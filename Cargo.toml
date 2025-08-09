@@ -1,8 +1,11 @@
 [package]
 name = "aoba"
 authors = ["langyo <langyo.china@gmail.com>"]
+description = "Multi-protocol debug & simulation CLI tool (Modbus, MQTT, TTY, TCP/UDP, etc.)"
+repository = "https://github.com/langyo/aoba"
+license = "Apache-2.0"
 
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 
 [profile.release]
