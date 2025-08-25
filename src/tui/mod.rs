@@ -1,3 +1,4 @@
+use anyhow::Result;
 use ratatui::{
     layout::{Constraint, Direction, Layout},
     prelude::*,
@@ -5,7 +6,7 @@ use ratatui::{
 };
 use std::io;
 
-pub fn start() {
+pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
     let mut stdout = io::stdout();
     let backend = CrosstermBackend::new(&mut stdout);
@@ -41,4 +42,7 @@ pub fn start() {
         .ok();
 
     let _ = io::stdin().read_line(&mut String::new());
+    // TODO: Listen for user input
+
+    Ok(())
 }

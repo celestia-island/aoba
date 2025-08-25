@@ -2,6 +2,8 @@ mod cli;
 mod gui;
 mod tui;
 
+use anyhow::Result;
+
 /// Detect if desktop environment is available (simple check for Windows/macOS/Linux)
 fn has_desktop_env() -> bool {
     #[cfg(target_os = "windows")]
@@ -24,21 +26,24 @@ fn has_desktop_env() -> bool {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::init();
     let matches = cli::parse_args();
 
     if matches.get_flag("gui") {
         log::info!("Forced GUI mode by argument");
-        gui::start();
+        gui::start()?;
     } else if matches.get_flag("tui") {
         log::info!("Forced TUI mode by argument");
-        tui::start();
+        tui::start()?;
     } else if has_desktop_env() {
         log::info!("Desktop environment detected, launching GUI mode");
-        gui::start();
+        gui::start()?;
     } else {
         log::info!("No desktop environment detected, launching TUI mode");
-        tui::start();
+        tui::start()?;
     }
+
+    Ok(())
 }
