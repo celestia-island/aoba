@@ -8,6 +8,7 @@ Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, T
 - Serial/network protocol debugging
 - Protocol simulation (master/slave, client/server)
 - TUI/GUI auto switch
+- Create virtual serial ports
 
 ## Quick Start
 1. Install Rust toolchain
