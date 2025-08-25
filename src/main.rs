@@ -1,7 +1,6 @@
+mod cli;
 mod gui;
 mod tui;
-
-use clap::{Arg, Command};
 
 /// Detect if desktop environment is available (simple check for Windows/macOS/Linux)
 fn has_desktop_env() -> bool {
@@ -27,22 +26,7 @@ fn has_desktop_env() -> bool {
 
 fn main() {
     env_logger::init();
-    let matches = Command::new("aoba")
-        .arg(
-            Arg::new("gui")
-                .long("gui")
-                .short('g')
-                .help("Force GUI mode")
-                .action(clap::ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("tui")
-                .long("tui")
-                .short('t')
-                .help("Force TUI mode")
-                .action(clap::ArgAction::SetTrue),
-        )
-        .get_matches();
+    let matches = cli::parse_args();
 
     if matches.get_flag("gui") {
         log::info!("Forced GUI mode by argument");
