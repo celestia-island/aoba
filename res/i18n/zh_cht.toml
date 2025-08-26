@@ -1,0 +1,13 @@
+title = "AOBA（青葉）"
+com_ports = "COM 端口"
+details = "詳細"
+no_com_ports = "未檢測到 COM 端口"
+help_short = "h/l 切換面板  j/k 移動  r 刷新  a 自動開/關  q 退出"
+auto_on = "自動：開"
+auto_off = "自動：關"
+last = "最後"
+last_none = "最後 -"
+
+name_label = "名稱："
+type_label = "類型："
+details_placeholder = "（詳細佔位）"
