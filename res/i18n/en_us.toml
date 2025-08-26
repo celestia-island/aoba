@@ -1,0 +1,14 @@
+title = "AOBA"
+com_ports = "COM Ports"
+details = "Details"
+no_com_ports = "No COM ports detected"
+help_short = "h/l switch panels  j/k move  r refresh  a auto toggle  q quit"
+auto_on = "Auto: ON"
+auto_off = "Auto: OFF"
+last = "Last"
+last_none = "Last -"
+
+# details placeholder text
+name_label = "Name:"
+type_label = "Type:"
+details_placeholder = "(Details placeholder)"

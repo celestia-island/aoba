@@ -31,6 +31,7 @@ sqids = "^0.4"
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
 strum = { version = "^0.27", features = ["derive"] }
+toml = "^0.9"
 uuid = { version = "^1", features = [
   'v4',
   "v7",
@@ -52,10 +53,15 @@ tokio = { version = "^1", features = ["full"] }
 futures = "^0.3"
 oneshot = "^0.1"
 
+windows-sys = "^0.60"
+whoami = "^1"
+crossterm = "^0.29"
+
 image = { version = "^0.25", features = ["gif", "jpeg", "png", "webp"] }
 eframe = "^0.32"
 egui = "^0.32"
 ratatui = "^0.29"
 
 rmodbus = { version = "^0.10", features = ["with_serde"] }
+libc = "0.2"
 serialport = "^4"

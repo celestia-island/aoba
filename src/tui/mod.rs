@@ -1,48 +1,101 @@
+pub mod app;
+pub mod input;
+pub mod ui;
+
 use anyhow::Result;
-use ratatui::{
-    layout::{Constraint, Direction, Layout},
-    prelude::*,
-    widgets::*,
-};
-use std::io;
+use ratatui::{backend::CrosstermBackend, prelude::*};
+use std::io::{self, Stdout};
+use std::time::Duration;
+
+use crate::tui::input::{map_key, Action};
+use app::App;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
+
+    // Setup terminal
     let mut stdout = io::stdout();
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(&mut stdout);
-    let mut terminal = Terminal::new(backend).expect("Failed to create terminal");
+    let mut terminal = Terminal::new(backend)?;
 
-    terminal.clear().ok();
-    terminal
-        .draw(|f| {
-            let area = f.area();
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .margin(2)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Length(5),
-                    Constraint::Percentage(40),
-                ])
-                .split(area);
+    let app = Arc::new(Mutex::new(App::new()));
 
-            let block = Block::default()
-                .title("Aoba - Multi-protocol Debug & Simulation Tool")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL);
-            let paragraph = Paragraph::new("Welcome to the TUI mode!")
-                .block(block)
-                .alignment(Alignment::Center);
-            f.render_widget(paragraph, chunks[1]);
+    // background refresher thread
+    {
+        let app_clone = Arc::clone(&app);
+        thread::spawn(move || loop {
+            thread::sleep(std::time::Duration::from_secs(3));
+            let mut guard = app_clone.lock().unwrap();
+            if guard.auto_refresh {
+                guard.refresh();
+            }
+        });
+    }
 
-            let exit_paragraph =
-                Paragraph::new("Press Enter to exit...").alignment(Alignment::Center);
-            f.render_widget(exit_paragraph, chunks[2]);
-        })
-        .ok();
+    let res = run_app(&mut terminal, Arc::clone(&app));
 
-    let _ = io::stdin().read_line(&mut String::new());
-    // TODO: Listen for user input
+    // Restore terminal
+    let mut stdout = io::stdout();
+    crossterm::execute!(stdout, crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::terminal::disable_raw_mode()?;
 
+    res
+}
+
+fn run_app(
+    terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
+    app: Arc<Mutex<App>>,
+) -> Result<()> {
+    loop {
+        // draw with short-lived lock
+        {
+            let guard = app.lock().unwrap();
+            terminal.draw(|f| crate::tui::ui::render_ui(f, &*guard))?;
+        }
+
+        // Poll for input
+        if crossterm::event::poll(Duration::from_millis(200))? {
+            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
+                match map_key(key.code) {
+                    Action::Quit => break,
+                    Action::FocusLeft => {
+                        let mut guard = app.lock().unwrap();
+                        guard.focus = app::Focus::Left;
+                    }
+                    Action::FocusRight => {
+                        let mut guard = app.lock().unwrap();
+                        guard.focus = app::Focus::Right;
+                    }
+                    Action::MoveNext => {
+                        let mut guard = app.lock().unwrap();
+                        if matches!(guard.focus, app::Focus::Left) {
+                            guard.next();
+                        }
+                    }
+                    Action::MovePrev => {
+                        let mut guard = app.lock().unwrap();
+                        if matches!(guard.focus, app::Focus::Left) {
+                            guard.prev();
+                        }
+                    }
+                    Action::Refresh => {
+                        let mut guard = app.lock().unwrap();
+                        guard.refresh();
+                    }
+                    Action::ToggleAutoRefresh => {
+                        let mut guard = app.lock().unwrap();
+                        guard.toggle_auto_refresh();
+                    }
+                    Action::None => {}
+                }
+            }
+        }
+    }
+
+    terminal.clear()?;
     Ok(())
 }
