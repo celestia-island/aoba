@@ -31,7 +31,7 @@ pub fn start() -> Result<()> {
         }
     }
 
-    // background refresher thread
+    // Background refresher thread
     {
         let app_clone = Arc::clone(&app);
         thread::spawn(move || loop {
@@ -61,7 +61,7 @@ fn run_app(
     app: Arc<Mutex<App>>,
 ) -> Result<()> {
     loop {
-        // draw with short-lived lock
+        // Draw with short-lived lock
         {
             match app.lock() {
                 Ok(guard) => {

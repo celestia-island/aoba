@@ -31,7 +31,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &App) {
             .block(err_block);
         f.render_widget(p, rows[0]);
 
-    let instr = crate::i18n::lang().press_c_clear.as_str().to_string();
+        let instr = crate::i18n::lang().press_c_clear.as_str().to_string();
         let instr_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::DarkGray));
         let instr_p = Paragraph::new(instr)
             .alignment(Alignment::Center)
