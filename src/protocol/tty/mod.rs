@@ -21,6 +21,8 @@ pub fn available_ports_sorted() -> Vec<serialport::SerialPortInfo> {
 }
 
 #[cfg(not(any(unix, windows)))]
-pub fn try_extract_vid_pid_serial(_pt: &serialport::SerialPortType) -> Option<(u16, u16, Option<String>)> {
+pub fn try_extract_vid_pid_serial(
+    _pt: &serialport::SerialPortType,
+) -> Option<(u16, u16, Option<String>)> {
     None
 }
