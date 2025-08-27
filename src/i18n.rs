@@ -10,18 +10,19 @@ const ZH_CHT_TOML: &str = include_str!("../res/i18n/zh_cht.toml");
 derive_struct! {
     #[derive(PartialEq, Serialize, Deserialize)]
     pub Lang {
-        title: String,
-        com_ports: String,
-        details: String,
-        no_com_ports: String,
-        help_short: String,
-        auto_on: String,
-        auto_off: String,
-        last: String,
-        last_none: String,
-        name_label: String,
-        type_label: String,
-        details_placeholder: String,
+        title: String = "title".to_string(),
+        com_ports: String = "com_ports".to_string(),
+        details: String = "details".to_string(),
+        no_com_ports: String = "no_com_ports".to_string(),
+        help_short: String = "help_short".to_string(),
+        auto_on: String = "auto_on".to_string(),
+        auto_off: String = "auto_off".to_string(),
+        last: String = "last".to_string(),
+        last_none: String = "last_none".to_string(),
+        name_label: String = "name_label".to_string(),
+        type_label: String = "type_label".to_string(),
+    details_placeholder: String = "details_placeholder".to_string(),
+    press_c_clear: String = "press_c_clear".to_string(),
     }
 }
 
@@ -37,23 +38,17 @@ fn parse_toml_to_lang(content: &str) -> Lang {
                 e,
                 &content.chars().take(200).collect::<String>()
             );
-            // fallback: return a Lang with keys as values
-            Lang {
-                title: "title".to_string(),
-                com_ports: "com_ports".to_string(),
-                details: "details".to_string(),
-                no_com_ports: "no_com_ports".to_string(),
-                help_short: "help_short".to_string(),
-                auto_on: "auto_on".to_string(),
-                auto_off: "auto_off".to_string(),
-                last: "last".to_string(),
-                last_none: "last_none".to_string(),
-                name_label: "name_label".to_string(),
-                type_label: "type_label".to_string(),
-                details_placeholder: "details_placeholder".to_string(),
-            }
+            // fallback: return the default Lang (keys as values)
+            Lang::default()
         }
     }
+}
+
+/// Return a reference to the currently selected `Lang`.
+/// Callers can access fields directly, e.g. `i18n::lang().title`.
+pub fn lang() -> &'static Lang {
+    // If LANGUAGE hasn't been initialized, use the default Lang.
+    LANG_SELECTED.get_or_init(|| Lang::default())
 }
 
 pub fn init_i18n() {
@@ -122,26 +117,4 @@ pub fn init_i18n() {
         user,
         LOCALE.get().map(|s| s.as_str()).unwrap_or("-")
     );
-}
-
-pub fn tr(key: &str) -> String {
-    if let Some(lang) = LANG_SELECTED.get() {
-        match key {
-            "title" => lang.title.clone(),
-            "com_ports" => lang.com_ports.clone(),
-            "details" => lang.details.clone(),
-            "no_com_ports" => lang.no_com_ports.clone(),
-            "help_short" => lang.help_short.clone(),
-            "auto_on" => lang.auto_on.clone(),
-            "auto_off" => lang.auto_off.clone(),
-            "last" => lang.last.clone(),
-            "last_none" => lang.last_none.clone(),
-            "name_label" => lang.name_label.clone(),
-            "type_label" => lang.type_label.clone(),
-            "details_placeholder" => lang.details_placeholder.clone(),
-            _ => key.to_string(),
-        }
-    } else {
-        key.to_string()
-    }
 }

@@ -22,7 +22,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &App) {
         .collect();
 
     let mut left_block = Block::default()
-        .title(format!(" {}", crate::i18n::tr("com_ports")))
+        .title(format!(" {}", &crate::i18n::lang().com_ports))
         .borders(Borders::ALL)
         .border_type(BorderType::Plain);
     if matches!(app.focus, Focus::Left) {
@@ -47,7 +47,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &App) {
     f.render_stateful_widget(list, chunks[0], &mut state);
 
     let mut right_block = Block::default()
-        .title(format!(" {}", crate::i18n::tr("details")))
+        .title(format!(" {}", &crate::i18n::lang().details))
         .borders(Borders::ALL)
         .border_type(BorderType::Plain);
     if matches!(app.focus, Focus::Right) {
@@ -59,16 +59,16 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &App) {
     }
 
     let details = if app.ports.is_empty() {
-        Paragraph::new(crate::i18n::tr("no_com_ports")).block(right_block)
+        Paragraph::new(crate::i18n::lang().no_com_ports.as_str()).block(right_block)
     } else {
         let p = &app.ports[app.selected];
         let text = format!(
             "{} {}\n{} {:?}\n\n{}",
-            crate::i18n::tr("name_label"),
+            &crate::i18n::lang().name_label,
             p.port_name,
-            crate::i18n::tr("type_label"),
+            &crate::i18n::lang().type_label,
             p.port_type,
-            crate::i18n::tr("details_placeholder")
+            &crate::i18n::lang().details_placeholder
         );
         Paragraph::new(text).block(right_block)
     };

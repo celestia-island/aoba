@@ -24,6 +24,13 @@ pub fn start() -> Result<()> {
 
     let app = Arc::new(Mutex::new(App::new()));
 
+    // For manual testing: if AOBA_TUI_FORCE_ERROR is set, pre-populate an error to display
+    if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
+        if let Ok(mut guard) = app.lock() {
+            guard.set_error("demo forced error: AOBA_TUI_FORCE_ERROR");
+        }
+    }
+
     // background refresher thread
     {
         let app_clone = Arc::clone(&app);
@@ -56,15 +63,32 @@ fn run_app(
     loop {
         // draw with short-lived lock
         {
-            let guard = app
-                .lock()
-                .map_err(|_| anyhow::anyhow!("failed to lock app for drawing"))?;
-            terminal.draw(|f| crate::tui::ui::render_ui(f, &*guard))?;
+            match app.lock() {
+                Ok(guard) => {
+                    terminal.draw(|f| crate::tui::ui::render_ui(f, &*guard))?;
+                }
+                Err(_) => {
+                    log::error!("[TUI] failed to lock app for drawing (poisoned)");
+                    // cannot set app.error because lock failed; just continue
+                }
+            }
         }
 
         // Poll for input
         if crossterm::event::poll(Duration::from_millis(200))? {
-            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
+            let evt = match crossterm::event::read() {
+                Ok(e) => e,
+                Err(e) => {
+                    if let Ok(mut guard) = app.lock() {
+                        guard.set_error(format!("input read error: {}", e));
+                    } else {
+                        log::error!("[TUI] input read error: {}", e);
+                    }
+                    continue;
+                }
+            };
+
+            if let crossterm::event::Event::Key(key) = evt {
                 // Only handle the initial key press event. Ignore Repeat and Release
                 // events so a single physical key press maps to a single action.
                 match key.kind {
@@ -78,6 +102,7 @@ fn run_app(
                     Action::FocusLeft => {
                         if let Ok(mut guard) = app.lock() {
                             guard.focus = app::Focus::Left;
+                            guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for FocusLeft");
                         }
@@ -85,6 +110,7 @@ fn run_app(
                     Action::FocusRight => {
                         if let Ok(mut guard) = app.lock() {
                             guard.focus = app::Focus::Right;
+                            guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for FocusRight");
                         }
@@ -94,6 +120,7 @@ fn run_app(
                             if matches!(guard.focus, app::Focus::Left) {
                                 guard.next();
                             }
+                            guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for MoveNext");
                         }
@@ -103,6 +130,7 @@ fn run_app(
                             if matches!(guard.focus, app::Focus::Left) {
                                 guard.prev();
                             }
+                            guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for MovePrev");
                         }
@@ -110,6 +138,7 @@ fn run_app(
                     Action::Refresh => {
                         if let Ok(mut guard) = app.lock() {
                             guard.refresh();
+                            guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for Refresh");
                         }
@@ -117,14 +146,22 @@ fn run_app(
                     Action::ToggleAutoRefresh => {
                         if let Ok(mut guard) = app.lock() {
                             guard.toggle_auto_refresh();
+                            guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for ToggleAutoRefresh");
+                        }
+                    }
+                    Action::ClearError => {
+                        if let Ok(mut guard) = app.lock() {
+                            guard.clear_error();
                         }
                     }
                     Action::None => {}
                 }
             }
         }
+
+        // No automatic error clearing; errors are cleared manually via the UI
     }
 
     terminal.clear()?;

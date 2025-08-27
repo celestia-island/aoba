@@ -9,6 +9,7 @@ pub enum Action {
     MovePrev,
     Refresh,
     ToggleAutoRefresh,
+    ClearError,
     None,
 }
 
@@ -22,6 +23,7 @@ pub fn map_key(code: KeyCode) -> Action {
         KeyCode::Up | KeyCode::Char('k') => Action::MovePrev,
         KeyCode::Char('r') => Action::Refresh,
         KeyCode::Char('a') => Action::ToggleAutoRefresh,
+        KeyCode::Char('c') => Action::ClearError,
         _ => Action::None,
     }
 }
