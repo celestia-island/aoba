@@ -76,6 +76,36 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     ports
 }
 
+/// Try to extract vid/pid/serial from a SerialPortType on Unix platforms.
+pub fn try_extract_vid_pid_serial(
+    pt: &serialport::SerialPortType,
+) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
+    match pt {
+        serialport::SerialPortType::UsbPort { vid, pid, serial_number, manufacturer, product } => {
+            let sn = serial_number.as_ref().map(|s| s.clone());
+            let m = manufacturer.as_ref().map(|s| s.clone());
+            let p = product.as_ref().map(|s| s.clone());
+            Some((*vid, *pid, sn, m, p))
+        }
+        // Some serialport versions have different field names; try to fall back
+        // to Debug parsing (best-effort).
+        _ => {
+            let dbg = format!("{:?}", pt).to_lowercase();
+            let vid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "vid");
+            let pid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "pid");
+            let sn = crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial")
+                .or_else(|| crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial_number"))
+                .or_else(|| crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "sn"));
+            let manu = crate::protocol::tty::tty_windows::parse_string_after(&dbg, "manufacturer");
+            let prod = crate::protocol::tty::tty_windows::parse_string_after(&dbg, "product");
+            match (vid, pid) {
+                (Some(v), Some(p)) => Some((v, p, sn, manu, prod)),
+                _ => None,
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

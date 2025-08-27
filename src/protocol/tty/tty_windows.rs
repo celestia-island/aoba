@@ -23,7 +23,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 // base like "COM3"
                 match &port.port_type {
                     SerialPortType::UsbPort { .. } => {
-                        if let Some((vid, pid, sn)) = extract_vid_pid_serial(&port.port_type) {
+                        if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&port.port_type) {
                             if let Some(sn) = sn {
                                 format!("{}:vid={:04x}:pid={:04x}:sn={}", base, vid, pid, sn)
                             } else {
@@ -40,7 +40,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 let base = port.port_name.to_lowercase();
                 match &port.port_type {
                     SerialPortType::UsbPort { .. } => {
-                        if let Some((vid, pid, sn)) = extract_vid_pid_serial(&port.port_type) {
+                        if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&port.port_type) {
                             if let Some(sn) = sn {
                                 format!("{}:vid={:04x}:pid={:04x}:sn={}", base, vid, pid, sn)
                             } else {
@@ -80,7 +80,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 // If it's a usb-type port, attempt to append VID/PID/SN if
                 // we can extract them; otherwise append a generic (usb).
                 if matches!(ports[i].port_type, SerialPortType::UsbPort { .. }) {
-                    if let Some((vid, pid, sn)) = extract_vid_pid_serial(&ports[i].port_type) {
+                    if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&ports[i].port_type) {
                         if let Some(sn) = sn {
                             ports[i].port_name = format!(
                                 "{} (vid:{:04x} pid:{:04x} sn:{})",
@@ -126,7 +126,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 // by inspecting its Debug representation. This is best-effort and should
 // not be relied on strictly, but helps annotate ports when metadata is
 // available across different serialport crate versions.
-fn extract_vid_pid_serial(pt: &SerialPortType) -> Option<(u16, u16, Option<String>)> {
+pub fn try_extract_vid_pid_serial(
+    pt: &SerialPortType,
+) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
     let dbg = format!("{:?}", pt).to_lowercase();
     // try common keys
     let vid = parse_hex_after(&dbg, "vid");
@@ -134,10 +136,33 @@ fn extract_vid_pid_serial(pt: &SerialPortType) -> Option<(u16, u16, Option<Strin
     let sn = parse_serial_after(&dbg, "serial")
         .or_else(|| parse_serial_after(&dbg, "serial_number"))
         .or_else(|| parse_serial_after(&dbg, "sn"));
+    let manufacturer = parse_string_after(&dbg, "manufacturer");
+    let product = parse_string_after(&dbg, "product");
     match (vid, pid) {
-        (Some(v), Some(p)) => Some((v, p, sn)),
+        (Some(v), Some(p)) => Some((v, p, sn, manufacturer, product)),
         _ => None,
     }
+}
+
+fn parse_string_after(s: &str, key: &str) -> Option<String> {
+    if let Some(pos) = s.find(key) {
+        let tail = &s[pos + key.len()..];
+        if let Some(eq) = tail.find('=') {
+            let after = &tail[eq + 1..];
+            let mut out = String::new();
+            for c in after.chars().skip_while(|c| c.is_whitespace()) {
+                if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == ':' || c == '.' {
+                    out.push(c);
+                } else {
+                    break;
+                }
+            }
+            if !out.is_empty() {
+                return Some(out);
+            }
+        }
+    }
+    None
 }
 
 fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
