@@ -17,7 +17,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
             None => p.port_name.to_lowercase(),
         };
         let key = match &p.port_type {
-            SerialPortType::UsbPort { vid, pid, .. } => format!("{}:vid={:04x}:pid={:04x}", base, vid, pid),
+            SerialPortType::UsbPort { vid, pid, .. } => {
+                format!("{}:vid={:04x}:pid={:04x}", base, vid, pid)
+            }
             _ => base,
         };
 
@@ -44,7 +46,8 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         }
         for i in idxs.into_iter() {
             if let SerialPortType::UsbPort { vid, pid, .. } = ports[i].port_type {
-                ports[i].port_name = format!("{} (vid:{:04x} pid:{:04x})", ports[i].port_name, vid, pid);
+                ports[i].port_name =
+                    format!("{} (vid:{:04x} pid:{:04x})", ports[i].port_name, vid, pid);
             }
         }
     }
@@ -81,7 +84,13 @@ pub fn try_extract_vid_pid_serial(
     pt: &serialport::SerialPortType,
 ) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
     match pt {
-        serialport::SerialPortType::UsbPort { vid, pid, serial_number, manufacturer, product } => {
+        serialport::SerialPortType::UsbPort {
+            vid,
+            pid,
+            serial_number,
+            manufacturer,
+            product,
+        } => {
             let sn = serial_number.as_ref().map(|s| s.clone());
             let m = manufacturer.as_ref().map(|s| s.clone());
             let p = product.as_ref().map(|s| s.clone());
@@ -94,7 +103,9 @@ pub fn try_extract_vid_pid_serial(
             let vid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "vid");
             let pid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "pid");
             let sn = crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial")
-                .or_else(|| crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial_number"))
+                .or_else(|| {
+                    crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial_number")
+                })
                 .or_else(|| crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "sn"));
             let manu = crate::protocol::tty::tty_windows::parse_string_after(&dbg, "manufacturer");
             let prod = crate::protocol::tty::tty_windows::parse_string_after(&dbg, "product");
@@ -111,17 +122,35 @@ mod tests {
     use super::*;
     use serialport::{SerialPortInfo, SerialPortType};
 
-    fn make(name: &str) -> SerialPortInfo { SerialPortInfo { port_name: name.to_string(), port_type: SerialPortType::Unknown } }
+    fn make(name: &str) -> SerialPortInfo {
+        SerialPortInfo {
+            port_name: name.to_string(),
+            port_type: SerialPortType::Unknown,
+        }
+    }
 
     #[test]
     fn unix_priority_and_annotation() {
-        let input = vec![make("/dev/ttyS0"), make("/dev/ttyUSB0"), make("/dev/ttyACM0"), make("/dev/ttyS1")];
+        let input = vec![
+            make("/dev/ttyS0"),
+            make("/dev/ttyUSB0"),
+            make("/dev/ttyACM0"),
+            make("/dev/ttyS1"),
+        ];
         let out = sort_and_dedup_ports(input);
         let names: Vec<_> = out.iter().map(|p| p.port_name.to_lowercase()).collect();
-        let idx_usb = names.iter().position(|n| n.contains("ttyusb") || n.contains("usb"));
+        let idx_usb = names
+            .iter()
+            .position(|n| n.contains("ttyusb") || n.contains("usb"));
         let idx_acm = names.iter().position(|n| n.contains("acm"));
-        let idx_ttys = names.iter().position(|n| n.contains("ttys") || n.contains("ttys0") || n.contains("ttys1") || n.contains("ttys"));
-        if let (Some(i_usb), Some(i_ttys)) = (idx_usb, idx_ttys) { assert!(i_usb < i_ttys); }
-        if let (Some(i_acm), Some(i_ttys)) = (idx_acm, idx_ttys) { assert!(i_acm < i_ttys); }
+        let idx_ttys = names.iter().position(|n| {
+            n.contains("ttys") || n.contains("ttys0") || n.contains("ttys1") || n.contains("ttys")
+        });
+        if let (Some(i_usb), Some(i_ttys)) = (idx_usb, idx_ttys) {
+            assert!(i_usb < i_ttys);
+        }
+        if let (Some(i_acm), Some(i_ttys)) = (idx_acm, idx_ttys) {
+            assert!(i_acm < i_ttys);
+        }
     }
 }

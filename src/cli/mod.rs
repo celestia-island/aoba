@@ -1,5 +1,4 @@
 pub mod actions;
-pub mod ui;
 
 use clap::{Arg, ArgMatches, Command};
 
@@ -35,9 +34,4 @@ pub fn parse_args() -> ArgMatches {
                 .action(clap::ArgAction::SetTrue),
         )
         .get_matches()
-}
-
-/// Convenience helper used by other modules/tests to check the list-ports flag.
-pub fn want_list_ports(matches: &ArgMatches) -> bool {
-    matches.get_flag("list-ports")
 }
