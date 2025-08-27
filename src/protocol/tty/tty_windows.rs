@@ -18,9 +18,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         // by visible name and marks USB ports when necessary.
         let key = {
             let name_up = port.port_name.to_uppercase();
-            // extract COM<number> anywhere in the name (handles NULL_COM3 etc.)
+            // Extract COM<number> anywhere in the name (handles NULL_COM3 etc.)
             if let Some(base) = extract_com_base(&name_up) {
-                // base like "COM3"
+                // Base like "COM3"
                 match &port.port_type {
                     SerialPortType::UsbPort { .. } => {
                         if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&port.port_type) {
@@ -130,7 +130,7 @@ pub fn try_extract_vid_pid_serial(
     pt: &SerialPortType,
 ) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
     let dbg = format!("{:?}", pt).to_lowercase();
-    // try common keys
+    // Try common keys
     let vid = parse_hex_after(&dbg, "vid");
     let pid = parse_hex_after(&dbg, "pid");
     let sn = parse_serial_after(&dbg, "serial")
@@ -168,7 +168,7 @@ fn parse_string_after(s: &str, key: &str) -> Option<String> {
 fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
     if let Some(pos) = s.find(key) {
         let tail = &s[pos + key.len()..];
-        // look for 0xhhhh
+    // Look for 0xhhhh
         if let Some(xpos) = tail.find("0x") {
             let mut num = String::new();
             for c in tail[xpos + 2..].chars() {
@@ -184,7 +184,7 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
                 }
             }
         }
-        // look for =hhhh or =0xhhhh or =dddd
+    // Look for =hhhh or =0xhhhh or =dddd
         if let Some(eq) = tail.find('=') {
             let after = &tail[eq + 1..];
             let mut num = String::new();
@@ -194,14 +194,14 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
                 } else if c.is_ascii_digit() && num.is_empty() {
                     num.push(c);
                 } else if num.is_empty() {
-                    // skip non-numeric until numeric starts
+                    // Skip non-numeric until numeric starts
                     continue;
                 } else {
                     break;
                 }
             }
             if !num.is_empty() {
-                // try hex then decimal
+                // Try hex then decimal
                 if let Ok(v) = u16::from_str_radix(&num, 16) {
                     return Some(v);
                 }
@@ -250,13 +250,13 @@ fn parse_serial_after(s: &str, key: &str) -> Option<String> {
 }
 
 fn extract_com_base(s: &str) -> Option<String> {
-    // find "COM" followed by digits anywhere
+    // Find "COM" followed by digits anywhere
     let up = s.to_uppercase();
     let mut chars = up.chars().collect::<Vec<_>>();
     let len = chars.len();
     for i in 0..len.saturating_sub(3) {
         if chars[i] == 'C' && chars[i + 1] == 'O' && chars[i + 2] == 'M' {
-            // collect digits after
+            // Collect digits after
             let mut j = i + 3;
             let mut num = String::new();
             while j < len {
@@ -297,7 +297,7 @@ mod tests {
             make_com("com2"),
         ];
         let out = sort_and_dedup_ports(input);
-        // ensure COM numeric sorting and dedup
+    // Ensure COM numeric sorting and dedup
         assert!(out[0].port_name.to_uppercase().starts_with("COM1"));
         assert!(out
             .iter()
@@ -331,7 +331,7 @@ mod tests {
         ];
         let out = sort_and_dedup_ports(input);
         let names: Vec<_> = out.iter().map(|p| p.port_name.to_uppercase()).collect();
-        // expect only one entry for COM3
+    // Expect only one entry for COM3
         assert_eq!(names.iter().filter(|n| n == &"COM3").count(), 1);
         assert!(names.contains(&"COM4".to_string()));
     }

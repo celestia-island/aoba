@@ -20,7 +20,7 @@ pub fn render_ui(f: &mut Frame, app: &App) {
         ])
         .split(area);
 
-    // render subcomponents
+    // Render subcomponents
     title::render_title(f, main_chunks[0]);
     panels::render_panels(f, main_chunks[1], app);
     bottom::render_bottom(f, main_chunks[2], app);
