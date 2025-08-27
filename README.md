@@ -26,7 +26,7 @@ Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, T
 ## Quick Start
 
 1. Install Rust toolchain
-2. `cargo build --release`
+2. `cargo build --bins`
 3. `cargo run` or run the generated executable
 
 ## Contribution

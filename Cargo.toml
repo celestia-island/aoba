@@ -53,7 +53,10 @@ tokio = { version = "^1", features = ["full"] }
 futures = "^0.3"
 oneshot = "^0.1"
 
-windows-sys = "^0.60"
+windows-sys = { version = "^0.60", features = [
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_Foundation",
+] }
 whoami = "^1"
 crossterm = "^0.29"
 

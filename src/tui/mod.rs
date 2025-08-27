@@ -4,6 +4,7 @@ pub mod ui;
 use anyhow::Result;
 use std::{
     io::{self, Stdout},
+    sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
     thread,
     time::Duration,

@@ -26,7 +26,7 @@
 ## 快速开始
 
 1. 安装 Rust 工具链
-2. `cargo build --release`
+2. `cargo build --bins`
 3. `cargo run` 或运行生成的可执行文件
 
 ## 贡献
