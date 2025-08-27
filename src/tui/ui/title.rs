@@ -4,7 +4,7 @@ pub fn render_title(f: &mut Frame, area: Rect) {
     let title_block = Block::default()
         .borders(Borders::NONE)
         .style(Style::default().bg(Color::Gray));
-    let title = Paragraph::new(crate::i18n::tr("title"))
+    let title = Paragraph::new(crate::i18n::lang().title.as_str())
         .alignment(Alignment::Center)
         .style(
             Style::default()

@@ -1,6 +1,8 @@
-use crate::protocol::tty::available_ports_sorted;
 use chrono::{DateTime, Local};
+
 use serialport::SerialPortInfo;
+
+use crate::protocol::tty::available_ports_sorted;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Focus {
@@ -14,6 +16,8 @@ pub struct App {
     pub focus: Focus,
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
+    // error message with timestamp when it was set
+    pub error: Option<(String, DateTime<Local>)>,
 }
 
 impl App {
@@ -25,7 +29,16 @@ impl App {
             focus: Focus::Left,
             auto_refresh: true,
             last_refresh: None,
+            error: None,
         }
+    }
+
+    pub fn set_error(&mut self, msg: impl Into<String>) {
+        self.error = Some((msg.into(), Local::now()));
+    }
+
+    pub fn clear_error(&mut self) {
+        self.error = None;
     }
 
     /// Create an App with provided ports (useful for tests)
@@ -37,6 +50,7 @@ impl App {
             focus: Focus::Left,
             auto_refresh: false,
             last_refresh: None,
+            error: None,
         }
     }
 
