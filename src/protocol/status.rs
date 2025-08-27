@@ -4,23 +4,23 @@ use serialport::SerialPortInfo;
 
 use crate::protocol::tty::available_ports_sorted;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Focus {
     Left,
     Right,
 }
 
-pub struct App {
+#[derive(Debug, Clone, PartialEq)]
+pub struct Status {
     pub ports: Vec<SerialPortInfo>,
     pub selected: usize,
     pub focus: Focus,
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
-    // Error message with timestamp when it was set
     pub error: Option<(String, DateTime<Local>)>,
 }
 
-impl App {
+impl Status {
     pub fn new() -> Self {
         let ports = available_ports_sorted();
         Self {
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn test_navigation() {
         let ports = vec![fake_port("COM1"), fake_port("COM2")];
-        let mut app = App::with_ports(ports);
+        let mut app = Status::with_ports(ports);
         assert_eq!(app.selected, 0);
         app.next();
         assert_eq!(app.selected, 1);
@@ -113,11 +113,11 @@ mod tests {
     #[test]
     fn test_focus_and_refresh() {
         let ports = vec![fake_port("COM1")];
-        let mut app = App::with_ports(ports);
+        let mut app = Status::with_ports(ports);
         assert_eq!(app.focus, Focus::Left);
-    // Call refresh (may change ports depending on environment)
+        // Call refresh (may change ports depending on environment)
         app.refresh();
-    // Ensure selected is in bounds
+        // Ensure selected is in bounds
         if !app.ports.is_empty() {
             assert!(app.selected < app.ports.len());
         }

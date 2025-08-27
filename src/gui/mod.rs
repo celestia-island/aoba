@@ -1,56 +1,74 @@
 mod init_font;
-
-use std::sync::Arc;
+mod ui;
 
 use anyhow::{anyhow, Result};
+use std::sync::{Arc, Mutex};
 
 use eframe::{self, egui};
+use egui::{vec2, IconData};
 
-use egui::IconData;
-use init_font::replace_fonts;
+use crate::protocol::status::Status;
 
 pub fn start() -> Result<()> {
     log::info!("[GUI] aoba GUI starting...");
 
     let mut options = eframe::NativeOptions::default();
-    options.viewport = options.viewport.with_icon(Arc::new({
-        let data = include_bytes!("../../res/logo.png");
-        let data = image::load_from_memory(data)?;
-        IconData {
-            rgba: data.to_rgba8().to_vec(),
-            width: data.width(),
-            height: data.height(),
-        }
-    }));
+    options.viewport = options
+        .viewport
+        .with_icon(Arc::new({
+            let data = include_bytes!("../../res/logo.png");
+            let data = image::load_from_memory(data)?;
+            IconData {
+                rgba: data.to_rgba8().to_vec(),
+                width: data.width(),
+                height: data.height(),
+            }
+        }))
+        .with_inner_size(vec2(900., 600.));
+    options.centered = true;
 
-    eframe::run_native("aoba", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
-        .map_err(|err| anyhow!("GUI has crashed: {}", err))
+    eframe::run_native(
+        "aoba",
+        options,
+        Box::new(|cc| Ok(Box::new(GuiApp::new(cc)))),
+    )
+    .map_err(|err| anyhow!("GUI has crashed: {}", err))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub enum Page {
-    #[default]
-    About,
+pub struct GuiApp {
+    status: Arc<Mutex<Status>>,
 }
 
-pub struct App {
-    pub selected_page: Page,
-}
-
-impl App {
+impl GuiApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        replace_fonts(&cc.egui_ctx);
-        Self {
-            selected_page: Page::default(),
-        }
+        init_font::replace_fonts(&cc.egui_ctx);
+
+        let status = Arc::new(Mutex::new(Status::new()));
+
+        Self { status }
     }
 }
 
-impl eframe::App for App {
+impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Aoba - Multi-protocol Debug & Simulation Tool");
-            ui.label("欢迎使用");
-        });
+        // Snapshot state quickly to avoid holding lock while drawing
+        let (ports, selected, mut auto_refresh, last_refresh, error) = {
+            if let Ok(guard) = self.status.lock() {
+                (
+                    guard.ports.clone(),
+                    guard.selected,
+                    guard.auto_refresh,
+                    guard.last_refresh.clone(),
+                    guard.error.clone(),
+                )
+            } else {
+                (Vec::new(), 0usize, false, None, None)
+            }
+        };
+
+        // Use modular renderers
+        ui::title::render_title(ctx);
+        ui::panels::render_panels(ctx, &self.status);
+        ui::status::render_status(ctx, &last_refresh, auto_refresh, &error, &self.status);
     }
 }

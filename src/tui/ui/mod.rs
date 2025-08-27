@@ -4,9 +4,9 @@ pub(self) mod title;
 
 use ratatui::prelude::*;
 
-use crate::tui::app::App;
+use crate::protocol::status::Status;
 
-pub fn render_ui(f: &mut Frame, app: &App) {
+pub fn render_ui(f: &mut Frame, app: &Status) {
     let area = f.area();
     // Reduce outer margin so middle panel is closer to title and bottom bar.
     let bottom_len = if app.error.is_some() { 2 } else { 1 };

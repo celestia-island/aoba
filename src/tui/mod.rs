@@ -1,16 +1,20 @@
-pub mod app;
 pub mod input;
 pub mod ui;
 
 use anyhow::Result;
-use ratatui::{backend::CrosstermBackend, prelude::*};
-use std::io::{self, Stdout};
-use std::time::Duration;
+use std::{
+    io::{self, Stdout},
+    sync::{Arc, Mutex},
+    thread,
+    time::Duration,
+};
 
-use crate::tui::input::{map_key, Action};
-use app::App;
-use std::sync::{Arc, Mutex};
-use std::thread;
+use ratatui::{backend::CrosstermBackend, prelude::*};
+
+use crate::{
+    protocol::status::{Focus, Status},
+    tui::input::{map_key, Action},
+};
 
 pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
@@ -22,7 +26,7 @@ pub fn start() -> Result<()> {
     let backend = CrosstermBackend::new(&mut stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = Arc::new(Mutex::new(App::new()));
+    let app = Arc::new(Mutex::new(Status::new()));
 
     // For manual testing: if AOBA_TUI_FORCE_ERROR is set, pre-populate an error to display
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
@@ -58,7 +62,7 @@ pub fn start() -> Result<()> {
 
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
-    app: Arc<Mutex<App>>,
+    app: Arc<Mutex<Status>>,
 ) -> Result<()> {
     loop {
         // Draw with short-lived lock
@@ -101,7 +105,7 @@ fn run_app(
                     Action::Quit => break,
                     Action::FocusLeft => {
                         if let Ok(mut guard) = app.lock() {
-                            guard.focus = app::Focus::Left;
+                            guard.focus = Focus::Left;
                             guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for FocusLeft");
@@ -109,7 +113,7 @@ fn run_app(
                     }
                     Action::FocusRight => {
                         if let Ok(mut guard) = app.lock() {
-                            guard.focus = app::Focus::Right;
+                            guard.focus = Focus::Right;
                             guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for FocusRight");
@@ -117,7 +121,7 @@ fn run_app(
                     }
                     Action::MoveNext => {
                         if let Ok(mut guard) = app.lock() {
-                            if matches!(guard.focus, app::Focus::Left) {
+                            if matches!(guard.focus, Focus::Left) {
                                 guard.next();
                             }
                             guard.clear_error();
@@ -127,7 +131,7 @@ fn run_app(
                     }
                     Action::MovePrev => {
                         if let Ok(mut guard) = app.lock() {
-                            if matches!(guard.focus, app::Focus::Left) {
+                            if matches!(guard.focus, Focus::Left) {
                                 guard.prev();
                             }
                             guard.clear_error();
