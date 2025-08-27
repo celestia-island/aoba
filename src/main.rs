@@ -2,8 +2,10 @@
 
 mod cli;
 mod gui;
-mod i18n;
 mod tui;
+
+mod i18n;
+mod protocol;
 
 use anyhow::Result;
 
