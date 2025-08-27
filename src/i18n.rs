@@ -38,7 +38,7 @@ fn parse_toml_to_lang(content: &str) -> Lang {
                 e,
                 &content.chars().take(200).collect::<String>()
             );
-            // fallback: return the default Lang (keys as values)
+            // Fallback: return the default Lang (keys as values)
             Lang::default()
         }
     }
@@ -52,13 +52,13 @@ pub fn lang() -> &'static Lang {
 }
 
 pub fn init_i18n() {
-    // available locales in priority order
+    // Available locales in priority order
     let mut avail: Vec<(&str, Lang)> = Vec::new();
     avail.push(("en_us", parse_toml_to_lang(EN_US_TOML)));
     avail.push(("zh_chs", parse_toml_to_lang(ZH_CHS_TOML)));
     avail.push(("zh_cht", parse_toml_to_lang(ZH_CHT_TOML)));
 
-    // detect preferred languages from env vars
+    // Detect preferred languages from env vars
     let mut prefs: Vec<String> = Vec::new();
     if let Ok(v) = std::env::var("LANGUAGE") {
         prefs.extend(v.split(':').map(|s| s.to_lowercase()));
@@ -74,7 +74,7 @@ pub fn init_i18n() {
         prefs.push(v.to_lowercase());
     }
 
-    // simple matcher: try to map prefs to available locales
+    // Simple matcher: try to map prefs to available locales
     let mut chosen: Option<(&str, Lang)> = None;
     for p in prefs.iter() {
         if p.contains("zh") {
@@ -98,7 +98,7 @@ pub fn init_i18n() {
         }
     }
 
-    // fallback to first available
+    // Fallback to first available
     if chosen.is_none() {
         if let Some((k, l)) = avail.first() {
             chosen = Some((k, l.clone()));
@@ -110,7 +110,6 @@ pub fn init_i18n() {
         LANG_SELECTED.set(l).ok();
     }
 
-    // log whoami username and chosen locale
     let user = whoami::username();
     log::info!(
         "i18n: user={} locale={}",

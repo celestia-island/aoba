@@ -16,7 +16,7 @@ pub struct App {
     pub focus: Focus,
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
-    // error message with timestamp when it was set
+    // Error message with timestamp when it was set
     pub error: Option<(String, DateTime<Local>)>,
 }
 
@@ -115,9 +115,9 @@ mod tests {
         let ports = vec![fake_port("COM1")];
         let mut app = App::with_ports(ports);
         assert_eq!(app.focus, Focus::Left);
-        // call refresh (may change ports depending on environment)
+    // Call refresh (may change ports depending on environment)
         app.refresh();
-        // ensure selected is in bounds
+    // Ensure selected is in bounds
         if !app.ports.is_empty() {
             assert!(app.selected < app.ports.len());
         }

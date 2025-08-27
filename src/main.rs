@@ -11,19 +11,19 @@ use anyhow::Result;
 
 #[cfg(windows)]
 fn ensure_console() -> Option<ConsoleGuard> {
-    // returns Some(ConsoleGuard) if attached or allocated (guard handles cleanup if needed)
+    // Returns Some(ConsoleGuard) if attached or allocated (guard handles cleanup if needed)
     use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
     unsafe {
         if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
-            // no parent, allocate
+            // No parent, allocate
             if AllocConsole() != 0 {
-                // redirect stdio to the new console, but save originals
+                // Redirect stdio to the new console, but save originals
                 if let Ok(guard) = ConsoleGuard::new(true) {
                     return Some(guard);
                 }
             }
         } else {
-            // attached to parent console; return guard that does not free
+            // Attached to parent console; return guard that does not free
             if let Ok(guard) = ConsoleGuard::new(false) {
                 return Some(guard);
             }
@@ -109,12 +109,12 @@ struct ConsoleGuard {
 #[cfg(windows)]
 impl ConsoleGuard {
     fn new(allocated: bool) -> Result<ConsoleGuard, ()> {
-        // duplicate current std fds so we can restore later
+        // Duplicate current std fds so we can restore later
         unsafe {
             let orig_stdin = libc::dup(0);
             let orig_stdout = libc::dup(1);
             let orig_stderr = libc::dup(2);
-            // redirect to console handles
+            // Redirect to console handles
             redirect_stdio_to_console();
             Ok(ConsoleGuard {
                 allocated,
@@ -130,7 +130,7 @@ impl ConsoleGuard {
 impl Drop for ConsoleGuard {
     fn drop(&mut self) {
         unsafe {
-            // restore original fds
+            // Restore original fds
             if self.orig_stdin >= 0 {
                 libc::dup2(self.orig_stdin, 0);
                 libc::close(self.orig_stdin);
@@ -165,7 +165,7 @@ impl ConsoleGuard {
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::init();
-    // init translations
+    // Init translations
     crate::i18n::init_i18n();
     let matches = cli::parse_args();
     // Run one-shot CLI actions (highest priority). If handled, exit now.
