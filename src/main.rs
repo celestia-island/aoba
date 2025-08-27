@@ -1,193 +1,160 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-mod cli;
-mod gui;
-mod tui;
-
-mod i18n;
-mod protocol;
-
 use anyhow::Result;
+use std::process::Command;
 
-#[cfg(windows)]
-fn ensure_console() -> Option<ConsoleGuard> {
-    // Returns Some(ConsoleGuard) if attached or allocated (guard handles cleanup if needed)
-    use windows_sys::Win32::System::Console::{AllocConsole, AttachConsole, ATTACH_PARENT_PROCESS};
+#[cfg(target_os = "windows")]
+fn launched_from_explorer() -> bool {
+    // Detect if parent process is explorer.exe by scanning processes and checking parent PID.
     unsafe {
-        if AttachConsole(ATTACH_PARENT_PROCESS) == 0 {
-            // No parent, allocate
-            if AllocConsole() != 0 {
-                // Redirect stdio to the new console, but save originals
-                if let Ok(guard) = ConsoleGuard::new(true) {
-                    return Some(guard);
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::System::Diagnostics::ToolHelp::*;
+
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return false;
+        }
+
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        if Process32FirstW(snapshot, &mut entry) == 0 {
+            CloseHandle(snapshot);
+            return false;
+        }
+
+        let current_pid = std::process::id() as u32;
+        let mut parent_pid: u32 = 0;
+        loop {
+            if entry.th32ProcessID == current_pid {
+                parent_pid = entry.th32ParentProcessID;
+                break;
+            }
+            if Process32NextW(snapshot, &mut entry) == 0 {
+                break;
+            }
+        }
+
+        if parent_pid == 0 {
+            CloseHandle(snapshot);
+            return false;
+        }
+
+        // Find parent process entry to read its exe name
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut parent_name = String::new();
+        if Process32FirstW(snapshot, &mut entry) != 0 {
+            loop {
+                if entry.th32ProcessID == parent_pid {
+                    let wide: &[u16] = &entry.szExeFile;
+                    let len = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
+                    parent_name = String::from_utf16_lossy(&wide[..len]).to_lowercase();
+                    break;
+                }
+                if Process32NextW(snapshot, &mut entry) == 0 {
+                    break;
                 }
             }
-        } else {
-            // Attached to parent console; return guard that does not free
-            if let Ok(guard) = ConsoleGuard::new(false) {
-                return Some(guard);
-            }
-        }
-    }
-    None
-}
-
-#[cfg(windows)]
-fn redirect_stdio_to_console() {
-    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-    use windows_sys::Win32::System::Console::{
-        GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
-    };
-
-    extern "C" {
-        fn _open_osfhandle(osfhandle: isize, flags: i32) -> i32;
-    }
-
-    unsafe {
-        let out_h = GetStdHandle(STD_OUTPUT_HANDLE);
-        if out_h != std::ptr::null_mut() && out_h != INVALID_HANDLE_VALUE {
-            let fd = _open_osfhandle(out_h as isize, 0);
-            if fd >= 0 {
-                libc::dup2(fd, 1);
-            }
         }
 
-        let err_h = GetStdHandle(STD_ERROR_HANDLE);
-        if err_h != std::ptr::null_mut() && err_h != INVALID_HANDLE_VALUE {
-            let fd = _open_osfhandle(err_h as isize, 0);
-            if fd >= 0 {
-                libc::dup2(fd, 2);
-            }
-        }
-
-        let in_h = GetStdHandle(STD_INPUT_HANDLE);
-        if in_h != std::ptr::null_mut() && in_h != INVALID_HANDLE_VALUE {
-            let fd = _open_osfhandle(in_h as isize, 0);
-            if fd >= 0 {
-                libc::dup2(fd, 0);
-            }
-        }
+        CloseHandle(snapshot);
+        parent_name.ends_with("explorer.exe")
     }
 }
 
-#[cfg(not(windows))]
-fn redirect_stdio() {}
-
-#[cfg(not(windows))]
-fn ensure_console() {}
-
-/// Detect if desktop environment is available (simple check for Windows/macOS/Linux)
-fn has_desktop_env() -> bool {
-    #[cfg(target_os = "windows")]
-    {
-        // Windows usually has desktop environment
-        return true;
-    }
-    #[cfg(target_os = "macos")]
-    {
-        return true;
-    }
-    #[cfg(target_os = "linux")]
-    {
-        // Check DISPLAY or WAYLAND_DISPLAY env variable
-        return std::env::var("DISPLAY").is_ok() || std::env::var("WAYLAND_DISPLAY").is_ok();
-    }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        return false;
-    }
+#[cfg(not(target_os = "windows"))]
+fn launched_from_explorer() -> bool {
+    false
 }
 
-#[cfg(windows)]
-struct ConsoleGuard {
-    allocated: bool,
-    orig_stdin: i32,
-    orig_stdout: i32,
-    orig_stderr: i32,
-}
+fn spawn_gui_next_to_current_exe() {
+    println!("Launching AOBA GUI...");
 
-#[cfg(windows)]
-impl ConsoleGuard {
-    fn new(allocated: bool) -> Result<ConsoleGuard, ()> {
-        // Duplicate current std fds so we can restore later
-        unsafe {
-            let orig_stdin = libc::dup(0);
-            let orig_stdout = libc::dup(1);
-            let orig_stderr = libc::dup(2);
-            // Redirect to console handles
-            redirect_stdio_to_console();
-            Ok(ConsoleGuard {
-                allocated,
-                orig_stdin,
-                orig_stdout,
-                orig_stderr,
-            })
-        }
-    }
-}
+    if let Ok(mut exe_path) = std::env::current_exe() {
+        exe_path.set_file_name("aoba_gui.exe");
+        match Command::new(&exe_path).spawn() {
+            Ok(mut child) => {
+                // Give the GUI process a short time to fail fast. If it exits quickly,
+                // assume startup failed and keep the console visible so the user can see errors.
+                use std::{thread, time::Duration};
 
-#[cfg(windows)]
-impl Drop for ConsoleGuard {
-    fn drop(&mut self) {
-        unsafe {
-            // Restore original fds
-            if self.orig_stdin >= 0 {
-                libc::dup2(self.orig_stdin, 0);
-                libc::close(self.orig_stdin);
-            }
-            if self.orig_stdout >= 0 {
-                libc::dup2(self.orig_stdout, 1);
-                libc::close(self.orig_stdout);
-            }
-            if self.orig_stderr >= 0 {
-                libc::dup2(self.orig_stderr, 2);
-                libc::close(self.orig_stderr);
-            }
+                let mut failed_early = false;
+                for _ in 0..30 {
+                    thread::sleep(Duration::from_millis(100));
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            eprintln!("GUI process exited early with status={}", status);
+                            failed_early = true;
+                            break;
+                        }
+                        Ok(None) => continue,
+                        Err(err) => {
+                            eprintln!("Failed to query GUI process status: {}", err);
+                            failed_early = true;
+                            break;
+                        }
+                    }
+                }
 
-            if self.allocated {
-                use windows_sys::Win32::System::Console::FreeConsole;
-                FreeConsole();
+                if failed_early {
+                    eprintln!("GUI failed to start; check the logs.");
+
+                    if launched_from_explorer() {
+                        // When started from Explorer (double-click), show a dialog and keep console open so the
+                        // user can see the error details.
+                        eprintln!("Press Enter to exit...");
+                        let mut _buf = String::new();
+                        let _ = std::io::stdin().read_line(&mut _buf);
+                        std::process::exit(1);
+                    } else {
+                        // Non-explorer (terminal/CI): just print and exit immediately.
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Err(err) => {
+                // Spawn failure: stderr bilingual
+                eprintln!("Failed to spawn GUI '{}': {}", exe_path.display(), err);
+
+                if launched_from_explorer() {
+                    eprintln!("Press Enter to exit...");
+                    let mut _buf = String::new();
+                    let _ = std::io::stdin().read_line(&mut _buf);
+                    std::process::exit(1);
+                } else {
+                    std::process::exit(1);
+                }
             }
         }
-    }
-}
-
-#[cfg(not(windows))]
-struct ConsoleGuard;
-
-#[cfg(not(windows))]
-impl ConsoleGuard {
-    fn new(_allocated: bool) -> Result<ConsoleGuard, ()> {
-        Ok(ConsoleGuard)
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    env_logger::init();
-    // Init translations
-    crate::i18n::init_i18n();
-    let matches = cli::parse_args();
-    // Run one-shot CLI actions (highest priority). If handled, exit now.
-    if crate::cli::actions::run_one_shot_actions(&matches) {
+    // Console launcher: keep it simple and let the OS/terminal manage stdio.
+    aoba::init_common();
+
+    let matches = aoba::cli::parse_args();
+
+    // One-shot actions (e.g., --list-ports). If handled, exit.
+    if aoba::cli::actions::run_one_shot_actions(&matches) {
         return Ok(());
     }
 
-    // Decide which UI to start: explicit flags first, then auto-detect.
+    // If TUI requested, run in this process so it inherits the terminal.
+    if matches.get_flag("tui") {
+        aoba::start_tui()?;
+        return Ok(());
+    }
+
+    // If GUI requested, spawn the GUI binary (windows_subsystem) next to this exe.
     if matches.get_flag("gui") {
-        log::info!("Forced GUI mode by argument");
-        gui::start()?;
-    } else if matches.get_flag("tui") {
-        log::info!("Forced TUI mode by argument");
-        let _guard = ensure_console();
-        tui::start()?;
-    } else if has_desktop_env() {
-        log::info!("Desktop environment detected, launching GUI mode");
-        gui::start()?;
+        spawn_gui_next_to_current_exe();
+        return Ok(());
+    }
+
+    // Default: prefer GUI when desktop available, otherwise TUI.
+    if aoba::is_desktop_available() {
+        spawn_gui_next_to_current_exe();
     } else {
-        log::info!("No desktop environment detected, launching TUI mode");
-        let _guard = ensure_console();
-        tui::start()?;
+        aoba::start_tui()?;
     }
 
     Ok(())
