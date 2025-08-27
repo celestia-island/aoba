@@ -23,7 +23,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 // Base like "COM3"
                 match &port.port_type {
                     SerialPortType::UsbPort { .. } => {
-                        if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&port.port_type) {
+                        if let Some((vid, pid, sn, _m, _p)) =
+                            try_extract_vid_pid_serial(&port.port_type)
+                        {
                             if let Some(sn) = sn {
                                 format!("{}:vid={:04x}:pid={:04x}:sn={}", base, vid, pid, sn)
                             } else {
@@ -40,7 +42,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 let base = port.port_name.to_lowercase();
                 match &port.port_type {
                     SerialPortType::UsbPort { .. } => {
-                        if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&port.port_type) {
+                        if let Some((vid, pid, sn, _m, _p)) =
+                            try_extract_vid_pid_serial(&port.port_type)
+                        {
                             if let Some(sn) = sn {
                                 format!("{}:vid={:04x}:pid={:04x}:sn={}", base, vid, pid, sn)
                             } else {
@@ -80,7 +84,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 // If it's a usb-type port, attempt to append VID/PID/SN if
                 // we can extract them; otherwise append a generic (usb).
                 if matches!(ports[i].port_type, SerialPortType::UsbPort { .. }) {
-                    if let Some((vid, pid, sn, _m, _p)) = try_extract_vid_pid_serial(&ports[i].port_type) {
+                    if let Some((vid, pid, sn, _m, _p)) =
+                        try_extract_vid_pid_serial(&ports[i].port_type)
+                    {
                         if let Some(sn) = sn {
                             ports[i].port_name = format!(
                                 "{} (vid:{:04x} pid:{:04x} sn:{})",
@@ -168,7 +174,7 @@ fn parse_string_after(s: &str, key: &str) -> Option<String> {
 fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
     if let Some(pos) = s.find(key) {
         let tail = &s[pos + key.len()..];
-    // Look for 0xhhhh
+        // Look for 0xhhhh
         if let Some(xpos) = tail.find("0x") {
             let mut num = String::new();
             for c in tail[xpos + 2..].chars() {
@@ -184,7 +190,7 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
                 }
             }
         }
-    // Look for =hhhh or =0xhhhh or =dddd
+        // Look for =hhhh or =0xhhhh or =dddd
         if let Some(eq) = tail.find('=') {
             let after = &tail[eq + 1..];
             let mut num = String::new();
@@ -252,7 +258,7 @@ fn parse_serial_after(s: &str, key: &str) -> Option<String> {
 fn extract_com_base(s: &str) -> Option<String> {
     // Find "COM" followed by digits anywhere
     let up = s.to_uppercase();
-    let mut chars = up.chars().collect::<Vec<_>>();
+    let chars = up.chars().collect::<Vec<_>>();
     let len = chars.len();
     for i in 0..len.saturating_sub(3) {
         if chars[i] == 'C' && chars[i + 1] == 'O' && chars[i + 2] == 'M' {
@@ -297,7 +303,7 @@ mod tests {
             make_com("com2"),
         ];
         let out = sort_and_dedup_ports(input);
-    // Ensure COM numeric sorting and dedup
+        // Ensure COM numeric sorting and dedup
         assert!(out[0].port_name.to_uppercase().starts_with("COM1"));
         assert!(out
             .iter()
@@ -331,7 +337,7 @@ mod tests {
         ];
         let out = sort_and_dedup_ports(input);
         let names: Vec<_> = out.iter().map(|p| p.port_name.to_uppercase()).collect();
-    // Expect only one entry for COM3
+        // Expect only one entry for COM3
         assert_eq!(names.iter().filter(|n| n == &"COM3").count(), 1);
         assert!(names.contains(&"COM4".to_string()));
     }
