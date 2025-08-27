@@ -168,7 +168,12 @@ async fn main() -> Result<()> {
     // init translations
     crate::i18n::init_i18n();
     let matches = cli::parse_args();
+    // Run one-shot CLI actions (highest priority). If handled, exit now.
+    if crate::cli::actions::run_one_shot_actions(&matches) {
+        return Ok(());
+    }
 
+    // Decide which UI to start: explicit flags first, then auto-detect.
     if matches.get_flag("gui") {
         log::info!("Forced GUI mode by argument");
         gui::start()?;
