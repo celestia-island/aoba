@@ -1,3 +1,4 @@
+use crate::protocol::tty::available_ports_sorted;
 use chrono::{DateTime, Local};
 use serialport::SerialPortInfo;
 
@@ -17,7 +18,7 @@ pub struct App {
 
 impl App {
     pub fn new() -> Self {
-        let ports = serialport::available_ports().unwrap_or_default();
+        let ports = available_ports_sorted();
         Self {
             ports,
             selected: 0,
@@ -41,7 +42,7 @@ impl App {
 
     /// Re-scan available ports and reset selection if needed
     pub fn refresh(&mut self) {
-        self.ports = serialport::available_ports().unwrap_or_default();
+        self.ports = available_ports_sorted();
         if self.ports.is_empty() {
             self.selected = 0;
         } else if self.selected >= self.ports.len() {
