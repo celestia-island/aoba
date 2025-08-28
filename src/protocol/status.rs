@@ -89,7 +89,13 @@ impl Status {
     /// Re-scan available ports and reset selection if needed
     pub fn refresh(&mut self) {
         let new_ports = available_ports_sorted();
-        // preserve known states and handles by port name
+    // Remember previously selected port name (if any real port selected)
+        let prev_selected_name = if !self.ports.is_empty() && self.selected < self.ports.len() {
+            Some(self.ports[self.selected].port_name.clone())
+        } else {
+            None
+        };
+    // Preserve known states and handles by port name
         let mut name_to_state: HashMap<String, PortState> = HashMap::new();
         let mut name_to_handle: HashMap<String, Option<Box<dyn SerialPort>>> = HashMap::new();
         for (i, p) in self.ports.iter().enumerate() {
@@ -103,7 +109,7 @@ impl Status {
             }
         }
         self.ports = new_ports;
-        // rebuild port_states and port_handles preserving by name
+    // Rebuild port_states and port_handles preserving by name
         let mut new_states: Vec<PortState> = Vec::with_capacity(self.ports.len());
         let mut new_handles: Vec<Option<Box<dyn SerialPort>>> =
             Vec::with_capacity(self.ports.len());
@@ -125,15 +131,26 @@ impl Status {
         self.port_states = new_states;
         self.port_handles = new_handles;
         if self.ports.is_empty() {
+            // No real ports -> reset selection to 0 (no virtual items rendered)
             self.selected = 0;
-        } else if self.selected >= self.ports.len() {
-            self.selected = 0;
+        } else {
+            // try to restore previous selected port by name
+            if let Some(name) = prev_selected_name {
+                if let Some(idx) = self.ports.iter().position(|p| p.port_name == name) {
+                    self.selected = idx;
+                }
+            }
+            // ensure selected is within allowed range: real ports + 2 virtual items
+            let total = self.ports.len().saturating_add(2);
+            if self.selected >= total {
+                self.selected = 0;
+            }
         }
         self.last_refresh = Some(Local::now());
     }
 
     fn probe_port_free(port_name: &str) -> bool {
-        // try to open the port briefly; if succeed it's free (we immediately drop it)
+        // Try to open the port briefly; if succeed it's free (we immediately drop it)
         match serialport::new(port_name, 9600)
             .timeout(Duration::from_millis(50))
             .open()
@@ -162,6 +179,21 @@ impl Status {
             return;
         }
         let i = self.selected;
+        // if selected is beyond real ports, handle virtual items
+        let special_base = self.ports.len();
+        if i >= special_base {
+            let rel = i - special_base;
+            if rel == 0 {
+                // Refresh
+                self.refresh();
+            } else {
+                // Manual specify: not implemented here; set an info/error
+                self.set_error(
+                    "Manual device specify: only supported on Linux and not implemented yet",
+                );
+            }
+            return;
+        }
         if let Some(state) = self.port_states.get_mut(i) {
             match state {
                 PortState::Free => {
@@ -202,18 +234,22 @@ impl Status {
         self.auto_refresh = !self.auto_refresh;
     }
     pub fn next(&mut self) {
-        if !self.ports.is_empty() {
-            self.selected = (self.selected + 1) % self.ports.len();
+        // allow moving into two trailing virtual entries
+        let total = self.ports.len().saturating_add(2);
+        if total > 0 {
+            self.selected = (self.selected + 1) % total;
         }
     }
 
     pub fn prev(&mut self) {
-        if !self.ports.is_empty() {
-            if self.selected == 0 {
-                self.selected = self.ports.len() - 1;
-            } else {
-                self.selected -= 1;
-            }
+        let total = self.ports.len().saturating_add(2);
+        if total == 0 {
+            return;
+        }
+        if self.selected == 0 {
+            self.selected = total - 1;
+        } else {
+            self.selected -= 1;
         }
     }
 }
