@@ -53,10 +53,6 @@ tokio = { version = "^1", features = ["full"] }
 futures = "^0.3"
 oneshot = "^0.1"
 
-windows-sys = { version = "^0.60", features = [
-  "Win32_System_Diagnostics_ToolHelp",
-  "Win32_Foundation",
-] }
 whoami = "^1"
 crossterm = "^0.29"
 
@@ -64,8 +60,8 @@ image = { version = "^0.25", features = ["gif", "jpeg", "png", "webp"] }
 eframe = "^0.32"
 egui = "^0.32"
 ratatui = "^0.29"
+unicode-width = "^0.2"
 
 rmodbus = { version = "^0.10", features = ["with_serde"] }
 libc = "0.2"
 serialport = "^4"
-unicode-width = "^0.1"

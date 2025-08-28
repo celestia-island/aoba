@@ -4,7 +4,6 @@ pub mod ui;
 use anyhow::Result;
 use std::{
     io::{self, Stdout},
-    sync::atomic::{AtomicBool, Ordering},
     sync::{Arc, Mutex},
     thread,
     time::Duration,
@@ -43,7 +42,7 @@ pub fn start() -> Result<()> {
         thread::spawn(move || loop {
             thread::sleep(std::time::Duration::from_secs(3));
             if let Ok(mut guard) = app_clone.lock() {
-                // always refresh to detect added/removed COM ports
+                // Always refresh to detect added/removed COM ports
                 guard.refresh();
             } else {
                 log::error!("[TUI] refresher thread: failed to lock app (poisoned)");
@@ -114,7 +113,15 @@ fn run_app(
                     }
                     Action::FocusRight => {
                         if let Ok(mut guard) = app.lock() {
-                            guard.focus = Focus::Right;
+                            // Only allow focusing right when the selected port is occupied by this app
+                            let state = guard
+                                .port_states
+                                .get(guard.selected)
+                                .cloned()
+                                .unwrap_or(crate::protocol::status::PortState::Free);
+                            if state == crate::protocol::status::PortState::OccupiedByThis {
+                                guard.focus = Focus::Right;
+                            }
                             guard.clear_error();
                         } else {
                             log::error!("[TUI] failed to lock app for FocusRight");
@@ -161,10 +168,22 @@ fn run_app(
                             log::error!("[TUI] failed to lock app for SwitchMode");
                         }
                     }
-                        Action::TogglePort => {
-                            let mut guard = app.lock().unwrap();
+                    Action::TogglePort => {
+                        if let Ok(mut guard) = app.lock() {
                             guard.toggle_selected_port();
+                            // ensure focus is valid: only allow Right focus when selected port is OccupiedByThis
+                            let state = guard
+                                .port_states
+                                .get(guard.selected)
+                                .cloned()
+                                .unwrap_or(crate::protocol::status::PortState::Free);
+                            if state != crate::protocol::status::PortState::OccupiedByThis {
+                                guard.focus = Focus::Left;
+                            }
+                        } else {
+                            log::error!("[TUI] failed to lock app for TogglePort");
                         }
+                    }
                     Action::SwitchNext => {
                         if let Ok(mut guard) = app.lock() {
                             guard.right_mode = match guard.right_mode {
