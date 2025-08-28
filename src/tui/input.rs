@@ -8,8 +8,11 @@ pub enum Action {
     MoveNext,
     MovePrev,
     Refresh,
-    ToggleAutoRefresh,
     ClearError,
+    SwitchMode(usize),
+    SwitchNext,
+    SwitchPrev,
+    TogglePort,
     None,
 }
 
@@ -22,8 +25,13 @@ pub fn map_key(code: KeyCode) -> Action {
         KeyCode::Down | KeyCode::Char('j') => Action::MoveNext,
         KeyCode::Up | KeyCode::Char('k') => Action::MovePrev,
         KeyCode::Char('r') => Action::Refresh,
-        KeyCode::Char('a') => Action::ToggleAutoRefresh,
         KeyCode::Char('c') => Action::ClearError,
+        KeyCode::Char('1') => Action::SwitchMode(0),
+        KeyCode::Char('2') => Action::SwitchMode(1),
+        KeyCode::Char('3') => Action::SwitchMode(2),
+        KeyCode::Tab => Action::SwitchNext,
+        KeyCode::BackTab => Action::SwitchPrev,
+        KeyCode::Enter => Action::TogglePort,
         _ => Action::None,
     }
 }
