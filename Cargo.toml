@@ -68,3 +68,4 @@ ratatui = "^0.29"
 rmodbus = { version = "^0.10", features = ["with_serde"] }
 libc = "0.2"
 serialport = "^4"
+unicode-width = "^0.1"

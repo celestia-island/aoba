@@ -23,6 +23,20 @@ derive_struct! {
         type_label: String = "type_label".to_string(),
     details_placeholder: String = "details_placeholder".to_string(),
     press_c_clear: String = "press_c_clear".to_string(),
+    // tabs and mode texts
+    tab_master: String = "tab_master".to_string(),
+    tab_slave: String = "tab_slave".to_string(),
+    tab_listen: String = "tab_listen".to_string(),
+    hint_line: String = "hint_line".to_string(),
+    master_mode: String = "master_mode".to_string(),
+    slave_mode: String = "slave_mode".to_string(),
+    listen_mode: String = "listen_mode".to_string(),
+    // port list headers and states
+    port_header: String = "port_header".to_string(),
+    state_header: String = "state_header".to_string(),
+    port_state_free: String = "port_state_free".to_string(),
+    port_state_owned: String = "port_state_owned".to_string(),
+    port_state_other: String = "port_state_other".to_string(),
     }
 }
 

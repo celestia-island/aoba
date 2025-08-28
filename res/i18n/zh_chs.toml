@@ -12,3 +12,19 @@ name_label = "名称："
 type_label = "类型："
 details_placeholder = "（详情占位）"
 press_c_clear = "按 'c' 清除"
+
+# tabs and modes
+tab_master = "主站模式"
+tab_slave = "从站模式"
+tab_listen = "监听模式"
+hint_line = "焦点切换: ← →   移动: h/j/k/l"
+master_mode = "主站模式"
+slave_mode = "从站模式"
+listen_mode = "监听模式"
+
+# port headers and states
+port_header = "端口"
+state_header = "状态"
+port_state_free = "可用"
+port_state_owned = "占用"
+port_state_other = "被占用"

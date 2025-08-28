@@ -13,3 +13,19 @@ name_label = "Name:"
 type_label = "Type:"
 details_placeholder = "(Details placeholder)"
 press_c_clear = "Press 'c' to clear the message"
+
+# tabs and modes
+tab_master = "Master"
+tab_slave = "Slave"
+tab_listen = "Listen"
+hint_line = "Focus: ← →   Move: h/j/k/l"
+master_mode = "Master Mode"
+slave_mode = "Slave Mode"
+listen_mode = "Listen Mode"
+
+# port headers and states
+port_header = "Port"
+state_header = "State"
+port_state_free = "Free"
+port_state_owned = "Own"
+port_state_other = "Used"

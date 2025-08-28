@@ -12,6 +12,7 @@ use std::{
 
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
+use crate::protocol::status::RightMode;
 use crate::{
     protocol::status::{Focus, Status},
     tui::input::{map_key, Action},
@@ -42,9 +43,8 @@ pub fn start() -> Result<()> {
         thread::spawn(move || loop {
             thread::sleep(std::time::Duration::from_secs(3));
             if let Ok(mut guard) = app_clone.lock() {
-                if guard.auto_refresh {
-                    guard.refresh();
-                }
+                // always refresh to detect added/removed COM ports
+                guard.refresh();
             } else {
                 log::error!("[TUI] refresher thread: failed to lock app (poisoned)");
             }
@@ -148,14 +148,44 @@ fn run_app(
                             log::error!("[TUI] failed to lock app for Refresh");
                         }
                     }
-                    Action::ToggleAutoRefresh => {
+                    Action::SwitchMode(i) => {
                         if let Ok(mut guard) = app.lock() {
-                            guard.toggle_auto_refresh();
+                            let mode = match i {
+                                0 => RightMode::Master,
+                                1 => RightMode::SlaveStack,
+                                _ => RightMode::Listen,
+                            };
+                            guard.right_mode = mode;
                             guard.clear_error();
                         } else {
-                            log::error!("[TUI] failed to lock app for ToggleAutoRefresh");
+                            log::error!("[TUI] failed to lock app for SwitchMode");
                         }
                     }
+                        Action::TogglePort => {
+                            let mut guard = app.lock().unwrap();
+                            guard.toggle_selected_port();
+                        }
+                    Action::SwitchNext => {
+                        if let Ok(mut guard) = app.lock() {
+                            guard.right_mode = match guard.right_mode {
+                                RightMode::Master => RightMode::SlaveStack,
+                                RightMode::SlaveStack => RightMode::Listen,
+                                RightMode::Listen => RightMode::Master,
+                            };
+                            guard.clear_error();
+                        }
+                    }
+                    Action::SwitchPrev => {
+                        if let Ok(mut guard) = app.lock() {
+                            guard.right_mode = match guard.right_mode {
+                                RightMode::Master => RightMode::Listen,
+                                RightMode::SlaveStack => RightMode::Master,
+                                RightMode::Listen => RightMode::SlaveStack,
+                            };
+                            guard.clear_error();
+                        }
+                    }
+                    // ToggleAutoRefresh removed: auto-refresh is always enabled by background thread
                     Action::ClearError => {
                         if let Ok(mut guard) = app.lock() {
                             guard.clear_error();

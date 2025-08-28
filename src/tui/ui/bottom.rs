@@ -3,7 +3,6 @@ use ratatui::{prelude::*, widgets::*};
 use crate::{i18n::lang, protocol::status::Status};
 
 pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
-    let help_short = lang().help_short.as_str();
     let help_block = Block::default().borders(Borders::NONE);
 
     // If app has an error message, display it on the first line (red),
@@ -38,9 +37,11 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
             .block(instr_block);
         f.render_widget(instr_p, rows[1]);
     } else {
-        let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::DarkGray));
-        let help = Paragraph::new(help_short)
+        let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
+        let hint = lang().hint_line.as_str();
+        let help = Paragraph::new(hint)
             .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true })
             .block(help_block);
         f.render_widget(help, area);
     }
