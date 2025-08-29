@@ -101,11 +101,38 @@ fn run_app(
                     _ => continue, // Release or other kinds
                 }
 
-                // If a subpage form is active and in editing mode, capture raw character input
-                // and interpret it as form input. Otherwise map keys to high-level actions.
+                // If a subpage form is active and in editing mode OR we're on the
+                // Baud->Custom pending slot, capture raw character input and
+                // interpret it as form input. Otherwise map keys to high-level actions.
                 let lock = app.lock();
                 let _is_editing = match &lock {
-                    Ok(g) => g.subpage_form.as_ref().map(|f| f.editing).unwrap_or(false),
+                    Ok(g) => g
+                        .subpage_form
+                        .as_ref()
+                        .map(|f| {
+                            if f.editing {
+                                true
+                            } else {
+                                // allow pre-confirm typing when editing_field is Baud and the current choice is Custom
+                                if let Some(crate::protocol::status::EditingField::Baud) =
+                                    f.editing_field.clone()
+                                {
+                                    let presets: [u32; 8] =
+                                        [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                                    let custom_idx = presets.len();
+                                    let cur = f.edit_choice_index.unwrap_or_else(|| {
+                                        presets
+                                            .iter()
+                                            .position(|&p| p == f.baud)
+                                            .unwrap_or(custom_idx)
+                                    });
+                                    cur == custom_idx
+                                } else {
+                                    false
+                                }
+                            }
+                        })
+                        .unwrap_or(false),
                     Err(_) => false,
                 };
 
@@ -143,7 +170,6 @@ fn run_app(
                                 if guard.active_subpage.is_some() {
                                     guard.active_subpage = Some(guard.right_mode);
                                 }
-                                guard.mode_selector_active = false;
                             }
                             KC::Esc => {
                                 guard.mode_selector_active = false;
@@ -163,68 +189,118 @@ fn run_app(
                 };
 
                 if is_editing {
-                    // handle editing keys explicitly
                     use crossterm::event::KeyCode as KC;
                     if let Ok(mut guard) = app.lock() {
+                        let mut pending_error: Option<String> = None;
                         if let Some(form) = guard.subpage_form.as_mut() {
                             match key.code {
                                 KC::Char(c) => {
-                                    // append printable characters
-                                    form.input_buffer.push(c);
+                                    // For Baud field only accept digits; other fields accept any char
+                                    if let Some(field) = &form.editing_field {
+                                        match field {
+                                            crate::protocol::status::EditingField::Baud => {
+                                                if c.is_ascii_digit() {
+                                                    form.input_buffer.push(c);
+                                                }
+                                            }
+                                            _ => form.input_buffer.push(c),
+                                        }
+                                    } else {
+                                        // pre-confirm case: assume Baud custom pending -> accept digits only
+                                        if c.is_ascii_digit() {
+                                            form.input_buffer.push(c);
+                                        }
+                                    }
                                 }
                                 KC::Backspace => {
                                     form.input_buffer.pop();
                                 }
-                                KC::Enter => {
-                                    // apply buffer to the currently editing field
+                                KC::Left | KC::Right => {
+                                    // try to interpret and adjust current field numerically or toggle parity
                                     if let Some(field) = &form.editing_field {
+                                        let dir: i64 = match key.code {
+                                            KC::Left => -1,
+                                            KC::Right => 1,
+                                            _ => 0,
+                                        };
                                         match field {
                                             crate::protocol::status::EditingField::Baud => {
-                                                if let Ok(v) = form.input_buffer.parse::<u32>() {
-                                                    form.baud = v;
+                                                let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                                                let custom_idx = presets.len();
+                                                // initialize edit_choice_index if missing
+                                                if form.edit_choice_index.is_none() {
+                                                    let idx = presets.iter().position(|&p| p == form.baud).unwrap_or(custom_idx);
+                                                    form.edit_choice_index = Some(idx);
+                                                }
+                                                if let Some(mut idx) = form.edit_choice_index {
+                                                    if dir > 0 {
+                                                        // move right
+                                                        if idx >= custom_idx {
+                                                            idx = 0;
+                                                        } else {
+                                                            idx = idx + 1;
+                                                        }
+                                                    } else {
+                                                        // move left
+                                                        if idx == 0 {
+                                                            idx = custom_idx;
+                                                        } else {
+                                                            idx = idx - 1;
+                                                        }
+                                                    }
+                                                    form.edit_choice_index = Some(idx);
+                                                    // if moved to preset, clear buffer and update baud preview
+                                                    if idx < presets.len() {
+                                                        form.input_buffer.clear();
+                                                        form.baud = presets[idx];
+                                                    }
                                                 }
                                             }
                                             crate::protocol::status::EditingField::StopBits => {
-                                                if let Ok(v) = form.input_buffer.parse::<u8>() {
-                                                    form.stop_bits = v;
-                                                }
+                                                // cycle among 1, 2
+                                                let options = [1, 2];
+                                                let cur_idx = options.iter().position(|&v| v == form.stop_bits).unwrap_or(0);
+                                                let next = if dir > 0 { (cur_idx + 1) % options.len() } else { (cur_idx + options.len() - 1) % options.len() };
+                                                form.stop_bits = options[next];
                                             }
                                             crate::protocol::status::EditingField::Parity => {
-                                                // simple mapping by text
-                                                match form.input_buffer.as_str() {
-                                                    "None" | "none" | "N" | "n" => {
-                                                        form.parity = crate::protocol::status::Parity::None
-                                                    }
-                                                    "Even" | "even" | "E" | "e" => {
-                                                        form.parity = crate::protocol::status::Parity::Even
-                                                    }
-                                                    "Odd" | "odd" | "O" | "o" => {
-                                                        form.parity = crate::protocol::status::Parity::Odd
-                                                    }
-                                                    _ => {}
-                                                }
+                                                // cycle parity options
+                                                let options = [crate::protocol::status::Parity::None, crate::protocol::status::Parity::Even, crate::protocol::status::Parity::Odd];
+                                                let idx = options.iter().position(|&p| p == form.parity).unwrap_or(0);
+                                                let next = if dir > 0 { (idx + 1) % options.len() } else { (idx + options.len() - 1) % options.len() };
+                                                form.parity = options[next].clone();
+                                            }
+                                            crate::protocol::status::EditingField::DataBits => {
+                                                let options = [5u8, 6u8, 7u8, 8u8];
+                                                let idx = options.iter().position(|&d| d == form.data_bits).unwrap_or(3);
+                                                let next = if dir > 0 { (idx + 1) % options.len() } else { (idx + options.len() - 1) % options.len() };
+                                                form.data_bits = options[next];
                                             }
                                             crate::protocol::status::EditingField::RegisterField { idx, field } => {
                                                 if let Some(reg) = form.registers.get_mut(*idx) {
                                                     match field {
                                                         crate::protocol::status::RegisterField::SlaveId => {
-                                                            if let Ok(v) = form.input_buffer.parse::<u8>() {
-                                                                reg.slave_id = v;
+                                                            let new = (reg.slave_id as i64).saturating_add(dir);
+                                                            if new >= 0 && new <= u8::MAX as i64 {
+                                                                reg.slave_id = new as u8;
                                                             }
                                                         }
                                                         crate::protocol::status::RegisterField::Mode => {
-                                                            if let Ok(v) = form.input_buffer.parse::<u8>() {
-                                                                reg.mode = v;
+                                                            let new = (reg.mode as i64).saturating_add(dir);
+                                                            if new >= 0 && new <= u8::MAX as i64 {
+                                                                reg.mode = new as u8;
                                                             }
                                                         }
                                                         crate::protocol::status::RegisterField::Address => {
-                                                            if let Ok(v) = form.input_buffer.parse::<u16>() {
-                                                                reg.address = v;
+                                                            let new = (reg.address as i64).saturating_add(dir);
+                                                            if new >= 0 && new <= u16::MAX as i64 {
+                                                                reg.address = new as u16;
                                                             }
                                                         }
                                                         crate::protocol::status::RegisterField::Length => {
-                                                            if let Ok(v) = form.input_buffer.parse::<u16>() {
-                                                                reg.length = v;
+                                                            let new = (reg.length as i64).saturating_add(dir);
+                                                            if new >= 0 && new <= u16::MAX as i64 {
+                                                                reg.length = new as u16;
                                                             }
                                                         }
                                                     }
@@ -232,19 +308,115 @@ fn run_app(
                                             }
                                         }
                                     }
-                                    // exit editing state for the field but keep overall editing flag
-                                    form.input_buffer.clear();
-                                    form.editing_field = None;
+                                }
+                                KC::Enter => {
+                                    // If we're in Baud field and currently on Custom but not yet confirmed,
+                                    // confirm deeper edit instead of committing immediately.
+                                    if let Some(crate::protocol::status::EditingField::Baud) =
+                                        &form.editing_field
+                                    {
+                                        let presets: [u32; 8] =
+                                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                                        let custom_idx = presets.len();
+                                        if let Some(idx) = form.edit_choice_index {
+                                            if idx == custom_idx && !form.edit_confirmed {
+                                                // enter deeper confirmed edit stage
+                                                form.edit_confirmed = true;
+                                                form.editing = true;
+                                                // keep input_buffer as is (user may have typed)
+                                                continue;
+                                            }
+                                        }
+                                    }
+                                    // commit and exit field editing
+                                    let mut commit_success = true;
+                                    if let Some(field) = &form.editing_field {
+                                        match field {
+                                            crate::protocol::status::EditingField::Baud => {
+                                                let presets: [u32; 8] = [
+                                                    1200, 2400, 4800, 9600, 19200, 38400, 57600,
+                                                    115200,
+                                                ];
+                                                if let Some(idx) = form.edit_choice_index {
+                                                    if idx < presets.len() {
+                                                        form.baud = presets[idx];
+                                                    } else {
+                                                        // custom: must parse and validate [1200..=2_000_000]
+                                                        if !form.input_buffer.is_empty() {
+                                                            if let Ok(v) =
+                                                                form.input_buffer.parse::<u32>()
+                                                            {
+                                                                if v >= 1200 && v <= 2_000_000 {
+                                                                    form.baud = v;
+                                                                } else {
+                                                                    pending_error = Some(
+                                                                        crate::i18n::lang()
+                                                                            .invalid_baud_range
+                                                                            .clone(),
+                                                                    );
+                                                                    commit_success = false;
+                                                                }
+                                                            } else {
+                                                                commit_success = false;
+                                                            }
+                                                        } else {
+                                                            commit_success = false;
+                                                        }
+                                                    }
+                                                } else {
+                                                    // fallback: if buffer present try parse and validate
+                                                    if !form.input_buffer.is_empty() {
+                                                        if let Ok(v) =
+                                                            form.input_buffer.parse::<u32>()
+                                                        {
+                                                            if v >= 1200 && v <= 2_000_000 {
+                                                                form.baud = v;
+                                                            } else {
+                                                                pending_error = Some(
+                                                                    crate::i18n::lang()
+                                                                        .invalid_baud_range
+                                                                        .clone(),
+                                                                );
+                                                                commit_success = false;
+                                                            }
+                                                        } else {
+                                                            commit_success = false;
+                                                        }
+                                                    } else {
+                                                        commit_success = false;
+                                                    }
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    // exit current field editing and leave overall editing mode only when commit succeeded
+                                    if commit_success {
+                                        form.input_buffer.clear();
+                                        form.editing_field = None;
+                                        form.editing = false;
+                                        form.edit_choice_index = None;
+                                        form.edit_confirmed = false;
+                                    } else {
+                                        // Keep the buffer so user can edit; pending_error will be applied after borrow ends
+                                    }
                                 }
                                 KC::Esc => {
-                                    // cancel current field editing
+                                    // cancel current field editing (revert input buffer)
                                     form.input_buffer.clear();
                                     form.editing_field = None;
+                                    form.editing = false;
+                                    form.edit_choice_index = None;
+                                    form.edit_confirmed = false;
                                 }
                                 _ => {}
                             }
                         }
-                        guard.clear_error();
+                        if let Some(msg) = pending_error {
+                            guard.set_error(msg);
+                        } else {
+                            guard.clear_error();
+                        }
                     }
                     continue; // skip normal key mapping when editing
                 }
@@ -301,7 +473,7 @@ fn run_app(
                         if let Ok(mut guard) = app.lock() {
                             if guard.active_subpage.is_some() {
                                 if let Some(form) = guard.subpage_form.as_mut() {
-                                    let total = 3usize.saturating_add(form.registers.len());
+                                    let total = 4usize.saturating_add(form.registers.len());
                                     if total > 0 {
                                         form.cursor = (form.cursor + 1) % total;
                                     }
@@ -318,7 +490,7 @@ fn run_app(
                         if let Ok(mut guard) = app.lock() {
                             if guard.active_subpage.is_some() {
                                 if let Some(form) = guard.subpage_form.as_mut() {
-                                    let total = 3usize.saturating_add(form.registers.len());
+                                    let total = 4usize.saturating_add(form.registers.len());
                                     if total > 0 {
                                         if form.cursor == 0 {
                                             form.cursor = total - 1;
@@ -438,7 +610,7 @@ fn run_app(
                             if let Some(form) = guard.subpage_form.as_mut() {
                                 form.editing = !form.editing;
                                 if form.editing {
-                                    // choose field based on cursor: 0=baud,1=parity,2=stopbits,>=3 -> register index
+                                    // choose field based on cursor: 0=baud,1=parity,2=databits,3=stopbits,>=4 -> register index
                                     match form.cursor {
                                         0 => {
                                             form.editing_field =
@@ -450,18 +622,42 @@ fn run_app(
                                         }
                                         2 => {
                                             form.editing_field = Some(
+                                                crate::protocol::status::EditingField::DataBits,
+                                            )
+                                        }
+                                        3 => {
+                                            form.editing_field = Some(
                                                 crate::protocol::status::EditingField::StopBits,
                                             )
                                         }
                                         n => {
-                                            let ridx = n.saturating_sub(3);
+                                            let ridx = n.saturating_sub(4);
                                             form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
                                         }
                                     }
                                     form.input_buffer.clear();
+                                    // If entering Baud edit, initialize edit_choice_index and prefill buffer for custom
+                                    if let Some(crate::protocol::status::EditingField::Baud) =
+                                        form.editing_field.clone()
+                                    {
+                                        let presets: [u32; 8] =
+                                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                                        let _custom_idx = presets.len();
+                                        let idx = presets
+                                            .iter()
+                                            .position(|&p| p == form.baud)
+                                            .unwrap_or(_custom_idx);
+                                        form.edit_choice_index = Some(idx);
+                                        if idx == presets.len() {
+                                            form.input_buffer = form.baud.to_string();
+                                        }
+                                        form.edit_confirmed = false; // not yet confirmed deeper edit
+                                    }
                                 } else {
                                     form.editing_field = None;
                                     form.input_buffer.clear();
+                                    form.edit_choice_index = None;
+                                    form.edit_confirmed = false;
                                 }
                             }
                             guard.clear_error();
