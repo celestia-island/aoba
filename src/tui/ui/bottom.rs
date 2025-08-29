@@ -1,6 +1,6 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{i18n::lang, protocol::status::Status, tui::ui::pages};
 
 pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
     let help_block = Block::default().borders(Borders::NONE);
@@ -46,62 +46,8 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
     } else {
         let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
-        // Build hints as a list so we can guarantee the quit hint is always last.
-        let mut hints: Vec<String> = Vec::new();
-        if _app.active_subpage.is_some() {
-            // If a subpage is active, show subpage-specific hints. If the subpage
-            // has a form and it is editing, modify hints based on edit_confirmed.
-            if let Some(form) = &_app.subpage_form {
-                if form.editing {
-                    // If editing but not in deep-confirmed edit, show unified selection hints
-                    if !form.edit_confirmed {
-                        hints.push(lang().press_enter_select.as_str().to_string());
-                        hints.push(lang().press_esc_cancel.as_str().to_string());
-                    } else {
-                        // Deeper confirmed edit: show submit/cancel guidance
-                        hints.push(lang().press_enter_submit.as_str().to_string());
-                        hints.push(lang().press_esc_cancel.as_str().to_string());
-                    }
-                } else {
-                    // Subpage active but not editing: standard subpage hints
-                    hints.push(lang().hint_back_list.as_str().to_string());
-                    hints.push(lang().hint_switch_tab.as_str().to_string());
-                }
-            } else {
-                hints.push(lang().hint_back_list.as_str().to_string());
-                hints.push(lang().hint_switch_tab.as_str().to_string());
-            }
-        } else {
-            // first hint: switching COM ports with Up/Down or k/j
-            hints.push(lang().hint_move_vertical.as_str().to_string());
-            // second hint: press 'l' to enter subpage (Right arrow intentionally disabled)
-            hints.push(lang().hint_enter_subpage.as_str().to_string());
-        }
-
-        // if selected port is occupied by this app and no subpage overlay is active,
-        // add mode menu hint before the quit hint. When a subpage is active 'm' is
-        // intentionally disabled so we don't show the hint.
-        let state = _app
-            .port_states
-            .get(_app.selected)
-            .cloned()
-            .unwrap_or(crate::protocol::status::PortState::Free);
-        if state == crate::protocol::status::PortState::OccupiedByThis
-            && _app.active_subpage.is_none()
-        {
-            hints.push(lang().hint_mode_menu.as_str().to_string());
-        }
-
-        // Append quit hint as the last item unless we're inside an active subpage editing session
-        let in_subpage_editing = _app
-            .subpage_form
-            .as_ref()
-            .map(|f| f.editing)
-            .unwrap_or(false);
-        if !in_subpage_editing {
-            hints.push(lang().press_q_quit.as_str().to_string());
-        }
-
+        // Delegate to page layer to assemble bottom hints.
+        let hints = pages::bottom_hints_for_app(_app);
         let text = hints.join("   ");
         let help = Paragraph::new(text)
             .alignment(Alignment::Center)

@@ -1,3 +1,4 @@
+use crossterm::event::KeyEvent;
 use ratatui::{
     prelude::*,
     style::{Modifier, Style},
@@ -5,9 +6,9 @@ use ratatui::{
     widgets::{Paragraph, Tabs},
 };
 
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
-/// UI for configuring Modbus 从站 (pull) settings for the selected port.
+/// UI for configuring Modbus slave (pull) settings for the selected port.
 pub fn render_pull(f: &mut Frame, area: Rect, app: &Status) {
     let port_name = if !app.ports.is_empty() && app.selected < app.ports.len() {
         app.ports[app.selected].port_name.clone()
@@ -121,10 +122,51 @@ pub fn handle_subpage_key(
         }
         KC::Enter => {
             if let Some(form) = app.subpage_form.as_mut() {
-                form.editing = !form.editing;
-                if form.editing {
+                if !form.editing {
+                    form.editing = true;
+                    // initialize editing field based on cursor (same as EditToggle)
+                    match form.cursor {
+                        0 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
+                        1 => {
+                            form.editing_field = Some(crate::protocol::status::EditingField::Parity)
+                        }
+                        2 => {
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::DataBits)
+                        }
+                        3 => {
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::StopBits)
+                        }
+                        n => {
+                            let ridx = n.saturating_sub(4);
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::RegisterField {
+                                    idx: ridx,
+                                    field: crate::protocol::status::RegisterField::SlaveId,
+                                });
+                        }
+                    }
                     form.input_buffer.clear();
+                    // If entering Baud edit, initialize edit_choice_index and prefill buffer for custom
+                    if let Some(crate::protocol::status::EditingField::Baud) =
+                        form.editing_field.clone()
+                    {
+                        let presets: [u32; 8] =
+                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                        let _custom_idx = presets.len();
+                        let idx = presets
+                            .iter()
+                            .position(|&p| p == form.baud)
+                            .unwrap_or(_custom_idx);
+                        form.edit_choice_index = Some(idx);
+                        if idx == presets.len() {
+                            form.input_buffer = form.baud.to_string();
+                        }
+                        form.edit_confirmed = false;
+                    }
                 } else {
+                    form.editing = false;
                     form.editing_field = None;
                     form.input_buffer.clear();
                 }
@@ -133,8 +175,51 @@ pub fn handle_subpage_key(
         }
         KC::Char('e') => {
             if let Some(form) = app.subpage_form.as_mut() {
-                form.editing = !form.editing;
-                if form.editing {
+                if !form.editing {
+                    form.editing = true;
+                    // same initialization as Enter
+                    match form.cursor {
+                        0 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
+                        1 => {
+                            form.editing_field = Some(crate::protocol::status::EditingField::Parity)
+                        }
+                        2 => {
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::DataBits)
+                        }
+                        3 => {
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::StopBits)
+                        }
+                        n => {
+                            let ridx = n.saturating_sub(4);
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::RegisterField {
+                                    idx: ridx,
+                                    field: crate::protocol::status::RegisterField::SlaveId,
+                                });
+                        }
+                    }
+                    form.input_buffer.clear();
+                    if let Some(crate::protocol::status::EditingField::Baud) =
+                        form.editing_field.clone()
+                    {
+                        let presets: [u32; 8] =
+                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                        let _custom_idx = presets.len();
+                        let idx = presets
+                            .iter()
+                            .position(|&p| p == form.baud)
+                            .unwrap_or(_custom_idx);
+                        form.edit_choice_index = Some(idx);
+                        if idx == presets.len() {
+                            form.input_buffer = form.baud.to_string();
+                        }
+                        form.edit_confirmed = false;
+                    }
+                } else {
+                    form.editing = false;
+                    form.editing_field = None;
                     form.input_buffer.clear();
                 }
             }
@@ -165,4 +250,52 @@ pub fn handle_subpage_key(
         _ => {}
     }
     false
+}
+
+/// Provide bottom hints when this page is active as a subpage.
+pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+    let mut hints: Vec<String> = Vec::new();
+    if let Some(form) = &app.subpage_form {
+        if form.editing {
+            if let Some(crate::protocol::status::EditingField::Baud) = &form.editing_field {
+                // distinguish between selecting Custom (not yet confirmed) and deeper editing
+                let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
+                let custom_idx = presets.len();
+                let cur = form.edit_choice_index.unwrap_or_else(|| {
+                    presets
+                        .iter()
+                        .position(|&p| p == form.baud)
+                        .unwrap_or(custom_idx)
+                });
+                if cur == custom_idx && !form.edit_confirmed {
+                    hints.push(lang().press_enter_select.as_str().to_string());
+                    hints.push(lang().press_esc_cancel.as_str().to_string());
+                } else {
+                    hints.push(lang().press_enter_submit.as_str().to_string());
+                    hints.push(lang().press_esc_cancel.as_str().to_string());
+                }
+            } else {
+                hints.push(lang().press_enter_submit.as_str().to_string());
+                hints.push(lang().press_esc_cancel.as_str().to_string());
+            }
+            return hints;
+        }
+    }
+    hints.push(lang().hint_back_list.as_str().to_string());
+    hints.push(lang().hint_switch_tab.as_str().to_string());
+    hints
+}
+
+/// Page-level key mapping: allow pull page to map keys to Actions (optional).
+pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
+    use crossterm::event::KeyCode as KC;
+    match key.code {
+        KC::Tab => Some(Action::SwitchNext),
+        KC::BackTab => Some(Action::SwitchPrev),
+        KC::Enter => Some(Action::EditToggle),
+        KC::Char('e') => Some(Action::EditToggle),
+        KC::Char('n') => Some(Action::AddRegister),
+        KC::Char('d') => Some(Action::DeleteRegister),
+        _ => None,
+    }
 }
