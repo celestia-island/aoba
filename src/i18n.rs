@@ -50,6 +50,21 @@ derive_struct! {
         press_enter_refresh: String = "press_enter_refresh".to_string(),
         press_enter_manual_specify: String = "press_enter_manual_specify".to_string(),
         press_q_quit: String = "press_q_quit".to_string(),
+    hint_enter_subpage: String = "hint_enter_subpage".to_string(),
+    hint_back_list: String = "hint_back_list".to_string(),
+    hint_mode_menu: String = "hint_mode_menu".to_string(),
+    // serial param labels & misc
+    serial_unknown: String = "serial_unknown".to_string(),
+    label_port: String = "label_port".to_string(),
+    label_type: String = "label_type".to_string(),
+    label_status: String = "label_status".to_string(),
+    label_mode: String = "label_mode".to_string(),
+    label_baud: String = "label_baud".to_string(),
+    label_data_bits: String = "label_data_bits".to_string(),
+    label_parity: String = "label_parity".to_string(),
+    label_stop_bits: String = "label_stop_bits".to_string(),
+    edit_suffix: String = "edit_suffix".to_string(),
+    registers_list: String = "registers_list".to_string(),
     }
 }
 

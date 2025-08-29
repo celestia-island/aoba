@@ -7,6 +7,68 @@ use std::time::Duration;
 
 use crate::protocol::tty::available_ports_sorted;
 
+#[derive(Debug, Clone)]
+pub enum Parity {
+    None,
+    Even,
+    Odd,
+}
+
+#[derive(Debug, Clone)]
+pub struct RegisterEntry {
+    pub slave_id: u8,
+    pub mode: u8, // 1,2,3,4 mapping
+    pub address: u16,
+    pub length: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubpageForm {
+    pub baud: u32,
+    pub parity: Parity,
+    pub stop_bits: u8,
+    pub registers: Vec<RegisterEntry>,
+    // UI state
+    pub cursor: usize, // which field or register is focused
+    pub editing: bool, // whether in edit mode
+    // which specific field is being edited (None when not editing)
+    pub editing_field: Option<EditingField>,
+    // input buffer for the current editing session (text)
+    pub input_buffer: String,
+}
+
+impl Default for SubpageForm {
+    fn default() -> Self {
+        Self {
+            baud: 9600,
+            parity: Parity::None,
+            stop_bits: 1,
+            registers: vec![],
+            cursor: 0,
+            editing: false,
+            editing_field: None,
+            input_buffer: String::new(),
+        }
+    }
+}
+
+/// Which concrete field inside the SubpageForm is currently being edited.
+#[derive(Debug, Clone)]
+pub enum EditingField {
+    Baud,
+    Parity,
+    StopBits,
+    RegisterField { idx: usize, field: RegisterField },
+}
+
+#[derive(Debug, Clone)]
+pub enum RegisterField {
+    SlaveId,
+    Mode,
+    Address,
+    Length,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Focus {
     Left,
@@ -33,6 +95,13 @@ pub struct Status {
     pub last_refresh: Option<DateTime<Local>>,
     pub error: Option<(String, DateTime<Local>)>,
     pub right_mode: RightMode,
+    /// When Some, a subpage for the right side is active (entered). None means main entry view.
+    pub active_subpage: Option<RightMode>,
+    /// transient UI state for the active subpage (editable form)
+    pub subpage_form: Option<SubpageForm>,
+    /// transient mode selector overlay state
+    pub mode_selector_active: bool,
+    pub mode_selector_index: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -57,7 +126,43 @@ impl Status {
             last_refresh: None,
             error: None,
             right_mode: RightMode::Master,
+            active_subpage: None,
+            subpage_form: None,
+            mode_selector_active: false,
+            mode_selector_index: 0,
         }
+    }
+
+    /// Initialize subpage_form from selected port when entering a subpage
+    pub fn init_subpage_form(&mut self) {
+        // If no ports or selected is virtual, create a default form
+        if self.ports.is_empty() || self.selected >= self.ports.len() {
+            self.subpage_form = Some(SubpageForm::default());
+            return;
+        }
+        // Try to populate from existing open handle if available
+        let mut form = SubpageForm::default();
+        if let Some(slot) = self.port_handles.get(self.selected) {
+            if let Some(handle) = slot.as_ref() {
+                form.baud = handle.baud_rate().unwrap_or(9600);
+                form.stop_bits = handle
+                    .stop_bits()
+                    .map(|s| match s {
+                        serialport::StopBits::One => 1,
+                        serialport::StopBits::Two => 2,
+                    })
+                    .unwrap_or(1);
+                // parity mapping
+                if let Ok(p) = handle.parity() {
+                    form.parity = match p {
+                        serialport::Parity::None => Parity::None,
+                        serialport::Parity::Even => Parity::Even,
+                        serialport::Parity::Odd => Parity::Odd,
+                    };
+                }
+            }
+        }
+        self.subpage_form = Some(form);
     }
 
     pub fn set_error(&mut self, msg: impl Into<String>) {
@@ -83,19 +188,23 @@ impl Status {
             last_refresh: None,
             error: None,
             right_mode: RightMode::Master,
+            active_subpage: None,
+            subpage_form: None,
+            mode_selector_active: false,
+            mode_selector_index: 0,
         }
     }
 
     /// Re-scan available ports and reset selection if needed
     pub fn refresh(&mut self) {
         let new_ports = available_ports_sorted();
-    // Remember previously selected port name (if any real port selected)
+        // Remember previously selected port name (if any real port selected)
         let prev_selected_name = if !self.ports.is_empty() && self.selected < self.ports.len() {
             Some(self.ports[self.selected].port_name.clone())
         } else {
             None
         };
-    // Preserve known states and handles by port name
+        // Preserve known states and handles by port name
         let mut name_to_state: HashMap<String, PortState> = HashMap::new();
         let mut name_to_handle: HashMap<String, Option<Box<dyn SerialPort>>> = HashMap::new();
         for (i, p) in self.ports.iter().enumerate() {
@@ -109,7 +218,7 @@ impl Status {
             }
         }
         self.ports = new_ports;
-    // Rebuild port_states and port_handles preserving by name
+        // Rebuild port_states and port_handles preserving by name
         let mut new_states: Vec<PortState> = Vec::with_capacity(self.ports.len());
         let mut new_handles: Vec<Option<Box<dyn SerialPort>>> =
             Vec::with_capacity(self.ports.len());
