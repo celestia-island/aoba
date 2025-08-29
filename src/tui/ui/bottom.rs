@@ -31,10 +31,17 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
         f.render_widget(p, rows[0]);
 
         let instr = lang().press_c_clear.as_str().to_string();
+        // When inside a subpage, show how to switch modes with Tab and how to quit
+        let sub_hint = lang().hint_switch_tab.as_str().to_string();
         let instr_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::DarkGray));
-        let instr_p = Paragraph::new(format!("{}   {}", instr, lang().press_q_quit.as_str()))
-            .alignment(Alignment::Center)
-            .block(instr_block);
+        let instr_p = Paragraph::new(format!(
+            "{}   {}   {}",
+            instr,
+            sub_hint,
+            lang().press_q_quit.as_str()
+        ))
+        .alignment(Alignment::Center)
+        .block(instr_block);
         f.render_widget(instr_p, rows[1]);
     } else {
         let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
@@ -43,17 +50,26 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
         let mut hints: Vec<String> = Vec::new();
         if _app.active_subpage.is_some() {
             hints.push(lang().hint_back_list.as_str().to_string());
+            // also show that Tab switches modes while in subpage
+            hints.push(lang().hint_switch_tab.as_str().to_string());
         } else {
+            // first hint: switching COM ports with Up/Down or k/j
+            hints.push(lang().hint_move_vertical.as_str().to_string());
+            // second hint: press 'l' to enter subpage (Right arrow intentionally disabled)
             hints.push(lang().hint_enter_subpage.as_str().to_string());
         }
 
-        // if selected port is occupied by this app, add mode menu hint before the quit hint
+        // if selected port is occupied by this app and no subpage overlay is active,
+        // add mode menu hint before the quit hint. When a subpage is active 'm' is
+        // intentionally disabled so we don't show the hint.
         let state = _app
             .port_states
             .get(_app.selected)
             .cloned()
             .unwrap_or(crate::protocol::status::PortState::Free);
-        if state == crate::protocol::status::PortState::OccupiedByThis {
+        if state == crate::protocol::status::PortState::OccupiedByThis
+            && _app.active_subpage.is_none()
+        {
             hints.push(lang().hint_mode_menu.as_str().to_string());
         }
 

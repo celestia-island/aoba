@@ -1,10 +1,11 @@
-use ratatui::prelude::*;
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::{
+    prelude::*,
+    style::{Modifier, Style},
+    text::{Line, Span},
+    widgets::{Paragraph, Tabs},
+};
 
-use crate::i18n::lang;
-use crate::protocol::status::{Parity, Status};
-use ratatui::style::{Color, Style, Modifier};
-use ratatui::text::{Span, Line};
+use crate::{i18n::lang, protocol::status::Status};
 
 /// UI for configuring Modbus 主站 (master) settings for the selected port.
 pub fn render_slave(f: &mut Frame, area: Rect, app: &Status) {
@@ -16,102 +17,75 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &Status) {
 
     let title_line = Line::from(vec![
         Span::raw(" "),
-        Span::styled(port_name.clone(), Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(
+            port_name.clone(),
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
         Span::raw(format!(" - {}", lang().tab_master.as_str())),
     ]);
 
-    let block = Block::default().title(title_line).borders(ratatui::widgets::Borders::ALL);
-
-    let form = app.subpage_form.as_ref().cloned().unwrap_or_default();
-
-    let mut lines: Vec<ratatui::text::Line> = Vec::new();
-    let push_field = |lines: &mut Vec<ratatui::text::Line>,
-                      idx: usize,
-                      label: &str,
-                      value: String,
-                      editing: bool,
-                      buffer: &str| {
-        if editing {
-            let s = format!("{}: {} [编辑: {}]", label, value, buffer);
-            lines.push(ratatui::text::Line::from(Span::styled(
-                s,
-                Style::default().fg(Color::Yellow),
-            )));
-        } else if idx == form.cursor {
-            let s = format!("{}: {}", label, value);
-            lines.push(ratatui::text::Line::from(Span::styled(
-                s,
-                Style::default().bg(Color::LightBlue),
-            )));
-        } else {
-            lines.push(ratatui::text::Line::from(format!("{}: {}", label, value)));
-        }
+    let middle_tab = match app.right_mode {
+        crate::protocol::status::RightMode::Master => lang().label_master_list.as_str(),
+        crate::protocol::status::RightMode::SlaveStack => lang().label_slave_listen.as_str(),
+        crate::protocol::status::RightMode::Listen => lang().label_slave_listen.as_str(),
     };
-    let editing_field = form.editing_field.clone();
-    push_field(
-        &mut lines,
-        0,
-        "波特率",
-        form.baud.to_string(),
-        matches!(
-            editing_field,
-            Some(crate::protocol::status::EditingField::Baud)
-        ),
-        form.input_buffer.as_str(),
-    );
-    let parity_text = match form.parity {
-        Parity::None => "None".to_string(),
-        Parity::Even => "Even".to_string(),
-        Parity::Odd => "Odd".to_string(),
-    };
-    push_field(
-        &mut lines,
-        1,
-        "校验",
-        parity_text,
-        matches!(
-            editing_field,
-            Some(crate::protocol::status::EditingField::Parity)
-        ),
-        form.input_buffer.as_str(),
-    );
-    push_field(
-        &mut lines,
-        2,
-        "停止位",
-        form.stop_bits.to_string(),
-        matches!(
-            editing_field,
-            Some(crate::protocol::status::EditingField::StopBits)
-        ),
-        form.input_buffer.as_str(),
-    );
-    lines.push(ratatui::text::Line::from(""));
-    lines.push(ratatui::text::Line::from("寄存器列表:"));
-    for (i, r) in form.registers.iter().enumerate() {
-        let idx = 3 + i;
-        let line_text = format!(
-            "{}. slave={} mode={} addr={} len={}",
-            i + 1,
-            r.slave_id,
-            r.mode,
-            r.address,
-            r.length
-        );
-        if form.cursor == idx {
-            lines.push(ratatui::text::Line::from(Span::styled(
-                line_text,
-                Style::default().bg(Color::LightBlue),
-            )));
-        } else {
-            lines.push(ratatui::text::Line::from(line_text));
-        }
+    let tabs = vec!["通信配置", middle_tab, "通信日志"];
+    let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
+
+    let [header_area, content_area] = ratatui::layout::Layout::vertical([
+        ratatui::layout::Constraint::Length(2),
+        ratatui::layout::Constraint::Min(0),
+    ])
+    .areas(area);
+
+    // header: title and tabs
+    let [tabs_area, title_area] = ratatui::layout::Layout::horizontal([
+        ratatui::layout::Constraint::Min(0),
+        ratatui::layout::Constraint::Length(20),
+    ])
+    .areas(header_area);
+
+    // title
+    f.render_widget(Paragraph::new(title_line), title_area);
+
+    // tabs
+    let titles = tabs
+        .iter()
+        .map(|t| Line::from(Span::raw(format!("  {}  ", t))));
+    let tabs_widget = Tabs::new(titles).select(tab_index);
+    f.render_widget(tabs_widget, tabs_area);
+
+    match tab_index {
+        0 => render_slave_config(f, content_area, app),
+        1 => match app.right_mode {
+            crate::protocol::status::RightMode::Master => {
+                crate::tui::ui::components::master_list_panel::render_master_list_panel(
+                    f,
+                    content_area,
+                    app,
+                )
+            }
+            _ => crate::tui::ui::components::slave_listen_panel::render_slave_listen_panel(
+                f,
+                content_area,
+                app,
+            ),
+        },
+        2 => render_slave_log(f, content_area, app),
+        _ => render_slave_config(f, content_area, app),
     }
+}
 
-    let para = Paragraph::new(lines)
-        .block(block)
-        .wrap(ratatui::widgets::Wrap { trim: true });
-    f.render_widget(para, area);
+fn render_slave_config(f: &mut Frame, area: Rect, app: &Status) {
+    // delegate to shared component implementation
+    crate::tui::ui::components::config_panel::render_config_panel(f, area, app, None);
+}
+
+// registers rendering is delegated directly to components (master_list_panel/slave_listen_panel)
+
+fn render_slave_log(f: &mut Frame, area: Rect, _app: &Status) {
+    // delegate to shared component implementation
+    crate::tui::ui::components::log_panel::render_log_panel(f, area, _app);
 }
 
 /// Handle key events when slave page is active. Return true if the event is consumed.
@@ -126,7 +100,23 @@ pub fn handle_subpage_key(
         }
     }
 
+    // Tab/arrow navigation is handled by the parent input handler; fall through to allow
+    // parent to process Tab/BackTab/Right/Left/Up/Down when appropriate.
+
     match key.code {
+        KC::Tab => {
+            app.subpage_tab_index = (app.subpage_tab_index + 1) % 3;
+            return true;
+        }
+        KC::BackTab => {
+            let total = 3usize;
+            if app.subpage_tab_index == 0 {
+                app.subpage_tab_index = total - 1;
+            } else {
+                app.subpage_tab_index -= 1;
+            }
+            return true;
+        }
         KC::Enter => {
             if let Some(form) = app.subpage_form.as_mut() {
                 form.editing = !form.editing;

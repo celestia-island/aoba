@@ -1,13 +1,17 @@
 // Clean single implementation of the entry page (ports list + right details / subpage delegate)
-use ratatui::prelude::*;
-use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::{Line, Span};
-use ratatui::widgets::Borders;
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::{
+    prelude::*,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::Borders,
+    widgets::{Block, Paragraph},
+};
 use unicode_width::UnicodeWidthStr;
 
-use crate::tui::ui::pages::{pull, slave};
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{
+    tui::ui::pages::{pull, slave},
+    {i18n::lang, protocol::status::Status},
+};
 
 pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
     // Horizontal split: left ports | right details
@@ -152,7 +156,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
                     baud = handle.baud_rate().map(|b| b.to_string()).unwrap_or(baud);
                     stop = handle
                         .stop_bits()
-                        .map(|s| format!("{:?}", s))
+                        .map(|s| match s {
+                            serialport::StopBits::One => lang().stopbits_one.clone(),
+                            serialport::StopBits::Two => lang().stopbits_two.clone(),
+                        })
                         .unwrap_or(stop);
                     data_bits = handle
                         .data_bits()
@@ -165,7 +172,11 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
                         .unwrap_or(data_bits);
                     parity = handle
                         .parity()
-                        .map(|p| format!("{:?}", p))
+                        .map(|p| match p {
+                            serialport::Parity::None => lang().parity_none.clone(),
+                            serialport::Parity::Even => lang().parity_even.clone(),
+                            serialport::Parity::Odd => lang().parity_odd.clone(),
+                        })
                         .unwrap_or(parity);
                 }
             }
