@@ -5,7 +5,7 @@ use serialport::{SerialPort, SerialPortInfo};
 
 use crate::protocol::tty::available_ports_sorted;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Parity {
     None,
     Even,
@@ -24,6 +24,7 @@ pub struct RegisterEntry {
 pub struct SubpageForm {
     pub baud: u32,
     pub parity: Parity,
+    pub data_bits: u8,
     pub stop_bits: u8,
     pub registers: Vec<RegisterEntry>,
     // UI state
@@ -33,6 +34,10 @@ pub struct SubpageForm {
     pub editing_field: Option<EditingField>,
     // input buffer for the current editing session (text)
     pub input_buffer: String,
+    /// temporary index used when editing a multi-option field (like Baud presets + Custom)
+    pub edit_choice_index: Option<usize>,
+    /// whether we've entered the deeper confirm/editing stage for a choice (e.g. Custom baud)
+    pub edit_confirmed: bool,
 }
 
 impl Default for SubpageForm {
@@ -40,12 +45,15 @@ impl Default for SubpageForm {
         Self {
             baud: 9600,
             parity: Parity::None,
+            data_bits: 8,
             stop_bits: 1,
             registers: vec![],
             cursor: 0,
             editing: false,
             editing_field: None,
             input_buffer: String::new(),
+            edit_choice_index: None,
+            edit_confirmed: false,
         }
     }
 }
@@ -55,6 +63,7 @@ impl Default for SubpageForm {
 pub enum EditingField {
     Baud,
     Parity,
+    DataBits,
     StopBits,
     RegisterField { idx: usize, field: RegisterField },
 }

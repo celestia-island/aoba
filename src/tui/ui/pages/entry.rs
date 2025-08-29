@@ -157,8 +157,8 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
                     stop = handle
                         .stop_bits()
                         .map(|s| match s {
-                            serialport::StopBits::One => lang().stopbits_one.clone(),
-                            serialport::StopBits::Two => lang().stopbits_two.clone(),
+                            serialport::StopBits::One => "1".to_string(),
+                            serialport::StopBits::Two => "2".to_string(),
                         })
                         .unwrap_or(stop);
                     data_bits = handle

@@ -49,9 +49,28 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
         // Build hints as a list so we can guarantee the quit hint is always last.
         let mut hints: Vec<String> = Vec::new();
         if _app.active_subpage.is_some() {
-            hints.push(lang().hint_back_list.as_str().to_string());
-            // also show that Tab switches modes while in subpage
-            hints.push(lang().hint_switch_tab.as_str().to_string());
+            // If a subpage is active, show subpage-specific hints. If the subpage
+            // has a form and it is editing, modify hints based on edit_confirmed.
+            if let Some(form) = &_app.subpage_form {
+                if form.editing {
+                    // If editing but not in deep-confirmed edit, show unified selection hints
+                    if !form.edit_confirmed {
+                        hints.push(lang().press_enter_select.as_str().to_string());
+                        hints.push(lang().press_esc_cancel.as_str().to_string());
+                    } else {
+                        // Deeper confirmed edit: show submit/cancel guidance
+                        hints.push(lang().press_enter_submit.as_str().to_string());
+                        hints.push(lang().press_esc_cancel.as_str().to_string());
+                    }
+                } else {
+                    // Subpage active but not editing: standard subpage hints
+                    hints.push(lang().hint_back_list.as_str().to_string());
+                    hints.push(lang().hint_switch_tab.as_str().to_string());
+                }
+            } else {
+                hints.push(lang().hint_back_list.as_str().to_string());
+                hints.push(lang().hint_switch_tab.as_str().to_string());
+            }
         } else {
             // first hint: switching COM ports with Up/Down or k/j
             hints.push(lang().hint_move_vertical.as_str().to_string());
@@ -73,8 +92,15 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
             hints.push(lang().hint_mode_menu.as_str().to_string());
         }
 
-        // Always append quit hint as the last item
-        hints.push(lang().press_q_quit.as_str().to_string());
+        // Append quit hint as the last item unless we're inside an active subpage editing session
+        let in_subpage_editing = _app
+            .subpage_form
+            .as_ref()
+            .map(|f| f.editing)
+            .unwrap_or(false);
+        if !in_subpage_editing {
+            hints.push(lang().press_q_quit.as_str().to_string());
+        }
 
         let text = hints.join("   ");
         let help = Paragraph::new(text)

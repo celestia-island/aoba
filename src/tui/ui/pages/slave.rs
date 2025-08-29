@@ -94,6 +94,7 @@ pub fn handle_subpage_key(
     app: &mut crate::protocol::status::Status,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
+    // If currently editing a field, consume keys here so parent won't process navigation.
     if let Some(form) = app.subpage_form.as_ref() {
         if form.editing {
             return true;
@@ -119,12 +120,57 @@ pub fn handle_subpage_key(
         }
         KC::Enter => {
             if let Some(form) = app.subpage_form.as_mut() {
-                form.editing = !form.editing;
-                if form.editing {
+                // Toggle editing mode for the currently selected field.
+                if !form.editing {
+                    form.editing = true;
+                    // choose field based on cursor: 0=baud,1=parity,2=databits,3=stopbits,>=4 -> register index
+                    match form.cursor {
+                        0 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
+                        1 => {
+                            form.editing_field = Some(crate::protocol::status::EditingField::Parity)
+                        }
+                        2 => {
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::DataBits)
+                        }
+                        3 => {
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::StopBits)
+                        }
+                        n => {
+                            let ridx = n.saturating_sub(4);
+                            form.editing_field =
+                                Some(crate::protocol::status::EditingField::RegisterField {
+                                    idx: ridx,
+                                    field: crate::protocol::status::RegisterField::SlaveId,
+                                });
+                        }
+                    }
                     form.input_buffer.clear();
                 } else {
-                    form.editing_field = None;
-                    form.input_buffer.clear();
+                    // If already editing, let the top-level input handler finish/commit the edit.
+                }
+            }
+            return true;
+        }
+        KC::Up | KC::Char('k') => {
+            if let Some(form) = app.subpage_form.as_mut() {
+                let total = 4usize.saturating_add(form.registers.len());
+                if total > 0 {
+                    if form.cursor == 0 {
+                        form.cursor = total - 1;
+                    } else {
+                        form.cursor -= 1;
+                    }
+                }
+            }
+            return true;
+        }
+        KC::Down | KC::Char('j') => {
+            if let Some(form) = app.subpage_form.as_mut() {
+                let total = 4usize.saturating_add(form.registers.len());
+                if total > 0 {
+                    form.cursor = (form.cursor + 1) % total;
                 }
             }
             return true;
