@@ -5,7 +5,46 @@ pub mod slave;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
 
-use crate::protocol::status::Status;
+use crate::{protocol::status::Status, tui::input::Action};
+
+/// Return page-provided bottom hints for the current app state.
+pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
+    // If a subpage is active, delegate to it; otherwise use entry's hints.
+    if let Some(sub) = app.active_subpage {
+        match sub {
+            crate::protocol::status::RightMode::Master => {
+                return crate::tui::ui::pages::slave::page_bottom_hints(app)
+            }
+            crate::protocol::status::RightMode::SlaveStack => {
+                return crate::tui::ui::pages::pull::page_bottom_hints(app)
+            }
+            crate::protocol::status::RightMode::Listen => {
+                return crate::tui::ui::pages::entry::page_bottom_hints(app)
+            }
+        }
+    }
+    // default to entry hints when no subpage
+    crate::tui::ui::pages::entry::page_bottom_hints(app)
+}
+
+/// Allow the active page to map a KeyEvent to a high-level Action when the global
+/// key mapping returns no action. Returns Some(Action) if mapped.
+pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
+    if let Some(sub) = app.active_subpage {
+        match sub {
+            crate::protocol::status::RightMode::Master => {
+                return crate::tui::ui::pages::slave::map_key(key, app)
+            }
+            crate::protocol::status::RightMode::SlaveStack => {
+                return crate::tui::ui::pages::pull::map_key(key, app)
+            }
+            crate::protocol::status::RightMode::Listen => {
+                return crate::tui::ui::pages::entry::map_key(key, app)
+            }
+        }
+    }
+    crate::tui::ui::pages::entry::map_key(key, app)
+}
 
 /// Route a KeyEvent to the active subpage.
 /// Returns true if the subpage consumed the event and no further handling should occur.

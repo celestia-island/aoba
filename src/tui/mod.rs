@@ -11,9 +11,8 @@ use std::{
 
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
-use crate::protocol::status::RightMode;
 use crate::{
-    protocol::status::{Focus, Status},
+    protocol::status::{Focus, RightMode, Status},
     tui::input::{map_key, Action},
 };
 
@@ -318,14 +317,19 @@ fn run_app(
                                         let presets: [u32; 8] =
                                             [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                                         let custom_idx = presets.len();
-                                        if let Some(idx) = form.edit_choice_index {
-                                            if idx == custom_idx && !form.edit_confirmed {
-                                                // enter deeper confirmed edit stage
-                                                form.edit_confirmed = true;
-                                                form.editing = true;
-                                                // keep input_buffer as is (user may have typed)
-                                                continue;
-                                            }
+                                        // compute current index from edit_choice_index or derive from baud
+                                        let cur = form.edit_choice_index.unwrap_or_else(|| {
+                                            presets
+                                                .iter()
+                                                .position(|&p| p == form.baud)
+                                                .unwrap_or(custom_idx)
+                                        });
+                                        if cur == custom_idx && !form.edit_confirmed {
+                                            // enter deeper confirmed edit stage
+                                            form.edit_confirmed = true;
+                                            form.editing = true;
+                                            // keep input_buffer as is (user may have typed)
+                                            continue;
                                         }
                                     }
                                     // commit and exit field editing
@@ -429,298 +433,320 @@ fn run_app(
                     }
                 }
 
-                match map_key(key.code) {
-                    Action::Quit => break,
-                    Action::LeavePage => {
-                        if let Ok(mut guard) = app.lock() {
-                            // If a subpage is active, Exit it; otherwise focus left
-                            if guard.active_subpage.is_some() {
-                                // Exit subpage and keep focus on Left
-                                guard.active_subpage = None;
-                                guard.focus = Focus::Left;
-                            } else {
-                                // Ensure focus stays Left (do not allow other keys to move focus to Right)
-                                guard.focus = Focus::Left;
-                            }
-                            guard.clear_error();
-                        } else {
-                            log::error!("[TUI] failed to lock app for FocusLeft");
+                {
+                    // try page-level mapping first (inner pages can override), fall back to global mapping
+                    let mut action_opt: Option<Action> = None;
+                    if let Ok(guard) = app.lock() {
+                        action_opt = crate::tui::ui::pages::map_key_in_page(key, &*guard);
+                    }
+                    if action_opt.is_none() {
+                        match map_key(key.code) {
+                            Action::None => {}
+                            a => action_opt = Some(a),
                         }
                     }
-                    Action::EnterPage => {
-                        if let Ok(mut guard) = app.lock() {
-                            // If selected port is occupied by this app, entering Right now opens the subpage for the current right_mode
-                            let state = guard
-                                .port_states
-                                .get(guard.selected)
-                                .cloned()
-                                .unwrap_or(crate::protocol::status::PortState::Free);
-                            if state == crate::protocol::status::PortState::OccupiedByThis {
-                                // activate subpage corresponding to current right_mode
-                                guard.active_subpage = Some(guard.right_mode);
-                                // reset subpage tab index and prepare form data
-                                guard.subpage_tab_index = 0;
-                                guard.init_subpage_form();
-                                // keep focus on Left logically (right content is a subpage overlay)
-                                guard.focus = Focus::Left;
-                            }
-                            guard.clear_error();
-                        } else {
-                            log::error!("[TUI] failed to lock app for FocusRight");
-                        }
-                    }
-                    Action::MoveNext => {
-                        if let Ok(mut guard) = app.lock() {
-                            if guard.active_subpage.is_some() {
-                                if let Some(form) = guard.subpage_form.as_mut() {
-                                    let total = 4usize.saturating_add(form.registers.len());
-                                    if total > 0 {
-                                        form.cursor = (form.cursor + 1) % total;
-                                    }
-                                }
-                            } else if matches!(guard.focus, Focus::Left) {
-                                guard.next();
-                            }
-                            guard.clear_error();
-                        } else {
-                            log::error!("[TUI] failed to lock app for MoveNext");
-                        }
-                    }
-                    Action::MovePrev => {
-                        if let Ok(mut guard) = app.lock() {
-                            if guard.active_subpage.is_some() {
-                                if let Some(form) = guard.subpage_form.as_mut() {
-                                    let total = 4usize.saturating_add(form.registers.len());
-                                    if total > 0 {
-                                        if form.cursor == 0 {
-                                            form.cursor = total - 1;
-                                        } else {
-                                            form.cursor -= 1;
-                                        }
-                                    }
-                                }
-                            } else if matches!(guard.focus, Focus::Left) {
-                                guard.prev();
-                            }
-                            guard.clear_error();
-                        } else {
-                            log::error!("[TUI] failed to lock app for MovePrev");
-                        }
-                    }
-                    // Refresh is handled by background thread; removed from key mapping
-                    Action::SwitchMode(i) => {
-                        if let Ok(mut guard) = app.lock() {
-                            let mode = match i {
-                                0 => RightMode::Master,
-                                1 => RightMode::SlaveStack,
-                                _ => RightMode::Listen,
-                            };
-                            guard.right_mode = mode;
-                            if guard.active_subpage.is_some() {
-                                guard.active_subpage = Some(guard.right_mode);
-                            }
-                            guard.clear_error();
-                        } else {
-                            log::error!("[TUI] failed to lock app for SwitchMode");
-                        }
-                    }
-                    Action::CycleMode => {
-                        if let Ok(mut guard) = app.lock() {
-                            guard.right_mode = match guard.right_mode {
-                                RightMode::Master => RightMode::SlaveStack,
-                                RightMode::SlaveStack => RightMode::Listen,
-                                RightMode::Listen => RightMode::Master,
-                            };
-                            if guard.active_subpage.is_some() {
-                                guard.active_subpage = Some(guard.right_mode);
-                            }
-                            guard.clear_error();
-                        }
-                    }
-                    Action::ShowModeSelector => {
-                        if let Ok(mut guard) = app.lock() {
-                            // only allow mode selector when no subpage overlay is active
-                            if guard.active_subpage.is_none() {
-                                // only for ports owned by this app
-                                let state = guard
-                                    .port_states
-                                    .get(guard.selected)
-                                    .cloned()
-                                    .unwrap_or(crate::protocol::status::PortState::Free);
-                                if state == crate::protocol::status::PortState::OccupiedByThis {
-                                    guard.mode_selector_active = true;
-                                    guard.mode_selector_index = match guard.right_mode {
-                                        RightMode::Master => 0,
-                                        RightMode::SlaveStack => 1,
-                                        RightMode::Listen => 0,
-                                    };
-                                }
-                            }
-                            guard.clear_error();
-                        }
-                    }
-                    Action::EnterSubpage(ch) => {
-                        if let Ok(mut guard) = app.lock() {
-                            // only when selected port is occupied by this app
-                            let state = guard
-                                .port_states
-                                .get(guard.selected)
-                                .cloned()
-                                .unwrap_or(crate::protocol::status::PortState::Free);
-                            if state == crate::protocol::status::PortState::OccupiedByThis {
-                                match ch {
-                                    'p' => guard.active_subpage = Some(RightMode::SlaveStack), // pull -> 从站
-                                    's' => guard.active_subpage = Some(RightMode::Master), // slave -> 主站 (named for historical reasons)
-                                    _ => {}
-                                }
-                                // initialize form
-                                guard.init_subpage_form();
-                            }
-                            guard.clear_error();
-                        }
-                    }
-                    Action::AddRegister => {
-                        if let Ok(mut guard) = app.lock() {
-                            if guard.active_subpage.is_some() {
-                                if guard.subpage_form.is_none() {
-                                    guard.init_subpage_form();
-                                }
-                                if let Some(form) = guard.subpage_form.as_mut() {
-                                    form.registers.push(crate::protocol::status::RegisterEntry {
-                                        slave_id: 1,
-                                        mode: 1,
-                                        address: 0,
-                                        length: 1,
-                                    });
-                                }
-                            }
-                            guard.clear_error();
-                        }
-                    }
-                    Action::DeleteRegister => {
-                        if let Ok(mut guard) = app.lock() {
-                            if let Some(form) = guard.subpage_form.as_mut() {
-                                form.registers.pop();
-                            }
-                            guard.clear_error();
-                        }
-                    }
-                    Action::EditToggle => {
-                        if let Ok(mut guard) = app.lock() {
-                            if let Some(form) = guard.subpage_form.as_mut() {
-                                form.editing = !form.editing;
-                                if form.editing {
-                                    // choose field based on cursor: 0=baud,1=parity,2=databits,3=stopbits,>=4 -> register index
-                                    match form.cursor {
-                                        0 => {
-                                            form.editing_field =
-                                                Some(crate::protocol::status::EditingField::Baud)
-                                        }
-                                        1 => {
-                                            form.editing_field =
-                                                Some(crate::protocol::status::EditingField::Parity)
-                                        }
-                                        2 => {
-                                            form.editing_field = Some(
-                                                crate::protocol::status::EditingField::DataBits,
-                                            )
-                                        }
-                                        3 => {
-                                            form.editing_field = Some(
-                                                crate::protocol::status::EditingField::StopBits,
-                                            )
-                                        }
-                                        n => {
-                                            let ridx = n.saturating_sub(4);
-                                            form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
-                                        }
-                                    }
-                                    form.input_buffer.clear();
-                                    // If entering Baud edit, initialize edit_choice_index and prefill buffer for custom
-                                    if let Some(crate::protocol::status::EditingField::Baud) =
-                                        form.editing_field.clone()
-                                    {
-                                        let presets: [u32; 8] =
-                                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
-                                        let _custom_idx = presets.len();
-                                        let idx = presets
-                                            .iter()
-                                            .position(|&p| p == form.baud)
-                                            .unwrap_or(_custom_idx);
-                                        form.edit_choice_index = Some(idx);
-                                        if idx == presets.len() {
-                                            form.input_buffer = form.baud.to_string();
-                                        }
-                                        form.edit_confirmed = false; // not yet confirmed deeper edit
+
+                    if let Some(action) = action_opt {
+                        match action {
+                            Action::Quit => {
+                                if let Ok(guard) = app.lock() {
+                                    let in_editing = guard
+                                        .subpage_form
+                                        .as_ref()
+                                        .map(|f| f.editing)
+                                        .unwrap_or(false);
+                                    let allowed = guard.active_subpage.is_none()
+                                        && !guard.mode_selector_active
+                                        && !in_editing
+                                        && matches!(guard.focus, Focus::Left);
+                                    if allowed {
+                                        break;
+                                    } else {
+                                        // silently ignore quit when not allowed (do not show message)
                                     }
                                 } else {
-                                    form.editing_field = None;
-                                    form.input_buffer.clear();
-                                    form.edit_choice_index = None;
-                                    form.edit_confirmed = false;
+                                    log::error!("[TUI] failed to lock app for Quit check");
                                 }
                             }
-                            guard.clear_error();
-                        }
-                    }
-                    // StartEditField removed: editing is handled via EditToggle and direct editing flow
-                    // EditCancel removed: exiting edit is handled by existing edit flow and Esc handling
-                    Action::ExitSubpage => {
-                        if let Ok(mut guard) = app.lock() {
-                            guard.active_subpage = None;
-                            guard.clear_error();
-                        }
-                    }
-                    Action::TogglePort => {
-                        if let Ok(mut guard) = app.lock() {
-                            guard.toggle_selected_port();
-                            // ensure focus is valid: only allow Right focus when selected port is OccupiedByThis
-                            let state = guard
-                                .port_states
-                                .get(guard.selected)
-                                .cloned()
-                                .unwrap_or(crate::protocol::status::PortState::Free);
-                            if state != crate::protocol::status::PortState::OccupiedByThis {
-                                guard.focus = Focus::Left;
+                            Action::LeavePage => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if guard.active_subpage.is_some() {
+                                        guard.active_subpage = None;
+                                        guard.focus = Focus::Left;
+                                    } else {
+                                        guard.focus = Focus::Left;
+                                    }
+                                    guard.clear_error();
+                                } else {
+                                    log::error!("[TUI] failed to lock app for FocusLeft");
+                                }
                             }
-                        } else {
-                            log::error!("[TUI] failed to lock app for TogglePort");
-                        }
-                    }
-                    Action::SwitchNext => {
-                        if let Ok(mut guard) = app.lock() {
-                            guard.right_mode = match guard.right_mode {
-                                RightMode::Master => RightMode::SlaveStack,
-                                RightMode::SlaveStack => RightMode::Listen,
-                                RightMode::Listen => RightMode::Master,
-                            };
-                            if guard.active_subpage.is_some() {
-                                guard.active_subpage = Some(guard.right_mode);
+                            Action::EnterPage => {
+                                if let Ok(mut guard) = app.lock() {
+                                    let state = guard
+                                        .port_states
+                                        .get(guard.selected)
+                                        .cloned()
+                                        .unwrap_or(crate::protocol::status::PortState::Free);
+                                    if state == crate::protocol::status::PortState::OccupiedByThis {
+                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.subpage_tab_index = 0;
+                                        guard.init_subpage_form();
+                                        guard.focus = Focus::Left;
+                                    }
+                                    guard.clear_error();
+                                } else {
+                                    log::error!("[TUI] failed to lock app for FocusRight");
+                                }
                             }
-                            guard.clear_error();
-                        }
-                    }
-                    Action::SwitchPrev => {
-                        if let Ok(mut guard) = app.lock() {
-                            guard.right_mode = match guard.right_mode {
-                                RightMode::Master => RightMode::Listen,
-                                RightMode::SlaveStack => RightMode::Master,
-                                RightMode::Listen => RightMode::SlaveStack,
-                            };
-                            if guard.active_subpage.is_some() {
-                                guard.active_subpage = Some(guard.right_mode);
-                                guard.init_subpage_form();
+                            Action::MoveNext => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if guard.active_subpage.is_some() {
+                                        if let Some(form) = guard.subpage_form.as_mut() {
+                                            let total = 4usize.saturating_add(form.registers.len());
+                                            if total > 0 {
+                                                form.cursor = (form.cursor + 1) % total;
+                                            }
+                                        }
+                                    } else if matches!(guard.focus, Focus::Left) {
+                                        guard.next();
+                                    }
+                                    guard.clear_error();
+                                } else {
+                                    log::error!("[TUI] failed to lock app for MoveNext");
+                                }
                             }
-                            guard.clear_error();
+                            Action::MovePrev => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if guard.active_subpage.is_some() {
+                                        if let Some(form) = guard.subpage_form.as_mut() {
+                                            let total = 4usize.saturating_add(form.registers.len());
+                                            if total > 0 {
+                                                if form.cursor == 0 {
+                                                    form.cursor = total - 1;
+                                                } else {
+                                                    form.cursor -= 1;
+                                                }
+                                            }
+                                        }
+                                    } else if matches!(guard.focus, Focus::Left) {
+                                        guard.prev();
+                                    }
+                                    guard.clear_error();
+                                } else {
+                                    log::error!("[TUI] failed to lock app for MovePrev");
+                                }
+                            }
+                            Action::SwitchMode(i) => {
+                                if let Ok(mut guard) = app.lock() {
+                                    let mode = match i {
+                                        0 => RightMode::Master,
+                                        1 => RightMode::SlaveStack,
+                                        _ => RightMode::Listen,
+                                    };
+                                    guard.right_mode = mode;
+                                    if guard.active_subpage.is_some() {
+                                        guard.active_subpage = Some(guard.right_mode);
+                                    }
+                                    guard.clear_error();
+                                } else {
+                                    log::error!("[TUI] failed to lock app for SwitchMode");
+                                }
+                            }
+                            Action::CycleMode => {
+                                if let Ok(mut guard) = app.lock() {
+                                    guard.right_mode = match guard.right_mode {
+                                        RightMode::Master => RightMode::SlaveStack,
+                                        RightMode::SlaveStack => RightMode::Listen,
+                                        RightMode::Listen => RightMode::Master,
+                                    };
+                                    if guard.active_subpage.is_some() {
+                                        guard.active_subpage = Some(guard.right_mode);
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::ShowModeSelector => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if guard.active_subpage.is_none() {
+                                        let state = guard
+                                            .port_states
+                                            .get(guard.selected)
+                                            .cloned()
+                                            .unwrap_or(crate::protocol::status::PortState::Free);
+                                        if state
+                                            == crate::protocol::status::PortState::OccupiedByThis
+                                        {
+                                            guard.mode_selector_active = true;
+                                            guard.mode_selector_index = match guard.right_mode {
+                                                RightMode::Master => 0,
+                                                RightMode::SlaveStack => 1,
+                                                RightMode::Listen => 0,
+                                            };
+                                        }
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::EnterSubpage(ch) => {
+                                if let Ok(mut guard) = app.lock() {
+                                    let state = guard
+                                        .port_states
+                                        .get(guard.selected)
+                                        .cloned()
+                                        .unwrap_or(crate::protocol::status::PortState::Free);
+                                    if state == crate::protocol::status::PortState::OccupiedByThis {
+                                        match ch {
+                                            'p' => {
+                                                guard.active_subpage = Some(RightMode::SlaveStack)
+                                            }
+                                            's' => guard.active_subpage = Some(RightMode::Master),
+                                            _ => {}
+                                        }
+                                        guard.init_subpage_form();
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::AddRegister => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if guard.active_subpage.is_some() {
+                                        if guard.subpage_form.is_none() {
+                                            guard.init_subpage_form();
+                                        }
+                                        if let Some(form) = guard.subpage_form.as_mut() {
+                                            form.registers.push(
+                                                crate::protocol::status::RegisterEntry {
+                                                    slave_id: 1,
+                                                    mode: 1,
+                                                    address: 0,
+                                                    length: 1,
+                                                },
+                                            );
+                                        }
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::DeleteRegister => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if let Some(form) = guard.subpage_form.as_mut() {
+                                        form.registers.pop();
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::EditToggle => {
+                                if let Ok(mut guard) = app.lock() {
+                                    if let Some(form) = guard.subpage_form.as_mut() {
+                                        form.editing = !form.editing;
+                                        if form.editing {
+                                            match form.cursor {
+                                                0 => {
+                                                    form.editing_field = Some(
+                                                        crate::protocol::status::EditingField::Baud,
+                                                    )
+                                                }
+                                                1 => form.editing_field = Some(
+                                                    crate::protocol::status::EditingField::Parity,
+                                                ),
+                                                2 => form.editing_field = Some(
+                                                    crate::protocol::status::EditingField::DataBits,
+                                                ),
+                                                3 => form.editing_field = Some(
+                                                    crate::protocol::status::EditingField::StopBits,
+                                                ),
+                                                n => {
+                                                    let ridx = n.saturating_sub(4);
+                                                    form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
+                                                }
+                                            }
+                                            form.input_buffer.clear();
+                                            if let Some(
+                                                crate::protocol::status::EditingField::Baud,
+                                            ) = form.editing_field.clone()
+                                            {
+                                                let presets: [u32; 8] = [
+                                                    1200, 2400, 4800, 9600, 19200, 38400, 57600,
+                                                    115200,
+                                                ];
+                                                let _custom_idx = presets.len();
+                                                let idx = presets
+                                                    .iter()
+                                                    .position(|&p| p == form.baud)
+                                                    .unwrap_or(_custom_idx);
+                                                form.edit_choice_index = Some(idx);
+                                                if idx == presets.len() {
+                                                    form.input_buffer = form.baud.to_string();
+                                                }
+                                                form.edit_confirmed = false;
+                                            }
+                                        } else {
+                                            form.editing_field = None;
+                                            form.input_buffer.clear();
+                                            form.edit_choice_index = None;
+                                            form.edit_confirmed = false;
+                                        }
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::ExitSubpage => {
+                                if let Ok(mut guard) = app.lock() {
+                                    guard.active_subpage = None;
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::TogglePort => {
+                                if let Ok(mut guard) = app.lock() {
+                                    guard.toggle_selected_port();
+                                    let state = guard
+                                        .port_states
+                                        .get(guard.selected)
+                                        .cloned()
+                                        .unwrap_or(crate::protocol::status::PortState::Free);
+                                    if state != crate::protocol::status::PortState::OccupiedByThis {
+                                        guard.focus = Focus::Left;
+                                    }
+                                } else {
+                                    log::error!("[TUI] failed to lock app for TogglePort");
+                                }
+                            }
+                            Action::SwitchNext => {
+                                if let Ok(mut guard) = app.lock() {
+                                    guard.right_mode = match guard.right_mode {
+                                        RightMode::Master => RightMode::SlaveStack,
+                                        RightMode::SlaveStack => RightMode::Listen,
+                                        RightMode::Listen => RightMode::Master,
+                                    };
+                                    if guard.active_subpage.is_some() {
+                                        guard.active_subpage = Some(guard.right_mode);
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::SwitchPrev => {
+                                if let Ok(mut guard) = app.lock() {
+                                    guard.right_mode = match guard.right_mode {
+                                        RightMode::Master => RightMode::Listen,
+                                        RightMode::SlaveStack => RightMode::Master,
+                                        RightMode::Listen => RightMode::SlaveStack,
+                                    };
+                                    if guard.active_subpage.is_some() {
+                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.init_subpage_form();
+                                    }
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::ClearError => {
+                                if let Ok(mut guard) = app.lock() {
+                                    guard.clear_error();
+                                }
+                            }
+                            Action::None => {}
                         }
                     }
-                    // ToggleAutoRefresh removed: auto-refresh is always enabled by background thread
-                    Action::ClearError => {
-                        if let Ok(mut guard) = app.lock() {
-                            guard.clear_error();
-                        }
-                    }
-                    Action::None => {}
                 }
             }
         }

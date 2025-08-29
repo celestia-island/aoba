@@ -19,7 +19,7 @@ pub fn parse_pull_get_coils(
     count: u16,
 ) -> Result<Vec<bool>> {
     log::info!(
-        "Coils bytes to get: {:?}",
+        "Coils payload bytes: {:?}",
         response[3..response.len() - 2]
             .iter()
             .map(|b| format!("{:08b}", b))
@@ -32,14 +32,14 @@ pub fn parse_pull_get_coils(
         "Invalid response length"
     );
 
-    // Parse coils bit order as standard (high bit to low bit per byte)
+    // Parse coils bit order: high bit to low bit within each byte
 
     let values = response[3..response.len() - 2]
         .iter()
         .map(|chunk| {
             let byte = chunk;
             (0..8)
-                .rev() // 8 位从高到低
+                .rev() // iterate bits from high to low
                 .map(|i| (byte & (1 << i)) != 0)
                 .collect::<Vec<bool>>()
         })
@@ -55,7 +55,7 @@ pub fn parse_pull_get_coils(
         values.len() == count as usize,
         "Invalid number of coils in response"
     );
-    println!("Received coils: {:?}", values);
+    log::debug!("Received coils: {:?}", values);
 
     Ok(values)
 }

@@ -1,4 +1,5 @@
 // Clean single implementation of the entry page (ports list + right details / subpage delegate)
+use crossterm::event::KeyEvent;
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
@@ -9,9 +10,53 @@ use ratatui::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    tui::ui::pages::{pull, slave},
+    tui::{
+        input::Action,
+        ui::pages::{pull, slave},
+    },
     {i18n::lang, protocol::status::Status},
 };
+
+/// Provide bottom bar hints for the entry view (when used as full-area or main view).
+pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+    let mut hints: Vec<String> = Vec::new();
+    // first hint: switching COM ports with Up/Down or k/j
+    hints.push(lang().hint_move_vertical.as_str().to_string());
+    // second hint: press 'l' to enter subpage
+    hints.push(lang().hint_enter_subpage.as_str().to_string());
+
+    // if selected port is occupied by this app and no subpage overlay is active,
+    // add mode menu hint
+    let state = app
+        .port_states
+        .get(app.selected)
+        .cloned()
+        .unwrap_or(crate::protocol::status::PortState::Free);
+    if state == crate::protocol::status::PortState::OccupiedByThis && app.active_subpage.is_none() {
+        hints.push(lang().hint_mode_menu.as_str().to_string());
+    }
+
+    // Append quit hint only when allowed (mirror global rule)
+    let in_subpage_editing = app
+        .subpage_form
+        .as_ref()
+        .map(|f| f.editing)
+        .unwrap_or(false);
+    let can_quit = app.active_subpage.is_none()
+        && !app.mode_selector_active
+        && !in_subpage_editing
+        && matches!(app.focus, crate::protocol::status::Focus::Left);
+    if can_quit {
+        hints.push(lang().press_q_quit.as_str().to_string());
+    }
+    hints
+}
+
+/// Page-level key mapping for entry. Return Some(Action) if page wants to map the key.
+pub fn map_key(_key: KeyEvent, _app: &Status) -> Option<Action> {
+    // entry does not add extra mappings; let global mapping handle it
+    None
+}
 
 pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
     // Horizontal split: left ports | right details
@@ -248,7 +293,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
             // Spacer
             info_lines.push(Line::from(Span::raw("")));
 
-            // (removed explicit "串口参数:" header per UX request)
+            // (removed explicit "serial parameters:" header per UX request)
 
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
