@@ -1,6 +1,8 @@
-use ratatui::prelude::*;
-use ratatui::style::{Color, Style};
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::{
+    prelude::*,
+    style::{Color, Style},
+    widgets::{Block, Paragraph},
+};
 
 use crate::i18n::lang;
 
@@ -34,10 +36,7 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
     for (i, o) in options.iter().enumerate() {
         let span = if i == index {
-            ratatui::text::Span::styled(
-                *o,
-                Style::default().fg(Color::White).bg(Color::LightBlue),
-            )
+            ratatui::text::Span::styled(*o, Style::default().fg(Color::White).bg(Color::LightBlue))
         } else {
             ratatui::text::Span::styled(*o, Style::default().fg(Color::White).bg(Color::DarkGray))
         };

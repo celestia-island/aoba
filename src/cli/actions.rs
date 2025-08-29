@@ -33,10 +33,11 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
             let mut out: Vec<PortInfo> = Vec::new();
             for p in ports.iter() {
                 // Try to extract vid/pid/serial using the existing helper if available
-                let (vid, pid, serial, manufacturer, product) = match crate::protocol::tty::try_extract_vid_pid_serial(&p.port_type) {
-                    Some((v, pa, s, m, pr)) => (Some(v), Some(pa), s, m, pr),
-                    None => (None, None, None, None, None),
-                };
+                let (vid, pid, serial, manufacturer, product) =
+                    match crate::protocol::tty::try_extract_vid_pid_serial(&p.port_type) {
+                        Some((v, pa, s, m, pr)) => (Some(v), Some(pa), s, m, pr),
+                        None => (None, None, None, None, None),
+                    };
                 // Attempt to capture annotation if present in port_name (parenthetical)
                 let ann = if p.port_name.contains('(') && p.port_name.contains(')') {
                     Some(p.port_name.clone())
@@ -61,7 +62,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
             if let Ok(s) = serde_json::to_string_pretty(&out) {
                 println!("{}", s);
             } else {
-                    // Fallback to plain listing
+                // Fallback to plain listing
                 for p in ports.iter() {
                     println!("{}", p.port_name);
                 }

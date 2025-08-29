@@ -1,9 +1,7 @@
 use chrono::{DateTime, Local};
+use std::{collections::HashMap, time::Duration};
 
-use serialport::SerialPort;
-use serialport::SerialPortInfo;
-use std::collections::HashMap;
-use std::time::Duration;
+use serialport::{SerialPort, SerialPortInfo};
 
 use crate::protocol::tty::available_ports_sorted;
 
@@ -99,6 +97,8 @@ pub struct Status {
     pub active_subpage: Option<RightMode>,
     /// transient UI state for the active subpage (editable form)
     pub subpage_form: Option<SubpageForm>,
+    /// selected tab index inside the active right-side subpage
+    pub subpage_tab_index: usize,
     /// transient mode selector overlay state
     pub mode_selector_active: bool,
     pub mode_selector_index: usize,
@@ -128,6 +128,7 @@ impl Status {
             right_mode: RightMode::Master,
             active_subpage: None,
             subpage_form: None,
+            subpage_tab_index: 0,
             mode_selector_active: false,
             mode_selector_index: 0,
         }
@@ -190,6 +191,7 @@ impl Status {
             right_mode: RightMode::Master,
             active_subpage: None,
             subpage_form: None,
+            subpage_tab_index: 0,
             mode_selector_active: false,
             mode_selector_index: 0,
         }
@@ -225,7 +227,7 @@ impl Status {
         for p in self.ports.iter() {
             if let Some(s) = name_to_state.remove(&p.port_name) {
                 new_states.push(s);
-            } else if Self::probe_port_free(&p.port_name) {
+            } else if Self::is_port_free(&p.port_name) {
                 new_states.push(PortState::Free);
             } else {
                 new_states.push(PortState::OccupiedByOther);
@@ -258,7 +260,7 @@ impl Status {
         self.last_refresh = Some(Local::now());
     }
 
-    fn probe_port_free(port_name: &str) -> bool {
+    fn is_port_free(port_name: &str) -> bool {
         // Try to open the port briefly; if succeed it's free (we immediately drop it)
         match serialport::new(port_name, 9600)
             .timeout(Duration::from_millis(50))
@@ -273,7 +275,7 @@ impl Status {
         ports
             .iter()
             .map(|p| {
-                if Self::probe_port_free(&p.port_name) {
+                if Self::is_port_free(&p.port_name) {
                     PortState::Free
                 } else {
                     PortState::OccupiedByOther

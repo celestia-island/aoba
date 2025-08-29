@@ -1,16 +1,22 @@
-use ratatui::prelude::*;
-
 pub mod entry;
 pub mod pull;
 pub mod slave;
 
-use crate::protocol::status::Status;
-
 use crossterm::event::KeyEvent;
+use ratatui::prelude::*;
+
+use crate::protocol::status::Status;
 
 /// Route a KeyEvent to the active subpage.
 /// Returns true if the subpage consumed the event and no further handling should occur.
 pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status) -> bool {
+    use crossterm::event::KeyCode as KC;
+
+    // Always let 'q' bubble up to the top-level quit handler (don't consume it here).
+    if let KC::Char('q') | KC::Char('Q') = key.code {
+        return false;
+    }
+
     if let Some(sub) = app.active_subpage {
         match sub {
             crate::protocol::status::RightMode::Master => {
