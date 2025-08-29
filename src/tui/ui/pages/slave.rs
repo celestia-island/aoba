@@ -1,3 +1,4 @@
+use crossterm::event::KeyEvent;
 use ratatui::{
     prelude::*,
     style::{Modifier, Style},
@@ -5,9 +6,9 @@ use ratatui::{
     widgets::{Paragraph, Tabs},
 };
 
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
-/// UI for configuring Modbus 主站 (master) settings for the selected port.
+/// UI for configuring Modbus master settings for the selected port.
 pub fn render_slave(f: &mut Frame, area: Rect, app: &Status) {
     let port_name = if !app.ports.is_empty() && app.selected < app.ports.len() {
         app.ports[app.selected].port_name.clone()
@@ -187,4 +188,39 @@ pub fn handle_subpage_key(
         _ => {}
     }
     false
+}
+
+/// Provide bottom hints when this page is active as a subpage.
+pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+    let mut hints: Vec<String> = Vec::new();
+    if let Some(form) = &app.subpage_form {
+        if form.editing {
+            if !form.edit_confirmed {
+                hints.push(lang().press_enter_select.as_str().to_string());
+                hints.push(lang().press_esc_cancel.as_str().to_string());
+            } else {
+                hints.push(lang().press_enter_submit.as_str().to_string());
+                hints.push(lang().press_esc_cancel.as_str().to_string());
+            }
+            return hints;
+        }
+    }
+    hints.push(lang().hint_back_list.as_str().to_string());
+    hints.push(lang().hint_switch_tab.as_str().to_string());
+    hints
+}
+
+/// Page-level key mapping: allow slave page to map keys to Actions (optional).
+pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
+    use crossterm::event::KeyCode as KC;
+    match key.code {
+        KC::Tab => Some(Action::SwitchNext),
+        KC::BackTab => Some(Action::SwitchPrev),
+        KC::Enter => Some(Action::EditToggle),
+        KC::Char('e') => Some(Action::EditToggle),
+        KC::Char('n') => Some(Action::AddRegister),
+        KC::Up | KC::Char('k') => Some(Action::MovePrev),
+        KC::Down | KC::Char('j') => Some(Action::MoveNext),
+        _ => None,
+    }
 }
