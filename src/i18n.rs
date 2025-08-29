@@ -40,6 +40,7 @@ derive_struct! {
         port_state_owned: String = "port_state_owned".to_string(),
         port_state_other: String = "port_state_other".to_string(),
         press_enter_toggle: String = "press_enter_toggle".to_string(),
+        press_enter_select: String = "press_enter_select".to_string(),
         press_enter_enable: String = "press_enter_enable".to_string(),
         press_enter_release: String = "press_enter_release".to_string(),
         press_enter_unavailable: String = "press_enter_unavailable".to_string(),
@@ -49,6 +50,9 @@ derive_struct! {
         manual_specify_unsupported: String = "manual_specify_unsupported".to_string(),
         press_enter_refresh: String = "press_enter_refresh".to_string(),
         press_enter_manual_specify: String = "press_enter_manual_specify".to_string(),
+        press_enter_confirm_edit: String = "press_enter_confirm_edit".to_string(),
+        press_enter_submit: String = "press_enter_submit".to_string(),
+        press_esc_cancel: String = "press_esc_cancel".to_string(),
         press_q_quit: String = "press_q_quit".to_string(),
         hint_enter_subpage: String = "hint_enter_subpage".to_string(),
         hint_back_list: String = "hint_back_list".to_string(),
@@ -64,16 +68,16 @@ derive_struct! {
         label_data_bits: String = "label_data_bits".to_string(),
         label_parity: String = "label_parity".to_string(),
         label_stop_bits: String = "label_stop_bits".to_string(),
+        custom: String = "custom".to_string(),
         // parity and stop bits specific options
         parity_none: String = "parity_none".to_string(),
         parity_even: String = "parity_even".to_string(),
         parity_odd: String = "parity_odd".to_string(),
-        stopbits_one: String = "stopbits_one".to_string(),
-        stopbits_two: String = "stopbits_two".to_string(),
         edit_suffix: String = "edit_suffix".to_string(),
         registers_list: String = "registers_list".to_string(),
         label_master_list: String = "label_master_list".to_string(),
         label_slave_listen: String = "label_slave_listen".to_string(),
+    invalid_baud_range: String = "invalid_baud_range".to_string(),
     }
 }
 
