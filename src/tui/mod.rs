@@ -169,6 +169,8 @@ fn run_app(
                                 if guard.active_subpage.is_some() {
                                     guard.active_subpage = Some(guard.right_mode);
                                 }
+                                // close mode selector after applying selection
+                                guard.mode_selector_active = false;
                             }
                             KC::Esc => {
                                 guard.mode_selector_active = false;
