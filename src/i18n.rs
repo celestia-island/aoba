@@ -27,7 +27,6 @@ derive_struct! {
         tab_master: String = "tab_master".to_string(),
         tab_slave: String = "tab_slave".to_string(),
         tab_listen: String = "tab_listen".to_string(),
-        hint_line: String = "hint_line".to_string(),
         master_mode: String = "master_mode".to_string(),
         slave_mode: String = "slave_mode".to_string(),
         listen_mode: String = "listen_mode".to_string(),
@@ -77,7 +76,7 @@ derive_struct! {
         registers_list: String = "registers_list".to_string(),
         label_master_list: String = "label_master_list".to_string(),
         label_slave_listen: String = "label_slave_listen".to_string(),
-    invalid_baud_range: String = "invalid_baud_range".to_string(),
+        invalid_baud_range: String = "invalid_baud_range".to_string(),
     }
 }
 

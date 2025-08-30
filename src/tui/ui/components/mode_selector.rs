@@ -6,6 +6,14 @@ use ratatui::{
 
 use crate::i18n::lang;
 
+/// Return the hint fragments shown in the mode selector popup.
+pub fn mode_selector_hints() -> Vec<String> {
+    vec![
+        lang().press_enter_select.as_str().to_string(),
+        lang().press_esc_cancel.as_str().to_string(),
+    ]
+}
+
 /// Render a centered mode selector popup. `index` is the currently selected option index.
 pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let area = f.area();
@@ -17,10 +25,11 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
 
     // clear underlying widgets in this area and draw a solid dark background block
     f.render_widget(ratatui::widgets::Clear, popup);
+    // Title forced to white so it remains visible regardless of theme
     let bg_block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .style(Style::default().bg(Color::DarkGray))
-        .title(" 选择模式");
+        .title(Span::styled(" 选择模式", Style::default().fg(Color::White)));
     f.render_widget(bg_block, popup);
 
     // inner area for text (inside borders)
@@ -53,4 +62,7 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let opts_rect = Rect::new(inner.x, start_y, inner.width, opts_h);
     let opts_para = Paragraph::new(lines).alignment(ratatui::layout::Alignment::Center);
     f.render_widget(opts_para, opts_rect);
+
+    // Bottom hint for popup is provided by pages layer via mode_selector_hints();
+    // the popup itself only draws the main box and options here.
 }
