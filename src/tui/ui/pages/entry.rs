@@ -98,8 +98,11 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
             ),
         };
 
+        // Prefix: two chars to avoid shifting when navigating. Selected shows '> ', else two spaces.
+        let prefix = if i == app.selected { "> " } else { "  " };
         let inner = width.saturating_sub(2);
-        let name_w = UnicodeWidthStr::width(name.as_str());
+        // account for prefix width in name column
+        let name_w = UnicodeWidthStr::width(name.as_str()) + UnicodeWidthStr::width(prefix);
         let state_w = UnicodeWidthStr::width(state_text.as_str());
         let pad = if inner > name_w + state_w {
             inner - name_w - state_w
@@ -109,11 +112,13 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
         let spacer = " ".repeat(pad);
 
         let spans = vec![
+            Span::raw(prefix),
             Span::raw(name),
             Span::raw(spacer),
             Span::styled(state_text, state_style),
         ];
         if i == app.selected {
+            // highlight entire row including prefix
             let styled = spans
                 .into_iter()
                 .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
@@ -124,20 +129,38 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
         }
     }
 
-    // extra labels
+    // extra labels (anchor to bottom of left panel)
     let extras = vec![
         lang().refresh_label.clone(),
         lang().manual_specify_label.clone(),
     ];
+    // compute inner vertical space (accounting for borders)
+    let inner_h = left.height.saturating_sub(2) as usize;
+    // how many lines will be occupied by ports currently
+    let used = lines.len();
+    let extras_len = extras.len();
+    // number of blank lines to insert so that extras appear at the bottom
+    let pad_lines = if inner_h > used + extras_len {
+        inner_h - used - extras_len
+    } else {
+        0
+    };
+    for _ in 0..pad_lines {
+        lines.push(Line::from(Span::raw("")));
+    }
+
     for (j, lbl) in extras.into_iter().enumerate() {
         let idx = app.ports.len() + j;
+        let prefix = if idx == app.selected { "> " } else { "  " };
+        let spans = vec![Span::raw(prefix), Span::raw(lbl)];
         if idx == app.selected {
-            lines.push(Line::from(Span::styled(
-                lbl,
-                Style::default().bg(Color::LightGreen),
-            )));
+            let styled = spans
+                .into_iter()
+                .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
+                .collect::<Vec<_>>();
+            lines.push(Line::from(styled));
         } else {
-            lines.push(Line::from(Span::raw(lbl)));
+            lines.push(Line::from(spans));
         }
     }
 
@@ -247,32 +270,26 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
                     .add_modifier(Modifier::ITALIC),
             };
 
-            // Build styled lines (avoid raw string duplication and add visual emphasis)
+            // Build styled lines and align values into a right-hand column.
             let mut info_lines: Vec<Line> = Vec::new();
 
-            info_lines.push(Line::from(vec![
-                Span::styled(
-                    lang().label_port.as_str(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(" {}", p.port_name)),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::styled(
-                    lang().label_type.as_str(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(" {:?}", p.port_type)),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::styled(
-                    lang().label_status.as_str(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!(" {}", status_text), status_style),
-            ]));
+            // Prepare label/value pairs (value strings already include leading space where needed)
+            let mut pairs: Vec<(String, String, Option<Style>)> = Vec::new();
+            pairs.push((
+                lang().label_port.as_str().to_string(),
+                format!("{}", p.port_name),
+                None,
+            ));
+            pairs.push((
+                lang().label_type.as_str().to_string(),
+                format!("{:?}", p.port_type),
+                None,
+            ));
+            pairs.push((
+                lang().label_status.as_str().to_string(),
+                format!("{}", status_text),
+                Some(status_style),
+            ));
 
             // If occupied by this app, show current right mode (localized)
             if selected_state == crate::protocol::status::PortState::OccupiedByThis {
@@ -281,55 +298,49 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
                     crate::protocol::status::RightMode::SlaveStack => lang().slave_mode.clone(),
                     crate::protocol::status::RightMode::Listen => lang().listen_mode.clone(),
                 };
-                info_lines.push(Line::from(vec![
-                    Span::styled(
-                        lang().label_mode.as_str(),
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(format!(" {}", mode_text)),
-                ]));
+                pairs.push((lang().label_mode.as_str().to_string(), mode_text, None));
             }
 
-            // Spacer
-            info_lines.push(Line::from(Span::raw("")));
+            // Serial parameter pairs
+            pairs.push((lang().label_baud.as_str().to_string(), baud, None));
+            pairs.push((lang().label_data_bits.as_str().to_string(), data_bits, None));
+            pairs.push((lang().label_parity.as_str().to_string(), parity, None));
+            pairs.push((lang().label_stop_bits.as_str().to_string(), stop, None));
 
-            // (removed explicit "serial parameters:" header per UX request)
+            // Compute max label width (without indent)
+            let indent = "  ";
+            let max_label_w = pairs
+                .iter()
+                .map(|(lbl, _, _)| UnicodeWidthStr::width(lbl.as_str()))
+                .max()
+                .unwrap_or(0usize);
 
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    lang().label_baud.as_str(),
+            for (lbl, val, maybe_style) in pairs.into_iter() {
+                let lbl_w = UnicodeWidthStr::width(lbl.as_str());
+                // add 4 extra spaces to increase distance between label and value
+                let pad = if max_label_w >= lbl_w {
+                    max_label_w - lbl_w + 5
+                } else {
+                    5
+                };
+                let spacer = " ".repeat(pad);
+                let label_span = Span::styled(
+                    format!("{}{}", indent, lbl),
                     Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(" {}", baud)),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    lang().label_data_bits.as_str(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(" {}", data_bits)),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    lang().label_parity.as_str(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(" {}", parity)),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    lang().label_stop_bits.as_str(),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(format!(" {}", stop)),
-            ]));
+                );
+                match maybe_style {
+                    Some(s) => info_lines.push(Line::from(vec![
+                        label_span,
+                        Span::raw(spacer),
+                        Span::styled(format!("{}", val), s),
+                    ])),
+                    None => info_lines.push(Line::from(vec![
+                        label_span,
+                        Span::raw(spacer),
+                        Span::raw(format!("{}", val)),
+                    ])),
+                }
+            }
 
             Paragraph::new(info_lines)
                 .block(content_block)

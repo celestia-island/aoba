@@ -25,11 +25,11 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
                       editing: bool,
                       buffer: &str| {
         let selected = idx == form.cursor;
-        // When selected we indent both lines by two spaces (no '>' prefix)
-        let prefix = if selected { "  " } else { "" };
+        // Always indent title/value by two spaces so items don't jump when navigating.
+        let base_prefix = "  ";
 
-        // Title line (bold)
-        let title_text = format!("{}{}", prefix, label);
+        // Title line (bold) — do NOT add extra selection-indent here, only style changes.
+        let title_text = format!("{}{}", base_prefix, label);
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -44,11 +44,17 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
 
         // Value line: if editing show edit buffer (yellow), otherwise show value (green if selected)
         if editing {
-            let val_text = format!("{}{}", prefix, lang().edit_suffix.replace("{}", buffer));
+            // In editing state we do not show the selection marker '>' — only show the edit buffer.
+            let rendered = lang().edit_suffix.replace("{}", buffer);
+            let val_text = format!("{}{}", base_prefix, rendered);
             let val_style = Style::default().fg(Color::Yellow);
             lines.push(ratatui::text::Line::from(Span::styled(val_text, val_style)));
         } else {
-            let val_text = format!("{}{}", prefix, value);
+            let val_text = if selected {
+                format!("{}> {}", base_prefix, value)
+            } else {
+                format!("{}{}", base_prefix, value)
+            };
             let val_style = if selected {
                 Style::default().fg(Color::Green)
             } else {
@@ -89,8 +95,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
         // Render title + selector/edit line
         let idx_field = 0usize;
         let selected = idx_field == form.cursor;
-        let prefix = if selected { "  " } else { "" };
-        let title_text = format!("{}{}", prefix, lang().label_baud.as_str());
+        let base_prefix = "  ";
+        let title_text = format!("{}{}", base_prefix, lang().label_baud.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -106,24 +112,23 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
         // If custom is selected and we're in the deeper confirmed edit stage, show editable buffer
         if current_idx == custom_idx && form.edit_confirmed {
             // confirmed editing: show buffer and yellow highlight
-            let val_text = format!(
-                "{}{}",
-                prefix,
-                lang().edit_suffix.replace("{}", form.input_buffer.as_str())
-            );
+            let rendered = lang().edit_suffix.replace("{}", form.input_buffer.as_str());
+            // Editing confirmed: do not show '>' marker; show edit buffer only.
+            let val_text = format!("{}{}", base_prefix, rendered);
             lines.push(ratatui::text::Line::from(Span::styled(
                 val_text,
                 Style::default().fg(Color::Yellow),
             )));
         } else if current_idx == custom_idx && !form.edit_confirmed {
             // custom selected but not yet confirmed: show selector parts (no extra inline hint)
-            let val_text = format!("{}{}", prefix, parts.join(" "));
+            // Custom selector while editing: do not show selection marker here.
+            let val_text = format!("{}{}", base_prefix, parts.join(" "));
             lines.push(ratatui::text::Line::from(Span::styled(
                 val_text,
                 Style::default().fg(Color::Yellow),
             )));
         } else {
-            let val_text = format!("{}{}", prefix, parts.join(" "));
+            let val_text = format!("{}{}", base_prefix, parts.join(" "));
             lines.push(ratatui::text::Line::from(Span::styled(
                 val_text,
                 Style::default().fg(Color::Yellow),
@@ -170,8 +175,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
 
         let idx_field = 1usize;
         let selected = idx_field == form.cursor;
-        let prefix = if selected { "  " } else { "" };
-        let title_text = format!("{}{}", prefix, lang().label_parity.as_str());
+        let base_prefix = "  ";
+        let title_text = format!("{}{}", base_prefix, lang().label_parity.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -183,7 +188,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
             title_text,
             title_style,
         )));
-        let val_text = format!("{}{}", prefix, parts.join(" "));
+        // In editing state do not show the selection marker; show selector parts plainly.
+        let val_text = format!("{}{}", base_prefix, parts.join(" "));
         lines.push(ratatui::text::Line::from(Span::styled(
             val_text,
             Style::default().fg(Color::Yellow),
@@ -220,8 +226,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
 
         let idx_field = 2usize;
         let selected = idx_field == form.cursor;
-        let prefix = if selected { "  " } else { "" };
-        let title_text = format!("{}{}", prefix, lang().label_data_bits.as_str());
+        let base_prefix = "  ";
+        let title_text = format!("{}{}", base_prefix, lang().label_data_bits.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -233,7 +239,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
             title_text,
             title_style,
         )));
-        let val_text = format!("{}{}", prefix, parts.join(" "));
+        // Editing selector — don't render '>' marker here.
+        let val_text = format!("{}{}", base_prefix, parts.join(" "));
         lines.push(ratatui::text::Line::from(Span::styled(
             val_text,
             Style::default().fg(Color::Yellow),
@@ -270,8 +277,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
 
         let idx_field = 3usize;
         let selected = idx_field == form.cursor;
-        let prefix = if selected { "  " } else { "" };
-        let title_text = format!("{}{}", prefix, lang().label_stop_bits.as_str());
+        let base_prefix = "  ";
+        let title_text = format!("{}{}", base_prefix, lang().label_stop_bits.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -283,7 +290,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Optio
             title_text,
             title_style,
         )));
-        let val_text = format!("{}{}", prefix, parts.join(" "));
+        // Editing selector — don't render '>' marker here.
+        let val_text = format!("{}{}", base_prefix, parts.join(" "));
         lines.push(ratatui::text::Line::from(Span::styled(
             val_text,
             Style::default().fg(Color::Yellow),
