@@ -52,11 +52,28 @@ derive_struct! {
         press_enter_confirm_edit: String = "press_enter_confirm_edit".to_string(),
         press_enter_submit: String = "press_enter_submit".to_string(),
         press_esc_cancel: String = "press_esc_cancel".to_string(),
+    // input area texts
+    input_label: String = "input_label".to_string(),
+    hint_input_edit: String = "hint_input_edit".to_string(),
+    hint_input_mode: String = "hint_input_mode".to_string(),
+    input_editing_hint: String = "input_editing_hint".to_string(),
+    input_mode_ascii: String = "input_mode_ascii".to_string(),
+    input_mode_hex: String = "input_mode_hex".to_string(),
+    input_mode_current: String = "input_mode_current".to_string(),
+    hint_input_edit_short: String = "hint_input_edit_short".to_string(),
+    hint_input_mode_short: String = "hint_input_mode_short".to_string(),
         press_q_quit: String = "press_q_quit".to_string(),
         hint_enter_subpage: String = "hint_enter_subpage".to_string(),
         hint_back_list: String = "hint_back_list".to_string(),
         hint_mode_menu: String = "hint_mode_menu".to_string(),
         hint_switch_tab: String = "hint_switch_tab".to_string(),
+        // separator used between bottom hints; localized (e.g. ", " or "、")
+        hint_separator: String = "hint_separator".to_string(),
+        // template used to format key/label hints. Use {key} and {label} as placeholders.
+        hint_kv_template: String = "hint_kv_template".to_string(),
+    // follow/unfollow hint labels
+    hint_follow_on: String = "hint_follow_on".to_string(),
+    hint_follow_off: String = "hint_follow_off".to_string(),
         // serial param labels & misc
         serial_unknown: String = "serial_unknown".to_string(),
         label_port: String = "label_port".to_string(),

@@ -66,3 +66,20 @@ registers_list = "寄存器列表:"
 label_master_list = "模拟主站列表"
 label_slave_listen = "从站监听"
 invalid_baud_range = "无效的波特率：必须在 1200 到 2000000 之间"
+
+# input area strings
+input_label = "输入"
+hint_input_edit = "按 i 进入编辑，Enter 提交，Esc 取消"
+hint_input_mode = "按 m 切换输入模式（ASCII / HEX）"
+input_editing_hint = "正在编辑输入 — 在此输入负载"
+input_mode_ascii = "ASCII 字符输入"
+input_mode_hex = "HEX 数字输入"
+
+# current mode display (prefix)
+input_mode_current = "当前输入模式为"
+hint_input_edit_short = "编辑"
+hint_input_mode_short = "切换模式"
+hint_separator = " "
+hint_kv_template = "按 {key} {label}"
+hint_follow_on = "跟随最新日志"
+hint_follow_off = "停止跟随日志"

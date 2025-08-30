@@ -5,6 +5,37 @@ use serialport::{SerialPort, SerialPortInfo};
 
 use crate::protocol::tty::available_ports_sorted;
 
+/// Parsed summary of a captured protocol request/response for UI display.
+#[derive(Debug, Clone)]
+pub struct ParsedRequest {
+    /// origin of the message (e.g. "master-stack" or "main-stack")
+    pub origin: String,
+    /// "R" or "W"
+    pub rw: String,
+    /// textual command or function code (e.g. "Read Coils / 0x01")
+    pub command: String,
+    pub slave_id: u8,
+    pub address: u16,
+    pub length: u16,
+}
+
+/// A single captured log entry for UI presentation.
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    pub when: DateTime<Local>,
+    /// raw bytes or textual payload (displayed truncated)
+    pub raw: String,
+    /// optional parsed summary
+    pub parsed: Option<ParsedRequest>,
+}
+
+/// Input mode for the log input box: ASCII text or Hex bytes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputMode {
+    Ascii,
+    Hex,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Parity {
     None,
@@ -106,6 +137,21 @@ pub struct Status {
     /// transient mode selector overlay state
     pub mode_selector_active: bool,
     pub mode_selector_index: usize,
+    /// recent protocol/log entries for display in log panel
+    pub logs: Vec<LogEntry>,
+    /// index of selected log entry when viewing logs (visual groups)
+    pub log_selected: usize,
+    /// offset of the visible log group: index of the bottom-most visible group in the viewport
+    /// (renderer computes the top from this bottom index and the visible page size)
+    pub log_view_offset: usize,
+    /// whether log view auto-scrolls to bottom when new entries arrive
+    pub log_auto_scroll: bool,
+    /// input mode for the log input area
+    pub input_mode: InputMode,
+    /// whether the log input is currently in editing state
+    pub input_editing: bool,
+    /// input buffer for the log input area
+    pub input_buffer: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -135,6 +181,13 @@ impl Status {
             subpage_tab_index: 0,
             mode_selector_active: false,
             mode_selector_index: 0,
+            logs: Vec::new(),
+            log_selected: 0,
+            log_view_offset: 0,
+            log_auto_scroll: true,
+            input_mode: InputMode::Ascii,
+            input_editing: false,
+            input_buffer: String::new(),
         }
     }
 
@@ -198,6 +251,38 @@ impl Status {
             subpage_tab_index: 0,
             mode_selector_active: false,
             mode_selector_index: 0,
+            logs: Vec::new(),
+            log_selected: 0,
+            log_view_offset: 0,
+            log_auto_scroll: true,
+            input_mode: InputMode::Ascii,
+            input_editing: false,
+            input_buffer: String::new(),
+        }
+    }
+
+    /// Append a log entry to the internal buffer (caps at 1000 entries)
+    pub fn append_log(&mut self, entry: LogEntry) {
+        const MAX: usize = 1000;
+        self.logs.push(entry);
+        if self.logs.len() > MAX {
+            let excess = self.logs.len() - MAX;
+            self.logs.drain(0..excess);
+            // ensure selected index remains valid
+            if self.log_selected >= self.logs.len() {
+                self.log_selected = self.logs.len().saturating_sub(1);
+            }
+        }
+        // maintain auto-scroll behaviour: when auto-scroll enabled, keep view anchored to the latest
+        if self.log_auto_scroll {
+            // position the view offset so bottom aligns with last entry (we'll compute exact top in renderer)
+            if self.logs.is_empty() {
+                self.log_view_offset = 0;
+            } else {
+                self.log_view_offset = self.logs.len().saturating_sub(1);
+                // If auto-scroll is enabled, also move the selection to the newest entry
+                self.log_selected = self.logs.len().saturating_sub(1);
+            }
         }
     }
 

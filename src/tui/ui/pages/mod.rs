@@ -33,6 +33,27 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
     hints
 }
 
+/// Return global bottom hints that should appear on the bottom-most line regardless
+/// of which subpage is active. This keeps page-specific hints separate (they can
+/// be shown on an extra line above).
+pub fn global_hints_for_app(app: &Status) -> Vec<String> {
+    let mut hints: Vec<String> = Vec::new();
+    // If a subpage is active, show back/list and tab-switch hints as global controls.
+    if app.active_subpage.is_some() {
+        hints.push(crate::i18n::lang().hint_back_list.as_str().to_string());
+        hints.push(crate::i18n::lang().hint_switch_tab.as_str().to_string());
+    } else {
+        // default to entry hints when no subpage
+        hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
+    }
+    // If the transient mode selector overlay is active, append its hints so the bottom bar
+    // can render them (keeps rendering centralized in bottom.rs)
+    if app.mode_selector_active {
+        hints.extend(crate::tui::ui::components::mode_selector::mode_selector_hints());
+    }
+    hints
+}
+
 /// Allow the active page to map a KeyEvent to a high-level Action when the global
 /// key mapping returns no action. Returns Some(Action) if mapped.
 pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
@@ -78,7 +99,7 @@ pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status) -> bool {
     false
 }
 
-pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render_panels(f: &mut Frame, area: Rect, app: &mut Status) {
     // If a subpage is active, render it full-screen; otherwise render the normal entry view
     if let Some(sub) = app.active_subpage {
         match sub {

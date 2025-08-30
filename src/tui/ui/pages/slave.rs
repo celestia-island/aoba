@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
 /// UI for configuring Modbus master settings for the selected port.
-pub fn render_slave(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
     let port_name = if !app.ports.is_empty() && app.selected < app.ports.len() {
         app.ports[app.selected].port_name.clone()
     } else {
@@ -33,8 +33,9 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &Status) {
     let tabs = vec!["通信配置", middle_tab, "通信日志"];
     let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
 
+    // Use a single-line header so tabs sit directly above content (no extra empty row)
     let [header_area, content_area] = ratatui::layout::Layout::vertical([
-        ratatui::layout::Constraint::Length(2),
+        ratatui::layout::Constraint::Length(1),
         ratatui::layout::Constraint::Min(0),
     ])
     .areas(area);
@@ -77,14 +78,14 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &Status) {
     }
 }
 
-fn render_slave_config(f: &mut Frame, area: Rect, app: &Status) {
+fn render_slave_config(f: &mut Frame, area: Rect, app: &mut Status) {
     // delegate to shared component implementation
     crate::tui::ui::components::config_panel::render_config_panel(f, area, app, None);
 }
 
 // registers rendering is delegated directly to components (master_list_panel/slave_listen_panel)
 
-fn render_slave_log(f: &mut Frame, area: Rect, _app: &Status) {
+fn render_slave_log(f: &mut Frame, area: Rect, _app: &mut Status) {
     // delegate to shared component implementation
     crate::tui::ui::components::log_panel::render_log_panel(f, area, _app);
 }
@@ -155,6 +156,11 @@ pub fn handle_subpage_key(
             return true;
         }
         KC::Up | KC::Char('k') => {
+            // If current subpage tab is the log tab, do not consume Up/Down here so
+            // the parent MovePrev/MoveNext logic can navigate log entries.
+            if app.subpage_tab_index == 2 {
+                return false;
+            }
             if let Some(form) = app.subpage_form.as_mut() {
                 let total = 4usize.saturating_add(form.registers.len());
                 if total > 0 {
@@ -168,6 +174,9 @@ pub fn handle_subpage_key(
             return true;
         }
         KC::Down | KC::Char('j') => {
+            if app.subpage_tab_index == 2 {
+                return false;
+            }
             if let Some(form) = app.subpage_form.as_mut() {
                 let total = 4usize.saturating_add(form.registers.len());
                 if total > 0 {
@@ -205,6 +214,46 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
             return hints;
         }
     }
+    // If current tab is the log tab, show log-input related hints
+    // If current tab is the configuration tab, show config-specific hints
+    if app.subpage_tab_index == 0 {
+        // show Enter to open editor and movement hint (Up/Down or k/j)
+        hints.push(lang().press_enter_confirm_edit.as_str().to_string());
+        hints.push(lang().hint_move_vertical.as_str().to_string());
+        return hints;
+    }
+
+    // If current tab is the middle list tab, do not show page-specific hints (leave blank)
+    if app.subpage_tab_index == 1 {
+        return hints;
+    }
+
+    if app.subpage_tab_index == 2 {
+        if app.input_editing {
+            hints.push(lang().press_enter_submit.as_str().to_string());
+            hints.push(lang().press_esc_cancel.as_str().to_string());
+        } else {
+            // show short kv-style hints (按 i 编辑, 按 m 切换模式) in the bottom bar
+            hints.push(crate::tui::ui::bottom::format_kv_hint(
+                "i",
+                lang().hint_input_edit_short.as_str(),
+            ));
+            hints.push(crate::tui::ui::bottom::format_kv_hint(
+                "m",
+                lang().hint_input_mode_short.as_str(),
+            ));
+            // show follow/track latest toggle (p) -- show the action (inverse of current state)
+            let action_label = if app.log_auto_scroll {
+                lang().hint_follow_off.as_str()
+            } else {
+                lang().hint_follow_on.as_str()
+            };
+            hints.push(crate::tui::ui::bottom::format_kv_hint("p", action_label));
+            // (mode description moved into the input placeholder; skip duplicate)
+        }
+        return hints;
+    }
+
     hints.push(lang().hint_back_list.as_str().to_string());
     hints.push(lang().hint_switch_tab.as_str().to_string());
     hints

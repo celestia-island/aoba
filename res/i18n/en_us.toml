@@ -67,3 +67,20 @@ registers_list = "Registers:"
 label_master_list = "Simulated Master list"
 label_slave_listen = "Slave listen"
 invalid_baud_range = "Invalid baud: must be between 1200 and 2000000"
+
+# input area strings
+input_label = "Input"
+hint_input_edit = "Press i to edit, Enter to submit, Esc to cancel"
+hint_input_mode = "Press m to switch input mode (ASCII / HEX)"
+input_editing_hint = "Editing input - type payload here"
+input_mode_ascii = "ASCII character input"
+input_mode_hex = "HEX numeric input"
+
+# current mode display (prefix)
+input_mode_current = "Current input mode is"
+hint_input_edit_short = "edit"
+hint_input_mode_short = "switch mode"
+hint_separator = ", "
+hint_kv_template = "Press {key} to {label}"
+hint_follow_on = "follow latest logs"
+hint_follow_off = "stop following logs"
