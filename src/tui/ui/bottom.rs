@@ -2,7 +2,7 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::{protocol::status::Status, tui::ui::pages};
 
-pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
+pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = Block::default().borders(Borders::NONE);
 
     // If app has an error message, display it on the first line (red),
@@ -35,10 +35,32 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
         let hint_rect = rows[1];
         // Use the unified renderer for hints
         render_hints(f, hint_rect, hints.iter().map(|s| s.as_str()));
-    } else {
-        let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
+        return;
+    }
 
-        // Delegate to page layer to assemble bottom hints.
+    // Normal (non-error) bottom rendering
+    let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
+
+    // If a subpage is active, render two parallel hint lines: page-specific above and global below.
+    if _app.active_subpage.is_some() {
+        let rows = ratatui::layout::Layout::default()
+            .direction(ratatui::layout::Direction::Vertical)
+            .margin(0)
+            .constraints([
+                ratatui::layout::Constraint::Length(1),
+                ratatui::layout::Constraint::Length(1),
+            ])
+            .split(area);
+
+        // page-specific hints (above)
+        let page_hints = pages::bottom_hints_for_app(_app);
+        render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
+
+        // global hints (bottom-most)
+        let global_hints = pages::global_hints_for_app(_app);
+        render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
+    } else {
+        // single-line bottom hints when not in a subpage
         let hints = pages::bottom_hints_for_app(_app);
         let text = format_hints(hints.iter().map(|s| s.as_str()));
         let help = Paragraph::new(text)
@@ -49,21 +71,29 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &Status) {
     }
 }
 
-// Separator used between hint fragments. Public so other modules can reuse.
-pub const HINT_SEPARATOR: &str = "   ";
-
-/// Join hint fragments into a single string using the project's hint separator.
-/// Accepts any iterator of items convertible to &str.
+/// Join hint fragments into a single string using the project's hint separator
+/// (localized via `i18n::lang().hint_separator`). Accepts any iterator of items
+/// convertible to &str.
 pub fn format_hints<I, S>(hints: I) -> String
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
+    // Use a wider visual gap between bottom hints: four spaces.
+    let sep = "    ";
     hints
         .into_iter()
         .map(|s| s.as_ref().to_string())
         .collect::<Vec<String>>()
-        .join(HINT_SEPARATOR)
+        .join(sep)
+}
+
+/// Format a key/value shortcut hint, e.g. key="i", value="编辑" -> "i=编辑".
+/// Provided here so pages/components can register consistent kv-styled hints.
+pub fn format_kv_hint(key: &str, value: &str) -> String {
+    // Use localized template, replace {key} and {label}
+    let tmpl = crate::i18n::lang().hint_kv_template.as_str();
+    tmpl.replace("{key}", key).replace("{label}", value)
 }
 
 /// Render hints into the given `area` using the project's standard hint style and separator.
@@ -71,10 +101,12 @@ pub fn render_hints<'a, I>(f: &mut Frame, area: Rect, hints: I)
 where
     I: IntoIterator<Item = &'a str>,
 {
+    // Use a wider visual gap between bottom hints: four spaces.
+    let sep = "    ";
     let text = hints
         .into_iter()
         .collect::<Vec<&str>>()
-        .join(HINT_SEPARATOR);
+        .join(sep);
     let hint_block = Block::default().style(Style::default().bg(Color::Gray).fg(Color::White));
     let hint_para = Paragraph::new(text)
         .alignment(Alignment::Center)

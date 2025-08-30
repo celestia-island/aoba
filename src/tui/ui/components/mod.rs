@@ -1,4 +1,5 @@
 pub mod config_panel;
+pub mod log_input;
 pub mod log_panel;
 pub mod master_list_panel;
 pub mod mode_selector;

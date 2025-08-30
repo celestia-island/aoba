@@ -55,7 +55,7 @@ pub fn map_key(_key: KeyEvent, _app: &Status) -> Option<Action> {
     None
 }
 
-pub fn render_entry(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     // Horizontal split: left ports | right details
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Horizontal)

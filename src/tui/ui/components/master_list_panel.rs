@@ -3,7 +3,7 @@ use ratatui::{prelude::*, text::Line};
 use crate::{i18n::lang, protocol::status::Status};
 
 /// Render a master list panel (distinct from registers_panel) — uses i18n strings.
-pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut lines: Vec<Line> = Vec::new();
     lines.push(Line::from(lang().label_master_list.as_str()));
     if let Some(form) = app.subpage_form.as_ref() {
