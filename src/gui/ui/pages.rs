@@ -3,7 +3,7 @@ use egui::{CentralPanel, Checkbox, ScrollArea, SidePanel};
 
 use crate::{
     i18n::lang,
-    protocol::status::{Focus, Status},
+    protocol::status::Status,
 };
 
 pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mutex<Status>>) {
@@ -42,7 +42,6 @@ pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mute
                     if ui.selectable_label(selected_bool, label).clicked() {
                         if let Ok(mut guard) = inner.lock() {
                             guard.selected = i;
-                            guard.focus = Focus::Left;
                             guard.clear_error();
                         }
                     }
