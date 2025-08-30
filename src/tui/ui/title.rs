@@ -2,7 +2,7 @@ use crate::{i18n::lang, protocol::status::Status};
 
 use ratatui::{prelude::*, widgets::*};
 
-pub fn render_title(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
     let title_block = Block::default()
         .borders(Borders::NONE)
         .style(Style::default().bg(Color::Gray));

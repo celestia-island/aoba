@@ -11,7 +11,7 @@ use crate::{
 use ratatui::style::Modifier;
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
-pub fn render_config_panel(f: &mut Frame, area: Rect, app: &Status, style: Option<Style>) {
+pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
     // Use transient form if present
     let form = app.subpage_form.as_ref().cloned().unwrap_or_default();
 
