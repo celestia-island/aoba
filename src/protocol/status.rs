@@ -76,11 +76,7 @@ pub enum RegisterField {
     Length,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Focus {
-    Left,
-    Right,
-}
+// Focus enum removed: UI now uses single-pane left list only
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RightMode {
@@ -97,7 +93,6 @@ pub struct Status {
     /// optional open handle when this app occupies the port
     pub port_handles: Vec<Option<Box<dyn SerialPort>>>,
     pub selected: usize,
-    pub focus: Focus,
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
     pub error: Option<(String, DateTime<Local>)>,
@@ -130,7 +125,7 @@ impl Status {
             port_states,
             port_handles,
             selected: 0,
-            focus: Focus::Left,
+
             auto_refresh: true,
             last_refresh: None,
             error: None,
@@ -193,7 +188,7 @@ impl Status {
             port_states,
             port_handles,
             selected: 0,
-            focus: Focus::Left,
+
             auto_refresh: false,
             last_refresh: None,
             error: None,
@@ -354,14 +349,37 @@ impl Status {
         self.auto_refresh = !self.auto_refresh;
     }
     pub fn next(&mut self) {
-        // allow moving into two trailing virtual entries
-        let total = self.ports.len().saturating_add(2);
+        // Navigate among real ports only
+        let total = self.ports.len();
         if total > 0 {
             self.selected = (self.selected + 1) % total;
         }
     }
 
     pub fn prev(&mut self) {
+        let total = self.ports.len();
+        if total == 0 {
+            return;
+        }
+        if self.selected == 0 {
+            self.selected = total - 1;
+        } else {
+            self.selected -= 1;
+        }
+    }
+
+    /// Navigate among visual rows in the left pane including the two trailing virtual items
+    /// (Refresh and Manual specify). This is used by the TUI navigation so the user can
+    /// select those bottom options even though the logical model's next()/prev() operate on
+    /// real ports only for test stability.
+    pub fn next_visual(&mut self) {
+        let total = self.ports.len().saturating_add(2);
+        if total > 0 {
+            self.selected = (self.selected + 1) % total;
+        }
+    }
+
+    pub fn prev_visual(&mut self) {
         let total = self.ports.len().saturating_add(2);
         if total == 0 {
             return;
@@ -403,7 +421,6 @@ mod tests {
     fn test_focus_and_refresh() {
         let ports = vec![fake_port("COM1")];
         let mut app = Status::with_ports(ports);
-        assert_eq!(app.focus, Focus::Left);
         // Call refresh (may change ports depending on environment)
         app.refresh();
         // Ensure selected is in bounds

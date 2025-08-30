@@ -42,10 +42,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         .as_ref()
         .map(|f| f.editing)
         .unwrap_or(false);
-    let can_quit = app.active_subpage.is_none()
-        && !app.mode_selector_active
-        && !in_subpage_editing
-        && matches!(app.focus, crate::protocol::status::Focus::Left);
+    let can_quit = app.active_subpage.is_none() && !app.mode_selector_active && !in_subpage_editing;
     if can_quit {
         hints.push(lang().press_q_quit.as_str().to_string());
     }

@@ -12,7 +12,7 @@ use std::{
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
-    protocol::status::{Focus, RightMode, Status},
+    protocol::status::{RightMode, Status},
     tui::input::{map_key, Action},
 };
 
@@ -459,8 +459,7 @@ fn run_app(
                                         .unwrap_or(false);
                                     let allowed = guard.active_subpage.is_none()
                                         && !guard.mode_selector_active
-                                        && !in_editing
-                                        && matches!(guard.focus, Focus::Left);
+                                        && !in_editing;
                                     if allowed {
                                         break;
                                     } else {
@@ -474,13 +473,10 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     if guard.active_subpage.is_some() {
                                         guard.active_subpage = None;
-                                        guard.focus = Focus::Left;
-                                    } else {
-                                        guard.focus = Focus::Left;
                                     }
                                     guard.clear_error();
                                 } else {
-                                    log::error!("[TUI] failed to lock app for FocusLeft");
+                                    log::error!("[TUI] failed to lock app");
                                 }
                             }
                             Action::EnterPage => {
@@ -494,11 +490,10 @@ fn run_app(
                                         guard.active_subpage = Some(guard.right_mode);
                                         guard.subpage_tab_index = 0;
                                         guard.init_subpage_form();
-                                        guard.focus = Focus::Left;
                                     }
                                     guard.clear_error();
                                 } else {
-                                    log::error!("[TUI] failed to lock app for FocusRight");
+                                    log::error!("[TUI] failed to lock app");
                                 }
                             }
                             Action::MoveNext => {
@@ -510,8 +505,10 @@ fn run_app(
                                                 form.cursor = (form.cursor + 1) % total;
                                             }
                                         }
-                                    } else if matches!(guard.focus, Focus::Left) {
-                                        guard.next();
+                                    } else {
+                                        // use visual navigation so trailing virtual entries (Refresh/Manual)
+                                        // can be selected in the UI
+                                        guard.next_visual();
                                     }
                                     guard.clear_error();
                                 } else {
@@ -531,8 +528,8 @@ fn run_app(
                                                 }
                                             }
                                         }
-                                    } else if matches!(guard.focus, Focus::Left) {
-                                        guard.prev();
+                                    } else {
+                                        guard.prev_visual();
                                     }
                                     guard.clear_error();
                                 } else {
@@ -708,7 +705,7 @@ fn run_app(
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state != crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.focus = Focus::Left;
+                                        // nothing to do: single-pane UI keeps left selection
                                     }
                                 } else {
                                     log::error!("[TUI] failed to lock app for TogglePort");

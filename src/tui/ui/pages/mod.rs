@@ -24,7 +24,13 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
         }
     }
     // default to entry hints when no subpage
-    crate::tui::ui::pages::entry::page_bottom_hints(app)
+    let mut hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
+    // If the transient mode selector overlay is active, append its hints so the bottom bar
+    // can render them (keeps rendering centralized in bottom.rs)
+    if app.mode_selector_active {
+        hints.extend(crate::tui::ui::components::mode_selector::mode_selector_hints());
+    }
+    hints
 }
 
 /// Allow the active page to map a KeyEvent to a high-level Action when the global
