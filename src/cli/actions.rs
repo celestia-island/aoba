@@ -32,7 +32,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
         if want_json {
             let mut out: Vec<PortInfo> = Vec::new();
             for p in ports.iter() {
-                // Try to extract vid/pid/serial using the existing helper if available
+                // Try to extract vid / pid / serial using the existing helper if available
                 let (vid, pid, serial, manufacturer, product) =
                     match crate::protocol::tty::try_extract_vid_pid_serial(&p.port_type) {
                         Some((v, pa, s, m, pr)) => (Some(v), Some(pa), s, m, pr),
