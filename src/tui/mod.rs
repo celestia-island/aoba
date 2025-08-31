@@ -1,7 +1,6 @@
-pub mod constants;
-pub mod edit;
 pub mod input;
-pub mod ui; // newly added helpers for form editing
+pub mod ui;
+pub mod utils; // newly added helpers for form editing
 
 use anyhow::Result;
 use std::{
@@ -16,8 +15,8 @@ use ratatui::{backend::CrosstermBackend, prelude::*};
 use crate::{
     protocol::status::{InputMode, LogEntry, RightMode, Status},
     tui::{
-        constants::LOG_PAGE_JUMP,
         input::{map_key, Action},
+        utils::constants::LOG_PAGE_JUMP,
     },
 };
 
@@ -61,7 +60,7 @@ pub fn start() -> Result<()> {
         thread::spawn(move || loop {
             thread::sleep(std::time::Duration::from_secs(3));
             if let Ok(mut guard) = app_clone.lock() {
-                // Always refresh to detect added/removed COM ports
+                // Always refresh to detect added / removed COM ports
                 guard.refresh();
             } else {
                 log::error!("[TUI] refresher thread: failed to lock app (poisoned)");
@@ -440,15 +439,9 @@ fn run_app(
 
                 if let Ok(mut guard) = app.lock() {
                     if guard.active_subpage.is_some() && guard.subpage_tab_index == 2 {
-                        // Per user request: on communication log subpage, Enter should do nothing
-                        // unless the input box is actively being edited (in which case Enter should submit).
-                        if !guard.input_editing && key.code == crossterm::event::KeyCode::Enter {
-                            // consume Enter and skip further handling when not editing
-                            drop(guard);
-                            continue;
-                        }
+                        // Communication log subpage: allow Enter OR 'i' to begin editing the input box.
                         use crossterm::event::KeyCode as KC;
-                        // If currently in input editing mode, consume characters/backspace/enter/esc here
+                        // If currently in input editing mode, consume characters / backspace / enter / esc here
                         if guard.input_editing {
                             match key.code {
                                 KC::Char(c) => {
@@ -465,7 +458,7 @@ fn run_app(
                                     guard.input_buffer.pop();
                                 }
                                 KC::Enter => {
-                                    // send: append as raw log entry; mark as parsed with rw = "W" so UI shows 发送
+                                    // Send: append as raw log entry; mark as parsed with rw = "W" so the UI shows the send label.
                                     let parsed = crate::protocol::status::ParsedRequest {
                                         origin: "local-input".to_string(),
                                         rw: "W".to_string(),
@@ -495,9 +488,9 @@ fn run_app(
                             redraw(terminal, &app);
                             continue; // consumed
                         } else {
-                            // Not editing: allow quick toggles for edit/mode
+                            // Not editing: allow quick toggles for edit / mode
                             match key.code {
-                                KC::Char('i') => {
+                                KC::Enter | KC::Char('i') => {
                                     guard.input_editing = true;
                                     guard.clear_error();
                                     drop(guard);
@@ -639,7 +632,7 @@ fn run_app(
                                             }
                                         }
                                     } else {
-                                        // use visual navigation so trailing virtual entries (Refresh/Manual)
+                                        // use visual navigation so trailing virtual entries (Refresh / Manual)
                                         // can be selected in the UI
                                         guard.next_visual();
                                     }

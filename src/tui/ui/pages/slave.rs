@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::Status,
-    tui::{edit, input::Action},
+    tui::{input::Action, utils::edit},
 };
 
 /// UI for configuring Modbus master settings for the selected port.
@@ -87,7 +87,7 @@ fn render_slave_config(f: &mut Frame, area: Rect, app: &mut Status) {
     crate::tui::ui::components::config_panel::render_config_panel(f, area, app, None);
 }
 
-// registers rendering is delegated directly to components (master_list_panel/slave_listen_panel)
+// registers rendering is delegated directly to components (master_list_panel / slave_listen_panel)
 
 fn render_slave_log(f: &mut Frame, area: Rect, _app: &mut Status) {
     // delegate to shared component implementation
@@ -107,11 +107,11 @@ pub fn handle_subpage_key(
         }
     }
 
-    // Tab/arrow navigation is handled by the parent input handler; fall through to allow
-    // parent to process Tab/BackTab/Right/Left/Up/Down when appropriate.
+    // Tab / arrow navigation is handled by the parent input handler; fall through to allow
+    // parent to process Tab / BackTab / Right / Left / Up / Down when appropriate.
 
     match key.code {
-        // 三个子标签切换
+        // Cycle through the three sub tabs.
         KC::Tab => {
             app.subpage_tab_index = (app.subpage_tab_index + 1) % 3;
             return true;
@@ -125,7 +125,7 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // 进入/退出编辑
+        // Enter / exit edit mode.
         KC::Enter => {
             if let Some(form) = app.subpage_form.as_mut() {
                 if !form.editing {
@@ -146,11 +146,11 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // 光标上移
+        // Move cursor up.
         KC::Up | KC::Char('k') => {
             if app.subpage_tab_index == 2 {
                 return false;
-            } // 让父级处理日志滚动
+            } // Let parent handle log scrolling.
             if let Some(form) = app.subpage_form.as_mut() {
                 let total = 4usize.saturating_add(form.registers.len());
                 if total > 0 {
@@ -163,7 +163,7 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // 光标下移
+        // Move cursor down.
         KC::Down | KC::Char('j') => {
             if app.subpage_tab_index == 2 {
                 return false;
@@ -176,7 +176,7 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // 新增寄存器（与 map_key 中 AddRegister 对应）
+        // Add a register (matches AddRegister in map_key).
         KC::Char('n') => {
             if app.subpage_form.is_none() {
                 app.init_subpage_form();
@@ -214,7 +214,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     // If current tab is the log tab, show log-input related hints
     // If current tab is the configuration tab, show config-specific hints
     if app.subpage_tab_index == 0 {
-        // show Enter to open editor and movement hint (Up/Down or k/j)
+        // show Enter to open editor and movement hint (Up / Down or k / j)
         hints.push(lang().press_enter_confirm_edit.as_str().to_string());
         hints.push(lang().hint_move_vertical.as_str().to_string());
         return hints;
@@ -230,16 +230,16 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
             hints.push(lang().press_enter_submit.as_str().to_string());
             hints.push(lang().press_esc_cancel.as_str().to_string());
         } else {
-            // show short kv-style hints (按 i 编辑, 按 m 切换模式) in the bottom bar
+            // Show short kv-style hints (press i to edit, press m to toggle mode) in the bottom bar.
             hints.push(crate::tui::ui::bottom::format_kv_hint(
-                "Enter/i",
+                "Enter / i",
                 lang().hint_input_edit_short.as_str(),
             ));
             hints.push(crate::tui::ui::bottom::format_kv_hint(
                 "m",
                 lang().hint_input_mode_short.as_str(),
             ));
-            // show follow/track latest toggle (p) -- show the action (inverse of current state)
+            // show follow / track latest toggle (p) -- show the action (inverse of current state)
             let action_label = if app.log_auto_scroll {
                 lang().hint_follow_off.as_str()
             } else {
