@@ -6,7 +6,11 @@ use ratatui::{
     widgets::{Paragraph, Tabs},
 };
 
-use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
+use crate::{
+    i18n::lang,
+    protocol::status::Status,
+    tui::{edit, input::Action},
+};
 
 /// UI for configuring Modbus slave (pull) settings for the selected port.
 pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
@@ -124,52 +128,9 @@ pub fn handle_subpage_key(
         KC::Enter => {
             if let Some(form) = app.subpage_form.as_mut() {
                 if !form.editing {
-                    form.editing = true;
-                    // initialize editing field based on cursor (same as EditToggle)
-                    match form.cursor {
-                        0 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
-                        1 => {
-                            form.editing_field = Some(crate::protocol::status::EditingField::Parity)
-                        }
-                        2 => {
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::DataBits)
-                        }
-                        3 => {
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::StopBits)
-                        }
-                        n => {
-                            let ridx = n.saturating_sub(4);
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::RegisterField {
-                                    idx: ridx,
-                                    field: crate::protocol::status::RegisterField::SlaveId,
-                                });
-                        }
-                    }
-                    form.input_buffer.clear();
-                    // If entering Baud edit, initialize edit_choice_index and prefill buffer for custom
-                    if let Some(crate::protocol::status::EditingField::Baud) =
-                        form.editing_field.clone()
-                    {
-                        let presets: [u32; 8] =
-                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
-                        let _custom_idx = presets.len();
-                        let idx = presets
-                            .iter()
-                            .position(|&p| p == form.baud)
-                            .unwrap_or(_custom_idx);
-                        form.edit_choice_index = Some(idx);
-                        if idx == presets.len() {
-                            form.input_buffer = form.baud.to_string();
-                        }
-                        form.edit_confirmed = false;
-                    }
+                    edit::begin_edit(form);
                 } else {
-                    form.editing = false;
-                    form.editing_field = None;
-                    form.input_buffer.clear();
+                    edit::end_edit(form);
                 }
             }
             return true;
@@ -177,51 +138,9 @@ pub fn handle_subpage_key(
         KC::Char('e') => {
             if let Some(form) = app.subpage_form.as_mut() {
                 if !form.editing {
-                    form.editing = true;
-                    // same initialization as Enter
-                    match form.cursor {
-                        0 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
-                        1 => {
-                            form.editing_field = Some(crate::protocol::status::EditingField::Parity)
-                        }
-                        2 => {
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::DataBits)
-                        }
-                        3 => {
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::StopBits)
-                        }
-                        n => {
-                            let ridx = n.saturating_sub(4);
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::RegisterField {
-                                    idx: ridx,
-                                    field: crate::protocol::status::RegisterField::SlaveId,
-                                });
-                        }
-                    }
-                    form.input_buffer.clear();
-                    if let Some(crate::protocol::status::EditingField::Baud) =
-                        form.editing_field.clone()
-                    {
-                        let presets: [u32; 8] =
-                            [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
-                        let _custom_idx = presets.len();
-                        let idx = presets
-                            .iter()
-                            .position(|&p| p == form.baud)
-                            .unwrap_or(_custom_idx);
-                        form.edit_choice_index = Some(idx);
-                        if idx == presets.len() {
-                            form.input_buffer = form.baud.to_string();
-                        }
-                        form.edit_confirmed = false;
-                    }
+                    edit::begin_edit(form);
                 } else {
-                    form.editing = false;
-                    form.editing_field = None;
-                    form.input_buffer.clear();
+                    edit::end_edit(form);
                 }
             }
             return true;
@@ -303,7 +222,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         } else {
             // show short kv-style hints (按 i 编辑, 按 m 切换模式) in the bottom bar
             hints.push(crate::tui::ui::bottom::format_kv_hint(
-                "i",
+                "Enter/i",
                 lang().hint_input_edit_short.as_str(),
             ));
             hints.push(crate::tui::ui::bottom::format_kv_hint(

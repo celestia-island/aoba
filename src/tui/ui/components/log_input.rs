@@ -35,8 +35,8 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
         };
         // style editing content in yellow (match config page editing color)
         let mut spans: Vec<ratatui::text::Span> = Vec::new();
-        // always prefix editing line with two spaces so it aligns with log items
-        spans.push(Span::raw("  "));
+    // prefix editing line with single space (log list uses 2 incl. selector; here we keep compact)
+    spans.push(Span::raw(" "));
         spans.push(Span::styled(
             content.clone(),
             Style::default().fg(Color::Yellow),
@@ -49,10 +49,10 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
         lines.push(ratatui::text::Line::from(spans));
         // keep a spare empty middle line so layout remains 3 lines
         // spare empty middle line should also keep two spaces for alignment
-        lines.push(Line::from(Span::raw("  ")));
+    lines.push(Line::from(Span::raw(" ")));
         // editing hint (submit)
         lines.push(Line::from(Span::styled(
-            format!("  {}", lang().press_enter_submit.as_str()),
+            format!(" {}", lang().press_enter_submit.as_str()),
             Style::default().fg(Color::LightGreen),
         )));
 
@@ -106,7 +106,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
             InputMode::Hex => lang().input_mode_hex.as_str(),
         };
         // add extra leading spaces to align with title
-        let placeholder = format!(" {} {}", lang().input_mode_current.as_str(), mode_text);
+    let placeholder = format!(" {} {}", lang().input_mode_current.as_str(), mode_text); // keep single leading space
         lines.push(Line::from(Span::styled(
             placeholder,
             Style::default()
@@ -119,10 +119,9 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
     }
 
     // hint (short)
-    lines.push(Line::from(Span::raw(format!(
-        "  {}",
-        lang().hint_input_edit_short.as_str()
-    ))));
+    // show dual-key hint: Enter/i
+    let edit_hint = format!("[Enter/i] {}", lang().hint_input_edit_short.as_str());
+    lines.push(Line::from(Span::raw(format!(" {}", edit_hint))));
 
     let block = Block::default()
         .borders(Borders::ALL)

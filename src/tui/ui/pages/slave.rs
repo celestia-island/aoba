@@ -6,7 +6,11 @@ use ratatui::{
     widgets::{Paragraph, Tabs},
 };
 
-use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
+use crate::{
+    i18n::lang,
+    protocol::status::Status,
+    tui::{edit, input::Action},
+};
 
 /// UI for configuring Modbus master settings for the selected port.
 pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
@@ -107,6 +111,7 @@ pub fn handle_subpage_key(
     // parent to process Tab/BackTab/Right/Left/Up/Down when appropriate.
 
     match key.code {
+        // 三个子标签切换
         KC::Tab => {
             app.subpage_tab_index = (app.subpage_tab_index + 1) % 3;
             return true;
@@ -120,59 +125,45 @@ pub fn handle_subpage_key(
             }
             return true;
         }
+        // 进入/退出编辑
         KC::Enter => {
             if let Some(form) = app.subpage_form.as_mut() {
-                // Toggle editing mode for the currently selected field.
                 if !form.editing {
-                    form.editing = true;
-                    // choose field based on cursor: 0=baud,1=parity,2=databits,3=stopbits,>=4 -> register index
-                    match form.cursor {
-                        0 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
-                        1 => {
-                            form.editing_field = Some(crate::protocol::status::EditingField::Parity)
-                        }
-                        2 => {
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::DataBits)
-                        }
-                        3 => {
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::StopBits)
-                        }
-                        n => {
-                            let ridx = n.saturating_sub(4);
-                            form.editing_field =
-                                Some(crate::protocol::status::EditingField::RegisterField {
-                                    idx: ridx,
-                                    field: crate::protocol::status::RegisterField::SlaveId,
-                                });
-                        }
-                    }
-                    form.input_buffer.clear();
+                    edit::begin_edit(form);
                 } else {
-                    // If already editing, let the top-level input handler finish/commit the edit.
+                    edit::end_edit(form);
                 }
             }
             return true;
         }
+        KC::Char('e') => {
+            if let Some(form) = app.subpage_form.as_mut() {
+                if !form.editing {
+                    edit::begin_edit(form);
+                } else {
+                    edit::end_edit(form);
+                }
+            }
+            return true;
+        }
+        // 光标上移
         KC::Up | KC::Char('k') => {
-            // If current subpage tab is the log tab, do not consume Up/Down here so
-            // the parent MovePrev/MoveNext logic can navigate log entries.
             if app.subpage_tab_index == 2 {
                 return false;
-            }
+            } // 让父级处理日志滚动
             if let Some(form) = app.subpage_form.as_mut() {
                 let total = 4usize.saturating_add(form.registers.len());
                 if total > 0 {
-                    if form.cursor == 0 {
-                        form.cursor = total - 1;
+                    form.cursor = if form.cursor == 0 {
+                        total - 1
                     } else {
-                        form.cursor -= 1;
-                    }
+                        form.cursor - 1
+                    };
                 }
             }
             return true;
         }
+        // 光标下移
         KC::Down | KC::Char('j') => {
             if app.subpage_tab_index == 2 {
                 return false;
@@ -185,12 +176,18 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        KC::Char('e') => {
+        // 新增寄存器（与 map_key 中 AddRegister 对应）
+        KC::Char('n') => {
+            if app.subpage_form.is_none() {
+                app.init_subpage_form();
+            }
             if let Some(form) = app.subpage_form.as_mut() {
-                form.editing = !form.editing;
-                if form.editing {
-                    form.input_buffer.clear();
-                }
+                form.registers.push(crate::protocol::status::RegisterEntry {
+                    slave_id: 1,
+                    mode: 1,
+                    address: 0,
+                    length: 1,
+                });
             }
             return true;
         }
@@ -235,7 +232,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         } else {
             // show short kv-style hints (按 i 编辑, 按 m 切换模式) in the bottom bar
             hints.push(crate::tui::ui::bottom::format_kv_hint(
-                "i",
+                "Enter/i",
                 lang().hint_input_edit_short.as_str(),
             ));
             hints.push(crate::tui::ui::bottom::format_kv_hint(
