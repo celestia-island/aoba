@@ -1,5 +1,7 @@
+pub mod constants;
+pub mod edit;
 pub mod input;
-pub mod ui;
+pub mod ui; // newly added helpers for form editing
 
 use anyhow::Result;
 use std::{
@@ -13,8 +15,26 @@ use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
     protocol::status::{InputMode, LogEntry, RightMode, Status},
-    tui::input::{map_key, Action},
+    tui::{
+        constants::LOG_PAGE_JUMP,
+        input::{map_key, Action},
+    },
 };
+
+// ---- Internal helpers ----------------------------------------------------
+/// Recompute log viewport (bottom anchored) after `log_selected` potentially changed.
+fn adjust_log_view(app: &mut Status, term_height: u16) {
+    app.adjust_log_view(term_height);
+}
+
+/// Convenience wrapper around terminal draw + locking to reduce repetition.
+fn redraw(terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>, app: &Arc<Mutex<Status>>) {
+    let _ = terminal.draw(|f| {
+        if let Ok(mut g) = app.lock() {
+            crate::tui::ui::render_ui(f, &mut *g);
+        }
+    });
+}
 
 pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
@@ -64,7 +84,7 @@ fn run_app(
     app: Arc<Mutex<Status>>,
 ) -> Result<()> {
     loop {
-        // Draw with short-lived mutable lock so renderers can update derived UI state
+        // Draw with short-lived mutable lock
         {
             match app.lock() {
                 Ok(mut guard) => {
@@ -92,17 +112,13 @@ fn run_app(
             };
 
             if let crossterm::event::Event::Key(key) = evt {
-                // Only handle the initial key press event. Ignore Repeat and Release
-                // events so a single physical key press maps to a single action.
+                // Only handle initial key press.
                 match key.kind {
                     crossterm::event::KeyEventKind::Press => {}
                     crossterm::event::KeyEventKind::Repeat => continue,
                     _ => continue, // Release or other kinds
                 }
 
-                // If a subpage form is active and in editing mode OR we're on the
-                // Baud->Custom pending slot, capture raw character input and
-                // interpret it as form input. Otherwise map keys to high-level actions.
                 let lock = app.lock();
                 let _is_editing = match &lock {
                     Ok(g) => g
@@ -135,7 +151,6 @@ fn run_app(
                     Err(_) => false,
                 };
 
-                // If mode selector overlay is active, handle its navigation here
                 let mode_selector_active = match &lock {
                     Ok(g) => g.mode_selector_active,
                     Err(_) => false,
@@ -179,7 +194,6 @@ fn run_app(
                         }
                         guard.clear_error();
                     }
-                    // skip normal key handling while selector active
                     continue;
                 }
 
@@ -311,8 +325,6 @@ fn run_app(
                                     }
                                 }
                                 KC::Enter => {
-                                    // If we're in Baud field and currently on Custom but not yet confirmed,
-                                    // confirm deeper edit instead of committing immediately.
                                     if let Some(crate::protocol::status::EditingField::Baud) =
                                         &form.editing_field
                                     {
@@ -334,7 +346,6 @@ fn run_app(
                                             continue;
                                         }
                                     }
-                                    // commit and exit field editing
                                     let mut commit_success = true;
                                     if let Some(field) = &form.editing_field {
                                         match field {
@@ -396,7 +407,7 @@ fn run_app(
                                             _ => {}
                                         }
                                     }
-                                    // exit current field editing and leave overall editing mode only when commit succeeded
+                                    // exit editing only when commit succeeded
                                     if commit_success {
                                         form.input_buffer.clear();
                                         form.editing_field = None;
@@ -424,11 +435,9 @@ fn run_app(
                             guard.clear_error();
                         }
                     }
-                    continue; // skip normal key mapping when editing
+                    continue;
                 }
 
-                // If we're on an active subpage and the current tab is the log tab (index 2),
-                // handle input-mode editing for the log input box here (priority over page-level keys).
                 if let Ok(mut guard) = app.lock() {
                     if guard.active_subpage.is_some() && guard.subpage_tab_index == 2 {
                         // Per user request: on communication log subpage, Enter should do nothing
@@ -482,12 +491,8 @@ fn run_app(
                             }
                             guard.clear_error();
                             // force redraw so input buffer appears immediately
-                            drop(guard); // release lock before drawing to avoid deadlock
-                            let _ = terminal.draw(|f| {
-                                if let Ok(mut g) = app.lock() {
-                                    crate::tui::ui::render_ui(f, &mut *g);
-                                }
-                            });
+                            drop(guard);
+                            redraw(terminal, &app);
                             continue; // consumed
                         } else {
                             // Not editing: allow quick toggles for edit/mode
@@ -496,11 +501,7 @@ fn run_app(
                                     guard.input_editing = true;
                                     guard.clear_error();
                                     drop(guard);
-                                    let _ = terminal.draw(|f| {
-                                        if let Ok(mut g) = app.lock() {
-                                            crate::tui::ui::render_ui(f, &mut *g);
-                                        }
-                                    });
+                                    redraw(terminal, &app);
                                     continue;
                                 }
                                 KC::Char('m') => {
@@ -510,15 +511,10 @@ fn run_app(
                                     };
                                     guard.clear_error();
                                     drop(guard);
-                                    let _ = terminal.draw(|f| {
-                                        if let Ok(mut g) = app.lock() {
-                                            crate::tui::ui::render_ui(f, &mut *g);
-                                        }
-                                    });
+                                    redraw(terminal, &app);
                                     continue;
                                 }
                                 KC::Up | KC::Char('k') => {
-                                    // move selection up among log groups and adjust view
                                     let total = guard.logs.len();
                                     if total > 0 {
                                         if guard.log_selected == 0 {
@@ -526,124 +522,26 @@ fn run_app(
                                         } else {
                                             guard.log_selected -= 1;
                                         }
-
-                                        // compute visible page size from terminal/layout
-                                        let term_h = match terminal.size() {
-                                            Ok(r) => r.height as usize,
-                                            Err(_) => 24usize,
-                                        };
-                                        let bottom_len = if guard.error.is_some()
-                                            || guard.active_subpage.is_some()
-                                        {
-                                            2usize
-                                        } else {
-                                            1usize
-                                        };
-                                        let logs_area_h = term_h.saturating_sub(bottom_len + 5);
-                                        let inner_h = logs_area_h.saturating_sub(2);
-                                        let groups_per_screen =
-                                            std::cmp::max(1usize, inner_h / 3usize);
-
-                                        let bottom = if guard.log_auto_scroll {
-                                            if guard.logs.is_empty() {
-                                                0
-                                            } else {
-                                                guard.logs.len().saturating_sub(1)
-                                            }
-                                        } else {
-                                            std::cmp::min(
-                                                guard.log_view_offset,
-                                                guard.logs.len().saturating_sub(1),
-                                            )
-                                        };
-                                        let top = if bottom + 1 >= groups_per_screen {
-                                            bottom + 1 - groups_per_screen
-                                        } else {
-                                            0
-                                        };
-
-                                        if guard.log_selected < top {
-                                            guard.log_auto_scroll = false;
-                                            let half = groups_per_screen / 2;
-                                            let new_bottom = std::cmp::min(
-                                                guard.logs.len().saturating_sub(1),
-                                                guard.log_selected + half,
-                                            );
-                                            guard.log_view_offset = new_bottom;
-                                        } else if guard.log_selected > bottom {
-                                            guard.log_auto_scroll = false;
-                                            guard.log_view_offset = guard.log_selected;
-                                        }
+                                        let term_h =
+                                            terminal.size().map(|r| r.height).unwrap_or(24);
+                                        adjust_log_view(&mut guard, term_h);
                                     }
                                     guard.clear_error();
                                     drop(guard);
-                                    let _ = terminal.draw(|f| {
-                                        if let Ok(mut g) = app.lock() {
-                                            crate::tui::ui::render_ui(f, &mut *g);
-                                        }
-                                    });
+                                    redraw(terminal, &app);
                                     continue;
                                 }
                                 KC::Down | KC::Char('j') => {
-                                    // move selection down among log groups and adjust view
                                     let total = guard.logs.len();
                                     if total > 0 {
                                         guard.log_selected = (guard.log_selected + 1) % total;
-
-                                        let term_h = match terminal.size() {
-                                            Ok(r) => r.height as usize,
-                                            Err(_) => 24usize,
-                                        };
-                                        let bottom_len = if guard.error.is_some()
-                                            || guard.active_subpage.is_some()
-                                        {
-                                            2usize
-                                        } else {
-                                            1usize
-                                        };
-                                        let logs_area_h = term_h.saturating_sub(bottom_len + 5);
-                                        let inner_h = logs_area_h.saturating_sub(2);
-                                        let groups_per_screen =
-                                            std::cmp::max(1usize, inner_h / 3usize);
-
-                                        let bottom = if guard.log_auto_scroll {
-                                            if guard.logs.is_empty() {
-                                                0
-                                            } else {
-                                                guard.logs.len().saturating_sub(1)
-                                            }
-                                        } else {
-                                            std::cmp::min(
-                                                guard.log_view_offset,
-                                                guard.logs.len().saturating_sub(1),
-                                            )
-                                        };
-                                        let top = if bottom + 1 >= groups_per_screen {
-                                            bottom + 1 - groups_per_screen
-                                        } else {
-                                            0
-                                        };
-
-                                        if guard.log_selected > bottom {
-                                            guard.log_auto_scroll = false;
-                                            guard.log_view_offset = guard.log_selected;
-                                        } else if guard.log_selected < top {
-                                            guard.log_auto_scroll = false;
-                                            let half = groups_per_screen / 2;
-                                            let new_bottom = std::cmp::min(
-                                                guard.logs.len().saturating_sub(1),
-                                                guard.log_selected + half,
-                                            );
-                                            guard.log_view_offset = new_bottom;
-                                        }
+                                        let term_h =
+                                            terminal.size().map(|r| r.height).unwrap_or(24);
+                                        adjust_log_view(&mut guard, term_h);
                                     }
                                     guard.clear_error();
                                     drop(guard);
-                                    let _ = terminal.draw(|f| {
-                                        if let Ok(mut g) = app.lock() {
-                                            crate::tui::ui::render_ui(f, &mut *g);
-                                        }
-                                    });
+                                    redraw(terminal, &app);
                                     continue;
                                 }
                                 _ => {}
@@ -652,7 +550,7 @@ fn run_app(
                     }
                 }
 
-                // If a subpage is active, give it first chance to consume the key
+                // Subpage first chance
                 if let Ok(mut guard) = app.lock() {
                     if crate::tui::ui::pages::handle_key_in_subpage(key, &mut *guard) {
                         guard.clear_error();
@@ -724,66 +622,15 @@ fn run_app(
                             Action::MoveNext => {
                                 if let Ok(mut guard) = app.lock() {
                                     if guard.active_subpage.is_some() {
-                                        // If active subpage and the current tab is the log tab (index 2),
-                                        // navigate among log entries. Otherwise adjust the subpage form cursor.
+                                        // Log tab navigation else form cursor
                                         if guard.subpage_tab_index == 2 {
                                             let total = guard.logs.len();
                                             if total > 0 {
                                                 guard.log_selected =
                                                     (guard.log_selected + 1) % total;
-                                                // compute visible page size from terminal/layout so we can
-                                                // adjust view only if selection moved out of visible window
-                                                let term_h = match terminal.size() {
-                                                    Ok(r) => r.height as usize,
-                                                    Err(_) => 24usize,
-                                                };
-                                                let bottom_len = if guard.error.is_some()
-                                                    || guard.active_subpage.is_some()
-                                                {
-                                                    2usize
-                                                } else {
-                                                    1usize
-                                                };
-                                                // estimate logs_area height following render_ui -> pages -> log_panel layout
-                                                let logs_area_h =
-                                                    term_h.saturating_sub(bottom_len + 5);
-                                                let inner_h = logs_area_h.saturating_sub(2);
-                                                let groups_per_screen =
-                                                    std::cmp::max(1usize, inner_h / 3usize);
-
-                                                // determine current bottom/top
-                                                let bottom = if guard.log_auto_scroll {
-                                                    if guard.logs.is_empty() {
-                                                        0
-                                                    } else {
-                                                        guard.logs.len().saturating_sub(1)
-                                                    }
-                                                } else {
-                                                    std::cmp::min(
-                                                        guard.log_view_offset,
-                                                        guard.logs.len().saturating_sub(1),
-                                                    )
-                                                };
-                                                let top = if bottom + 1 >= groups_per_screen {
-                                                    bottom + 1 - groups_per_screen
-                                                } else {
-                                                    0
-                                                };
-
-                                                // If selection moved below current bottom, move bottom to selection.
-                                                if guard.log_selected > bottom {
-                                                    guard.log_auto_scroll = false;
-                                                    guard.log_view_offset = guard.log_selected;
-                                                } else if guard.log_selected < top {
-                                                    // moved above top: reposition so selection is roughly centered
-                                                    guard.log_auto_scroll = false;
-                                                    let half = groups_per_screen / 2;
-                                                    let new_bottom = std::cmp::min(
-                                                        guard.logs.len().saturating_sub(1),
-                                                        guard.log_selected + half,
-                                                    );
-                                                    guard.log_view_offset = new_bottom;
-                                                }
+                                                let term_h =
+                                                    terminal.size().map(|r| r.height).unwrap_or(24);
+                                                adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
                                             let total = 4usize.saturating_add(form.registers.len());
@@ -812,54 +659,9 @@ fn run_app(
                                                 } else {
                                                     guard.log_selected -= 1;
                                                 }
-                                                // compute visible page size from terminal/layout
-                                                let term_h = match terminal.size() {
-                                                    Ok(r) => r.height as usize,
-                                                    Err(_) => 24usize,
-                                                };
-                                                let bottom_len = if guard.error.is_some()
-                                                    || guard.active_subpage.is_some()
-                                                {
-                                                    2usize
-                                                } else {
-                                                    1usize
-                                                };
-                                                let logs_area_h =
-                                                    term_h.saturating_sub(bottom_len + 5);
-                                                let inner_h = logs_area_h.saturating_sub(2);
-                                                let groups_per_screen =
-                                                    std::cmp::max(1usize, inner_h / 3usize);
-
-                                                let bottom = if guard.log_auto_scroll {
-                                                    if guard.logs.is_empty() {
-                                                        0
-                                                    } else {
-                                                        guard.logs.len().saturating_sub(1)
-                                                    }
-                                                } else {
-                                                    std::cmp::min(
-                                                        guard.log_view_offset,
-                                                        guard.logs.len().saturating_sub(1),
-                                                    )
-                                                };
-                                                let top = if bottom + 1 >= groups_per_screen {
-                                                    bottom + 1 - groups_per_screen
-                                                } else {
-                                                    0
-                                                };
-
-                                                if guard.log_selected < top {
-                                                    guard.log_auto_scroll = false;
-                                                    let half = groups_per_screen / 2;
-                                                    let new_bottom = std::cmp::min(
-                                                        guard.logs.len().saturating_sub(1),
-                                                        guard.log_selected + half,
-                                                    );
-                                                    guard.log_view_offset = new_bottom;
-                                                } else if guard.log_selected > bottom {
-                                                    guard.log_auto_scroll = false;
-                                                    guard.log_view_offset = guard.log_selected;
-                                                }
+                                                let term_h =
+                                                    terminal.size().map(|r| r.height).unwrap_or(24);
+                                                adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
                                             let total = 4usize.saturating_add(form.registers.len());
@@ -884,15 +686,7 @@ fn run_app(
                                     if guard.active_subpage.is_some()
                                         && guard.subpage_tab_index == 2
                                     {
-                                        // page up: move view up by one page (bottom index moves up)
-                                        let page = 5usize; // conservative default; renderer clamps
-                                        if guard.log_view_offset > page {
-                                            guard.log_view_offset =
-                                                guard.log_view_offset.saturating_sub(page);
-                                        } else {
-                                            guard.log_view_offset = 0;
-                                        }
-                                        guard.log_auto_scroll = false;
+                                        guard.page_up(LOG_PAGE_JUMP);
                                     }
                                     guard.clear_error();
                                 }
@@ -902,15 +696,7 @@ fn run_app(
                                     if guard.active_subpage.is_some()
                                         && guard.subpage_tab_index == 2
                                     {
-                                        let page = 5usize;
-                                        let total = guard.logs.len();
-                                        if total > 0 {
-                                            guard.log_view_offset = std::cmp::min(
-                                                total - 1,
-                                                guard.log_view_offset.saturating_add(page),
-                                            );
-                                        }
-                                        guard.log_auto_scroll = false;
+                                        guard.page_down(LOG_PAGE_JUMP);
                                     }
                                     guard.clear_error();
                                 }
