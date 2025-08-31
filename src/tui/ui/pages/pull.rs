@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::Status,
-    tui::{edit, input::Action},
+    tui::{input::Action, utils::edit},
 };
 
 /// UI for configuring Modbus slave (pull) settings for the selected port.
@@ -87,7 +87,7 @@ fn render_pull_config(f: &mut Frame, area: Rect, app: &mut Status) {
     crate::tui::ui::components::config_panel::render_config_panel(f, area, app, None);
 }
 
-// registers rendering is delegated directly to components (master_list_panel/slave_listen_panel)
+// registers rendering is delegated directly to components (master_list_panel / slave_listen_panel)
 
 fn render_pull_log(f: &mut Frame, area: Rect, _app: &mut Status) {
     // delegate to shared component implementation
@@ -100,17 +100,17 @@ pub fn handle_subpage_key(
     app: &mut crate::protocol::status::Status,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
-    // If editing, let the global editing handler take care of chars/backspace/enter
+    // If editing, let the global editing handler take care of chars / backspace / enter
     if let Some(form) = app.subpage_form.as_ref() {
         if form.editing {
             return true;
         }
     }
-    // Tab/arrow navigation is handled by the parent input handler; fall through to allow
-    // parent to process Tab/BackTab/Right/Left/Up/Down when appropriate.
+    // Tab / arrow navigation is handled by the parent input handler; fall through to allow
+    // parent to process Tab / BackTab / Right / Left / Up / Down when appropriate.
 
     match key.code {
-        // Allow local Tab-based subpage tab switching (3 tabs: config, list/log)
+        // Allow local Tab-based subpage tab switching (3 tabs: config, list / log)
         KC::Tab => {
             // 3 tabs in this page
             app.subpage_tab_index = (app.subpage_tab_index + 1) % 3;
@@ -166,7 +166,7 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // form cursor movement delegated to parent (MoveNext/MovePrev) when subpage is active
+        // form cursor movement delegated to parent (MoveNext / MovePrev) when subpage is active
         _ => {}
     }
     false
@@ -204,7 +204,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     // If current tab is the log tab, show log-input related hints
     // If current tab is the configuration tab, show config-specific hints
     if app.subpage_tab_index == 0 {
-        // show Enter to open editor and movement hint (Up/Down or k/j)
+        // show Enter to open editor and movement hint (Up / Down or k / j)
         hints.push(lang().press_enter_confirm_edit.as_str().to_string());
         hints.push(lang().hint_move_vertical.as_str().to_string());
         return hints;
@@ -220,16 +220,16 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
             hints.push(lang().press_enter_submit.as_str().to_string());
             hints.push(lang().press_esc_cancel.as_str().to_string());
         } else {
-            // show short kv-style hints (按 i 编辑, 按 m 切换模式) in the bottom bar
+            // Show short kv-style hints (press i to edit, press m to toggle mode) in the bottom bar.
             hints.push(crate::tui::ui::bottom::format_kv_hint(
-                "Enter/i",
+                "Enter / i",
                 lang().hint_input_edit_short.as_str(),
             ));
             hints.push(crate::tui::ui::bottom::format_kv_hint(
                 "m",
                 lang().hint_input_mode_short.as_str(),
             ));
-            // show follow/track latest toggle (p) -- show the action (inverse of current state)
+            // show follow / track latest toggle (p) -- show the action (inverse of current state)
             let action_label = if app.log_auto_scroll {
                 // currently following -> hint to stop following
                 lang().hint_follow_off.as_str()

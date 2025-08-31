@@ -88,8 +88,8 @@ where
         .join(sep)
 }
 
-/// Format a key/value shortcut hint, e.g. key="i", value="编辑" -> "i=编辑".
-/// Provided here so pages/components can register consistent kv-styled hints.
+/// Format a key / value shortcut hint, e.g. key = "i", value = "Edit" -> "i=Edit".
+/// Provided here so pages / components can register consistent kv-styled hints.
 pub fn format_kv_hint(key: &str, value: &str) -> String {
     // Use localized template, replace {key} and {label}
     let tmpl = crate::i18n::lang().hint_kv_template.as_str();

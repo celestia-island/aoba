@@ -11,7 +11,7 @@ use crate::protocol::status::Status;
 /// Render a log panel. Each log entry is presented as a 3-line grouped item:
 /// 1) timestamp
 /// 2) raw payload (single line, truncated)
-/// 3) parsed summary (origin, R/W, command, slave id, range)
+/// 3) parsed summary (origin, R / W, command, slave id, range)
 /// Navigation selects a whole group. Selected group is prefixed with "> " on the left
 /// and rendered with a highlighted background; unselected groups get 2 spaces prefix.
 pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
@@ -67,7 +67,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                 .unwrap_or(false);
 
             let prefix_text = if selected { "> " } else { "  " };
-            // direction: determine send/recv
+            // direction: determine send / recv
             let is_send = entry
                 .parsed
                 .as_ref()
@@ -81,7 +81,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             ts_spans.push(Span::raw(prefix_text));
             ts_spans.push(Span::raw(ts));
             ts_spans.push(Span::raw("    "));
-            // direction style: bold + colored (green=发送 / yellow=接收). No background applied.
+            // Direction style: bold + colored (green = Send / yellow = Receive). No background applied.
             let dir_span_style = if is_send {
                 Style::default()
                     .add_modifier(Modifier::BOLD)
@@ -135,7 +135,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     } else {
         app.log_selected + 1
     };
-    // compose follow label localized next to progress (e.g. " 跟随最新日志" / " 自由查看")
+    // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if app.log_auto_scroll {
         crate::i18n::lang().hint_follow_on.as_str()
     } else {

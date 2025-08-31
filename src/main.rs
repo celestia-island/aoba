@@ -55,7 +55,7 @@ fn spawn_gui_next_to_current_exe() -> bool {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Console launcher: keep it simple and let the OS/terminal manage stdio.
+    // Console launcher: keep it simple and let the OS / terminal manage stdio.
     aoba::init_common();
 
     let matches = aoba::cli::parse_args();

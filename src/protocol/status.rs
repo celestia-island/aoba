@@ -5,7 +5,7 @@ use serialport::{SerialPort, SerialPortInfo};
 
 use crate::protocol::tty::available_ports_sorted;
 
-/// Parsed summary of a captured protocol request/response for UI display.
+/// Parsed summary of a captured protocol request / response for UI display.
 #[derive(Debug, Clone)]
 pub struct ParsedRequest {
     /// origin of the message (e.g. "master-stack" or "main-stack")
@@ -67,7 +67,7 @@ pub struct SubpageForm {
     pub input_buffer: String,
     /// temporary index used when editing a multi-option field (like Baud presets + Custom)
     pub edit_choice_index: Option<usize>,
-    /// whether we've entered the deeper confirm/editing stage for a choice (e.g. Custom baud)
+    /// whether we've entered the deeper confirm / editing stage for a choice (e.g. Custom baud)
     pub edit_confirmed: bool,
 }
 
@@ -137,7 +137,7 @@ pub struct Status {
     /// transient mode selector overlay state
     pub mode_selector_active: bool,
     pub mode_selector_index: usize,
-    /// recent protocol/log entries for display in log panel
+    /// recent protocol / log entries for display in log panel
     pub logs: Vec<LogEntry>,
     /// index of selected log entry when viewing logs (visual groups)
     pub log_selected: usize,
@@ -191,24 +191,38 @@ impl Status {
         }
     }
 
-    /// 根据当前终端高度调整日志视图窗口，使选中项可见。
+    /// Adjust the log view window according to the current terminal height so the selected entry stays visible.
     pub fn adjust_log_view(&mut self, term_height: u16) {
-        if self.logs.is_empty() { return; }
-        let bottom_len = if self.error.is_some() || self.active_subpage.is_some() { 2 } else { 1 };
-        // 这里的 5 与 TUI 布局中标题/输入等保留行的经验值一致；后续若布局改变可抽出。
+        if self.logs.is_empty() {
+            return;
+        }
+        let bottom_len = if self.error.is_some() || self.active_subpage.is_some() {
+            2
+        } else {
+            1
+        };
+        // The constant 5 matches empirically reserved rows (title / input etc.) in current TUI layout; extract if layout changes.
         let logs_area_h = (term_height as usize).saturating_sub(bottom_len + 5);
         let inner_h = logs_area_h.saturating_sub(2);
-        let groups_per_screen = std::cmp::max(1usize, inner_h / crate::tui::constants::LOG_GROUP_HEIGHT);
+        let groups_per_screen = std::cmp::max(
+            1usize,
+            inner_h / crate::tui::utils::constants::LOG_GROUP_HEIGHT,
+        );
         let bottom = if self.log_auto_scroll {
             self.logs.len().saturating_sub(1)
         } else {
             std::cmp::min(self.log_view_offset, self.logs.len().saturating_sub(1))
         };
-        let top = if bottom + 1 >= groups_per_screen { bottom + 1 - groups_per_screen } else { 0 };
+        let top = if bottom + 1 >= groups_per_screen {
+            bottom + 1 - groups_per_screen
+        } else {
+            0
+        };
         if self.log_selected < top {
             self.log_auto_scroll = false;
             let half = groups_per_screen / 2;
-            let new_bottom = std::cmp::min(self.logs.len().saturating_sub(1), self.log_selected + half);
+            let new_bottom =
+                std::cmp::min(self.logs.len().saturating_sub(1), self.log_selected + half);
             self.log_view_offset = new_bottom;
         } else if self.log_selected > bottom {
             self.log_auto_scroll = false;
@@ -216,9 +230,11 @@ impl Status {
         }
     }
 
-    /// 日志向上翻页（减小 bottom index）。
+    /// Page up in the log (decrease bottom index).
     pub fn page_up(&mut self, page: usize) {
-        if self.logs.is_empty() { return; }
+        if self.logs.is_empty() {
+            return;
+        }
         if self.log_view_offset > page {
             self.log_view_offset = self.log_view_offset.saturating_sub(page);
         } else {
@@ -227,9 +243,11 @@ impl Status {
         self.log_auto_scroll = false;
     }
 
-    /// 日志向下翻页（增大 bottom index）。
+    /// Page down in the log (increase bottom index).
     pub fn page_down(&mut self, page: usize) {
-        if self.logs.is_empty() { return; }
+        if self.logs.is_empty() {
+            return;
+        }
         let total = self.logs.len();
         self.log_view_offset = std::cmp::min(total - 1, self.log_view_offset.saturating_add(page));
         self.log_auto_scroll = false;
@@ -431,7 +449,7 @@ impl Status {
                 // Refresh
                 self.refresh();
             } else {
-                // Manual specify: not implemented here; set an info/error
+                // Manual specify: not implemented here; set an info / error
                 self.set_error(
                     "Manual device specify: only supported on Linux and not implemented yet",
                 );
@@ -561,20 +579,24 @@ mod tests {
     #[test]
     fn test_log_paging_and_adjust() {
         let mut s = Status::with_ports(vec![]);
-        // 填充 20 条日志
+        // Fill 20 log entries.
         for i in 0..20 {
-            s.append_log(LogEntry { when: Local::now(), raw: format!("payload{i}"), parsed: None });
+            s.append_log(LogEntry {
+                when: Local::now(),
+                raw: format!("payload{i}"),
+                parsed: None,
+            });
         }
-        // 初始 auto_scroll 应该锚定在最后
+        // Initial auto_scroll should be anchored at the end.
         assert_eq!(s.log_view_offset, 19);
         s.page_up(5);
         assert!(s.log_view_offset <= 19);
         let prev = s.log_view_offset;
         s.page_down(5);
         assert!(s.log_view_offset >= prev);
-        // 选中第一条，调整视图应把 offset 往上移动（不再保持底部）
+        // Select the first entry; adjusting the view should move the offset upward (no longer stuck to bottom).
         s.log_selected = 0;
-        s.adjust_log_view(40); // 模拟终端高度
+        s.adjust_log_view(40); // Simulated terminal height.
         assert!(s.log_view_offset <= 19);
     }
 }

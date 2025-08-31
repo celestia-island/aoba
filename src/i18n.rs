@@ -69,9 +69,9 @@ derive_struct! {
         hint_switch_tab: String = "hint_switch_tab".to_string(),
         // separator used between bottom hints; localized (e.g. ", " or "、")
         hint_separator: String = "hint_separator".to_string(),
-        // template used to format key/label hints. Use {key} and {label} as placeholders.
+    // template used to format key / label hints. Use {key} and {label} as placeholders.
         hint_kv_template: String = "hint_kv_template".to_string(),
-    // follow/unfollow hint labels
+    // follow / unfollow hint labels
     hint_follow_on: String = "hint_follow_on".to_string(),
     hint_follow_off: String = "hint_follow_off".to_string(),
         // serial param labels & misc
