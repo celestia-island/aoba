@@ -191,6 +191,50 @@ impl Status {
         }
     }
 
+    /// 根据当前终端高度调整日志视图窗口，使选中项可见。
+    pub fn adjust_log_view(&mut self, term_height: u16) {
+        if self.logs.is_empty() { return; }
+        let bottom_len = if self.error.is_some() || self.active_subpage.is_some() { 2 } else { 1 };
+        // 这里的 5 与 TUI 布局中标题/输入等保留行的经验值一致；后续若布局改变可抽出。
+        let logs_area_h = (term_height as usize).saturating_sub(bottom_len + 5);
+        let inner_h = logs_area_h.saturating_sub(2);
+        let groups_per_screen = std::cmp::max(1usize, inner_h / crate::tui::constants::LOG_GROUP_HEIGHT);
+        let bottom = if self.log_auto_scroll {
+            self.logs.len().saturating_sub(1)
+        } else {
+            std::cmp::min(self.log_view_offset, self.logs.len().saturating_sub(1))
+        };
+        let top = if bottom + 1 >= groups_per_screen { bottom + 1 - groups_per_screen } else { 0 };
+        if self.log_selected < top {
+            self.log_auto_scroll = false;
+            let half = groups_per_screen / 2;
+            let new_bottom = std::cmp::min(self.logs.len().saturating_sub(1), self.log_selected + half);
+            self.log_view_offset = new_bottom;
+        } else if self.log_selected > bottom {
+            self.log_auto_scroll = false;
+            self.log_view_offset = self.log_selected;
+        }
+    }
+
+    /// 日志向上翻页（减小 bottom index）。
+    pub fn page_up(&mut self, page: usize) {
+        if self.logs.is_empty() { return; }
+        if self.log_view_offset > page {
+            self.log_view_offset = self.log_view_offset.saturating_sub(page);
+        } else {
+            self.log_view_offset = 0;
+        }
+        self.log_auto_scroll = false;
+    }
+
+    /// 日志向下翻页（增大 bottom index）。
+    pub fn page_down(&mut self, page: usize) {
+        if self.logs.is_empty() { return; }
+        let total = self.logs.len();
+        self.log_view_offset = std::cmp::min(total - 1, self.log_view_offset.saturating_add(page));
+        self.log_auto_scroll = false;
+    }
+
     /// Initialize subpage_form from selected port when entering a subpage
     pub fn init_subpage_form(&mut self) {
         // If no ports or selected is virtual, create a default form
@@ -512,5 +556,25 @@ mod tests {
         if !app.ports.is_empty() {
             assert!(app.selected < app.ports.len());
         }
+    }
+
+    #[test]
+    fn test_log_paging_and_adjust() {
+        let mut s = Status::with_ports(vec![]);
+        // 填充 20 条日志
+        for i in 0..20 {
+            s.append_log(LogEntry { when: Local::now(), raw: format!("payload{i}"), parsed: None });
+        }
+        // 初始 auto_scroll 应该锚定在最后
+        assert_eq!(s.log_view_offset, 19);
+        s.page_up(5);
+        assert!(s.log_view_offset <= 19);
+        let prev = s.log_view_offset;
+        s.page_down(5);
+        assert!(s.log_view_offset >= prev);
+        // 选中第一条，调整视图应把 offset 往上移动（不再保持底部）
+        s.log_selected = 0;
+        s.adjust_log_view(40); // 模拟终端高度
+        assert!(s.log_view_offset <= 19);
     }
 }

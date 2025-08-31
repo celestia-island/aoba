@@ -9,7 +9,7 @@ use anyhow::Result;
 
 /// Common initialization used by both GUI and TUI entrypoints.
 pub fn init_common() {
-    let _ = env_logger::try_init();
+    env_logger::init();
     crate::i18n::init_i18n();
 }
 
