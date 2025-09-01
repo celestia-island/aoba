@@ -11,7 +11,7 @@ use crate::{
     protocol::status::Status,
     tui::ui::components::{
         config_panel::render_config_panel, log_panel::render_log_panel,
-        master_list_panel::render_master_list_panel, slave_listen_panel::render_slave_listen_panel,
+        master_list_panel::render_master_list_panel,
     },
     tui::{input::Action, utils::edit},
 };
@@ -33,12 +33,18 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
         Span::raw(format!(" - {}", lang().tab_master.as_str())),
     ]);
 
-    let middle_tab = match app.right_mode {
-        crate::protocol::status::RightMode::Master => lang().label_master_list.as_str(),
-        crate::protocol::status::RightMode::SlaveStack => lang().label_slave_listen.as_str(),
-        crate::protocol::status::RightMode::Listen => lang().label_slave_listen.as_str(),
+    // Middle tab label varies by mode:
+    // Master => editable simulated masters list
+    // SlaveStack / Listen => passive listen list (registers not directly editable except header fields)
+    let middle_tab = match app.port_mode {
+        crate::protocol::status::PortMode::Master => lang().label_master_list.as_str(),
+        crate::protocol::status::PortMode::SlaveStack => lang().label_slave_listen.as_str(),
     };
-    let tabs = vec!["Comm Config", middle_tab, "Comm Log"];
+    let tabs = vec![
+        lang().tab_config.as_str(),
+        middle_tab,
+        lang().tab_log.as_str(),
+    ];
     let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
 
     // Use a single-line header so tabs sit directly above content (no extra empty row)
@@ -67,11 +73,11 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
 
     match tab_index {
         0 => render_slave_config(f, content_area, app),
-        1 => match app.right_mode {
-            crate::protocol::status::RightMode::Master => {
+        1 => match app.port_mode {
+            crate::protocol::status::PortMode::Master => {
                 render_master_list_panel(f, content_area, app)
             }
-            _ => render_slave_listen_panel(f, content_area, app),
+            _ => render_master_list_panel(f, content_area, app),
         },
         2 => render_slave_log(f, content_area, app),
         _ => render_slave_config(f, content_area, app),
@@ -83,7 +89,7 @@ fn render_slave_config(f: &mut Frame, area: Rect, app: &mut Status) {
     render_config_panel(f, area, app, None);
 }
 
-// registers rendering is delegated directly to components (master_list_panel / slave_listen_panel)
+// registers rendering delegated to master_list_panel (listen panel removed)
 
 fn render_slave_log(f: &mut Frame, area: Rect, _app: &mut Status) {
     // delegate to shared component implementation
@@ -97,6 +103,7 @@ pub fn handle_subpage_key(
 ) -> bool {
     use crossterm::event::KeyCode as KC;
     let master_tab = app.subpage_tab_index == 1;
+    let _is_listen_like = false; // Removed Listen reference
     if !master_tab {
         if let Some(form) = app.subpage_form.as_ref() {
             if form.editing {
@@ -129,17 +136,44 @@ pub fn handle_subpage_key(
                         form.master_field_editing = false;
                         return true;
                     }
-                    KC::Left | KC::Char('h') | KC::Up | KC::Char('k') => {
+                    // While editing a non-Type field, allow movement keys to auto-commit and move to adjacent field
+                    KC::Left
+                    | KC::Char('h')
+                    | KC::Right
+                    | KC::Char('l')
+                    | KC::Up
+                    | KC::Char('k')
+                    | KC::Down
+                    | KC::Char('j') => {
                         if is_type {
-                            cycle_type(form, false);
+                            // keep previous behavior for Type spinner
+                            match key.code {
+                                KC::Left | KC::Char('h') | KC::Up | KC::Char('k') => {
+                                    cycle_type(form, false)
+                                }
+                                KC::Right | KC::Char('l') | KC::Down | KC::Char('j') => {
+                                    cycle_type(form, true)
+                                }
+                                _ => {}
+                            }
+                            return true;
+                        } else {
+                            // commit current field then move focus (stay in selection layer)
+                            commit_master_field(form);
+                            form.master_field_editing = false; // exit editing
+                                                               // After exiting editing we are in field-selected layer; perform movement
+                            let enable_values =
+                                app.port_mode == crate::protocol::status::PortMode::Master;
+                            let dir = match key.code {
+                                KC::Left | KC::Char('h') => Dir::Left,
+                                KC::Right | KC::Char('l') => Dir::Right,
+                                KC::Up | KC::Char('k') => Dir::Up,
+                                KC::Down | KC::Char('j') => Dir::Down,
+                                _ => Dir::Right,
+                            };
+                            move_master_field_dir(form, dir, enable_values);
+                            return true;
                         }
-                        return true;
-                    }
-                    KC::Right | KC::Char('l') | KC::Down | KC::Char('j') => {
-                        if is_type {
-                            cycle_type(form, true);
-                        }
-                        return true;
                     }
                     KC::Backspace => {
                         if !is_type {
@@ -171,22 +205,65 @@ pub fn handle_subpage_key(
                         return true;
                     }
                     KC::Up | KC::Char('k') => {
-                        move_master_field_dir(form, Dir::Up);
+                        // In listen-like modes, disable value cell navigation (only header + Refresh)
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Up, enable_values);
                         return true;
                     }
                     KC::Down | KC::Char('j') => {
-                        move_master_field_dir(form, Dir::Down);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Down, enable_values);
                         return true;
                     }
                     KC::Left | KC::Char('h') => {
-                        move_master_field_dir(form, Dir::Left);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Left, enable_values);
                         return true;
                     }
                     KC::Right | KC::Char('l') => {
-                        move_master_field_dir(form, Dir::Right);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Right, enable_values);
                         return true;
                     }
                     _ => {}
+                }
+            } else {
+                // Not in field selection or editing; allow Enter on trailing new line to create entry
+                if key.code == KC::Enter {
+                    if form.master_cursor == form.registers.len() {
+                        // Creation allowed in all modes; default length differs for Master vs others
+                        let length = if app.port_mode == crate::protocol::status::PortMode::Master {
+                            8
+                        } else {
+                            1
+                        };
+                        form.registers.push(crate::protocol::status::RegisterEntry {
+                            slave_id: 1,
+                            mode: crate::protocol::status::RegisterMode::Coils,
+                            address: 0,
+                            length,
+                            values: vec![0u8; length as usize],
+                            refresh_ms: 1000,
+                            req_success: 0,
+                            req_total: 0,
+                        });
+                        form.master_cursor = form.registers.len() - 1;
+                        form.master_field_selected = true;
+                        form.master_edit_index = Some(form.master_cursor);
+                        form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
+                        form.master_field_editing = true;
+                        form.master_input_buffer.clear();
+                        return true;
+                    } else {
+                        form.master_field_selected = true;
+                        form.master_edit_index = Some(form.master_cursor);
+                        form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
+                        return true;
+                    }
                 }
             }
         }
@@ -219,7 +296,9 @@ pub fn handle_subpage_key(
                             }
                         }
                     } else if form.master_field_selected {
-                        move_master_field_dir(form, Dir::Up);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Up, enable_values);
                     }
                 }
                 return true;
@@ -249,7 +328,9 @@ pub fn handle_subpage_key(
                             form.master_cursor = (form.master_cursor + 1) % total;
                         }
                     } else if form.master_field_selected {
-                        move_master_field_dir(form, Dir::Down);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Down, enable_values);
                     }
                 }
                 return true;
@@ -269,7 +350,9 @@ pub fn handle_subpage_key(
             if master_tab {
                 if let Some(form) = app.subpage_form.as_mut() {
                     if form.master_field_selected {
-                        move_master_field_dir(form, Dir::Left);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Left, enable_values);
                         return true;
                     }
                 }
@@ -279,7 +362,9 @@ pub fn handle_subpage_key(
             if master_tab {
                 if let Some(form) = app.subpage_form.as_mut() {
                     if form.master_field_selected {
-                        move_master_field_dir(form, Dir::Right);
+                        let enable_values =
+                            app.port_mode == crate::protocol::status::PortMode::Master;
+                        move_master_field_dir(form, Dir::Right, enable_values);
                         return true;
                     }
                 }
@@ -288,13 +373,16 @@ pub fn handle_subpage_key(
         // Delete current master (not editing and not on the new entry line)
         KC::Char('d') => {
             if master_tab {
-                if let Some(form) = app.subpage_form.as_mut() {
-                    if !form.master_field_selected && !form.master_field_editing {
-                        if form.master_cursor < form.registers.len() {
-                            form.registers.remove(form.master_cursor);
-                            if form.master_cursor >= form.registers.len() && form.master_cursor > 0
-                            {
-                                form.master_cursor -= 1;
+                if app.port_mode == crate::protocol::status::PortMode::Master {
+                    if let Some(form) = app.subpage_form.as_mut() {
+                        if !form.master_field_selected && !form.master_field_editing {
+                            if form.master_cursor < form.registers.len() {
+                                form.registers.remove(form.master_cursor);
+                                if form.master_cursor >= form.registers.len()
+                                    && form.master_cursor > 0
+                                {
+                                    form.master_cursor -= 1;
+                                }
                             }
                         }
                     }
@@ -308,20 +396,28 @@ pub fn handle_subpage_key(
                     // Field selection/edit already handled earlier; here we are in browse layer
                     if !form.master_field_selected && !form.master_field_editing {
                         if form.master_cursor == form.registers.len() {
-                            // Create new entry but stay in browse (do not auto-enter field selection)
+                            let length =
+                                if app.port_mode == crate::protocol::status::PortMode::Master {
+                                    8
+                                } else {
+                                    1
+                                };
                             form.registers.push(crate::protocol::status::RegisterEntry {
                                 slave_id: 1,
                                 mode: crate::protocol::status::RegisterMode::Coils,
                                 address: 0,
-                                length: 8,
-                                values: vec![0u8; 8],
+                                length,
+                                values: vec![0u8; length as usize],
+                                refresh_ms: 1000,
+                                req_success: 0,
+                                req_total: 0,
                             });
                             form.master_cursor = form.registers.len() - 1;
                         } else {
                             form.master_edit_index = Some(form.master_cursor);
                             form.master_edit_field =
                                 Some(crate::protocol::status::MasterEditField::Id);
-                            form.master_field_selected = true; // Enter field selection layer
+                            form.master_field_selected = true;
                         }
                     }
                 }
@@ -348,7 +444,36 @@ pub fn handle_subpage_key(
                         address: 0,
                         length: 1,
                         values: vec![0u8; 1],
+                        refresh_ms: 1000,
+                        req_success: 0,
+                        req_total: 0,
                     });
+                }
+                return true;
+            }
+        }
+        KC::Char('r') => {
+            // Reset current register statistics only in listen/slave stack mode (not master editing)
+            if master_tab && app.port_mode != crate::protocol::status::PortMode::Master {
+                if let Some(form) = app.subpage_form.as_mut() {
+                    if form.master_cursor < form.registers.len() {
+                        if let Some(reg) = form.registers.get_mut(form.master_cursor) {
+                            reg.req_success = 0;
+                            reg.req_total = 0;
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+        KC::Char('R') => {
+            // Reset all register statistics in listen/slave stack mode
+            if master_tab && app.port_mode != crate::protocol::status::PortMode::Master {
+                if let Some(form) = app.subpage_form.as_mut() {
+                    for reg in &mut form.registers {
+                        reg.req_success = 0;
+                        reg.req_total = 0;
+                    }
                 }
                 return true;
             }
@@ -383,16 +508,28 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     }
 
     if app.subpage_tab_index == 1 {
-        // master list tab
+        let is_listen_like = false; // Removed Listen reference
         if let Some(form) = &app.subpage_form {
             if form.master_field_editing {
-                // If editing Type show switch hints; else show HEX input hints
                 if let Some(field) = &form.master_edit_field {
                     if matches!(field, crate::protocol::status::MasterEditField::Type) {
                         hints.push(lang().hint_master_field_apply.as_str().to_string());
                         hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
                         hints.push(lang().hint_master_type_switch.as_str().to_string());
-                    } else {
+                    } else if matches!(
+                        field,
+                        crate::protocol::status::MasterEditField::Refresh
+                            | crate::protocol::status::MasterEditField::Id
+                            | crate::protocol::status::MasterEditField::Start
+                            | crate::protocol::status::MasterEditField::End
+                    ) {
+                        // Only header fields editable in listen-like modes
+                        hints.push(lang().hint_master_field_apply.as_str().to_string());
+                        hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
+                        hints.push(lang().hint_master_edit_hex.as_str().to_string());
+                        hints.push(lang().hint_master_edit_backspace.as_str().to_string());
+                    } else if !is_listen_like {
+                        // value editing only in master mode
                         hints.push(lang().hint_master_field_apply.as_str().to_string());
                         hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
                         hints.push(lang().hint_master_edit_hex.as_str().to_string());
@@ -405,7 +542,9 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                 hints.push(lang().hint_master_field_exit_select.as_str().to_string());
             } else {
                 hints.push(lang().hint_master_enter_edit.as_str().to_string());
-                hints.push(lang().hint_master_delete.as_str().to_string());
+                if !is_listen_like {
+                    hints.push(lang().hint_master_delete.as_str().to_string());
+                }
             }
         }
         return hints;
@@ -448,7 +587,7 @@ pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
     match key.code {
         KC::Tab => Some(Action::SwitchNext),
         KC::BackTab => Some(Action::SwitchPrev),
-        KC::Enter => Some(Action::EditToggle),
+        KC::Enter => Some(Action::EditToggle), // creation handled in handler before toggle
         KC::Char('e') => Some(Action::EditToggle),
         KC::Char('n') => Some(Action::AddRegister),
         KC::Up | KC::Char('k') => Some(Action::MovePrev),
@@ -484,6 +623,7 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                                 master.values[off] = 0;
                             }
                         }
+                        Refresh => master.refresh_ms = 1000,
                     }
                 } else {
                     let buf = form.master_input_buffer.trim().to_string();
@@ -530,6 +670,11 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                                 }
                             }
                         }
+                        Refresh => {
+                            if let Ok(v) = buf.parse::<u32>() {
+                                master.refresh_ms = v.max(10);
+                            }
+                        }
                     }
                 }
                 form.master_input_buffer.clear();
@@ -562,29 +707,38 @@ fn cycle_type(form: &mut crate::protocol::status::SubpageForm, forward: bool) {
     }
 }
 
-fn move_master_field_dir(form: &mut crate::protocol::status::SubpageForm, dir: Dir) {
+fn move_master_field_dir(
+    form: &mut crate::protocol::status::SubpageForm,
+    dir: Dir,
+    enable_values: bool,
+) {
     use crate::protocol::status::MasterEditField as F;
     if let Some(idx) = form.master_edit_index {
         if let Some(master) = form.registers.get(idx) {
-            // Build grid: header row (Id, Type, Start, End) then value cells in 8-column rows
-            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End];
-            for off in 0..master.length {
-                order.push(F::Value(master.address + off));
+            // Build grid: header row (Id, Type, Start, End, Refresh) then value cells (value navigation allowed only in Master mode)
+            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End, F::Refresh];
+            if enable_values {
+                for off in 0..master.length {
+                    order.push(F::Value(master.address + off));
+                }
             }
             let cur = form.master_edit_field.clone().unwrap_or(F::Id);
             // map each field to (row,col)
             let mut coords: Vec<(usize, usize, F)> = Vec::new();
-            // header row row=0, columns 0..3
+            // header row row=0, columns 0..4
             coords.push((0, 0, F::Id));
             coords.push((0, 1, F::Type));
             coords.push((0, 2, F::Start));
             coords.push((0, 3, F::End));
+            coords.push((0, 4, F::Refresh));
             // value grid starts at row=1; each row has 8 columns
-            for off in 0..master.length {
-                let addr = master.address + off;
-                let row = 1 + (off / 8) as usize;
-                let col = (off % 8) as usize;
-                coords.push((row, col, F::Value(addr)));
+            if enable_values {
+                for off in 0..master.length {
+                    let addr = master.address + off;
+                    let row = 1 + (off / 8) as usize;
+                    let col = (off % 8) as usize;
+                    coords.push((row, col, F::Value(addr)));
+                }
             }
             let (crow, ccol) = coords
                 .iter()
@@ -630,7 +784,7 @@ fn move_master_field_dir(form: &mut crate::protocol::status::SubpageForm, dir: D
                 }
                 Dir::Right => {
                     // width depends on row
-                    let row_width = if crow == 0 { 4 } else { 8 };
+                    let row_width = if crow == 0 { 5 } else { 8 };
                     if ccol + 1 >= row_width {
                         (crow, ccol)
                     } else {

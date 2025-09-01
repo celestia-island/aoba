@@ -12,24 +12,19 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
     // If a subpage is active, delegate to it; otherwise use entry's hints.
     if let Some(sub) = app.active_subpage {
         match sub {
-            crate::protocol::status::RightMode::Master => {
+            crate::protocol::status::PortMode::Master => {
                 return crate::tui::ui::pages::slave::page_bottom_hints(app)
             }
-            crate::protocol::status::RightMode::SlaveStack => {
+            crate::protocol::status::PortMode::SlaveStack => {
                 return crate::tui::ui::pages::pull::page_bottom_hints(app)
-            }
-            crate::protocol::status::RightMode::Listen => {
-                return crate::tui::ui::pages::entry::page_bottom_hints(app)
             }
         }
     }
     // default to entry hints when no subpage
-    let mut hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
+    let hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
     // If the transient mode selector overlay is active, append its hints so the bottom bar
     // can render them (keeps rendering centralized in bottom.rs)
-    if app.mode_selector_active {
-        hints.extend(crate::tui::ui::components::mode_selector::mode_selector_hints());
-    }
+    // Mode selector hints now rendered inside popup; do not append here to keep layout stable.
     hints
 }
 
@@ -48,9 +43,7 @@ pub fn global_hints_for_app(app: &Status) -> Vec<String> {
     }
     // If the transient mode selector overlay is active, append its hints so the bottom bar
     // can render them (keeps rendering centralized in bottom.rs)
-    if app.mode_selector_active {
-        hints.extend(crate::tui::ui::components::mode_selector::mode_selector_hints());
-    }
+    // Mode selector hints now rendered inside popup; do not append here.
     hints
 }
 
@@ -59,14 +52,11 @@ pub fn global_hints_for_app(app: &Status) -> Vec<String> {
 pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
     if let Some(sub) = app.active_subpage {
         match sub {
-            crate::protocol::status::RightMode::Master => {
+            crate::protocol::status::PortMode::Master => {
                 return crate::tui::ui::pages::slave::map_key(key, app)
             }
-            crate::protocol::status::RightMode::SlaveStack => {
+            crate::protocol::status::PortMode::SlaveStack => {
                 return crate::tui::ui::pages::pull::map_key(key, app)
-            }
-            crate::protocol::status::RightMode::Listen => {
-                return crate::tui::ui::pages::entry::map_key(key, app)
             }
         }
     }
@@ -85,14 +75,11 @@ pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status) -> bool {
 
     if let Some(sub) = app.active_subpage {
         match sub {
-            crate::protocol::status::RightMode::Master => {
+            crate::protocol::status::PortMode::Master => {
                 return slave::handle_subpage_key(key, app)
             }
-            crate::protocol::status::RightMode::SlaveStack => {
+            crate::protocol::status::PortMode::SlaveStack => {
                 return pull::handle_subpage_key(key, app)
-            }
-            crate::protocol::status::RightMode::Listen => {
-                return entry::handle_subpage_key(key, app)
             }
         }
     }
@@ -103,12 +90,8 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &mut Status) {
     // If a subpage is active, render it full-screen; otherwise render the normal entry view
     if let Some(sub) = app.active_subpage {
         match sub {
-            crate::protocol::status::RightMode::Master => slave::render_slave(f, area, app),
-            crate::protocol::status::RightMode::SlaveStack => pull::render_pull(f, area, app),
-            crate::protocol::status::RightMode::Listen => {
-                // reuse entry's listen rendering but full area
-                entry::render_entry(f, area, app)
-            }
+            crate::protocol::status::PortMode::Master => slave::render_slave(f, area, app),
+            crate::protocol::status::PortMode::SlaveStack => pull::render_pull(f, area, app),
         }
     } else {
         entry::render_entry(f, area, app);

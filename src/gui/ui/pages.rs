@@ -1,10 +1,7 @@
 use eframe::egui;
 use egui::{CentralPanel, Checkbox, ScrollArea, SidePanel};
 
-use crate::{
-    i18n::lang,
-    protocol::status::Status,
-};
+use crate::{i18n::lang, protocol::status::Status};
 
 pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mutex<Status>>) {
     // Snapshot state
