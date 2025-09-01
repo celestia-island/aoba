@@ -1,10 +1,12 @@
+use std::cmp::min;
+
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::Line,
 };
 
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{i18n::lang, protocol::status::Status, tui::ui::components::render_boxed_paragraph};
 
 /// Master list panel rendering.
 /// - List all master configurations with a trailing "new" entry.
@@ -16,8 +18,8 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     if let Some(form) = app.subpage_form.as_ref() {
         if form.registers.is_empty() {
-            // 空列表 -> 选中新建项给予箭头
-            let selected = form.master_cursor == 0; // cursor=0 代表新建项
+            // Empty list -> highlight the 'new' entry with an arrow
+            let selected = form.master_cursor == 0; // cursor=0 means the 'new' entry
             let prefix = if selected { "> " } else { "  " };
             let content = format!("{}[+] {}", prefix, lang().new_master);
             if selected {
@@ -28,14 +30,14 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         } else {
             for (i, r) in form.registers.iter().enumerate() {
                 let start = r.address as u32;
-                let end_inclusive = start + r.length as u32 - 1; // length>=1 假设
+                let end_inclusive = start + r.length as u32 - 1; // assume length >= 1
                 let selected = form.master_cursor == i;
                 let mut line_spans: Vec<Span> = Vec::new();
                 // Fixed prefix: selector arrow + two spaces + # index (keeps # aligned).
                 if selected {
-                    line_spans.push(Span::raw("> ")); // 箭头
+                    line_spans.push(Span::raw("> ")); // arrow
                 }
-                line_spans.push(Span::raw(format!("#{}", i + 1))); // # 开始列位置固定
+                line_spans.push(Span::raw(format!("#{}", i + 1))); // '#' start column fixed
                 line_spans.push(Span::raw(", "));
                 // Determine layered states.
                 let this_selected_master = form.master_cursor == i;
@@ -234,11 +236,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         all_lines.push(Line::from(lang().details_placeholder.as_str()));
         all_lines.push(Line::from(format!("[+] {}", lang().new_master)));
     }
-    // 计算滚动窗口
-    let inner_height = area.height.saturating_sub(2) as usize; // 边框内可显示行
+    // Compute scroll window
+    let inner_height = area.height.saturating_sub(2) as usize; // number of lines visible inside the border
     let mut first_visible = 0usize;
     if let Some(form) = app.subpage_form.as_ref() {
-        // 计算当前 cursor 所在 header 起始行索引
+        // Compute starting line index of current cursor's header
         let mut cursor_line = 0usize;
         let mut accum = 0usize;
         for (i, r) in form.registers.iter().enumerate() {
@@ -254,10 +256,10 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             accum += 1 + value_lines + 1; // header + values + blank
         }
         if form.master_cursor == form.registers.len() {
-            // 新建行
-            cursor_line = accum; // 累积所有 master 行数
+            // 'New' line
+            cursor_line = accum; // accumulated lines of all masters
         }
-        // 如果正在编辑数值字段，确保该值所在行可见
+        // If editing a value field, ensure its line is visible
         if form.master_field_selected {
             if let Some(idx) = form.master_edit_index {
                 if idx < form.registers.len() {
@@ -265,7 +267,7 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                         if let crate::protocol::status::MasterEditField::Value(addr) = field {
                             let r_cur = &form.registers[idx];
                             if *addr >= r_cur.address && *addr < r_cur.address + r_cur.length {
-                                // 计算该值行号
+                                // Compute the line number of that value
                                 let mut line_no = 0usize;
                                 for (i2, r2) in form.registers.iter().enumerate() {
                                     let val_lines2 = if r2.length == 0 {
@@ -274,11 +276,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                                         (r2.length as usize + 7) / 8
                                     };
                                     if i2 == idx {
-                                        line_no += 1; // header 行
+                                        line_no += 1; // header line
                                         if r2.length > 0 {
                                             let offset = *addr as usize - r2.address as usize;
                                             let val_line_index = offset / 8;
-                                            line_no += val_line_index; // value 行偏移
+                                            line_no += val_line_index; // value line offset
                                         }
                                         if line_no < first_visible {
                                             first_visible = line_no;
@@ -305,11 +307,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     if first_visible > last_start {
         first_visible = last_start;
     }
-    let end = std::cmp::min(total_lines, first_visible + inner_height);
+    let end = min(total_lines, first_visible + inner_height);
     let window = &all_lines[first_visible..end];
-    crate::tui::ui::components::render_boxed_paragraph(f, area, window.to_vec(), None);
+    render_boxed_paragraph(f, area, window.to_vec(), None);
 
-    // 滚动条
+    // Scroll bar
     if total_lines > inner_height && inner_height > 0 {
         let bar_x = area.x + area.width.saturating_sub(1);
         let bar_y = area.y + 1; // inside border

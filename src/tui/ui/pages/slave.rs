@@ -9,6 +9,10 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::Status,
+    tui::ui::components::{
+        config_panel::render_config_panel, log_panel::render_log_panel,
+        master_list_panel::render_master_list_panel, slave_listen_panel::render_slave_listen_panel,
+    },
     tui::{input::Action, utils::edit},
 };
 
@@ -34,7 +38,7 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
         crate::protocol::status::RightMode::SlaveStack => lang().label_slave_listen.as_str(),
         crate::protocol::status::RightMode::Listen => lang().label_slave_listen.as_str(),
     };
-    let tabs = vec!["通信配置", middle_tab, "通信日志"];
+    let tabs = vec!["Comm Config", middle_tab, "Comm Log"];
     let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
 
     // Use a single-line header so tabs sit directly above content (no extra empty row)
@@ -65,17 +69,9 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
         0 => render_slave_config(f, content_area, app),
         1 => match app.right_mode {
             crate::protocol::status::RightMode::Master => {
-                crate::tui::ui::components::master_list_panel::render_master_list_panel(
-                    f,
-                    content_area,
-                    app,
-                )
+                render_master_list_panel(f, content_area, app)
             }
-            _ => crate::tui::ui::components::slave_listen_panel::render_slave_listen_panel(
-                f,
-                content_area,
-                app,
-            ),
+            _ => render_slave_listen_panel(f, content_area, app),
         },
         2 => render_slave_log(f, content_area, app),
         _ => render_slave_config(f, content_area, app),
@@ -84,14 +80,14 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
 
 fn render_slave_config(f: &mut Frame, area: Rect, app: &mut Status) {
     // delegate to shared component implementation
-    crate::tui::ui::components::config_panel::render_config_panel(f, area, app, None);
+    render_config_panel(f, area, app, None);
 }
 
 // registers rendering is delegated directly to components (master_list_panel / slave_listen_panel)
 
 fn render_slave_log(f: &mut Frame, area: Rect, _app: &mut Status) {
     // delegate to shared component implementation
-    crate::tui::ui::components::log_panel::render_log_panel(f, area, _app);
+    render_log_panel(f, area, _app);
 }
 
 /// Handle key events when slave page is active. Return true if the event is consumed.
@@ -113,9 +109,9 @@ pub fn handle_subpage_key(
     }
     if master_tab {
         if let Some(form) = app.subpage_form.as_mut() {
-            // 编辑输入阶段
+            // Field editing stage
             if form.master_field_editing {
-                // 特殊：Type 字段不使用输入缓冲，而是左右/上下循环
+                // Special: the Type field skips input buffer; cycle with left/right or up/down
                 let is_type = matches!(
                     form.master_edit_field,
                     Some(crate::protocol::status::MasterEditField::Type)
@@ -390,7 +386,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         // master list tab
         if let Some(form) = &app.subpage_form {
             if form.master_field_editing {
-                // 若是 Type 编辑，显示切换提示，否则仍显示 HEX 输入提示
+                // If editing Type show switch hints; else show HEX input hints
                 if let Some(field) = &form.master_edit_field {
                     if matches!(field, crate::protocol::status::MasterEditField::Type) {
                         hints.push(lang().hint_master_field_apply.as_str().to_string());
@@ -460,7 +456,7 @@ pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
         _ => None,
     }
 }
-// ---- Master list 编辑辅助函数 ----
+// ---- Master list editing helper functions ----
 #[derive(Clone, Copy)]
 enum Dir {
     Up,
@@ -476,7 +472,7 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                 if form.master_input_buffer.is_empty() {
                     match field {
                         Id => master.slave_id = 0,
-                        Type => { /* 保持原值 不重置 */ }
+                        Type => { /* keep original value (do not reset) */ }
                         Start => master.address = 0,
                         End => {
                             master.length = 1;

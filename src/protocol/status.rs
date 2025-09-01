@@ -1,9 +1,12 @@
 use chrono::{DateTime, Local};
+use std::cmp::{max, min};
 use std::{collections::HashMap, time::Duration};
 
-use serialport::{SerialPort, SerialPortInfo};
+use serialport::new as sp_new;
+use serialport::{Parity as SerialParity, SerialPort, SerialPortInfo, StopBits};
 
 use crate::protocol::tty::available_ports_sorted;
+use crate::tui::utils::constants::LOG_GROUP_HEIGHT;
 
 /// Parsed summary of a captured protocol request / response for UI display.
 #[derive(Debug, Clone)]
@@ -102,7 +105,7 @@ pub struct SubpageForm {
     pub edit_choice_index: Option<usize>,
     /// whether we've entered the deeper confirm / editing stage for a choice (e.g. Custom baud)
     pub edit_confirmed: bool,
-    // --- Master list (tab 1) 专用 UI 状态 ---
+    // --- Master list (tab 1) dedicated UI state ---
     /// Cursor in master list panel (points to a master or the trailing "new" entry)
     pub master_cursor: usize,
     /// Whether currently editing a master entry (deprecated flag, kept for future use)
@@ -269,14 +272,11 @@ impl Status {
         // The constant 5 matches empirically reserved rows (title / input etc.) in current TUI layout; extract if layout changes.
         let logs_area_h = (term_height as usize).saturating_sub(bottom_len + 5);
         let inner_h = logs_area_h.saturating_sub(2);
-        let groups_per_screen = std::cmp::max(
-            1usize,
-            inner_h / crate::tui::utils::constants::LOG_GROUP_HEIGHT,
-        );
+        let groups_per_screen = max(1usize, inner_h / LOG_GROUP_HEIGHT);
         let bottom = if self.log_auto_scroll {
             self.logs.len().saturating_sub(1)
         } else {
-            std::cmp::min(self.log_view_offset, self.logs.len().saturating_sub(1))
+            min(self.log_view_offset, self.logs.len().saturating_sub(1))
         };
         let top = if bottom + 1 >= groups_per_screen {
             bottom + 1 - groups_per_screen
@@ -286,8 +286,7 @@ impl Status {
         if self.log_selected < top {
             self.log_auto_scroll = false;
             let half = groups_per_screen / 2;
-            let new_bottom =
-                std::cmp::min(self.logs.len().saturating_sub(1), self.log_selected + half);
+            let new_bottom = min(self.logs.len().saturating_sub(1), self.log_selected + half);
             self.log_view_offset = new_bottom;
         } else if self.log_selected > bottom {
             self.log_auto_scroll = false;
@@ -314,7 +313,7 @@ impl Status {
             return;
         }
         let total = self.logs.len();
-        self.log_view_offset = std::cmp::min(total - 1, self.log_view_offset.saturating_add(page));
+        self.log_view_offset = min(total - 1, self.log_view_offset.saturating_add(page));
         self.log_auto_scroll = false;
     }
 
@@ -333,16 +332,16 @@ impl Status {
                 form.stop_bits = handle
                     .stop_bits()
                     .map(|s| match s {
-                        serialport::StopBits::One => 1,
-                        serialport::StopBits::Two => 2,
+                        StopBits::One => 1,
+                        StopBits::Two => 2,
                     })
                     .unwrap_or(1);
                 // parity mapping
                 if let Ok(p) = handle.parity() {
                     form.parity = match p {
-                        serialport::Parity::None => Parity::None,
-                        serialport::Parity::Even => Parity::Even,
-                        serialport::Parity::Odd => Parity::Odd,
+                        SerialParity::None => Parity::None,
+                        SerialParity::Even => Parity::Even,
+                        SerialParity::Odd => Parity::Odd,
                     };
                 }
             }
@@ -478,7 +477,7 @@ impl Status {
 
     fn is_port_free(port_name: &str) -> bool {
         // Try to open the port briefly; if succeed it's free (we immediately drop it)
-        match serialport::new(port_name, 9600)
+        match sp_new(port_name, 9600)
             .timeout(Duration::from_millis(50))
             .open()
         {
@@ -526,7 +525,7 @@ impl Status {
                 PortState::Free => {
                     // try to open and hold the port
                     let port_name = self.ports[i].port_name.clone();
-                    match serialport::new(&port_name, 9600)
+                    match sp_new(&port_name, 9600)
                         .timeout(Duration::from_millis(200))
                         .open()
                     {

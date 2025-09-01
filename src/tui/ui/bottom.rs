@@ -1,6 +1,6 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::{protocol::status::Status, tui::ui::pages};
+use crate::{i18n::lang, protocol::status::Status, tui::ui::pages};
 
 pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = Block::default().borders(Borders::NONE);
@@ -92,7 +92,7 @@ where
 /// Provided here so pages / components can register consistent kv-styled hints.
 pub fn format_kv_hint(key: &str, value: &str) -> String {
     // Use localized template, replace {key} and {label}
-    let tmpl = crate::i18n::lang().hint_kv_template.as_str();
+    let tmpl = lang().hint_kv_template.as_str();
     tmpl.replace("{key}", key).replace("{label}", value)
 }
 
@@ -103,10 +103,7 @@ where
 {
     // Use a wider visual gap between bottom hints: four spaces.
     let sep = "    ";
-    let text = hints
-        .into_iter()
-        .collect::<Vec<&str>>()
-        .join(sep);
+    let text = hints.into_iter().collect::<Vec<&str>>().join(sep);
     let hint_block = Block::default().style(Style::default().bg(Color::Gray).fg(Color::White));
     let hint_para = Paragraph::new(text)
         .alignment(Alignment::Center)
