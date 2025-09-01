@@ -11,7 +11,11 @@ pub fn render_ui(f: &mut Frame, app: &mut Status) {
     let area = f.area();
     // Reduce outer margin so middle panel is closer to title and bottom bar.
     // Reserve 2 lines for bottom when there's an error or when a subpage is active
-    let bottom_len = if app.error.is_some() || app.active_subpage.is_some() { 2 } else { 1 };
+    let bottom_len = if app.error.is_some() || app.active_subpage.is_some() {
+        2
+    } else {
+        1
+    };
     let main_chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Vertical)
         .margin(0)

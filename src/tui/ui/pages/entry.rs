@@ -178,15 +178,8 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     // If a subpage is active, delegate the entire right area to it.
     if let Some(sub) = app.active_subpage {
         match sub {
-            crate::protocol::status::RightMode::Master => slave::render_slave(f, right, app),
-            crate::protocol::status::RightMode::SlaveStack => pull::render_pull(f, right, app),
-            crate::protocol::status::RightMode::Listen => {
-                let block = Block::default()
-                    .borders(Borders::ALL)
-                    .title(Span::raw(format!(" {}", lang().details.as_str())));
-                let p = Paragraph::new("Listen mode").block(block);
-                f.render_widget(p, right);
-            }
+            crate::protocol::status::PortMode::Master => slave::render_slave(f, right, app),
+            crate::protocol::status::PortMode::SlaveStack => pull::render_pull(f, right, app),
         }
         return;
     }
@@ -290,10 +283,9 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
 
             // If occupied by this app, show current right mode (localized)
             if selected_state == crate::protocol::status::PortState::OccupiedByThis {
-                let mode_text = match app.right_mode {
-                    crate::protocol::status::RightMode::Master => lang().master_mode.clone(),
-                    crate::protocol::status::RightMode::SlaveStack => lang().slave_mode.clone(),
-                    crate::protocol::status::RightMode::Listen => lang().listen_mode.clone(),
+                let mode_text = match app.port_mode {
+                    crate::protocol::status::PortMode::Master => lang().master_mode.clone(),
+                    crate::protocol::status::PortMode::SlaveStack => lang().slave_mode.clone(),
                 };
                 pairs.push((lang().label_mode.as_str().to_string(), mode_text, None));
             }
@@ -350,8 +342,6 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     if app.mode_selector_active {
         crate::tui::ui::components::mode_selector::render_mode_selector(f, app.mode_selector_index);
     }
-    use crate::tui::ui::components::mode_selector::render_mode_selector;
-    render_mode_selector(f, app.mode_selector_index);
 }
 
 /// Handle key events when entry is used as a full-area subpage (listen). Return true if consumed.

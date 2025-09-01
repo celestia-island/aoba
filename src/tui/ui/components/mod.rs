@@ -3,7 +3,7 @@ pub mod log_input;
 pub mod log_panel;
 pub mod master_list_panel;
 pub mod mode_selector;
-pub mod slave_listen_panel;
+pub mod pull_list_panel;
 
 use ratatui::{
     prelude::*,

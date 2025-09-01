@@ -85,6 +85,12 @@ pub struct RegisterEntry {
     pub length: u16,
     /// Placeholder register values for UI editing (length-sized, hex display)
     pub values: Vec<u8>,
+    /// Refresh interval in milliseconds (for listen panel)
+    pub refresh_ms: u32,
+    /// Successful request count
+    pub req_success: u64,
+    /// Total request count
+    pub req_total: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -173,15 +179,16 @@ pub enum MasterEditField {
     End,
     /// Single register value (absolute address)
     Value(u16),
+    /// Refresh interval (ms) for listen panel
+    Refresh,
 }
 
 // Focus enum removed: UI now uses single-pane left list only
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RightMode {
+pub enum PortMode {
     Master,
     SlaveStack,
-    Listen,
 }
 
 #[derive(Debug)]
@@ -195,31 +202,59 @@ pub struct Status {
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
     pub error: Option<(String, DateTime<Local>)>,
-    pub right_mode: RightMode,
+    pub port_mode: PortMode,
     /// When Some, a subpage for the right side is active (entered). None means main entry view.
-    pub active_subpage: Option<RightMode>,
+    pub active_subpage: Option<PortMode>,
     /// transient UI state for the active subpage (editable form)
     pub subpage_form: Option<SubpageForm>,
     /// selected tab index inside the active right-side subpage
     pub subpage_tab_index: usize,
-    /// transient mode selector overlay state
+    /// recent protocol / log entries (current working port)
+    pub logs: Vec<LogEntry>,
+    pub log_selected: usize,
+    pub log_view_offset: usize,
+    pub log_auto_scroll: bool,
+    pub input_mode: InputMode,
+    pub input_editing: bool,
+    pub input_buffer: String,
+    /// cached per-port UI states keyed by port name
+    pub per_port_states: HashMap<String, PerPortState>,
+    /// transient mode selector overlay state (not per-port)
     pub mode_selector_active: bool,
     pub mode_selector_index: usize,
-    /// recent protocol / log entries for display in log panel
+}
+
+#[derive(Debug, Clone)]
+pub struct PerPortState {
+    pub port_mode: PortMode,
+    pub active_subpage: Option<PortMode>,
+    pub subpage_form: Option<SubpageForm>,
+    pub subpage_tab_index: usize,
     pub logs: Vec<LogEntry>,
-    /// index of selected log entry when viewing logs (visual groups)
     pub log_selected: usize,
-    /// offset of the visible log group: index of the bottom-most visible group in the viewport
-    /// (renderer computes the top from this bottom index and the visible page size)
     pub log_view_offset: usize,
-    /// whether log view auto-scrolls to bottom when new entries arrive
     pub log_auto_scroll: bool,
-    /// input mode for the log input area
     pub input_mode: InputMode,
-    /// whether the log input is currently in editing state
     pub input_editing: bool,
-    /// input buffer for the log input area
     pub input_buffer: String,
+}
+
+impl Default for PerPortState {
+    fn default() -> Self {
+        Self {
+            port_mode: PortMode::Master,
+            active_subpage: None,
+            subpage_form: None,
+            subpage_tab_index: 0,
+            logs: Vec::new(),
+            log_selected: 0,
+            log_view_offset: 0,
+            log_auto_scroll: true,
+            input_mode: InputMode::Ascii,
+            input_editing: false,
+            input_buffer: String::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -243,12 +278,10 @@ impl Status {
             auto_refresh: true,
             last_refresh: None,
             error: None,
-            right_mode: RightMode::Master,
+            port_mode: PortMode::Master,
             active_subpage: None,
             subpage_form: None,
             subpage_tab_index: 0,
-            mode_selector_active: false,
-            mode_selector_index: 0,
             logs: Vec::new(),
             log_selected: 0,
             log_view_offset: 0,
@@ -256,6 +289,9 @@ impl Status {
             input_mode: InputMode::Ascii,
             input_editing: false,
             input_buffer: String::new(),
+            per_port_states: HashMap::new(),
+            mode_selector_active: false,
+            mode_selector_index: 0,
         }
     }
 
@@ -371,12 +407,10 @@ impl Status {
             auto_refresh: false,
             last_refresh: None,
             error: None,
-            right_mode: RightMode::Master,
+            port_mode: PortMode::Master,
             active_subpage: None,
             subpage_form: None,
             subpage_tab_index: 0,
-            mode_selector_active: false,
-            mode_selector_index: 0,
             logs: Vec::new(),
             log_selected: 0,
             log_view_offset: 0,
@@ -384,6 +418,9 @@ impl Status {
             input_mode: InputMode::Ascii,
             input_editing: false,
             input_buffer: String::new(),
+            per_port_states: HashMap::new(),
+            mode_selector_active: false,
+            mode_selector_index: 0,
         }
     }
 
@@ -414,6 +451,7 @@ impl Status {
 
     /// Re-scan available ports and reset selection if needed
     pub fn refresh(&mut self) {
+        self.save_current_port_state();
         let new_ports = available_ports_sorted();
         // Remember previously selected port name (if any real port selected)
         let prev_selected_name = if !self.ports.is_empty() && self.selected < self.ports.len() {
@@ -473,6 +511,61 @@ impl Status {
             }
         }
         self.last_refresh = Some(Local::now());
+        self.load_current_port_state();
+    }
+
+    fn save_current_port_state(&mut self) {
+        if self.selected < self.ports.len() {
+            if let Some(info) = self.ports.get(self.selected) {
+                let snap = PerPortState {
+                    port_mode: self.port_mode,
+                    active_subpage: self.active_subpage,
+                    subpage_form: self.subpage_form.clone(),
+                    subpage_tab_index: self.subpage_tab_index,
+                    logs: self.logs.clone(),
+                    log_selected: self.log_selected,
+                    log_view_offset: self.log_view_offset,
+                    log_auto_scroll: self.log_auto_scroll,
+                    input_mode: self.input_mode,
+                    input_editing: self.input_editing,
+                    input_buffer: self.input_buffer.clone(),
+                };
+                self.per_port_states.insert(info.port_name.clone(), snap);
+            }
+        }
+    }
+
+    fn load_current_port_state(&mut self) {
+        if self.selected < self.ports.len() {
+            if let Some(info) = self.ports.get(self.selected) {
+                if let Some(snap) = self.per_port_states.get(&info.port_name).cloned() {
+                    self.port_mode = snap.port_mode;
+                    self.active_subpage = snap.active_subpage;
+                    self.subpage_form = snap.subpage_form;
+                    self.subpage_tab_index = snap.subpage_tab_index;
+                    self.logs = snap.logs;
+                    self.log_selected = snap.log_selected;
+                    self.log_view_offset = snap.log_view_offset;
+                    self.log_auto_scroll = snap.log_auto_scroll;
+                    self.input_mode = snap.input_mode;
+                    self.input_editing = snap.input_editing;
+                    self.input_buffer = snap.input_buffer;
+                } else {
+                    // fresh defaults
+                    self.port_mode = PortMode::Master;
+                    self.active_subpage = None;
+                    self.subpage_form = None;
+                    self.subpage_tab_index = 0;
+                    self.logs.clear();
+                    self.log_selected = 0;
+                    self.log_view_offset = 0;
+                    self.log_auto_scroll = true;
+                    self.input_mode = InputMode::Ascii;
+                    self.input_editing = false;
+                    self.input_buffer.clear();
+                }
+            }
+        }
     }
 
     fn is_port_free(port_name: &str) -> bool {
@@ -560,11 +653,13 @@ impl Status {
         self.auto_refresh = !self.auto_refresh;
     }
     pub fn next(&mut self) {
-        // Navigate among real ports only
         let total = self.ports.len();
-        if total > 0 {
-            self.selected = (self.selected + 1) % total;
+        if total == 0 {
+            return;
         }
+        self.save_current_port_state();
+        self.selected = (self.selected + 1) % total;
+        self.load_current_port_state();
     }
 
     pub fn prev(&mut self) {
@@ -572,11 +667,13 @@ impl Status {
         if total == 0 {
             return;
         }
+        self.save_current_port_state();
         if self.selected == 0 {
             self.selected = total - 1;
         } else {
             self.selected -= 1;
         }
+        self.load_current_port_state();
     }
 
     /// Navigate among visual rows in the left pane including the two trailing virtual items
@@ -585,8 +682,16 @@ impl Status {
     /// real ports only for test stability.
     pub fn next_visual(&mut self) {
         let total = self.ports.len().saturating_add(2);
-        if total > 0 {
-            self.selected = (self.selected + 1) % total;
+        if total == 0 {
+            return;
+        }
+        let was_real = self.selected < self.ports.len();
+        if was_real {
+            self.save_current_port_state();
+        }
+        self.selected = (self.selected + 1) % total;
+        if self.selected < self.ports.len() {
+            self.load_current_port_state();
         }
     }
 
@@ -595,10 +700,17 @@ impl Status {
         if total == 0 {
             return;
         }
+        let was_real = self.selected < self.ports.len();
+        if was_real {
+            self.save_current_port_state();
+        }
         if self.selected == 0 {
             self.selected = total - 1;
         } else {
             self.selected -= 1;
+        }
+        if self.selected < self.ports.len() {
+            self.load_current_port_state();
         }
     }
 }
