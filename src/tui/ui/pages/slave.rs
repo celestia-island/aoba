@@ -100,24 +100,108 @@ pub fn handle_subpage_key(
     app: &mut crate::protocol::status::Status,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
-    // If currently editing a field, consume keys here so parent won't process navigation.
-    if let Some(form) = app.subpage_form.as_ref() {
-        if form.editing {
-            return true;
+    let master_tab = app.subpage_tab_index == 1;
+    if !master_tab {
+        if let Some(form) = app.subpage_form.as_ref() {
+            if form.editing {
+                return true;
+            }
         }
     }
-
-    // Tab / arrow navigation is handled by the parent input handler; fall through to allow
-    // parent to process Tab / BackTab / Right / Left / Up / Down when appropriate.
-
+    if master_tab && app.subpage_form.is_none() {
+        app.init_subpage_form();
+    }
+    if master_tab {
+        if let Some(form) = app.subpage_form.as_mut() {
+            // 编辑输入阶段
+            if form.master_field_editing {
+                // 特殊：Type 字段不使用输入缓冲，而是左右/上下循环
+                let is_type = matches!(
+                    form.master_edit_field,
+                    Some(crate::protocol::status::MasterEditField::Type)
+                );
+                match key.code {
+                    KC::Esc => {
+                        form.master_input_buffer.clear();
+                        form.master_field_editing = false;
+                        return true;
+                    }
+                    KC::Enter => {
+                        if !is_type {
+                            commit_master_field(form);
+                        } // Type commits live (no buffer)
+                        form.master_field_editing = false;
+                        return true;
+                    }
+                    KC::Left | KC::Char('h') | KC::Up | KC::Char('k') => {
+                        if is_type {
+                            cycle_type(form, false);
+                        }
+                        return true;
+                    }
+                    KC::Right | KC::Char('l') | KC::Down | KC::Char('j') => {
+                        if is_type {
+                            cycle_type(form, true);
+                        }
+                        return true;
+                    }
+                    KC::Backspace => {
+                        if !is_type {
+                            form.master_input_buffer.pop();
+                        }
+                        return true;
+                    }
+                    KC::Char(c) => {
+                        if !is_type && c.is_ascii_hexdigit() {
+                            form.master_input_buffer.push(c.to_ascii_lowercase());
+                        }
+                        return true;
+                    }
+                    _ => return true,
+                }
+            } else if form.master_field_selected {
+                match key.code {
+                    KC::Esc => {
+                        // Exit field selection layer
+                        form.master_field_selected = false;
+                        form.master_edit_field = None;
+                        form.master_edit_index = None;
+                        return true;
+                    }
+                    KC::Enter => {
+                        // Enter field editing (Type supports immediate left/right cycling)
+                        form.master_field_editing = true;
+                        form.master_input_buffer.clear();
+                        return true;
+                    }
+                    KC::Up | KC::Char('k') => {
+                        move_master_field_dir(form, Dir::Up);
+                        return true;
+                    }
+                    KC::Down | KC::Char('j') => {
+                        move_master_field_dir(form, Dir::Down);
+                        return true;
+                    }
+                    KC::Left | KC::Char('h') => {
+                        move_master_field_dir(form, Dir::Left);
+                        return true;
+                    }
+                    KC::Right | KC::Char('l') => {
+                        move_master_field_dir(form, Dir::Right);
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
     match key.code {
-        // Cycle through the three sub tabs.
         KC::Tab => {
             app.subpage_tab_index = (app.subpage_tab_index + 1) % 3;
             return true;
         }
         KC::BackTab => {
-            let total = 3usize;
+            let total = 3;
             if app.subpage_tab_index == 0 {
                 app.subpage_tab_index = total - 1;
             } else {
@@ -125,32 +209,28 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // Enter / exit edit mode.
-        KC::Enter => {
-            if let Some(form) = app.subpage_form.as_mut() {
-                if !form.editing {
-                    edit::begin_edit(form);
-                } else {
-                    edit::end_edit(form);
-                }
-            }
-            return true;
-        }
-        KC::Char('e') => {
-            if let Some(form) = app.subpage_form.as_mut() {
-                if !form.editing {
-                    edit::begin_edit(form);
-                } else {
-                    edit::end_edit(form);
-                }
-            }
-            return true;
-        }
-        // Move cursor up.
         KC::Up | KC::Char('k') => {
+            if master_tab {
+                // Reorder (Ctrl+Up) feature removed
+                if let Some(form) = app.subpage_form.as_mut() {
+                    if !form.master_field_selected && !form.master_field_editing {
+                        let total = form.registers.len() + 1;
+                        if total > 0 {
+                            if form.master_cursor == 0 {
+                                form.master_cursor = total - 1;
+                            } else {
+                                form.master_cursor -= 1;
+                            }
+                        }
+                    } else if form.master_field_selected {
+                        move_master_field_dir(form, Dir::Up);
+                    }
+                }
+                return true;
+            }
             if app.subpage_tab_index == 2 {
                 return false;
-            } // Let parent handle log scrolling.
+            }
             if let Some(form) = app.subpage_form.as_mut() {
                 let total = 4usize.saturating_add(form.registers.len());
                 if total > 0 {
@@ -163,8 +243,21 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // Move cursor down.
         KC::Down | KC::Char('j') => {
+            if master_tab {
+                // Reorder (Ctrl+Down) feature removed
+                if let Some(form) = app.subpage_form.as_mut() {
+                    if !form.master_field_selected && !form.master_field_editing {
+                        let total = form.registers.len() + 1;
+                        if total > 0 {
+                            form.master_cursor = (form.master_cursor + 1) % total;
+                        }
+                    } else if form.master_field_selected {
+                        move_master_field_dir(form, Dir::Down);
+                    }
+                }
+                return true;
+            }
             if app.subpage_tab_index == 2 {
                 return false;
             }
@@ -176,20 +269,93 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // Add a register (matches AddRegister in map_key).
-        KC::Char('n') => {
-            if app.subpage_form.is_none() {
-                app.init_subpage_form();
+        KC::Left | KC::Char('h') => {
+            if master_tab {
+                if let Some(form) = app.subpage_form.as_mut() {
+                    if form.master_field_selected {
+                        move_master_field_dir(form, Dir::Left);
+                        return true;
+                    }
+                }
+            }
+        }
+        KC::Right | KC::Char('l') => {
+            if master_tab {
+                if let Some(form) = app.subpage_form.as_mut() {
+                    if form.master_field_selected {
+                        move_master_field_dir(form, Dir::Right);
+                        return true;
+                    }
+                }
+            }
+        }
+        // Delete current master (not editing and not on the new entry line)
+        KC::Char('d') => {
+            if master_tab {
+                if let Some(form) = app.subpage_form.as_mut() {
+                    if !form.master_field_selected && !form.master_field_editing {
+                        if form.master_cursor < form.registers.len() {
+                            form.registers.remove(form.master_cursor);
+                            if form.master_cursor >= form.registers.len() && form.master_cursor > 0
+                            {
+                                form.master_cursor -= 1;
+                            }
+                        }
+                    }
+                }
+                return true;
+            }
+        }
+        KC::Enter => {
+            if master_tab {
+                if let Some(form) = app.subpage_form.as_mut() {
+                    // Field selection/edit already handled earlier; here we are in browse layer
+                    if !form.master_field_selected && !form.master_field_editing {
+                        if form.master_cursor == form.registers.len() {
+                            // Create new entry but stay in browse (do not auto-enter field selection)
+                            form.registers.push(crate::protocol::status::RegisterEntry {
+                                slave_id: 1,
+                                mode: crate::protocol::status::RegisterMode::Coils,
+                                address: 0,
+                                length: 8,
+                                values: vec![0u8; 8],
+                            });
+                            form.master_cursor = form.registers.len() - 1;
+                        } else {
+                            form.master_edit_index = Some(form.master_cursor);
+                            form.master_edit_field =
+                                Some(crate::protocol::status::MasterEditField::Id);
+                            form.master_field_selected = true; // Enter field selection layer
+                        }
+                    }
+                }
+                return true;
             }
             if let Some(form) = app.subpage_form.as_mut() {
-                form.registers.push(crate::protocol::status::RegisterEntry {
-                    slave_id: 1,
-                    mode: 1,
-                    address: 0,
-                    length: 1,
-                });
+                if !form.editing {
+                    edit::begin_edit(form);
+                } else {
+                    edit::end_edit(form);
+                }
             }
             return true;
+        }
+        KC::Char('n') => {
+            if !master_tab {
+                if app.subpage_form.is_none() {
+                    app.init_subpage_form();
+                }
+                if let Some(form) = app.subpage_form.as_mut() {
+                    form.registers.push(crate::protocol::status::RegisterEntry {
+                        slave_id: 1,
+                        mode: crate::protocol::status::RegisterMode::Coils,
+                        address: 0,
+                        length: 1,
+                        values: vec![0u8; 1],
+                    });
+                }
+                return true;
+            }
         }
         _ => {}
     }
@@ -220,8 +386,32 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         return hints;
     }
 
-    // If current tab is the middle list tab, do not show page-specific hints (leave blank)
     if app.subpage_tab_index == 1 {
+        // master list tab
+        if let Some(form) = &app.subpage_form {
+            if form.master_field_editing {
+                // 若是 Type 编辑，显示切换提示，否则仍显示 HEX 输入提示
+                if let Some(field) = &form.master_edit_field {
+                    if matches!(field, crate::protocol::status::MasterEditField::Type) {
+                        hints.push(lang().hint_master_field_apply.as_str().to_string());
+                        hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
+                        hints.push(lang().hint_master_type_switch.as_str().to_string());
+                    } else {
+                        hints.push(lang().hint_master_field_apply.as_str().to_string());
+                        hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
+                        hints.push(lang().hint_master_edit_hex.as_str().to_string());
+                        hints.push(lang().hint_master_edit_backspace.as_str().to_string());
+                    }
+                }
+            } else if form.master_field_selected {
+                hints.push(lang().hint_master_field_select.as_str().to_string());
+                hints.push(lang().hint_master_field_move.as_str().to_string());
+                hints.push(lang().hint_master_field_exit_select.as_str().to_string());
+            } else {
+                hints.push(lang().hint_master_enter_edit.as_str().to_string());
+                hints.push(lang().hint_master_delete.as_str().to_string());
+            }
+        }
         return hints;
     }
 
@@ -268,5 +458,198 @@ pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
         KC::Up | KC::Char('k') => Some(Action::MovePrev),
         KC::Down | KC::Char('j') => Some(Action::MoveNext),
         _ => None,
+    }
+}
+// ---- Master list 编辑辅助函数 ----
+#[derive(Clone, Copy)]
+enum Dir {
+    Up,
+    Down,
+    Left,
+    Right,
+}
+fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
+    if let Some(idx) = form.master_edit_index {
+        if let Some(field) = &form.master_edit_field {
+            if let Some(master) = form.registers.get_mut(idx) {
+                use crate::protocol::status::MasterEditField::*;
+                if form.master_input_buffer.is_empty() {
+                    match field {
+                        Id => master.slave_id = 0,
+                        Type => { /* 保持原值 不重置 */ }
+                        Start => master.address = 0,
+                        End => {
+                            master.length = 1;
+                            master.values.resize(master.length as usize, 0);
+                        }
+                        Value(a) => {
+                            let off = (*a as usize).saturating_sub(master.address as usize);
+                            if off < master.values.len() {
+                                master.values[off] = 0;
+                            }
+                        }
+                    }
+                } else {
+                    let buf = form.master_input_buffer.trim().to_string();
+                    let parse_u16 = || {
+                        u16::from_str_radix(&buf, 16)
+                            .ok()
+                            .or_else(|| buf.parse::<u16>().ok())
+                    };
+                    let parse_u8 = || {
+                        u8::from_str_radix(&buf, 16)
+                            .ok()
+                            .or_else(|| buf.parse::<u8>().ok())
+                    };
+                    match field {
+                        Id => {
+                            if let Some(v) = parse_u8() {
+                                master.slave_id = v;
+                            }
+                        }
+                        Type => {
+                            if let Some(v) = parse_u8() {
+                                master.mode = crate::protocol::status::RegisterMode::from_u8(v);
+                            }
+                        }
+                        Start => {
+                            if let Some(v) = parse_u16() {
+                                master.address = v;
+                            }
+                        }
+                        End => {
+                            if let Some(v) = parse_u16() {
+                                if v >= master.address {
+                                    let new_len = v - master.address + 1;
+                                    master.length = new_len;
+                                    master.values.resize(new_len as usize, 0);
+                                }
+                            }
+                        }
+                        Value(a) => {
+                            if let Some(v) = parse_u8() {
+                                let off = (*a as usize).saturating_sub(master.address as usize);
+                                if off < master.values.len() {
+                                    master.values[off] = v;
+                                }
+                            }
+                        }
+                    }
+                }
+                form.master_input_buffer.clear();
+            }
+        }
+    }
+}
+
+fn cycle_type(form: &mut crate::protocol::status::SubpageForm, forward: bool) {
+    use crate::protocol::status::RegisterMode;
+    if let Some(idx) = form.master_edit_index {
+        if let Some(crate::protocol::status::MasterEditField::Type) = form.master_edit_field {
+            if let Some(master) = form.registers.get_mut(idx) {
+                let all = RegisterMode::all();
+                let cur_pos = all
+                    .iter()
+                    .position(|m| *m as u8 == master.mode as u8)
+                    .unwrap_or(0);
+                let len = all.len() as i32;
+                let mut ni = cur_pos as i32 + if forward { 1 } else { -1 };
+                if ni < 0 {
+                    ni = len - 1;
+                }
+                if ni >= len {
+                    ni = 0;
+                }
+                master.mode = all[ni as usize];
+            }
+        }
+    }
+}
+
+fn move_master_field_dir(form: &mut crate::protocol::status::SubpageForm, dir: Dir) {
+    use crate::protocol::status::MasterEditField as F;
+    if let Some(idx) = form.master_edit_index {
+        if let Some(master) = form.registers.get(idx) {
+            // Build grid: header row (Id, Type, Start, End) then value cells in 8-column rows
+            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End];
+            for off in 0..master.length {
+                order.push(F::Value(master.address + off));
+            }
+            let cur = form.master_edit_field.clone().unwrap_or(F::Id);
+            // map each field to (row,col)
+            let mut coords: Vec<(usize, usize, F)> = Vec::new();
+            // header row row=0, columns 0..3
+            coords.push((0, 0, F::Id));
+            coords.push((0, 1, F::Type));
+            coords.push((0, 2, F::Start));
+            coords.push((0, 3, F::End));
+            // value grid starts at row=1; each row has 8 columns
+            for off in 0..master.length {
+                let addr = master.address + off;
+                let row = 1 + (off / 8) as usize;
+                let col = (off % 8) as usize;
+                coords.push((row, col, F::Value(addr)));
+            }
+            let (crow, ccol) = coords
+                .iter()
+                .find(|(_, _, f)| *f == cur)
+                .map(|(r, c, _)| (*r, *c))
+                .unwrap_or((0, 0));
+            let target = match dir {
+                Dir::Up => {
+                    if crow == 0 {
+                        (crow, ccol)
+                    } else {
+                        // move up one row (if above header, stay)
+                        let nr = crow - 1; // header row has only 4 cols
+                        if nr == 0 {
+                            // clamp ccol to 0..3
+                            (0, ccol.min(3))
+                        } else {
+                            (nr, ccol)
+                        }
+                    }
+                }
+                Dir::Down => {
+                    // attempt down
+                    let max_row = coords.iter().map(|(r, _, _)| *r).max().unwrap_or(0);
+                    if crow == max_row {
+                        (crow, ccol)
+                    } else {
+                        let nr = crow + 1;
+                        if nr == 1 {
+                            // leaving header to values
+                            (nr, ccol.min(7))
+                        } else {
+                            (nr, ccol)
+                        }
+                    }
+                }
+                Dir::Left => {
+                    if ccol == 0 {
+                        (crow, ccol)
+                    } else {
+                        (crow, ccol - 1)
+                    }
+                }
+                Dir::Right => {
+                    // width depends on row
+                    let row_width = if crow == 0 { 4 } else { 8 };
+                    if ccol + 1 >= row_width {
+                        (crow, ccol)
+                    } else {
+                        (crow, ccol + 1)
+                    }
+                }
+            };
+            // find nearest field with those coords (if none, stay)
+            if let Some((_, _, f)) = coords
+                .iter()
+                .find(|(r, c, _)| *r == target.0 && *c == target.1)
+            {
+                form.master_edit_field = Some(f.clone());
+                form.master_input_buffer.clear();
+            }
+        }
     }
 }

@@ -43,12 +43,45 @@ pub enum Parity {
     Odd,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegisterMode {
+    Coils = 1,
+    DiscreteInputs = 2,
+    Holding = 3,
+    Input = 4,
+}
+
+impl RegisterMode {
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => Self::Coils,
+            2 => Self::DiscreteInputs,
+            3 => Self::Holding,
+            4 => Self::Input,
+            _ => Self::Coils,
+        }
+    }
+    pub fn as_u8(self) -> u8 {
+        self as u8
+    }
+    pub fn all() -> [RegisterMode; 4] {
+        [
+            Self::Coils,
+            Self::DiscreteInputs,
+            Self::Holding,
+            Self::Input,
+        ]
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RegisterEntry {
     pub slave_id: u8,
-    pub mode: u8, // 1,2,3,4 mapping
+    pub mode: RegisterMode,
     pub address: u16,
     pub length: u16,
+    /// Placeholder register values for UI editing (length-sized, hex display)
+    pub values: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +102,21 @@ pub struct SubpageForm {
     pub edit_choice_index: Option<usize>,
     /// whether we've entered the deeper confirm / editing stage for a choice (e.g. Custom baud)
     pub edit_confirmed: bool,
+    // --- Master list (tab 1) 专用 UI 状态 ---
+    /// Cursor in master list panel (points to a master or the trailing "new" entry)
+    pub master_cursor: usize,
+    /// Whether currently editing a master entry (deprecated flag, kept for future use)
+    pub master_editing: bool,
+    /// Whether a specific master field is selected (field selection layer)
+    pub master_field_selected: bool,
+    /// Whether the current field is in active input editing (vs merely selected)
+    pub master_field_editing: bool,
+    /// Currently focused master field
+    pub master_edit_field: Option<MasterEditField>,
+    /// Input buffer for master field editing (hex / decimal)
+    pub master_input_buffer: String,
+    /// Index of the master being edited
+    pub master_edit_index: Option<usize>,
 }
 
 impl Default for SubpageForm {
@@ -85,6 +133,13 @@ impl Default for SubpageForm {
             input_buffer: String::new(),
             edit_choice_index: None,
             edit_confirmed: false,
+            master_cursor: 0,
+            master_editing: false,
+            master_field_selected: false,
+            master_field_editing: false,
+            master_edit_field: None,
+            master_input_buffer: String::new(),
+            master_edit_index: None,
         }
     }
 }
@@ -105,6 +160,16 @@ pub enum RegisterField {
     Mode,
     Address,
     Length,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MasterEditField {
+    Id,
+    Type,
+    Start,
+    End,
+    /// Single register value (absolute address)
+    Value(u16),
 }
 
 // Focus enum removed: UI now uses single-pane left list only
