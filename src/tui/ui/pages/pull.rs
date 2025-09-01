@@ -151,11 +151,12 @@ pub fn handle_subpage_key(
                 app.init_subpage_form();
             }
             if let Some(form) = app.subpage_form.as_mut() {
-                form.registers.push(crate::protocol::status::RegisterEntry {
-                    slave_id: 1,
-                    mode: 1,
+                    form.registers.push(crate::protocol::status::RegisterEntry {
+                        slave_id: 1,
+                        mode: crate::protocol::status::RegisterMode::Coils,
                     address: 0,
                     length: 1,
+                    values: vec![0u8;1],
                 });
             }
             return true;

@@ -1,5 +1,5 @@
-//! TUI 通用工具模块集合。
+//! Collection of common TUI utility modules.
 pub mod constants;
 pub mod edit;
 
-// 若需要兼容旧路径，可在上层 re-export；当前不做重复导出。
+// If legacy paths are needed, re-export at higher module; avoided duplication here.
