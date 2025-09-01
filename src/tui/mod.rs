@@ -300,10 +300,13 @@ fn run_app(
                                                             }
                                                         }
                                                         crate::protocol::status::RegisterField::Mode => {
-                                                            let new = (reg.mode as i64).saturating_add(dir);
-                                                            if new >= 0 && new <= u8::MAX as i64 {
-                                                                reg.mode = new as u8;
-                                                            }
+                                                            use crate::protocol::status::RegisterMode;
+                                                            let current = reg.mode as u8 as i64;
+                                                            let new_raw = (current).saturating_add(dir);
+                                                            // Wrap within 1..=4
+                                                            let mut val = if new_raw < 1 { 4 } else if new_raw > 4 { 1 } else { new_raw } as u8;
+                                                            if !(1..=4).contains(&val) { val = 1; }
+                                                            reg.mode = RegisterMode::from_u8(val);
                                                         }
                                                         crate::protocol::status::RegisterField::Address => {
                                                             let new = (reg.address as i64).saturating_add(dir);
@@ -823,9 +826,10 @@ fn run_app(
                                             form.registers.push(
                                                 crate::protocol::status::RegisterEntry {
                                                     slave_id: 1,
-                                                    mode: 1,
+                                                    mode: crate::protocol::status::RegisterMode::Coils,
                                                     address: 0,
                                                     length: 1,
+                                                    values: vec![0u8;1],
                                                 },
                                             );
                                         }
