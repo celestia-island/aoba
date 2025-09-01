@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use ratatui::{
     prelude::*,
     style::{Color, Style},
@@ -17,7 +19,7 @@ pub fn mode_selector_hints() -> Vec<String> {
 /// Render a centered mode selector popup. `index` is the currently selected option index.
 pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let area = f.area();
-    let w = std::cmp::min(40, area.width.saturating_sub(4));
+    let w = min(40, area.width.saturating_sub(4));
     let h = 6u16;
     let x = (area.width.saturating_sub(w)) / 2;
     let y = (area.height.saturating_sub(h)) / 2;

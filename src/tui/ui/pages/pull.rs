@@ -9,6 +9,10 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::Status,
+    tui::ui::components::{
+        config_panel::render_config_panel, log_panel::render_log_panel,
+        master_list_panel::render_master_list_panel, slave_listen_panel::render_slave_listen_panel,
+    },
     tui::{input::Action, utils::edit},
 };
 
@@ -65,17 +69,9 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
         0 => render_pull_config(f, content_area, app),
         1 => match app.right_mode {
             crate::protocol::status::RightMode::Master => {
-                crate::tui::ui::components::master_list_panel::render_master_list_panel(
-                    f,
-                    content_area,
-                    app,
-                )
+                render_master_list_panel(f, content_area, app)
             }
-            _ => crate::tui::ui::components::slave_listen_panel::render_slave_listen_panel(
-                f,
-                content_area,
-                app,
-            ),
+            _ => render_slave_listen_panel(f, content_area, app),
         },
         2 => render_pull_log(f, content_area, app),
         _ => render_pull_config(f, content_area, app),
@@ -84,14 +80,14 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
 
 fn render_pull_config(f: &mut Frame, area: Rect, app: &mut Status) {
     // delegate to shared component implementation
-    crate::tui::ui::components::config_panel::render_config_panel(f, area, app, None);
+    render_config_panel(f, area, app, None);
 }
 
 // registers rendering is delegated directly to components (master_list_panel / slave_listen_panel)
 
 fn render_pull_log(f: &mut Frame, area: Rect, _app: &mut Status) {
     // delegate to shared component implementation
-    crate::tui::ui::components::log_panel::render_log_panel(f, area, _app);
+    render_log_panel(f, area, _app);
 }
 
 /// Handle key events when pull page is active. Return true if the event is consumed.
@@ -151,12 +147,12 @@ pub fn handle_subpage_key(
                 app.init_subpage_form();
             }
             if let Some(form) = app.subpage_form.as_mut() {
-                    form.registers.push(crate::protocol::status::RegisterEntry {
-                        slave_id: 1,
-                        mode: crate::protocol::status::RegisterMode::Coils,
+                form.registers.push(crate::protocol::status::RegisterEntry {
+                    slave_id: 1,
+                    mode: crate::protocol::status::RegisterMode::Coils,
                     address: 0,
                     length: 1,
-                    values: vec![0u8;1],
+                    values: vec![0u8; 1],
                 });
             }
             return true;

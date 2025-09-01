@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+};
 
 use serialport::{SerialPortInfo, SerialPortType};
 
@@ -120,8 +123,8 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         let ib = com_index(&b.port_name);
         match (ia, ib) {
             (Some(x), Some(y)) => x.cmp(&y),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (Some(_), None) => Ordering::Less,
+            (None, Some(_)) => Ordering::Greater,
             (None, None) => a.port_name.cmp(&b.port_name),
         }
     });

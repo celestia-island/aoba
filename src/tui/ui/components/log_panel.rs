@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
@@ -6,8 +8,9 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::protocol::status::Status;
+use crate::{i18n::lang, protocol::status::Status};
 
+use crate::tui::ui::components::log_input::render_log_input;
 /// Render a log panel. Each log entry is presented as a 3-line grouped item:
 /// 1) timestamp
 /// 2) raw payload (single line, truncated)
@@ -30,7 +33,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     // inner height inside the block (account for borders)
     let inner_h = logs_area.height.saturating_sub(2) as usize;
-    let groups_per_screen = std::cmp::max(1usize, inner_h / group_height);
+    let groups_per_screen = max(1usize, inner_h / group_height);
 
     // Determine bottom index based on auto-scroll or explicit offset
     let bottom = if total_groups == 0 {
@@ -38,7 +41,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     } else if app.log_auto_scroll {
         total_groups.saturating_sub(1)
     } else {
-        std::cmp::min(app.log_view_offset, total_groups.saturating_sub(1))
+        min(app.log_view_offset, total_groups.saturating_sub(1))
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
@@ -56,9 +59,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     };
 
     let mut styled_lines: Vec<Line> = Vec::new();
-    for (idx, g) in
-        (top_group..std::cmp::min(total_groups, top_group + groups_per_screen)).enumerate()
-    {
+    for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
         if let Some(entry) = app.logs.get(g) {
             let selected = app
                 .log_selected
@@ -137,9 +138,9 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if app.log_auto_scroll {
-        crate::i18n::lang().hint_follow_on.as_str()
+        lang().hint_follow_on.as_str()
     } else {
-        crate::i18n::lang().hint_follow_off.as_str()
+        lang().hint_follow_off.as_str()
     };
     // Single-span title fallback: bold and color entire title depending on follow state.
     let title_text = format!(
@@ -194,5 +195,5 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     // Bottom: input area (fixed height)
     let input_area = chunks[1];
-    crate::tui::ui::components::log_input::render_log_input(f, input_area, app);
+    render_log_input(f, input_area, app);
 }

@@ -11,6 +11,7 @@ use std::{
 };
 
 use ratatui::{backend::CrosstermBackend, prelude::*};
+use crate::i18n::lang;
 
 use crate::{
     protocol::status::{InputMode, LogEntry, RightMode, Status},
@@ -369,7 +370,7 @@ fn run_app(
                                                                     form.baud = v;
                                                                 } else {
                                                                     pending_error = Some(
-                                                                        crate::i18n::lang()
+                                                                        lang()
                                                                             .invalid_baud_range
                                                                             .clone(),
                                                                     );
@@ -392,7 +393,7 @@ fn run_app(
                                                                 form.baud = v;
                                                             } else {
                                                                 pending_error = Some(
-                                                                    crate::i18n::lang()
+                                                                    lang()
                                                                         .invalid_baud_range
                                                                         .clone(),
                                                                 );
