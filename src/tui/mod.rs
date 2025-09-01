@@ -10,16 +10,28 @@ use std::{
     time::Duration,
 };
 
-use ratatui::{backend::CrosstermBackend, prelude::*};
 use crate::i18n::lang;
+use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
-    protocol::status::{InputMode, LogEntry, RightMode, Status},
+    protocol::status::{InputMode, LogEntry, PortMode, Status},
     tui::{
         input::{map_key, Action},
         utils::constants::LOG_PAGE_JUMP,
     },
 };
+
+// Helper: detect whether current active subpage view is on its log tab.
+// Modes:
+//  - Master / SlaveStack: 3 tabs [0=config,1=list,2=log] -> log index=2
+//  - Listen: 2 tabs [0=config,1=log] -> log index=1
+fn is_log_tab(app: &Status) -> bool {
+    if let Some(mode) = app.active_subpage {
+        matches!(mode, PortMode::Master | PortMode::SlaveStack) && app.subpage_tab_index == 2
+    } else {
+        false
+    }
+}
 
 // ---- Internal helpers ----------------------------------------------------
 /// Recompute log viewport (bottom anchored) after `log_selected` potentially changed.
@@ -165,26 +177,23 @@ fn run_app(
                         match key.code {
                             KC::Up | KC::Char('k') => {
                                 if guard.mode_selector_index == 0 {
-                                    guard.mode_selector_index = 1;
+                                    guard.mode_selector_index = 2; // wrap to last
                                 } else {
                                     guard.mode_selector_index -= 1;
                                 }
                             }
                             KC::Down | KC::Char('j') => {
-                                guard.mode_selector_index = (guard.mode_selector_index + 1) % 2;
+                                guard.mode_selector_index = (guard.mode_selector_index + 1) % 3;
                             }
                             KC::Enter => {
                                 // apply selection
-                                guard.right_mode = match guard.mode_selector_index {
-                                    0 => RightMode::Master,
-                                    1 => RightMode::SlaveStack,
-                                    _ => RightMode::Master,
+                                guard.port_mode = match guard.mode_selector_index {
+                                    0 => PortMode::Master,
+                                    _ => PortMode::SlaveStack,
                                 };
-                                // If currently in a subpage, switch the active subpage view but preserve existing form data
                                 if guard.active_subpage.is_some() {
-                                    guard.active_subpage = Some(guard.right_mode);
+                                    guard.active_subpage = Some(guard.port_mode);
                                 }
-                                // close mode selector after applying selection
                                 guard.mode_selector_active = false;
                             }
                             KC::Esc => {
@@ -442,7 +451,7 @@ fn run_app(
                 }
 
                 if let Ok(mut guard) = app.lock() {
-                    if guard.active_subpage.is_some() && guard.subpage_tab_index == 2 {
+                    if is_log_tab(&guard) {
                         // Communication log subpage: allow Enter OR 'i' to begin editing the input box.
                         use crossterm::event::KeyCode as KC;
                         // If currently in input editing mode, consume characters / backspace / enter / esc here
@@ -607,7 +616,7 @@ fn run_app(
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.active_subpage = Some(guard.port_mode);
                                         guard.subpage_tab_index = 0;
                                         guard.init_subpage_form();
                                     }
@@ -620,7 +629,7 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     if guard.active_subpage.is_some() {
                                         // Log tab navigation else form cursor
-                                        if guard.subpage_tab_index == 2 {
+                                        if is_log_tab(&guard) {
                                             let total = guard.logs.len();
                                             if total > 0 {
                                                 guard.log_selected =
@@ -648,7 +657,7 @@ fn run_app(
                             Action::MovePrev => {
                                 if let Ok(mut guard) = app.lock() {
                                     if guard.active_subpage.is_some() {
-                                        if guard.subpage_tab_index == 2 {
+                                        if is_log_tab(&guard) {
                                             let total = guard.logs.len();
                                             if total > 0 {
                                                 if guard.log_selected == 0 {
@@ -680,9 +689,7 @@ fn run_app(
                             }
                             Action::PageUp => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some()
-                                        && guard.subpage_tab_index == 2
-                                    {
+                                    if is_log_tab(&guard) {
                                         guard.page_up(LOG_PAGE_JUMP);
                                     }
                                     guard.clear_error();
@@ -690,9 +697,7 @@ fn run_app(
                             }
                             Action::PageDown => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some()
-                                        && guard.subpage_tab_index == 2
-                                    {
+                                    if is_log_tab(&guard) {
                                         guard.page_down(LOG_PAGE_JUMP);
                                     }
                                     guard.clear_error();
@@ -700,9 +705,7 @@ fn run_app(
                             }
                             Action::JumpTop => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some()
-                                        && guard.subpage_tab_index == 2
-                                    {
+                                    if is_log_tab(&guard) {
                                         // jump to top: bottom index becomes the last index of the first page
                                         guard.log_view_offset = 0;
                                         guard.log_auto_scroll = false;
@@ -712,9 +715,7 @@ fn run_app(
                             }
                             Action::JumpBottom => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some()
-                                        && guard.subpage_tab_index == 2
-                                    {
+                                    if is_log_tab(&guard) {
                                         let total = guard.logs.len();
                                         if total > 0 {
                                             guard.log_view_offset = total - 1;
@@ -728,9 +729,7 @@ fn run_app(
                             }
                             Action::ToggleFollow => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some()
-                                        && guard.subpage_tab_index == 2
-                                    {
+                                    if is_log_tab(&guard) {
                                         // toggle following newest logs
                                         guard.log_auto_scroll = !guard.log_auto_scroll;
                                         if guard.log_auto_scroll {
@@ -748,14 +747,13 @@ fn run_app(
                             }
                             Action::SwitchMode(i) => {
                                 if let Ok(mut guard) = app.lock() {
-                                    let mode = match i {
-                                        0 => RightMode::Master,
-                                        1 => RightMode::SlaveStack,
-                                        _ => RightMode::Listen,
+                                    guard.port_mode = if i == 0 {
+                                        PortMode::Master
+                                    } else {
+                                        PortMode::SlaveStack
                                     };
-                                    guard.right_mode = mode;
                                     if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.active_subpage = Some(guard.port_mode);
                                     }
                                     guard.clear_error();
                                 } else {
@@ -764,13 +762,12 @@ fn run_app(
                             }
                             Action::CycleMode => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.right_mode = match guard.right_mode {
-                                        RightMode::Master => RightMode::SlaveStack,
-                                        RightMode::SlaveStack => RightMode::Listen,
-                                        RightMode::Listen => RightMode::Master,
+                                    guard.port_mode = match guard.port_mode {
+                                        PortMode::Master => PortMode::SlaveStack,
+                                        PortMode::SlaveStack => PortMode::Master,
                                     };
                                     if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.active_subpage = Some(guard.port_mode);
                                     }
                                     guard.clear_error();
                                 }
@@ -787,10 +784,9 @@ fn run_app(
                                             == crate::protocol::status::PortState::OccupiedByThis
                                         {
                                             guard.mode_selector_active = true;
-                                            guard.mode_selector_index = match guard.right_mode {
-                                                RightMode::Master => 0,
-                                                RightMode::SlaveStack => 1,
-                                                RightMode::Listen => 0,
+                                            guard.mode_selector_index = match guard.port_mode {
+                                                PortMode::Master => 0,
+                                                PortMode::SlaveStack => 1,
                                             };
                                         }
                                     }
@@ -805,13 +801,11 @@ fn run_app(
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        match ch {
-                                            'p' => {
-                                                guard.active_subpage = Some(RightMode::SlaveStack)
-                                            }
-                                            's' => guard.active_subpage = Some(RightMode::Master),
-                                            _ => {}
-                                        }
+                                        guard.active_subpage = match ch {
+                                            'p' => Some(PortMode::SlaveStack),
+                                            's' => Some(PortMode::Master),
+                                            _ => guard.active_subpage,
+                                        };
                                         guard.init_subpage_form();
                                     }
                                     guard.clear_error();
@@ -831,6 +825,9 @@ fn run_app(
                                                     address: 0,
                                                     length: 1,
                                                     values: vec![0u8;1],
+                                                    refresh_ms: 1000,
+                                                    req_success: 0,
+                                                    req_total: 0,
                                                 },
                                             );
                                         }
@@ -924,26 +921,24 @@ fn run_app(
                             }
                             Action::SwitchNext => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.right_mode = match guard.right_mode {
-                                        RightMode::Master => RightMode::SlaveStack,
-                                        RightMode::SlaveStack => RightMode::Listen,
-                                        RightMode::Listen => RightMode::Master,
+                                    guard.port_mode = match guard.port_mode {
+                                        PortMode::Master => PortMode::SlaveStack,
+                                        PortMode::SlaveStack => PortMode::Master,
                                     };
                                     if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.active_subpage = Some(guard.port_mode);
                                     }
                                     guard.clear_error();
                                 }
                             }
                             Action::SwitchPrev => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.right_mode = match guard.right_mode {
-                                        RightMode::Master => RightMode::Listen,
-                                        RightMode::SlaveStack => RightMode::Master,
-                                        RightMode::Listen => RightMode::SlaveStack,
+                                    guard.port_mode = match guard.port_mode {
+                                        PortMode::Master => PortMode::SlaveStack,
+                                        PortMode::SlaveStack => PortMode::Master,
                                     };
                                     if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.right_mode);
+                                        guard.active_subpage = Some(guard.port_mode);
                                         guard.init_subpage_form();
                                     }
                                     guard.clear_error();

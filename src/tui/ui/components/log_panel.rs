@@ -74,7 +74,11 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                 .as_ref()
                 .map(|p| p.rw.to_uppercase() == "W")
                 .unwrap_or(false);
-            let dir_text = if is_send { "发送" } else { "接收" };
+            let dir_text = if is_send {
+                crate::i18n::lang().log_dir_send.as_str()
+            } else {
+                crate::i18n::lang().log_dir_recv.as_str()
+            };
 
             // timestamp line: prefix + timestamp (with milliseconds) + 4 spaces + direction (direction styled bold + color)
             let ts = entry.when.format("%Y-%m-%d %H:%M:%S%.3f").to_string();

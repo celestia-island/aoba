@@ -17,7 +17,6 @@ press_c_clear = "Press c to clear warnings"
 # tabs and modes
 tab_master = "Simulated Master"
 tab_slave = "Slave"
-tab_listen = "Listen"
 hint_move_vertical = "Press ↑ / k or ↓ / j to move"
 hint_move_with_panels = "Press Tab to switch focus; press ↑ / k or ↓ / j to move"
 master_mode = "Simulated Master Mode"
@@ -68,6 +67,7 @@ label_master_list = "Simulated Master list"
 label_slave_listen = "Slave listen"
 invalid_baud_range = "Invalid baud: must be between 1200 and 2000000"
 new_master = "New master"                                                                                           # retained
+new_slave = "New slave"
 label_address_range = "Address Range"
 reg_type_coils = "Coils(01)"
 reg_type_discrete_inputs = "Discrete Inputs(02)"
@@ -86,6 +86,13 @@ hint_master_field_exit_select = "Press Esc to cancel selection"
 hint_master_field_apply = "Press Enter to apply changes"
 hint_master_field_cancel_edit = "Press Esc to exit editing"
 hint_master_type_switch = "Use ← / j or → / k to switch register type"
+
+# new keys for previously hard-coded Chinese strings
+tab_config = "Config"
+tab_log = "Log"
+mode_selector_title = " Select Mode"
+log_dir_send = "Send"
+log_dir_recv = "Recv"
 
 # input area strings
 input_label = "Input"

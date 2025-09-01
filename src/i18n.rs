@@ -26,10 +26,8 @@ derive_struct! {
         // tabs and mode texts
         tab_master: String = "tab_master".to_string(),
         tab_slave: String = "tab_slave".to_string(),
-        tab_listen: String = "tab_listen".to_string(),
         master_mode: String = "master_mode".to_string(),
         slave_mode: String = "slave_mode".to_string(),
-        listen_mode: String = "listen_mode".to_string(),
         hint_move_vertical: String = "hint_move_vertical".to_string(),
         hint_move_with_panels: String = "hint_move_with_panels".to_string(),
         // port list headers and states
@@ -95,6 +93,7 @@ derive_struct! {
         label_slave_listen: String = "label_slave_listen".to_string(),
         invalid_baud_range: String = "invalid_baud_range".to_string(),
         new_master: String = "new_master".to_string(),
+    new_slave: String = "new_slave".to_string(),
         label_address_range: String = "label_address_range".to_string(),
         reg_type_coils: String = "reg_type_coils".to_string(),
         reg_type_discrete_inputs: String = "reg_type_discrete_inputs".to_string(),
@@ -113,6 +112,12 @@ derive_struct! {
         hint_master_field_apply: String = "hint_master_field_apply".to_string(),
         hint_master_field_cancel_edit: String = "hint_master_field_cancel_edit".to_string(),
         hint_master_type_switch: String = "hint_master_type_switch".to_string(),
+    // generic tab titles (replacing deprecated tab_comm_config / tab_comm_log)
+    tab_config: String = "tab_config".to_string(),
+    tab_log: String = "tab_log".to_string(),
+    mode_selector_title: String = "mode_selector_title".to_string(),
+    log_dir_send: String = "log_dir_send".to_string(),
+    log_dir_recv: String = "log_dir_recv".to_string(),
     }
 }
 
