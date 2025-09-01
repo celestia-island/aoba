@@ -350,6 +350,8 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     if app.mode_selector_active {
         crate::tui::ui::components::mode_selector::render_mode_selector(f, app.mode_selector_index);
     }
+    use crate::tui::ui::components::mode_selector::render_mode_selector;
+    render_mode_selector(f, app.mode_selector_index);
 }
 
 /// Handle key events when entry is used as a full-area subpage (listen). Return true if consumed.

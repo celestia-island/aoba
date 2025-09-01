@@ -5,7 +5,7 @@ pub mod slave;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
 
-use crate::{protocol::status::Status, tui::input::Action};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
 /// Return page-provided bottom hints for the current app state.
 pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
@@ -40,8 +40,8 @@ pub fn global_hints_for_app(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     // If a subpage is active, show back/list and tab-switch hints as global controls.
     if app.active_subpage.is_some() {
-        hints.push(crate::i18n::lang().hint_back_list.as_str().to_string());
-        hints.push(crate::i18n::lang().hint_switch_tab.as_str().to_string());
+        hints.push(lang().hint_back_list.as_str().to_string());
+        hints.push(lang().hint_switch_tab.as_str().to_string());
     } else {
         // default to entry hints when no subpage
         hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
