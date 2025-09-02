@@ -16,7 +16,7 @@ use crate::tui::ui::components::log_input::render_log_input;
 /// 2) raw payload (single line, truncated)
 /// 3) parsed summary (origin, R / W, command, slave id, range)
 /// Navigation selects a whole group. Selected group is prefixed with "> " on the left
-/// and rendered with a highlighted background; unselected groups get 2 spaces prefix.
+/// And rendered with a highlighted background; unselected groups get 2 spaces prefix.
 pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Split area into top (logs) and bottom (input)
     let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
@@ -31,7 +31,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let total_groups = app.logs.len();
     let group_height = 3usize;
 
-    // inner height inside the block (account for borders)
+    // Inner height inside the block (account for borders)
     let inner_h = logs_area.height.saturating_sub(2) as usize;
     let groups_per_screen = max(1usize, inner_h / group_height);
 
@@ -68,19 +68,19 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                 .unwrap_or(false);
 
             let prefix_text = if selected { "> " } else { "  " };
-            // direction: determine send / recv
+            // Direction: determine send / recv
             let is_send = entry
                 .parsed
                 .as_ref()
                 .map(|p| p.rw.to_uppercase() == "W")
                 .unwrap_or(false);
             let dir_text = if is_send {
-                crate::i18n::lang().log_dir_send.as_str()
+                crate::i18n::lang().tabs.log_dir_send.as_str()
             } else {
-                crate::i18n::lang().log_dir_recv.as_str()
+                crate::i18n::lang().tabs.log_dir_recv.as_str()
             };
 
-            // timestamp line: prefix + timestamp (with milliseconds) + 4 spaces + direction (direction styled bold + color)
+            // Timestamp line: prefix + timestamp (with milliseconds) + 4 spaces + direction (direction styled bold + color)
             let ts = entry.when.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
             let mut ts_spans: Vec<Span> = Vec::new();
             ts_spans.push(Span::raw(prefix_text));
@@ -98,14 +98,14 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             };
             ts_spans.push(Span::styled(dir_text, dir_span_style));
             // If selected, also apply background to the non-direction spans so selection has visible bg
-            // build Line from spans vector
+            // Build Line from spans vector
             let mut ts_line_spans: Vec<Span> = Vec::new();
             for s in ts_spans.into_iter() {
                 ts_line_spans.push(s);
             }
             styled_lines.push(Line::from(ts_line_spans));
 
-            // raw payload line: prefix + truncated raw
+            // Raw payload line: prefix + truncated raw
             let raw = entry.raw.replace('\n', " ");
             let raw_display = if raw.len() > width {
                 let mut s = raw[..width].to_string();
@@ -120,7 +120,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             let raw_spans: Vec<Span> = vec![Span::raw(prefix_text), Span::raw(raw_display)];
             styled_lines.push(Line::from(raw_spans));
 
-            // parsed summary line
+            // Parsed summary line
             let parsed_str = if let Some(p) = &entry.parsed {
                 format!(
                     "{} {} {} id={} @{} len= {}",
@@ -142,9 +142,9 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if app.log_auto_scroll {
-        lang().hint_follow_on.as_str()
+        lang().tabs.log.hint_follow_on.as_str()
     } else {
-        lang().hint_follow_off.as_str()
+        lang().tabs.log.hint_follow_off.as_str()
     };
     // Single-span title fallback: bold and color entire title depending on follow state.
     let title_text = format!(
@@ -165,7 +165,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         .borders(ratatui::widgets::Borders::ALL)
         .title(title_span);
 
-    // render content area (leave 1 column for scrollbar)
+    // Render content area (leave 1 column for scrollbar)
     let content_rect = Rect::new(
         logs_area.x,
         logs_area.y,
@@ -180,8 +180,8 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Draw a simple scrollbar at the right edge of logs_area
     if total_groups > groups_per_screen {
         let bar_x = logs_area.x + logs_area.width.saturating_sub(1);
-        let bar_y = logs_area.y + 1; // inside top border
-        let bar_h = logs_area.height.saturating_sub(2); // inside borders
+        let bar_y = logs_area.y + 1; // Inside top border
+        let bar_h = logs_area.height.saturating_sub(2); // Inside borders
         let denom = (total_groups.saturating_sub(groups_per_screen)) as f32;
         let ratio = if denom > 0.0 {
             (top_group as f32) / denom

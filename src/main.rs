@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::process::Command;
 
 // Try to spawn the GUI next to the current exe. Return true if GUI started successfully,
-// false if spawning or early startup failed (caller may fallback to TUI).
+// False if spawning or early startup failed (caller may fallback to TUI).
 fn spawn_gui_next_to_current_exe() -> bool {
     println!("Launching AOBA GUI...");
 
@@ -11,7 +11,7 @@ fn spawn_gui_next_to_current_exe() -> bool {
         match Command::new(&exe_path).spawn() {
             Ok(mut child) => {
                 // Give the GUI process a short time to fail fast. If it exits quickly,
-                // assume startup failed and return false so caller can fallback to TUI.
+                // Assume startup failed and return false so caller can fallback to TUI.
                 use std::{thread, time::Duration};
 
                 let mut failed_early = false;
@@ -76,7 +76,7 @@ async fn main() -> Result<()> {
         if spawn_gui_next_to_current_exe() {
             return Ok(());
         } else {
-            // fall through to start TUI
+            // Fall through to start TUI
             aoba::start_tui()?;
             return Ok(());
         }

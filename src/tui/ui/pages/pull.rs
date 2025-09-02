@@ -30,24 +30,24 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
             port_name.clone(),
             Style::default().add_modifier(Modifier::BOLD),
         ),
-        Span::raw(format!(" - {}", lang().tab_slave.as_str())),
+    Span::raw(format!(" - {}", lang().tabs.tab_slave.as_str())),
     ]);
 
     // Listen mode should only have two tabs: [Config, Log]; other modes retain three tabs (including middle list)
     let (tabs, mid_is_list_panel) = match app.port_mode {
         crate::protocol::status::PortMode::Master => (
             vec![
-                lang().tab_config.as_str(),
-                lang().label_master_list.as_str(),
-                lang().tab_log.as_str(),
+                lang().tabs.tab_config.as_str(),
+                lang().protocol.label_master_list.as_str(),
+                lang().tabs.tab_log.as_str(),
             ],
             true,
         ),
         crate::protocol::status::PortMode::SlaveStack => (
             vec![
-                lang().tab_config.as_str(),
-                lang().label_slave_listen.as_str(),
-                lang().tab_log.as_str(),
+                lang().tabs.tab_config.as_str(),
+                lang().protocol.label_slave_listen.as_str(),
+                lang().tabs.tab_log.as_str(),
             ],
             true,
         ),
@@ -61,24 +61,24 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
     ])
     .areas(area);
 
-    // header: title and tabs
+    // Header: title and tabs
     let [tabs_area, title_area] = ratatui::layout::Layout::horizontal([
         ratatui::layout::Constraint::Min(0),
         ratatui::layout::Constraint::Length(20),
     ])
     .areas(header_area);
 
-    // title
+    // Title
     f.render_widget(Paragraph::new(title_line), title_area);
 
-    // tabs
+    // Tabs
     let titles = tabs
         .iter()
         .map(|t| Line::from(Span::raw(format!("  {}  ", t))));
     let tabs_widget = Tabs::new(titles).select(tab_index);
     f.render_widget(tabs_widget, tabs_area);
 
-    // three tabs for remaining modes
+    // Three tabs for remaining modes
     match tab_index {
         0 => render_pull_config(f, content_area, app),
         1 => {
@@ -101,14 +101,14 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
 }
 
 fn render_pull_config(f: &mut Frame, area: Rect, app: &mut Status) {
-    // delegate to shared component implementation
+    // Delegate to shared component implementation
     render_config_panel(f, area, app, None);
 }
 
-// registers rendering delegated to master_list_panel (listen panel removed)
+// Registers rendering delegated to master_list_panel (listen panel removed)
 
 fn render_pull_log(f: &mut Frame, area: Rect, _app: &mut Status) {
-    // delegate to shared component implementation
+    // Delegate to shared component implementation
     render_log_panel(f, area, _app);
 }
 
@@ -125,7 +125,7 @@ pub fn handle_subpage_key(
         }
     }
     // Tab / arrow navigation is handled by the parent input handler; fall through to allow
-    // parent to process Tab / BackTab / Right / Left / Up / Down when appropriate.
+    // Parent to process Tab / BackTab / Right / Left / Up / Down when appropriate.
 
     // Mid tab (index 1) advanced editing for register list (master or slave stack)
     if app.subpage_tab_index == 1 {
@@ -138,7 +138,7 @@ pub fn handle_subpage_key(
                 );
                 match key.code {
                     KC::Esc => {
-                        // cancel editing: discard buffer and stay in selection layer
+                        // Cancel editing: discard buffer and stay in selection layer
                         form.master_field_editing = false;
                         form.master_input_buffer.clear();
                         return true;
@@ -158,14 +158,14 @@ pub fn handle_subpage_key(
                     | KC::Down
                     | KC::Char('j') => {
                         if is_type {
-                            // cycle type when editing Type
+                            // Cycle type when editing Type
                             let forward = matches!(
                                 key.code,
                                 KC::Right | KC::Char('l') | KC::Down | KC::Char('j')
                             );
                             cycle_type(form, forward);
                         } else {
-                            // commit then move to another field entering editing again
+                            // Commit then move to another field entering editing again
                             commit_master_field(form);
                             form.master_field_editing = false;
                             let enable_values =
@@ -196,7 +196,7 @@ pub fn handle_subpage_key(
                     _ => return true,
                 }
             } else if form.master_field_selected {
-                // in selection layer
+                // In selection layer
                 match key.code {
                     KC::Esc => {
                         form.master_field_selected = false;
@@ -236,10 +236,10 @@ pub fn handle_subpage_key(
                     _ => {}
                 }
             } else {
-                // browse layer
+                // Browse layer
                 if key.code == KC::Enter {
                     if form.master_cursor == form.registers.len() {
-                        // create new
+                        // Create new
                         let length = if app.port_mode == crate::protocol::status::PortMode::Master {
                             8
                         } else {
@@ -260,14 +260,14 @@ pub fn handle_subpage_key(
                     form.master_field_selected = true;
                     form.master_edit_index = Some(form.master_cursor);
                     form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
-                    form.master_field_editing = true; // jump straight into editing Id
+                    form.master_field_editing = true; // Jump straight into editing Id
                     form.master_input_buffer.clear();
                     return true;
                 }
                 match key.code {
-                    // vertical movement over headers/new line
+                    // Vertical movement over headers/new line
                     KC::Up | KC::Char('k') => {
-                        let total = form.registers.len() + 1; // includes new line
+                        let total = form.registers.len() + 1; // Includes new line
                         if total > 0 {
                             if form.master_cursor == 0 {
                                 form.master_cursor = total - 1;
@@ -285,7 +285,7 @@ pub fn handle_subpage_key(
                         return true;
                     }
                     KC::Char('d') => {
-                        // delete current (not new line)
+                        // Delete current (not new line)
                         if form.master_cursor < form.registers.len()
                             && !form.master_field_selected
                             && !form.master_field_editing
@@ -336,11 +336,11 @@ pub fn handle_subpage_key(
                             req_success: 0,
                             req_total: 0,
                         });
-                        // move cursor to new entry index (last one)
+                        // Move cursor to new entry index (last one)
                         if !form.registers.is_empty() {
                             form.master_cursor = form.registers.len() - 1;
                         }
-                        // enter field selection state
+                        // Enter field selection state
                         form.master_field_selected = true;
                         form.master_edit_index = Some(form.master_cursor);
                         form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
@@ -350,7 +350,7 @@ pub fn handle_subpage_key(
                     }
                 }
             }
-            // otherwise treat Enter as toggle edit for config tab or submit in editing
+            // Otherwise treat Enter as toggle edit for config tab or submit in editing
             if let Some(form) = app.subpage_form.as_mut() {
                 if !form.editing {
                     edit::begin_edit(form);
@@ -371,7 +371,7 @@ pub fn handle_subpage_key(
             return true;
         }
         KC::Char('n') => {
-            // add register
+            // Add register
             if app.subpage_form.is_none() {
                 app.init_subpage_form();
             }
@@ -395,7 +395,7 @@ pub fn handle_subpage_key(
             }
             return true;
         }
-        // form cursor movement delegated to parent (MoveNext / MovePrev) when subpage is active
+        // Form cursor movement delegated to parent (MoveNext / MovePrev) when subpage is active
         _ => {}
     }
     false
@@ -407,7 +407,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     if let Some(form) = &app.subpage_form {
         if form.editing {
             if let Some(crate::protocol::status::EditingField::Baud) = &form.editing_field {
-                // distinguish between selecting Custom (not yet confirmed) and deeper editing
+                // Distinguish between selecting Custom (not yet confirmed) and deeper editing
                 let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                 let custom_idx = presets.len();
                 let cur = form.edit_choice_index.unwrap_or_else(|| {
@@ -417,15 +417,15 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                         .unwrap_or(custom_idx)
                 });
                 if cur == custom_idx && !form.edit_confirmed {
-                    hints.push(lang().press_enter_select.as_str().to_string());
-                    hints.push(lang().press_esc_cancel.as_str().to_string());
+                    hints.push(lang().hotkeys.press_enter_select.as_str().to_string());
+                    hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
                 } else {
-                    hints.push(lang().press_enter_submit.as_str().to_string());
-                    hints.push(lang().press_esc_cancel.as_str().to_string());
+                    hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
+                    hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
                 }
             } else {
-                hints.push(lang().press_enter_submit.as_str().to_string());
-                hints.push(lang().press_esc_cancel.as_str().to_string());
+                hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
+                hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
             }
             return hints;
         }
@@ -433,9 +433,9 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     // If current tab is the log tab, show log-input related hints
     // If current tab is the configuration tab, show config-specific hints
     if app.subpage_tab_index == 0 {
-        // show Enter to open editor and movement hint (Up / Down or k / j)
-        hints.push(lang().press_enter_confirm_edit.as_str().to_string());
-        hints.push(lang().hint_move_vertical.as_str().to_string());
+        // Show Enter to open editor and movement hint (Up / Down or k / j)
+    hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
+    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;
     }
 
@@ -445,9 +445,9 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
             if form.master_field_editing {
                 if let Some(field) = &form.master_edit_field {
                     if matches!(field, crate::protocol::status::MasterEditField::Type) {
-                        hints.push(lang().hint_master_field_apply.as_str().to_string());
-                        hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
-                        hints.push(lang().hint_master_type_switch.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_field_cancel_edit.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_type_switch.as_str().to_string());
                     } else if matches!(
                         field,
                         crate::protocol::status::MasterEditField::Id
@@ -455,19 +455,19 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                             | crate::protocol::status::MasterEditField::End
                             | crate::protocol::status::MasterEditField::Refresh
                     ) {
-                        hints.push(lang().hint_master_field_apply.as_str().to_string());
-                        hints.push(lang().hint_master_field_cancel_edit.as_str().to_string());
-                        hints.push(lang().hint_master_edit_hex.as_str().to_string());
-                        hints.push(lang().hint_master_edit_backspace.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_field_cancel_edit.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_edit_hex.as_str().to_string());
+            hints.push(lang().hotkeys.hint_master_edit_backspace.as_str().to_string());
                     }
                 }
             } else if form.master_field_selected {
-                hints.push(lang().hint_master_field_select.as_str().to_string());
-                hints.push(lang().hint_master_field_move.as_str().to_string());
-                hints.push(lang().hint_master_field_exit_select.as_str().to_string());
+        hints.push(lang().hotkeys.hint_master_field_select.as_str().to_string());
+        hints.push(lang().hotkeys.hint_master_field_move.as_str().to_string());
+        hints.push(lang().hotkeys.hint_master_field_exit_select.as_str().to_string());
             } else {
-                hints.push(lang().hint_master_enter_edit.as_str().to_string());
-                hints.push(lang().hint_master_delete.as_str().to_string());
+        hints.push(lang().hotkeys.hint_master_enter_edit.as_str().to_string());
+        hints.push(lang().hotkeys.hint_master_delete.as_str().to_string());
             }
         }
         return hints;
@@ -475,25 +475,25 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
 
     if app.subpage_tab_index == 2 {
         if app.input_editing {
-            hints.push(lang().press_enter_submit.as_str().to_string());
-            hints.push(lang().press_esc_cancel.as_str().to_string());
+            hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
+            hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
         } else {
             // Show short kv-style hints (press i to edit, press m to toggle mode) in the bottom bar.
             hints.push(crate::tui::ui::bottom::format_kv_hint(
                 "Enter / i",
-                lang().hint_input_edit_short.as_str(),
+                lang().input.hint_input_edit_short.as_str(),
             ));
             hints.push(crate::tui::ui::bottom::format_kv_hint(
                 "m",
-                lang().hint_input_mode_short.as_str(),
+                lang().input.hint_input_mode_short.as_str(),
             ));
-            // show follow / track latest toggle (p) -- show the action (inverse of current state)
+            // Show follow / track latest toggle (p) -- show the action (inverse of current state)
             let action_label = if app.log_auto_scroll {
-                // currently following -> hint to stop following
-                lang().hint_follow_off.as_str()
+                // Currently following -> hint to stop following
+                lang().tabs.log.hint_follow_off.as_str()
             } else {
-                // currently not following -> hint to start following
-                lang().hint_follow_on.as_str()
+                // Currently not following -> hint to start following
+                lang().tabs.log.hint_follow_on.as_str()
             };
             hints.push(crate::tui::ui::bottom::format_kv_hint("p", action_label));
             // (mode description moved into the input placeholder; skip duplicate)
@@ -501,8 +501,8 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         return hints;
     }
 
-    hints.push(lang().hint_back_list.as_str().to_string());
-    hints.push(lang().hint_switch_tab.as_str().to_string());
+    hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
+    hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
     hints
 }
 

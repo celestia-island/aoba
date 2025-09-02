@@ -12,8 +12,8 @@ use unicode_width::UnicodeWidthStr;
 /// Return the hint fragments shown in the mode selector popup.
 pub fn mode_selector_hints() -> Vec<String> {
     vec![
-        lang().press_enter_select.as_str().to_string(),
-        lang().press_esc_cancel.as_str().to_string(),
+    lang().hotkeys.press_enter_select.as_str().to_string(),
+    lang().hotkeys.press_esc_cancel.as_str().to_string(),
     ]
 }
 
@@ -26,19 +26,19 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let y = (area.height.saturating_sub(h)) / 2;
     let popup = Rect::new(x, y, w, h);
 
-    // clear underlying widgets in this area and draw a solid dark background block
+    // Clear underlying widgets in this area and draw a solid dark background block
     f.render_widget(ratatui::widgets::Clear, popup);
     // Title forced to white so it remains visible regardless of theme
     let bg_block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .style(Style::default().bg(Color::DarkGray))
         .title(Span::styled(
-            lang().mode_selector_title.as_str(),
+            lang().tabs.mode_selector_title.as_str(),
             Style::default().fg(Color::White),
         ));
     f.render_widget(bg_block, popup);
 
-    // inner area for text (inside borders)
+    // Inner area for text (inside borders)
     let inner = Rect::new(
         popup.x + 1,
         popup.y + 1,
@@ -47,7 +47,7 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     );
 
     // Options (each line centered horizontally, and vertically centered in inner area)
-    let options = vec![lang().tab_master.as_str(), lang().tab_slave.as_str()];
+    let options = vec![lang().tabs.tab_master.as_str(), lang().tabs.tab_slave.as_str()];
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
     for (i, o) in options.iter().enumerate() {
         let span = if i == index {
@@ -58,7 +58,7 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
         lines.push(ratatui::text::Line::from(span));
     }
 
-    // vertical center: compute start y so the list is centered within inner.height
+    // Vertical center: compute start y so the list is centered within inner.height
     let opts_h = lines.len() as u16;
     let start_y = if inner.height > opts_h {
         inner.y + (inner.height - opts_h) / 2
@@ -74,14 +74,14 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let hint_line_y = popup.y + popup.height - 1;
     if popup.height >= 1 && popup.width > 2 {
         let mut hint_text = format!(" {}", mode_selector_hints().join("  "));
-        let max_w = popup.width.saturating_sub(2) as usize; // exclude corners
+        let max_w = popup.width.saturating_sub(2) as usize; // Exclude corners
         if UnicodeWidthStr::width(hint_text.as_str()) > max_w {
             // Trim and add ellipsis if needed
             let mut acc = String::new();
             for ch in hint_text.chars() {
                 let next = format!("{}{}", acc, ch);
                 if UnicodeWidthStr::width(next.as_str()) > max_w.saturating_sub(1) {
-                    // reserve 1 for ellipsis
+                    // Reserve 1 for ellipsis
                     acc.push('…');
                     break;
                 }

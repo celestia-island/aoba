@@ -11,11 +11,11 @@ use crate::tui::utils::constants::LOG_GROUP_HEIGHT;
 /// Parsed summary of a captured protocol request / response for UI display.
 #[derive(Debug, Clone)]
 pub struct ParsedRequest {
-    /// origin of the message (e.g. "master-stack" or "main-stack")
+    /// Origin of the message (e.g. "master-stack" or "main-stack")
     pub origin: String,
     /// "R" or "W"
     pub rw: String,
-    /// textual command or function code (e.g. "Read Coils / 0x01")
+    /// Textual command or function code (e.g. "Read Coils / 0x01")
     pub command: String,
     pub slave_id: u8,
     pub address: u16,
@@ -26,9 +26,9 @@ pub struct ParsedRequest {
 #[derive(Debug, Clone)]
 pub struct LogEntry {
     pub when: DateTime<Local>,
-    /// raw bytes or textual payload (displayed truncated)
+    /// Raw bytes or textual payload (displayed truncated)
     pub raw: String,
-    /// optional parsed summary
+    /// Optional parsed summary
     pub parsed: Option<ParsedRequest>,
 }
 
@@ -101,15 +101,15 @@ pub struct SubpageForm {
     pub stop_bits: u8,
     pub registers: Vec<RegisterEntry>,
     // UI state
-    pub cursor: usize, // which field or register is focused
-    pub editing: bool, // whether in edit mode
-    // which specific field is being edited (None when not editing)
+    pub cursor: usize, // Which field or register is focused
+    pub editing: bool, // Whether in edit mode
+    // Which specific field is being edited (None when not editing)
     pub editing_field: Option<EditingField>,
-    // input buffer for the current editing session (text)
+    // Input buffer for the current editing session (text)
     pub input_buffer: String,
-    /// temporary index used when editing a multi-option field (like Baud presets + Custom)
+    /// Temporary index used when editing a multi-option field (like Baud presets + Custom)
     pub edit_choice_index: Option<usize>,
-    /// whether we've entered the deeper confirm / editing stage for a choice (e.g. Custom baud)
+    /// Whether we've entered the deeper confirm / editing stage for a choice (e.g. Custom baud)
     pub edit_confirmed: bool,
     // --- Master list (tab 1) dedicated UI state ---
     /// Cursor in master list panel (points to a master or the trailing "new" entry)
@@ -194,9 +194,9 @@ pub enum PortMode {
 #[derive(Debug)]
 pub struct Status {
     pub ports: Vec<SerialPortInfo>,
-    /// occupancy state for each port (same index as `ports`)
+    /// Occupancy state for each port (same index as `ports`)
     pub port_states: Vec<PortState>,
-    /// optional open handle when this app occupies the port
+    /// Optional open handle when this app occupies the port
     pub port_handles: Vec<Option<Box<dyn SerialPort>>>,
     pub selected: usize,
     pub auto_refresh: bool,
@@ -205,11 +205,11 @@ pub struct Status {
     pub port_mode: PortMode,
     /// When Some, a subpage for the right side is active (entered). None means main entry view.
     pub active_subpage: Option<PortMode>,
-    /// transient UI state for the active subpage (editable form)
+    /// Transient UI state for the active subpage (editable form)
     pub subpage_form: Option<SubpageForm>,
-    /// selected tab index inside the active right-side subpage
+    /// Selected tab index inside the active right-side subpage
     pub subpage_tab_index: usize,
-    /// recent protocol / log entries (current working port)
+    /// Recent protocol / log entries (current working port)
     pub logs: Vec<LogEntry>,
     pub log_selected: usize,
     pub log_view_offset: usize,
@@ -217,9 +217,9 @@ pub struct Status {
     pub input_mode: InputMode,
     pub input_editing: bool,
     pub input_buffer: String,
-    /// cached per-port UI states keyed by port name
+    /// Cached per-port UI states keyed by port name
     pub per_port_states: HashMap<String, PerPortState>,
-    /// transient mode selector overlay state (not per-port)
+    /// Transient mode selector overlay state (not per-port)
     pub mode_selector_active: bool,
     pub mode_selector_index: usize,
 }
@@ -372,7 +372,7 @@ impl Status {
                         StopBits::Two => 2,
                     })
                     .unwrap_or(1);
-                // parity mapping
+                // Parity mapping
                 if let Ok(p) = handle.parity() {
                     form.parity = match p {
                         SerialParity::None => Parity::None,
@@ -431,14 +431,14 @@ impl Status {
         if self.logs.len() > MAX {
             let excess = self.logs.len() - MAX;
             self.logs.drain(0..excess);
-            // ensure selected index remains valid
+            // Ensure selected index remains valid
             if self.log_selected >= self.logs.len() {
                 self.log_selected = self.logs.len().saturating_sub(1);
             }
         }
-        // maintain auto-scroll behaviour: when auto-scroll enabled, keep view anchored to the latest
+        // Maintain auto-scroll behaviour: when auto-scroll enabled, keep view anchored to the latest
         if self.log_auto_scroll {
-            // position the view offset so bottom aligns with last entry (we'll compute exact top in renderer)
+            // Position the view offset so bottom aligns with last entry (we'll compute exact top in renderer)
             if self.logs.is_empty() {
                 self.log_view_offset = 0;
             } else {
@@ -466,7 +466,7 @@ impl Status {
             if let Some(s) = self.port_states.get(i) {
                 name_to_state.insert(p.port_name.clone(), *s);
             }
-            // take ownership of existing handle if any
+            // Take ownership of existing handle if any
             if let Some(h) = self.port_handles.get_mut(i) {
                 let taken = h.take();
                 name_to_handle.insert(p.port_name.clone(), taken);
@@ -485,7 +485,7 @@ impl Status {
             } else {
                 new_states.push(PortState::OccupiedByOther);
             }
-            // move back handle if existed
+            // Move back handle if existed
             if let Some(h) = name_to_handle.remove(&p.port_name) {
                 new_handles.push(h);
             } else {
@@ -498,13 +498,13 @@ impl Status {
             // No real ports -> reset selection to 0 (no virtual items rendered)
             self.selected = 0;
         } else {
-            // try to restore previous selected port by name
+            // Try to restore previous selected port by name
             if let Some(name) = prev_selected_name {
                 if let Some(idx) = self.ports.iter().position(|p| p.port_name == name) {
                     self.selected = idx;
                 }
             }
-            // ensure selected is within allowed range: real ports + 2 virtual items
+            // Ensure selected is within allowed range: real ports + 2 virtual items
             let total = self.ports.len().saturating_add(2);
             if self.selected >= total {
                 self.selected = 0;
@@ -551,7 +551,7 @@ impl Status {
                     self.input_editing = snap.input_editing;
                     self.input_buffer = snap.input_buffer;
                 } else {
-                    // fresh defaults
+                    // Fresh defaults
                     self.port_mode = PortMode::Master;
                     self.active_subpage = None;
                     self.subpage_form = None;
@@ -598,7 +598,7 @@ impl Status {
             return;
         }
         let i = self.selected;
-        // if selected is beyond real ports, handle virtual items
+        // If selected is beyond real ports, handle virtual items
         let special_base = self.ports.len();
         if i >= special_base {
             let rel = i - special_base;
@@ -616,7 +616,7 @@ impl Status {
         if let Some(state) = self.port_states.get_mut(i) {
             match state {
                 PortState::Free => {
-                    // try to open and hold the port
+                    // Try to open and hold the port
                     let port_name = self.ports[i].port_name.clone();
                     match sp_new(&port_name, 9600)
                         .timeout(Duration::from_millis(200))
@@ -629,21 +629,21 @@ impl Status {
                             *state = PortState::OccupiedByThis;
                         }
                         Err(e) => {
-                            // cannot open -> likely occupied by other
+                            // Cannot open -> likely occupied by other
                             *state = PortState::OccupiedByOther;
                             self.set_error(format!("failed to open {}: {}", port_name, e));
                         }
                     }
                 }
                 PortState::OccupiedByThis => {
-                    // drop handle
+                    // Drop handle
                     if let Some(hslot) = self.port_handles.get_mut(i) {
                         *hslot = None;
                     }
                     *state = PortState::Free;
                 }
                 PortState::OccupiedByOther => {
-                    // don't change
+                    // Don't change
                 }
             }
         }
@@ -678,8 +678,8 @@ impl Status {
 
     /// Navigate among visual rows in the left pane including the two trailing virtual items
     /// (Refresh and Manual specify). This is used by the TUI navigation so the user can
-    /// select those bottom options even though the logical model's next()/prev() operate on
-    /// real ports only for test stability.
+    /// Select those bottom options even though the logical model's next()/prev() operate on
+    /// Real ports only for test stability.
     pub fn next_visual(&mut self) {
         let total = self.ports.len().saturating_add(2);
         if total == 0 {

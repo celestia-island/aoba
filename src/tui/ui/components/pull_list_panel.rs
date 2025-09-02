@@ -10,7 +10,7 @@ use crate::{i18n::lang, protocol::status::Status, tui::ui::components::render_bo
 
 /// Slave (SlaveStack mode) register list / configuration panel.
 /// Mirrors the logic of `render_master_list_panel` but dedicated for slave mode so future
-/// divergences are easy to implement:
+/// Divergences are easy to implement:
 /// - Lists exposed slave register regions (address range + current values).
 /// - Reuses `master_*` state fields in `SubpageForm` for add / edit flow.
 /// - Placeholder for future slave‑specific stats (write counters, update timestamps, etc.).
@@ -20,9 +20,9 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     if let Some(form) = app.subpage_form.as_ref() {
         if form.registers.is_empty() {
             // Empty list => show only the add-new entry.
-            let selected = form.master_cursor == 0; // cursor=0 -> add-new entry
+            let selected = form.master_cursor == 0; // Cursor=0 -> add-new entry
             let prefix = if selected { "> " } else { "  " };
-            let content = format!("{}[+] {}", prefix, lang().new_slave);
+            let content = format!("{}[+] {}", prefix, lang().protocol.new_slave);
             if selected {
                 all_lines.push(Line::styled(content, Style::default().fg(Color::Green)));
             } else {
@@ -31,7 +31,7 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         } else {
             for (i, r) in form.registers.iter().enumerate() {
                 let start = r.address as u32;
-                let end_inclusive = start + r.length as u32 - 1; // assume length >= 1
+                let end_inclusive = start + r.length as u32 - 1; // Assume length >= 1
                 let selected = form.master_cursor == i;
                 let mut line_spans: Vec<Span> = Vec::new();
                 if selected {
@@ -90,10 +90,10 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
                 // Register type selector
                 let types = [
-                    lang().reg_type_coils.as_str(),
-                    lang().reg_type_discrete_inputs.as_str(),
-                    lang().reg_type_holding.as_str(),
-                    lang().reg_type_input.as_str(),
+                    lang().protocol.reg_type_coils.as_str(),
+                    lang().protocol.reg_type_discrete_inputs.as_str(),
+                    lang().protocol.reg_type_holding.as_str(),
+                    lang().protocol.reg_type_input.as_str(),
                 ];
                 let cur_type_idx = ((r.mode as u8 as usize).saturating_sub(1)).min(3);
                 if matches!(cur_field, Some(MEF::Type)) && this_editing_field {
@@ -115,7 +115,7 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
                 // Address range
                 line_spans.push(Span::styled(
-                    format!("{} = ", lang().label_address_range),
+                    format!("{} = ", lang().protocol.label_address_range),
                     base_style,
                 ));
                 let start_active = matches!(cur_field, Some(MEF::Start)) && this_editing_field;
@@ -225,7 +225,7 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             let new_line = format!(
                 "{}[+] {}",
                 if new_sel { "> " } else { "  " },
-                lang().new_slave
+                lang().protocol.new_slave
             );
             if new_sel {
                 all_lines.push(Line::styled(new_line, Style::default().fg(Color::Green)));
@@ -234,8 +234,8 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             }
         }
     } else {
-        all_lines.push(Line::from(lang().details_placeholder.as_str()));
-        all_lines.push(Line::from(format!("[+] {}", lang().new_slave)));
+    all_lines.push(Line::from(lang().index.details_placeholder.as_str()));
+    all_lines.push(Line::from(format!("[+] {}", lang().protocol.new_slave)));
     }
 
     // Scroll window calculation (mirrors master panel)
@@ -275,7 +275,7 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                                         (r2.length as usize + 7) / 8
                                     };
                                     if i2 == idx {
-                                        line_no += 1; // header line
+                                        line_no += 1; // Header line
                                         if r2.length > 0 {
                                             let offset = *addr as usize - r2.address as usize;
                                             let val_line_index = offset / 8;

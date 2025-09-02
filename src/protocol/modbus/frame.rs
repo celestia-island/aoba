@@ -9,7 +9,7 @@ use super::parse_modbus_header;
 
 /// Read a Modbus RTU frame from the provided serial port wrapper.
 /// Returns Ok(Some(Bytes)) when a full frame was read, Ok(None) for timeout/no-data,
-/// or Err for unexpected I/O/locking errors.
+/// Or Err for unexpected I/O/locking errors.
 pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Result<Option<Bytes>> {
     // Read fixed-length header first (6 bytes used by rmodbus guesser)
     let mut header_buf: [u8; 6] = [0u8; 6];
@@ -26,7 +26,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
             break;
         }
 
-        // bail out if we've been waiting too long
+        // Bail out if we've been waiting too long
         if chrono::Utc::now() - header_start > Duration::seconds(2) {
             return Ok(None);
         }

@@ -20,9 +20,9 @@ pub fn render_ui(f: &mut Frame, app: &mut Status) {
         .direction(ratatui::layout::Direction::Vertical)
         .margin(0)
         .constraints([
-            ratatui::layout::Constraint::Length(1), // title
+            ratatui::layout::Constraint::Length(1), // Title
             ratatui::layout::Constraint::Min(0),
-            ratatui::layout::Constraint::Length(bottom_len), // bottom help (1 or 2 lines)
+            ratatui::layout::Constraint::Length(bottom_len), // Bottom help (1 or 2 lines)
         ])
         .split(area);
 

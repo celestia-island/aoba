@@ -16,17 +16,17 @@ pub fn render_status(
             let last = if let Some(dt) = last_refresh {
                 dt.format("%Y-%m-%d %H:%M:%S").to_string()
             } else {
-                lang().last_none.clone()
+                lang().index.last_none.clone()
             };
-            ui.label(format!("{}: {}", lang().last, last));
+            ui.label(format!("{}: {}", lang().index.last, last));
 
             ui.separator();
 
             // Auto refresh status
             let auto_label = if auto_refresh {
-                lang().auto_on.clone()
+                lang().index.auto_on.clone()
             } else {
-                lang().auto_off.clone()
+                lang().index.auto_off.clone()
             };
             ui.label(auto_label);
 
@@ -35,7 +35,7 @@ pub fn render_status(
             // Error area
             if let Some((msg, _ts)) = error {
                 ui.colored_label(Color32::LIGHT_RED, msg);
-                if ui.button(lang().press_c_clear.as_str()).clicked() {
+                if ui.button(lang().hotkeys.press_c_clear.as_str()).clicked() {
                     if let Ok(mut guard) = inner.lock() {
                         guard.clear_error();
                     }

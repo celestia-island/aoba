@@ -2,7 +2,7 @@
 use crate::protocol::status::{EditingField, SubpageForm};
 
 /// Select the field being edited based on the current `cursor` position and
-/// initialize the preset index and input buffer for the Baud field.
+/// Initialize the preset index and input buffer for the Baud field.
 pub fn select_field_by_cursor(form: &mut SubpageForm) {
     form.editing_field = Some(match form.cursor {
         0 => EditingField::Baud,

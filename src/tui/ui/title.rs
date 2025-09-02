@@ -11,12 +11,12 @@ pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
     let title_text = if let Some(_) = app.active_subpage {
         if !app.ports.is_empty() && app.selected < app.ports.len() {
             let p = &app.ports[app.selected];
-            format!("{} - {}", p.port_name, lang().title.as_str())
+            format!("{} - {}", p.port_name, lang().index.title.as_str())
         } else {
-            lang().title.as_str().to_string()
+            lang().index.title.as_str().to_string()
         }
     } else {
-        lang().title.as_str().to_string()
+        lang().index.title.as_str().to_string()
     };
 
     let title = Paragraph::new(title_text)

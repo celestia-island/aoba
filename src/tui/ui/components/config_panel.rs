@@ -45,7 +45,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         // Value line: if editing show edit buffer (yellow), otherwise show value (green if selected)
         if editing {
             // In editing state we do not show the selection marker '>' — only show the edit buffer.
-            let rendered = lang().edit_suffix.replace("{}", buffer);
+        let rendered = lang().protocol.edit_suffix.replace("{}", buffer);
             let val_text = format!("{}{}", base_prefix, rendered);
             let val_style = Style::default().fg(Color::Yellow);
             lines.push(ratatui::text::Line::from(Span::styled(val_text, val_style)));
@@ -71,10 +71,10 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         // Presets stop at 115200; append a 'Custom' slot so user can select and type a custom baud
         let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
         let mut options: Vec<String> = presets.iter().map(|p| p.to_string()).collect();
-        options.push(lang().custom.clone());
+    options.push(lang().protocol.custom.clone());
         let custom_idx = options.len() - 1;
 
-        // determine current index in options from form.edit_choice_index when available
+        // Determine current index in options from form.edit_choice_index when available
         let current_idx = form
             .edit_choice_index
             .or_else(|| presets.iter().position(|&p| p == form.baud))
@@ -96,7 +96,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 0usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-        let title_text = format!("{}{}", base_prefix, lang().label_baud.as_str());
+    let title_text = format!("{}{}", base_prefix, lang().protocol.label_baud.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -111,8 +111,8 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
 
         // If custom is selected and we're in the deeper confirmed edit stage, show editable buffer
         if current_idx == custom_idx && form.edit_confirmed {
-            // confirmed editing: show buffer and yellow highlight
-            let rendered = lang().edit_suffix.replace("{}", form.input_buffer.as_str());
+            // Confirmed editing: show buffer and yellow highlight
+            let rendered = lang().protocol.edit_suffix.replace("{}", form.input_buffer.as_str());
             // Editing confirmed: do not show '>' marker; show edit buffer only.
             let val_text = format!("{}{}", base_prefix, rendered);
             lines.push(ratatui::text::Line::from(Span::styled(
@@ -120,7 +120,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                 Style::default().fg(Color::Yellow),
             )));
         } else if current_idx == custom_idx && !form.edit_confirmed {
-            // custom selected but not yet confirmed: show selector parts (no extra inline hint)
+            // Custom selected but not yet confirmed: show selector parts (no extra inline hint)
             // Custom selector while editing: do not show selection marker here.
             let val_text = format!("{}{}", base_prefix, parts.join(" "));
             lines.push(ratatui::text::Line::from(Span::styled(
@@ -138,7 +138,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             0,
-            lang().label_baud.as_str(),
+            lang().protocol.label_baud.as_str(),
             form.baud.to_string(),
             matches!(editing_field, Some(EditingField::Baud)),
             form.input_buffer.as_str(),
@@ -147,15 +147,15 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
 
     // --- Parity (idx 1) ---
     let parity_text = match form.parity {
-        crate::protocol::status::Parity::None => lang().parity_none.clone(),
-        crate::protocol::status::Parity::Even => lang().parity_even.clone(),
-        crate::protocol::status::Parity::Odd => lang().parity_odd.clone(),
+        crate::protocol::status::Parity::None => lang().protocol.parity_none.clone(),
+        crate::protocol::status::Parity::Even => lang().protocol.parity_even.clone(),
+        crate::protocol::status::Parity::Odd => lang().protocol.parity_odd.clone(),
     };
     if matches!(editing_field, Some(EditingField::Parity)) {
         let options = vec![
-            lang().parity_none.clone(),
-            lang().parity_even.clone(),
-            lang().parity_odd.clone(),
+            lang().protocol.parity_none.clone(),
+            lang().protocol.parity_even.clone(),
+            lang().protocol.parity_odd.clone(),
         ];
         let cur_idx = match form.parity {
             crate::protocol::status::Parity::None => 0usize,
@@ -176,7 +176,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 1usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-        let title_text = format!("{}{}", base_prefix, lang().label_parity.as_str());
+    let title_text = format!("{}{}", base_prefix, lang().protocol.label_parity.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -198,7 +198,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             1,
-            lang().label_parity.as_str(),
+            lang().protocol.label_parity.as_str(),
             parity_text,
             matches!(editing_field, Some(EditingField::Parity)),
             form.input_buffer.as_str(),
@@ -227,7 +227,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 2usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-        let title_text = format!("{}{}", base_prefix, lang().label_data_bits.as_str());
+    let title_text = format!("{}{}", base_prefix, lang().protocol.label_data_bits.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -249,7 +249,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             2,
-            lang().label_data_bits.as_str(),
+            lang().protocol.label_data_bits.as_str(),
             data_bits_text,
             matches!(editing_field, Some(EditingField::DataBits)),
             form.input_buffer.as_str(),
@@ -278,7 +278,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 3usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-        let title_text = format!("{}{}", base_prefix, lang().label_stop_bits.as_str());
+    let title_text = format!("{}{}", base_prefix, lang().protocol.label_stop_bits.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -300,7 +300,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             3,
-            lang().label_stop_bits.as_str(),
+            lang().protocol.label_stop_bits.as_str(),
             form.stop_bits.to_string(),
             matches!(editing_field, Some(EditingField::StopBits)),
             form.input_buffer.as_str(),
