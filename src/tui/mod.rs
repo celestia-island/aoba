@@ -67,21 +67,66 @@ pub fn start() -> Result<()> {
         }
     }
 
-    // Background refresher thread
+    // Unified core worker thread: handles all non-UI periodic logic (port refresh, register polling, draining events) and communicates via the bus.
+    use crate::tui::utils::bus::{Bus, CoreToUi, UiToCore};
+    let (core_tx, core_rx) = flume::unbounded::<CoreToUi>(); // core -> ui
+    let (ui_tx, ui_rx) = flume::unbounded::<UiToCore>(); // ui -> core
+    let bus = Bus::new(core_rx, ui_tx.clone());
+
+    // Core thread
     {
         let app_clone = Arc::clone(&app);
-        thread::spawn(move || loop {
-            thread::sleep(std::time::Duration::from_secs(3));
-            if let Ok(mut guard) = app_clone.lock() {
-                // Always refresh to detect added / removed COM ports
-                guard.refresh();
-            } else {
-                log::error!("[TUI] refresher thread: failed to lock app (poisoned)");
+        thread::spawn(move || {
+            let mut last_full_scan = std::time::Instant::now();
+            let mut last_ports_refresh = std::time::Instant::now();
+            loop {
+                // Handle commands coming from UI
+                while let Ok(msg) = ui_rx.try_recv() {
+                    match msg {
+                        UiToCore::Refresh => {
+                            if let Ok(mut guard) = app_clone.lock() {
+                                guard.refresh();
+                            }
+                            let _ = core_tx.send(CoreToUi::Refreshed);
+                        }
+                        UiToCore::Quit => {
+                            return;
+                        }
+                    }
+                }
+
+                // Lightweight port list refresh (every 1s)
+                if last_ports_refresh.elapsed() >= Duration::from_millis(1000) {
+                    if let Ok(mut guard) = app_clone.lock() {
+                        guard.refresh_ports_only();
+                    }
+                    last_ports_refresh = std::time::Instant::now();
+                    let _ = core_tx.send(CoreToUi::Refreshed);
+                }
+
+                // Full device scan (includes external commands) at lower frequency (e.g. every 15s) to avoid UI stalls
+                if last_full_scan.elapsed() >= Duration::from_secs(15) {
+                    if let Ok(mut guard) = app_clone.lock() {
+                        guard.refresh();
+                    }
+                    last_full_scan = std::time::Instant::now();
+                    let _ = core_tx.send(CoreToUi::Refreshed);
+                }
+
+                // Drive polling + sync runtime configs + drain events (keep lock short)
+                if let Ok(mut guard) = app_clone.lock() {
+                    guard.sync_runtime_configs();
+                    guard.drive_slave_polling();
+                    guard.drain_runtime_events();
+                    guard.tick_spinner();
+                }
+                let _ = core_tx.send(CoreToUi::Tick);
+                thread::sleep(Duration::from_millis(40));
             }
         });
     }
 
-    let res = run_app(&mut terminal, Arc::clone(&app));
+    let res = run_app(&mut terminal, Arc::clone(&app), bus);
 
     // Restore terminal
     let mut stdout = io::stdout();
@@ -94,23 +139,18 @@ pub fn start() -> Result<()> {
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
     app: Arc<Mutex<Status>>,
+    bus: crate::tui::utils::bus::Bus,
 ) -> Result<()> {
     loop {
-        // Draw with short-lived mutable lock
-        {
-            match app.lock() {
-                Ok(mut guard) => {
-                    terminal.draw(|f| crate::tui::ui::render_ui(f, &mut *guard))?;
-                }
-                Err(_) => {
-                    log::error!("[TUI] failed to lock app for drawing (poisoned)");
-                    // Cannot set app.error because lock failed; just continue
-                }
-            }
+        // First try to receive a notification from core thread (short timeout) to reduce busy waiting
+        let _ = bus.core_rx.recv_timeout(Duration::from_millis(50));
+        // Rendering only (read state)
+        if let Ok(mut guard) = app.lock() {
+            terminal.draw(|f| crate::tui::ui::render_ui(f, &mut *guard))?;
         }
 
         // Poll for input
-        if crossterm::event::poll(Duration::from_millis(200))? {
+        if crossterm::event::poll(Duration::from_millis(100))? {
             let evt = match crossterm::event::read() {
                 Ok(e) => e,
                 Err(e) => {
@@ -176,20 +216,21 @@ fn run_app(
                     if let Ok(mut guard) = app.lock() {
                         match key.code {
                             KC::Up | KC::Char('k') => {
-                                if guard.mode_selector_index == 0 {
-                                    guard.mode_selector_index = 2; // Wrap to last
-                                } else {
+                                if guard.mode_selector_index > 0 {
                                     guard.mode_selector_index -= 1;
                                 }
                             }
                             KC::Down | KC::Char('j') => {
-                                guard.mode_selector_index = (guard.mode_selector_index + 1) % 3;
+                                if guard.mode_selector_index < 1 {
+                                    guard.mode_selector_index += 1;
+                                }
                             }
                             KC::Enter => {
                                 // Apply selection
-                                guard.port_mode = match guard.mode_selector_index {
-                                    0 => PortMode::Master,
-                                    _ => PortMode::SlaveStack,
+                                guard.port_mode = if guard.mode_selector_index == 0 {
+                                    PortMode::Master
+                                } else {
+                                    PortMode::SlaveStack
                                 };
                                 if guard.active_subpage.is_some() {
                                     guard.active_subpage = Some(guard.port_mode);
@@ -592,6 +633,8 @@ fn run_app(
                                         && !guard.mode_selector_active
                                         && !in_editing;
                                     if allowed {
+                                        let _ =
+                                            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Quit);
                                         break;
                                     } else {
                                         // Silently ignore quit when not allowed (do not show message)
@@ -830,6 +873,7 @@ fn run_app(
                                                     refresh_ms: 1000,
                                                     req_success: 0,
                                                     req_total: 0,
+                                                    next_poll_at: std::time::Instant::now(),
                                                 },
                                             );
                                         }
@@ -949,6 +993,17 @@ fn run_app(
                             Action::ClearError => {
                                 if let Ok(mut guard) = app.lock() {
                                     guard.clear_error();
+                                }
+                            }
+                            Action::QuickScan => {
+                                if let Ok(mut guard) = app.lock() {
+                                    // Only meaningful when Refresh action item is selected
+                                    if guard.selected >= guard.ports.len()
+                                        && guard.selected == guard.ports.len()
+                                    {
+                                        // refresh item
+                                        guard.quick_scan();
+                                    }
                                 }
                             }
                             Action::None => {}

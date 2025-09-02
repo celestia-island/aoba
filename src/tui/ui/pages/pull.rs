@@ -30,7 +30,7 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
             port_name.clone(),
             Style::default().add_modifier(Modifier::BOLD),
         ),
-    Span::raw(format!(" - {}", lang().tabs.tab_slave.as_str())),
+        Span::raw(format!(" - {}", lang().tabs.tab_slave.as_str())),
     ]);
 
     // Listen mode should only have two tabs: [Config, Log]; other modes retain three tabs (including middle list)
@@ -205,9 +205,23 @@ pub fn handle_subpage_key(
                         return true;
                     }
                     KC::Enter => {
-                        form.master_field_editing = true;
-                        form.master_input_buffer.clear();
-                        return true;
+                        // If selecting Counter field, reset counts instead of entering editing
+                        if matches!(
+                            form.master_edit_field,
+                            Some(crate::protocol::status::MasterEditField::Counter)
+                        ) {
+                            if let Some(idx) = form.master_edit_index {
+                                if let Some(entry) = form.registers.get_mut(idx) {
+                                    entry.req_success = 0;
+                                    entry.req_total = 0;
+                                }
+                            }
+                            return true;
+                        } else {
+                            form.master_field_editing = true;
+                            form.master_input_buffer.clear();
+                            return true;
+                        }
                     }
                     KC::Up | KC::Char('k') => {
                         let enable_values =
@@ -254,6 +268,7 @@ pub fn handle_subpage_key(
                             refresh_ms: 1000,
                             req_success: 0,
                             req_total: 0,
+                            next_poll_at: std::time::Instant::now(),
                         });
                         form.master_cursor = form.registers.len() - 1;
                     }
@@ -335,6 +350,7 @@ pub fn handle_subpage_key(
                             refresh_ms: 1000,
                             req_success: 0,
                             req_total: 0,
+                            next_poll_at: std::time::Instant::now(),
                         });
                         // Move cursor to new entry index (last one)
                         if !form.registers.is_empty() {
@@ -385,6 +401,7 @@ pub fn handle_subpage_key(
                     refresh_ms: 1000,
                     req_success: 0,
                     req_total: 0,
+                    next_poll_at: std::time::Instant::now(),
                 });
             }
             return true;
@@ -434,8 +451,8 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     // If current tab is the configuration tab, show config-specific hints
     if app.subpage_tab_index == 0 {
         // Show Enter to open editor and movement hint (Up / Down or k / j)
-    hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
-    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
+        hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
+        hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;
     }
 
@@ -445,29 +462,61 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
             if form.master_field_editing {
                 if let Some(field) = &form.master_edit_field {
                     if matches!(field, crate::protocol::status::MasterEditField::Type) {
-            hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
-            hints.push(lang().hotkeys.hint_master_field_cancel_edit.as_str().to_string());
-            hints.push(lang().hotkeys.hint_master_type_switch.as_str().to_string());
+                        hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
+                        hints.push(
+                            lang()
+                                .hotkeys
+                                .hint_master_field_cancel_edit
+                                .as_str()
+                                .to_string(),
+                        );
+                        hints.push(lang().hotkeys.hint_master_type_switch.as_str().to_string());
                     } else if matches!(
                         field,
                         crate::protocol::status::MasterEditField::Id
                             | crate::protocol::status::MasterEditField::Start
                             | crate::protocol::status::MasterEditField::End
                             | crate::protocol::status::MasterEditField::Refresh
+                            | crate::protocol::status::MasterEditField::Counter
                     ) {
-            hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
-            hints.push(lang().hotkeys.hint_master_field_cancel_edit.as_str().to_string());
-            hints.push(lang().hotkeys.hint_master_edit_hex.as_str().to_string());
-            hints.push(lang().hotkeys.hint_master_edit_backspace.as_str().to_string());
+                        hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
+                        hints.push(
+                            lang()
+                                .hotkeys
+                                .hint_master_field_cancel_edit
+                                .as_str()
+                                .to_string(),
+                        );
+                        hints.push(lang().hotkeys.hint_master_edit_hex.as_str().to_string());
+                        hints.push(
+                            lang()
+                                .hotkeys
+                                .hint_master_edit_backspace
+                                .as_str()
+                                .to_string(),
+                        );
                     }
                 }
             } else if form.master_field_selected {
-        hints.push(lang().hotkeys.hint_master_field_select.as_str().to_string());
-        hints.push(lang().hotkeys.hint_master_field_move.as_str().to_string());
-        hints.push(lang().hotkeys.hint_master_field_exit_select.as_str().to_string());
+                if matches!(
+                    form.master_edit_field,
+                    Some(crate::protocol::status::MasterEditField::Counter)
+                ) {
+                    hints.push(lang().hotkeys.hint_reset_req_counter.as_str().to_string());
+                } else {
+                    hints.push(lang().hotkeys.hint_master_field_select.as_str().to_string());
+                }
+                hints.push(lang().hotkeys.hint_master_field_move.as_str().to_string());
+                hints.push(
+                    lang()
+                        .hotkeys
+                        .hint_master_field_exit_select
+                        .as_str()
+                        .to_string(),
+                );
             } else {
-        hints.push(lang().hotkeys.hint_master_enter_edit.as_str().to_string());
-        hints.push(lang().hotkeys.hint_master_delete.as_str().to_string());
+                hints.push(lang().hotkeys.hint_master_enter_edit.as_str().to_string());
+                hints.push(lang().hotkeys.hint_master_delete.as_str().to_string());
             }
         }
         return hints;
@@ -501,8 +550,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         return hints;
     }
 
-    hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
-    hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
+    // Fallback: no page-specific hints; global line provides navigation
     hints
 }
 
@@ -551,6 +599,7 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                             }
                         }
                         Refresh => entry.refresh_ms = 1000,
+                        Counter => { /* not editable */ }
                     }
                 } else {
                     let buf = form.master_input_buffer.trim().to_string();
@@ -602,6 +651,7 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                                 entry.refresh_ms = v.max(10);
                             }
                         }
+                        Counter => { /* not editable */ }
                     }
                 }
                 form.master_input_buffer.clear();
@@ -642,7 +692,7 @@ fn move_master_field_dir(
     use crate::protocol::status::MasterEditField as F;
     if let Some(idx) = form.master_edit_index {
         if let Some(entry) = form.registers.get(idx) {
-            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End, F::Refresh];
+            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End, F::Refresh, F::Counter];
             if enable_values {
                 for off in 0..entry.length {
                     order.push(F::Value(entry.address + off));
@@ -655,6 +705,7 @@ fn move_master_field_dir(
             coords.push((0, 2, F::Start));
             coords.push((0, 3, F::End));
             coords.push((0, 4, F::Refresh));
+            coords.push((0, 5, F::Counter));
             if enable_values {
                 for off in 0..entry.length {
                     let addr = entry.address + off;
@@ -702,7 +753,7 @@ fn move_master_field_dir(
                     }
                 }
                 Dir::Right => {
-                    let row_width = if crow == 0 { 5 } else { 8 };
+                    let row_width = if crow == 0 { 6 } else { 8 };
                     if ccol + 1 >= row_width {
                         (crow, ccol)
                     } else {
