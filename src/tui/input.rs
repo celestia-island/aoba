@@ -24,6 +24,7 @@ pub enum Action {
     SwitchPrev,
     TogglePort,
     ToggleFollow,
+    QuickScan,
     None,
 }
 
@@ -45,6 +46,7 @@ pub fn map_key(code: KeyCode) -> Action {
         KeyCode::Char('d') => Action::DeleteRegister,
         KeyCode::Char('p') => Action::ToggleFollow,
         KeyCode::Char('m') => Action::ShowModeSelector,
+        KeyCode::Char('r') => Action::QuickScan,
         KeyCode::Tab => Action::SwitchNext,
         KeyCode::BackTab => Action::SwitchPrev,
         KeyCode::Enter => Action::TogglePort,
