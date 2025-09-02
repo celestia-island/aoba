@@ -128,7 +128,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
 
     // Extra labels (anchor to bottom of left panel)
     let extras = vec![
-        lang().index.refresh_label.clone(),
+        lang().index.refresh_action.clone(),
         lang().index.manual_specify_label.clone(),
     ];
     // Compute inner vertical space (accounting for borders)
@@ -195,49 +195,48 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         let special_base = app.ports.len();
         if app.selected >= special_base {
             let rel = app.selected - special_base;
-            let txt = if rel == 0 {
-                lang().index.refresh_label.as_str().to_string()
+            if rel == 0 {
+                // Refresh action item: show last scan summary
+                let mut lines: Vec<Line> = Vec::new();
+                lines.push(Line::from(lang().index.refresh_action.as_str()));
+                // Quick scan hint
+                lines.push(Line::from(Span::styled(
+                    lang().index.scan_quick_hint.as_str(),
+                    Style::default().fg(Color::LightBlue),
+                )));
+                if let Some(ts) = app.last_scan_time {
+                    lines.push(Line::from(format!("{} {}", lang().index.scan_last_header.as_str(), ts.format("%Y-%m-%d %H:%M:%S"))));
+                } else {
+                    lines.push(Line::from(lang().index.scan_none.as_str()));
+                }
+                if app.last_scan_info.is_empty() {
+                    lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
+                } else {
+                    lines.push(Line::from(lang().index.scan_raw_header.as_str()));
+                    for l in app.last_scan_info.iter().take(100) { // cap lines to avoid overflow
+                        if l.starts_with("ERROR:") {
+                            lines.push(Line::from(Span::styled(l.as_str(), Style::default().fg(Color::Red))));
+                        } else {
+                            lines.push(Line::from(l.as_str()));
+                        }
+                    }
+                    if app.last_scan_info.len() > 100 {
+                        lines.push(Line::from(format!("... ({} {})", app.last_scan_info.len() - 100, lang().index.scan_truncated_suffix.as_str())));
+                    }
+                }
+                Paragraph::new(lines).block(content_block)
             } else {
-                lang().index.manual_specify_label.as_str().to_string()
-            };
-            Paragraph::new(txt).block(content_block)
+                Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
+            }
         } else {
             let p = &app.ports[app.selected];
 
-            // Gather serial parameters if handle exists
-            let mut baud = lang().protocol.serial_unknown.clone();
-            let mut stop = lang().protocol.serial_unknown.clone();
-            let mut data_bits = lang().protocol.serial_unknown.clone();
-            let mut parity = lang().protocol.serial_unknown.clone();
-            if let Some(slot) = app.port_handles.get(app.selected) {
-                if let Some(handle) = slot.as_ref() {
-                    baud = handle.baud_rate().map(|b| b.to_string()).unwrap_or(baud);
-                    stop = handle
-                        .stop_bits()
-                        .map(|s| match s {
-                            serialport::StopBits::One => "1".to_string(),
-                            serialport::StopBits::Two => "2".to_string(),
-                        })
-                        .unwrap_or(stop);
-                    data_bits = handle
-                        .data_bits()
-                        .map(|d| match d {
-                            serialport::DataBits::Five => "5".to_string(),
-                            serialport::DataBits::Six => "6".to_string(),
-                            serialport::DataBits::Seven => "7".to_string(),
-                            serialport::DataBits::Eight => "8".to_string(),
-                        })
-                        .unwrap_or(data_bits);
-                    parity = handle
-                        .parity()
-                        .map(|p| match p {
-                            serialport::Parity::None => lang().protocol.parity_none.clone(),
-                            serialport::Parity::Even => lang().protocol.parity_even.clone(),
-                            serialport::Parity::Odd => lang().protocol.parity_odd.clone(),
-                        })
-                        .unwrap_or(parity);
-                }
-            }
+            // Prefer runtime's current_cfg (实时同步配置). If没有占用则不显示这些字段。
+            let runtime_cfg = if let Some(Some(rt)) = app.port_runtimes.get(app.selected) {
+                Some(rt.current_cfg.clone())
+            } else {
+                None
+            };
 
             // Localized status text and style
             let status_text = match selected_state {
@@ -294,23 +293,38 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 ));
             }
 
-            // Serial parameter pairs
-            pairs.push((lang().protocol.label_baud.as_str().to_string(), baud, None));
-            pairs.push((
-                lang().protocol.label_data_bits.as_str().to_string(),
-                data_bits,
-                None,
-            ));
-            pairs.push((
-                lang().protocol.label_parity.as_str().to_string(),
-                parity,
-                None,
-            ));
-            pairs.push((
-                lang().protocol.label_stop_bits.as_str().to_string(),
-                stop,
-                None,
-            ));
+            if selected_state == crate::protocol::status::PortState::OccupiedByThis {
+                if let Some(cfg) = runtime_cfg.clone() {
+                    let baud = cfg.baud.to_string();
+                    let data_bits = cfg.data_bits.to_string();
+                    let parity = match cfg.parity {
+                        crate::protocol::status::Parity::None => {
+                            lang().protocol.parity_none.clone()
+                        }
+                        crate::protocol::status::Parity::Even => {
+                            lang().protocol.parity_even.clone()
+                        }
+                        crate::protocol::status::Parity::Odd => lang().protocol.parity_odd.clone(),
+                    };
+                    let stop = cfg.stop_bits.to_string();
+                    pairs.push((lang().protocol.label_baud.as_str().to_string(), baud, None));
+                    pairs.push((
+                        lang().protocol.label_data_bits.as_str().to_string(),
+                        data_bits,
+                        None,
+                    ));
+                    pairs.push((
+                        lang().protocol.label_parity.as_str().to_string(),
+                        parity,
+                        None,
+                    ));
+                    pairs.push((
+                        lang().protocol.label_stop_bits.as_str().to_string(),
+                        stop,
+                        None,
+                    ));
+                }
+            }
 
             // Compute max label width (without indent)
             let indent = "  ";

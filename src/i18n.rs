@@ -29,10 +29,15 @@ derive_struct! {
             port_state_free: String = "port_state_free".to_string(),
             port_state_owned: String = "port_state_owned".to_string(),
             port_state_other: String = "port_state_other".to_string(),
-            refresh_label: String = "refresh_label".to_string(),
+            refresh_action: String = "refresh_action".to_string(),
             manual_specify_label: String = "manual_specify_label".to_string(),
             manual_specify_linux_note: String = "manual_specify_linux_note".to_string(),
             manual_specify_unsupported: String = "manual_specify_unsupported".to_string(),
+            scan_last_header: String = "scan_last_header".to_string(),
+            scan_none: String = "scan_none".to_string(),
+            scan_raw_header: String = "scan_raw_header".to_string(),
+            scan_truncated_suffix: String = "scan_truncated_suffix".to_string(),
+            scan_quick_hint: String = "scan_quick_hint".to_string(),
         },
 
         hotkeys: {
@@ -72,6 +77,7 @@ derive_struct! {
             hint_master_field_apply: String = "hint_master_field_apply".to_string(),
             hint_master_field_cancel_edit: String = "hint_master_field_cancel_edit".to_string(),
             hint_master_type_switch: String = "hint_master_type_switch".to_string(),
+            hint_reset_req_counter: String = "hint_reset_req_counter".to_string(),
         },
 
         tabs: {
@@ -133,6 +139,8 @@ derive_struct! {
             reg_type_discrete_inputs: String = "reg_type_discrete_inputs".to_string(),
             reg_type_holding: String = "reg_type_holding".to_string(),
             reg_type_input: String = "reg_type_input".to_string(),
+            label_req_counter: String = "label_req_counter".to_string(),
+            refresh_rate: String = "refresh_rate".to_string(),
         },
     }
 }

@@ -30,15 +30,17 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
             port_name.clone(),
             Style::default().add_modifier(Modifier::BOLD),
         ),
-    Span::raw(format!(" - {}", lang().tabs.tab_master.as_str())),
+        Span::raw(format!(" - {}", lang().tabs.tab_master.as_str())),
     ]);
 
     // Middle tab label varies by mode:
-    // Master => editable simulated masters list
-    // SlaveStack / Listen => passive listen list (registers not directly editable except header fields)
+    // Master => editable list of simulated master requests
+    // SlaveStack => passive listening list (register entries not directly editable except header fields)
     let middle_tab = match app.port_mode {
         crate::protocol::status::PortMode::Master => lang().protocol.label_master_list.as_str(),
-        crate::protocol::status::PortMode::SlaveStack => lang().protocol.label_slave_listen.as_str(),
+        crate::protocol::status::PortMode::SlaveStack => {
+            lang().protocol.label_slave_listen.as_str()
+        }
     };
     let tabs = vec![
         lang().tabs.tab_config.as_str(),
@@ -47,14 +49,14 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
     ];
     let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
 
-    // Use a single-line header so tabs sit directly above content (no extra empty row)
+    // Use a single-line header so tabs sit directly above the content (avoid an extra empty row)
     let [header_area, content_area] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Length(1),
         ratatui::layout::Constraint::Min(0),
     ])
     .areas(area);
 
-    // Header: title and tabs
+    // Header region: tabs (left) and title (right-aligned area)
     let [tabs_area, title_area] = ratatui::layout::Layout::horizontal([
         ratatui::layout::Constraint::Min(0),
         ratatui::layout::Constraint::Length(20),
@@ -64,7 +66,7 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
     // Title
     f.render_widget(Paragraph::new(title_line), title_area);
 
-    // Tabs
+    // Render the tabs
     let titles = tabs
         .iter()
         .map(|t| Line::from(Span::raw(format!("  {}  ", t))));
@@ -77,7 +79,13 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
             crate::protocol::status::PortMode::Master => {
                 render_master_list_panel(f, content_area, app)
             }
-            _ => render_master_list_panel(f, content_area, app),
+            crate::protocol::status::PortMode::SlaveStack => {
+                crate::tui::ui::components::slave_listen_panel::render_slave_listen_panel(
+                    f,
+                    content_area,
+                    app,
+                )
+            }
         },
         2 => render_slave_log(f, content_area, app),
         _ => render_slave_config(f, content_area, app),
@@ -85,14 +93,10 @@ pub fn render_slave(f: &mut Frame, area: Rect, app: &mut Status) {
 }
 
 fn render_slave_config(f: &mut Frame, area: Rect, app: &mut Status) {
-    // Delegate to shared component implementation
     render_config_panel(f, area, app, None);
 }
 
-// Registers rendering delegated to master_list_panel (listen panel removed)
-
 fn render_slave_log(f: &mut Frame, area: Rect, _app: &mut Status) {
-    // Delegate to shared component implementation
     render_log_panel(f, area, _app);
 }
 
@@ -103,7 +107,7 @@ pub fn handle_subpage_key(
 ) -> bool {
     use crossterm::event::KeyCode as KC;
     let master_tab = app.subpage_tab_index == 1;
-    let _is_listen_like = false; // Removed Listen reference
+    // (Removed legacy listen-mode flag)
     if !master_tab {
         if let Some(form) = app.subpage_form.as_ref() {
             if form.editing {
@@ -116,9 +120,8 @@ pub fn handle_subpage_key(
     }
     if master_tab {
         if let Some(form) = app.subpage_form.as_mut() {
-            // Field editing stage
+            // Editing layer
             if form.master_field_editing {
-                // Special: the Type field skips input buffer; cycle with left/right or up/down
                 let is_type = matches!(
                     form.master_edit_field,
                     Some(crate::protocol::status::MasterEditField::Type)
@@ -132,11 +135,10 @@ pub fn handle_subpage_key(
                     KC::Enter => {
                         if !is_type {
                             commit_master_field(form);
-                        } // Type commits live (no buffer)
+                        }
                         form.master_field_editing = false;
                         return true;
                     }
-                    // While editing a non-Type field, allow movement keys to auto-commit and move to adjacent field
                     KC::Left
                     | KC::Char('h')
                     | KC::Right
@@ -146,7 +148,6 @@ pub fn handle_subpage_key(
                     | KC::Down
                     | KC::Char('j') => {
                         if is_type {
-                            // Keep previous behavior for Type spinner
                             match key.code {
                                 KC::Left | KC::Char('h') | KC::Up | KC::Char('k') => {
                                     cycle_type(form, false)
@@ -158,10 +159,8 @@ pub fn handle_subpage_key(
                             }
                             return true;
                         } else {
-                            // Commit current field then move focus (stay in selection layer)
                             commit_master_field(form);
-                            form.master_field_editing = false; // Exit editing
-                                                               // After exiting editing we are in field-selected layer; perform movement
+                            form.master_field_editing = false;
                             let enable_values =
                                 app.port_mode == crate::protocol::status::PortMode::Master;
                             let dir = match key.code {
@@ -192,20 +191,32 @@ pub fn handle_subpage_key(
             } else if form.master_field_selected {
                 match key.code {
                     KC::Esc => {
-                        // Exit field selection layer
                         form.master_field_selected = false;
                         form.master_edit_field = None;
                         form.master_edit_index = None;
                         return true;
                     }
                     KC::Enter => {
-                        // Enter field editing (Type supports immediate left/right cycling)
+                        if let Some(field) = &form.master_edit_field {
+                            use crate::protocol::status::MasterEditField as MEF;
+                            if matches!(field, MEF::Counter) {
+                                if let Some(idx) = form.master_edit_index {
+                                    if let Some(reg) = form.registers.get_mut(idx) {
+                                        reg.req_success = 0;
+                                        reg.req_total = 0;
+                                    }
+                                }
+                                return true;
+                            }
+                        }
                         form.master_field_editing = true;
                         form.master_input_buffer.clear();
+                        if app.port_mode == crate::protocol::status::PortMode::SlaveStack {
+                            app.pause_and_reset_slave_listen();
+                        }
                         return true;
                     }
                     KC::Up | KC::Char('k') => {
-                        // In listen-like modes, disable value cell navigation (only header + Refresh)
                         let enable_values =
                             app.port_mode == crate::protocol::status::PortMode::Master;
                         move_master_field_dir(form, Dir::Up, enable_values);
@@ -231,40 +242,40 @@ pub fn handle_subpage_key(
                     }
                     _ => {}
                 }
-            } else {
-                // Not in field selection or editing; allow Enter on trailing new line to create entry
-                if key.code == KC::Enter {
-                    if form.master_cursor == form.registers.len() {
-                        // Creation allowed in all modes; default length differs for Master vs others
-                        let length = if app.port_mode == crate::protocol::status::PortMode::Master {
-                            8
-                        } else {
-                            1
-                        };
-                        form.registers.push(crate::protocol::status::RegisterEntry {
-                            slave_id: 1,
-                            mode: crate::protocol::status::RegisterMode::Coils,
-                            address: 0,
-                            length,
-                            values: vec![0u8; length as usize],
-                            refresh_ms: 1000,
-                            req_success: 0,
-                            req_total: 0,
-                        });
-                        form.master_cursor = form.registers.len() - 1;
-                        form.master_field_selected = true;
-                        form.master_edit_index = Some(form.master_cursor);
-                        form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
-                        form.master_field_editing = true;
-                        form.master_input_buffer.clear();
-                        return true;
+            } else if key.code == KC::Enter {
+                // Browsing layer: create or select
+                if form.master_cursor == form.registers.len() {
+                    let length = if app.port_mode == crate::protocol::status::PortMode::Master {
+                        8
                     } else {
-                        form.master_field_selected = true;
-                        form.master_edit_index = Some(form.master_cursor);
-                        form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
-                        return true;
+                        1
+                    };
+                    form.registers.push(crate::protocol::status::RegisterEntry {
+                        slave_id: 1,
+                        mode: crate::protocol::status::RegisterMode::Coils,
+                        address: 0,
+                        length,
+                        values: vec![0u8; length as usize],
+                        refresh_ms: 1000,
+                        req_success: 0,
+                        req_total: 0,
+                        next_poll_at: std::time::Instant::now(),
+                    });
+                    form.master_cursor = form.registers.len() - 1;
+                    form.master_field_selected = true;
+                    form.master_edit_index = Some(form.master_cursor);
+                    form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
+                    form.master_field_editing = true;
+                    form.master_input_buffer.clear();
+                    if app.port_mode == crate::protocol::status::PortMode::SlaveStack {
+                        app.pause_and_reset_slave_listen();
                     }
+                } else {
+                    form.master_field_selected = true;
+                    form.master_edit_index = Some(form.master_cursor);
+                    form.master_edit_field = Some(crate::protocol::status::MasterEditField::Id);
                 }
+                return true;
             }
         }
     }
@@ -370,7 +381,7 @@ pub fn handle_subpage_key(
                 }
             }
         }
-        // Delete current master (not editing and not on the new entry line)
+        // Delete current register request (when not editing and not on the new-entry line)
         KC::Char('d') => {
             if master_tab {
                 if app.port_mode == crate::protocol::status::PortMode::Master {
@@ -393,7 +404,7 @@ pub fn handle_subpage_key(
         KC::Enter => {
             if master_tab {
                 if let Some(form) = app.subpage_form.as_mut() {
-                    // Field selection/edit already handled earlier; here we are in browse layer
+                    // Field selection / edit already handled earlier; here we are in the browsing layer
                     if !form.master_field_selected && !form.master_field_editing {
                         if form.master_cursor == form.registers.len() {
                             let length =
@@ -411,6 +422,7 @@ pub fn handle_subpage_key(
                                 refresh_ms: 1000,
                                 req_success: 0,
                                 req_total: 0,
+                                next_poll_at: std::time::Instant::now(),
                             });
                             form.master_cursor = form.registers.len() - 1;
                         } else {
@@ -434,17 +446,25 @@ pub fn handle_subpage_key(
         }
         KC::Char('n') => {
             if master_tab {
-                if app.subpage_form.is_none() { app.init_subpage_form(); }
+                if app.subpage_form.is_none() {
+                    app.init_subpage_form();
+                }
                 if let Some(form) = app.subpage_form.as_mut() {
+                    let len_val = if app.port_mode == crate::protocol::status::PortMode::Master {
+                        8
+                    } else {
+                        1
+                    };
                     form.registers.push(crate::protocol::status::RegisterEntry {
                         slave_id: 1,
                         mode: crate::protocol::status::RegisterMode::Coils,
                         address: 0,
-                        length: if app.port_mode == crate::protocol::status::PortMode::Master { 8 } else { 1 },
-                        values: vec![0u8; if app.port_mode == crate::protocol::status::PortMode::Master { 8 } else { 1 }],
+                        length: len_val,
+                        values: vec![0u8; len_val as usize],
                         refresh_ms: 1000,
                         req_success: 0,
                         req_total: 0,
+                        next_poll_at: std::time::Instant::now(),
                     });
                 }
                 return true;
@@ -473,20 +493,75 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     // If current tab is the log tab, show log-input related hints
     // If current tab is the configuration tab, show config-specific hints
     if app.subpage_tab_index == 0 {
-        // Show Enter to open editor and movement hint (Up / Down or k / j)
-    hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
-    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
+        // Show Enter to open the editor and movement hint (Up / Down or k / j)
+        hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
+        hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;
     }
 
-    // (Corrupted legacy block removed; new logic implemented below.)
+    // Legacy, partially corrupted block removed; new logic implemented below.
+
+    if app.subpage_tab_index == 1 {
+        // Middle list tab (master register requests) – mirror the logic in pull.rs
+        if let Some(form) = &app.subpage_form {
+            if form.master_field_editing {
+                if let Some(field) = &form.master_edit_field {
+                    use crate::protocol::status::MasterEditField as MEF;
+                    if matches!(field, MEF::Type) {
+                        hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
+                        hints.push(
+                            lang()
+                                .hotkeys
+                                .hint_master_field_cancel_edit
+                                .as_str()
+                                .to_string(),
+                        );
+                        hints.push(lang().hotkeys.hint_master_type_switch.as_str().to_string());
+                    // Left/Right to cycle
+                    } else if matches!(field, MEF::Id | MEF::Start | MEF::End | MEF::Refresh) {
+                        hints.push(lang().hotkeys.hint_master_field_apply.as_str().to_string());
+                        hints.push(
+                            lang()
+                                .hotkeys
+                                .hint_master_field_cancel_edit
+                                .as_str()
+                                .to_string(),
+                        );
+                        hints.push(lang().hotkeys.hint_master_edit_hex.as_str().to_string());
+                        hints.push(
+                            lang()
+                                .hotkeys
+                                .hint_master_edit_backspace
+                                .as_str()
+                                .to_string(),
+                        ); // Backspace editing
+                    }
+                }
+            } else if form.master_field_selected {
+                hints.push(lang().hotkeys.hint_master_field_select.as_str().to_string());
+                hints.push(lang().hotkeys.hint_master_field_move.as_str().to_string());
+                hints.push(
+                    lang()
+                        .hotkeys
+                        .hint_master_field_exit_select
+                        .as_str()
+                        .to_string(),
+                ); // ESC to exit selection layer
+            } else {
+                hints.push(lang().hotkeys.hint_master_enter_edit.as_str().to_string());
+                hints.push(lang().hotkeys.hint_master_delete.as_str().to_string());
+                // 'd' to delete
+            }
+        }
+        return hints;
+    }
 
     if app.subpage_tab_index == 2 {
         if app.input_editing {
             hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
             hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
         } else {
-            // Show short kv-style hints (press i to edit, press m to toggle mode) in the bottom bar.
+            // Show concise kv-style hints (press i to edit, press m to toggle log input mode)
             hints.push(crate::tui::ui::bottom::format_kv_hint(
                 "Enter / i",
                 lang().input.hint_input_edit_short.as_str(),
@@ -495,20 +570,19 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                 "m",
                 lang().input.hint_input_mode_short.as_str(),
             ));
-            // Show follow / track latest toggle (p) -- show the action (inverse of current state)
+            // Show follow / track-latest toggle (p) — display the action inverse of the current state
             let action_label = if app.log_auto_scroll {
                 lang().tabs.log.hint_follow_off.as_str()
             } else {
                 lang().tabs.log.hint_follow_on.as_str()
             };
             hints.push(crate::tui::ui::bottom::format_kv_hint("p", action_label));
-            // (mode description moved into the input placeholder; skip duplicate)
+            // Mode description moved into the input placeholder; skip duplicating here
         }
         return hints;
     }
 
-    hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
-    hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
+    // For all other fallback cases (rare), return empty list; the global hint line supplies navigation
     hints
 }
 
@@ -518,7 +592,7 @@ pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
     match key.code {
         KC::Tab => Some(Action::SwitchNext),
         KC::BackTab => Some(Action::SwitchPrev),
-        KC::Enter => Some(Action::EditToggle), // Creation handled in handler before toggle
+        KC::Enter => Some(Action::EditToggle), // Creation is handled in the event handler before toggling
         KC::Char('e') => Some(Action::EditToggle),
         KC::Char('n') => Some(Action::AddRegister),
         KC::Up | KC::Char('k') => Some(Action::MovePrev),
@@ -555,6 +629,8 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                             }
                         }
                         Refresh => master.refresh_ms = 1000,
+                        Counter => { /* pressing Enter on Counter does reset elsewhere; on commit do nothing */
+                        }
                     }
                 } else {
                     let buf = form.master_input_buffer.trim().to_string();
@@ -606,6 +682,7 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                                 master.refresh_ms = v.max(10);
                             }
                         }
+                        Counter => { /* not editable */ }
                     }
                 }
                 form.master_input_buffer.clear();
@@ -646,8 +723,8 @@ fn move_master_field_dir(
     use crate::protocol::status::MasterEditField as F;
     if let Some(idx) = form.master_edit_index {
         if let Some(master) = form.registers.get(idx) {
-            // Build grid: header row (Id, Type, Start, End, Refresh) then value cells (value navigation allowed only in Master mode)
-            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End, F::Refresh];
+            // Build a grid: header row (Id, Type, Start, End, Refresh, Counter)
+            let mut order: Vec<F> = vec![F::Id, F::Type, F::Start, F::End, F::Refresh, F::Counter];
             if enable_values {
                 for off in 0..master.length {
                     order.push(F::Value(master.address + off));
@@ -656,13 +733,14 @@ fn move_master_field_dir(
             let cur = form.master_edit_field.clone().unwrap_or(F::Id);
             // Map each field to (row,col)
             let mut coords: Vec<(usize, usize, F)> = Vec::new();
-            // Header row row=0, columns 0..4
+            // Header row uses row=0, columns 0..4
             coords.push((0, 0, F::Id));
             coords.push((0, 1, F::Type));
             coords.push((0, 2, F::Start));
             coords.push((0, 3, F::End));
             coords.push((0, 4, F::Refresh));
-            // Value grid starts at row=1; each row has 8 columns
+            coords.push((0, 5, F::Counter));
+            // Value grid starts at row=1; each row has up to 8 columns
             if enable_values {
                 for off in 0..master.length {
                     let addr = master.address + off;
@@ -715,7 +793,7 @@ fn move_master_field_dir(
                 }
                 Dir::Right => {
                     // Width depends on row
-                    let row_width = if crow == 0 { 5 } else { 8 };
+                    let row_width = if crow == 0 { 6 } else { 8 }; // header now has 6 columns including Counter
                     if ccol + 1 >= row_width {
                         (crow, ccol)
                     } else {
@@ -723,7 +801,7 @@ fn move_master_field_dir(
                     }
                 }
             };
-            // Find nearest field with those coords (if none, stay)
+            // Find a field with those target coordinates (if none, stay in place)
             if let Some((_, _, f)) = coords
                 .iter()
                 .find(|(r, c, _)| *r == target.0 && *c == target.1)
