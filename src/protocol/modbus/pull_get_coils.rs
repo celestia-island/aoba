@@ -39,7 +39,7 @@ pub fn parse_pull_get_coils(
         .map(|chunk| {
             let byte = chunk;
             (0..8)
-                .rev() // iterate bits from high to low
+                .rev() // Iterate bits from high to low
                 .map(|i| (byte & (1 << i)) != 0)
                 .collect::<Vec<bool>>()
         })
