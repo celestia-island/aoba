@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Tabs},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
@@ -23,15 +24,6 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
     } else {
         "-".to_string()
     };
-
-    let title_line = Line::from(vec![
-        Span::raw(" "),
-        Span::styled(
-            port_name.clone(),
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(format!(" - {}", lang().tabs.tab_slave.as_str())),
-    ]);
 
     // Listen mode should only have two tabs: [Config, Log]; other modes retain three tabs (including middle list)
     let (tabs, mid_is_list_panel) = match app.port_mode {
@@ -54,29 +46,45 @@ pub fn render_pull(f: &mut Frame, area: Rect, app: &mut Status) {
     };
     let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
 
-    // Use a single-line header so tabs sit directly above content (no extra empty row)
+    // Use a single-line header so tabs sit directly above content
     let [header_area, content_area] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Length(1),
         ratatui::layout::Constraint::Min(0),
     ])
     .areas(area);
 
-    // Header: title and tabs
-    let [tabs_area, title_area] = ratatui::layout::Layout::horizontal([
-        ratatui::layout::Constraint::Min(0),
-        ratatui::layout::Constraint::Length(20),
-    ])
-    .areas(header_area);
+    // Right-side mode label (port + mode text) to avoid sticking to last tab
+    let mode_text = match app.port_mode {
+        crate::protocol::status::PortMode::Master => lang().tabs.master_mode.as_str(),
+        crate::protocol::status::PortMode::SlaveStack => lang().tabs.slave_mode.as_str(),
+    };
+    let right_label = format!("{} - {}", port_name, mode_text); // e.g. "COM1 - 模拟主"
+    let right_width = UnicodeWidthStr::width(right_label.as_str());
+    // Split header horizontally: tabs (remaining) | right label (exact width + 2 spaces padding)
+    let h_chunks = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Horizontal)
+        .constraints([
+            ratatui::layout::Constraint::Min(5),
+            ratatui::layout::Constraint::Length((right_width + 2) as u16),
+        ])
+        .split(header_area);
 
-    // Title
-    f.render_widget(Paragraph::new(title_line), title_area);
-
-    // Tabs
+    // Tabs in left region
     let titles = tabs
         .iter()
         .map(|t| Line::from(Span::raw(format!("  {}  ", t))));
     let tabs_widget = Tabs::new(titles).select(tab_index);
-    f.render_widget(tabs_widget, tabs_area);
+    f.render_widget(tabs_widget, h_chunks[0]);
+
+    // Right label with leading space to ensure clear separation
+    let right_para = Paragraph::new(format!(" {}", right_label))
+        .alignment(Alignment::Left)
+        .style(
+            Style::default()
+                .fg(Color::LightGreen)
+                .add_modifier(Modifier::BOLD),
+        );
+    f.render_widget(right_para, h_chunks[1]);
 
     // Three tabs for remaining modes
     match tab_index {
@@ -157,27 +165,54 @@ pub fn handle_subpage_key(
                     | KC::Char('k')
                     | KC::Down
                     | KC::Char('j') => {
-                        if is_type {
-                            // Cycle type when editing Type
-                            let forward = matches!(
-                                key.code,
-                                KC::Right | KC::Char('l') | KC::Down | KC::Char('j')
-                            );
-                            cycle_type(form, forward);
-                        } else {
-                            // Commit then move to another field entering editing again
-                            commit_master_field(form);
-                            form.master_field_editing = false;
-                            let enable_values =
-                                app.port_mode == crate::protocol::status::PortMode::Master;
-                            let dir = match key.code {
-                                KC::Left | KC::Char('h') => Dir::Left,
-                                KC::Right | KC::Char('l') => Dir::Right,
-                                KC::Up | KC::Char('k') => Dir::Up,
-                                KC::Down | KC::Char('j') => Dir::Down,
-                                _ => Dir::Right,
-                            };
-                            move_master_field_dir(form, dir, enable_values);
+                        // Special toggle for coil value editing: left/right flips boolean without hex input
+                        let mut handled_move = false;
+                        if let Some(crate::protocol::status::MasterEditField::Value(addr)) =
+                            form.master_edit_field.clone()
+                        {
+                            // Determine if current entry is coils
+                            if let Some(idx) = form.master_edit_index {
+                                if let Some(entry) = form.registers.get_mut(idx) {
+                                    if entry.mode == crate::protocol::status::RegisterMode::Coils {
+                                        if key.code == KC::Left
+                                            || key.code == KC::Right
+                                            || key.code == KC::Char('h')
+                                            || key.code == KC::Char('l')
+                                        {
+                                            let off = (addr - entry.address) as usize;
+                                            if off < entry.values.len() {
+                                                entry.values[off] =
+                                                    if entry.values[off] == 0 { 1 } else { 0 };
+                                            }
+                                            handled_move = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if !handled_move {
+                            if is_type {
+                                // Cycle type when editing Type
+                                let forward = matches!(
+                                    key.code,
+                                    KC::Right | KC::Char('l') | KC::Down | KC::Char('j')
+                                );
+                                cycle_type(form, forward);
+                            } else {
+                                // Commit then move to another field entering editing again
+                                commit_master_field(form);
+                                form.master_field_editing = false;
+                                let enable_values =
+                                    app.port_mode == crate::protocol::status::PortMode::Master;
+                                let dir = match key.code {
+                                    KC::Left | KC::Char('h') => Dir::Left,
+                                    KC::Right | KC::Char('l') => Dir::Right,
+                                    KC::Up | KC::Char('k') => Dir::Up,
+                                    KC::Down | KC::Char('j') => Dir::Down,
+                                    _ => Dir::Right,
+                                };
+                                move_master_field_dir(form, dir, enable_values);
+                            }
                         }
                         return true;
                     }
@@ -585,7 +620,8 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                 use crate::protocol::status::MasterEditField::*;
                 if form.master_input_buffer.is_empty() {
                     match field {
-                        Id => entry.slave_id = 0,
+                        // Disallow 0; empty input resets to 1
+                        Id => entry.slave_id = 1,
                         Type => {}
                         Start => entry.address = 0,
                         End => {
@@ -593,9 +629,12 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                             entry.values.resize(entry.length as usize, 0);
                         }
                         Value(a) => {
-                            let off = (*a as usize).saturating_sub(entry.address as usize);
-                            if off < entry.values.len() {
-                                entry.values[off] = 0;
+                            // For coils boolean editing we toggle via arrow keys without buffer; don't overwrite.
+                            if entry.mode != crate::protocol::status::RegisterMode::Coils {
+                                let off = (*a as usize).saturating_sub(entry.address as usize);
+                                if off < entry.values.len() {
+                                    entry.values[off] = 0;
+                                }
                             }
                         }
                         Refresh => entry.refresh_ms = 1000,
@@ -616,6 +655,7 @@ fn commit_master_field(form: &mut crate::protocol::status::SubpageForm) {
                     match field {
                         Id => {
                             if let Some(v) = parse_u8() {
+                                let v = if v == 0 { 1 } else { v }; // Enforce non-zero
                                 entry.slave_id = v;
                             }
                         }

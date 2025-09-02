@@ -160,12 +160,9 @@ fn render_pull_header(
         } else {
             form.master_input_buffer.as_str()
         };
-        spans.push(Span::styled(format!("Slave ID = [{}]", content), id_style));
+        spans.push(Span::styled(format!("ID = [{}]", content), id_style));
     } else {
-        spans.push(Span::styled(
-            format!("Slave ID = {:02X}", r.slave_id),
-            id_style,
-        ));
+        spans.push(Span::styled(format!("ID = {:02X}", r.slave_id), id_style));
     }
     spans.push(Span::raw(", "));
     // Type
@@ -339,7 +336,16 @@ fn render_pull_values(
                     continue;
                 }
             }
-            spans.push(Span::styled(format!("{:02X}", val), style));
+            if r.mode == crate::protocol::status::RegisterMode::Coils {
+                let lbl = if val != 0 {
+                    crate::i18n::lang().protocol.value_true.as_str()
+                } else {
+                    crate::i18n::lang().protocol.value_false.as_str()
+                };
+                spans.push(Span::styled(lbl.to_string(), style));
+            } else {
+                spans.push(Span::styled(format!("{:02X}", val), style));
+            }
         }
         out.push(Line::from(spans));
         addr = line_base + 8;
