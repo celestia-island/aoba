@@ -235,12 +235,12 @@ fn render_entry_values(
             let val = r.values.get(offset).cloned().unwrap_or(0);
             let style = if let Some(MEF::Value(a)) = &cur_field {
                 if *a as usize == cur && editing_field {
-                    // 编辑中 -> 加粗黄色
+                    // Editing -> bold yellow
                     Style::default()
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD)
                 } else if !editing_field && *a as usize == cur {
-                    // 仅选中 -> 普通黄色
+                    // Selected only -> normal yellow
                     Style::default().fg(Color::Yellow)
                 } else {
                     Style::default().fg(Color::Green)
@@ -261,7 +261,7 @@ fn render_entry_values(
                     continue;
                 }
             }
-            spans.push(Span::styled(format!("{:02X}", val), style));
+            if r.mode == crate::protocol::status::RegisterMode::Coils { let lbl = if val != 0 { crate::i18n::lang().protocol.value_true.as_str() } else { crate::i18n::lang().protocol.value_false.as_str() }; spans.push(Span::styled(lbl.to_string(), style)); } else { spans.push(Span::styled(format!("{:02X}", val), style)); }
         }
         out.push(Line::from(spans));
         addr = line_base + 8;

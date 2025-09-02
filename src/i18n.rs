@@ -141,6 +141,9 @@ derive_struct! {
             reg_type_input: String = "reg_type_input".to_string(),
             label_req_counter: String = "label_req_counter".to_string(),
             refresh_rate: String = "refresh_rate".to_string(),
+            value_true: String = "value_true".to_string(),
+            value_false: String = "value_false".to_string(),
+            toggle_too_fast: String = "toggle_too_fast".to_string(),
         },
     }
 }

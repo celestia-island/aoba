@@ -231,7 +231,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         } else {
             let p = &app.ports[app.selected];
 
-            // Prefer runtime's current_cfg (实时同步配置). If没有占用则不显示这些字段。
+            // Prefer runtime's current_cfg (live synchronized config). If not occupied we hide these fields.
             let runtime_cfg = if let Some(Some(rt)) = app.port_runtimes.get(app.selected) {
                 Some(rt.current_cfg.clone())
             } else {

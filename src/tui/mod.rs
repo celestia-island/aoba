@@ -345,10 +345,10 @@ fn run_app(
                                                 if let Some(reg) = form.registers.get_mut(*idx) {
                                                     match field {
                                                         crate::protocol::status::RegisterField::SlaveId => {
-                                                            let new = (reg.slave_id as i64).saturating_add(dir);
-                                                            if new >= 0 && new <= u8::MAX as i64 {
-                                                                reg.slave_id = new as u8;
-                                                            }
+                                                            let mut new = (reg.slave_id as i64).saturating_add(dir);
+                                                            if new < 1 { new = 1; }
+                                                            if new > u8::MAX as i64 { new = u8::MAX as i64; }
+                                                            reg.slave_id = new as u8;
                                                         }
                                                         crate::protocol::status::RegisterField::Mode => {
                                                             use crate::protocol::status::RegisterMode;
