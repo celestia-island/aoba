@@ -9,6 +9,9 @@ use crate::protocol::runtime::{PortRuntimeHandle, RuntimeCommand, RuntimeEvent, 
 use crate::protocol::tty::available_ports_sorted;
 use crate::tui::utils::constants::LOG_GROUP_HEIGHT;
 
+/// Minimum interval (milliseconds) between consecutive port occupancy toggles to prevent OS driver self-lock.
+pub const PORT_TOGGLE_MIN_INTERVAL_MS: u64 = 1500; // 1.5 seconds
+
 /// Parsed summary of a captured protocol request / response for UI display.
 #[derive(Debug, Clone)]
 pub struct ParsedRequest {
@@ -239,6 +242,10 @@ pub struct Status {
     pub spinner_frame: u8,
     /// Whether slave listen polling is temporarily paused due to parameter editing
     pub polling_paused: bool,
+    /// Last time a port occupancy toggle was performed (throttling rapid Enter presses)
+    pub last_port_toggle: Option<std::time::Instant>,
+    /// Minimum interval between port toggles
+    pub port_toggle_min_interval_ms: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -414,6 +421,8 @@ impl Status {
             busy: false,
             spinner_frame: 0,
             polling_paused: false,
+            last_port_toggle: None,
+            port_toggle_min_interval_ms: PORT_TOGGLE_MIN_INTERVAL_MS,
         }
     }
 
@@ -550,6 +559,8 @@ impl Status {
             busy: false,
             spinner_frame: 0,
             polling_paused: false,
+            last_port_toggle: None,
+            port_toggle_min_interval_ms: PORT_TOGGLE_MIN_INTERVAL_MS,
         }
     }
 
@@ -823,6 +834,15 @@ impl Status {
 
     /// Toggle the selected port's occupancy by this app. No-op if other program occupies the port.
     pub fn toggle_selected_port(&mut self) {
+        // Throttle rapid toggles to prevent OS / driver self-lock due to fast open/close bursts.
+        let now = std::time::Instant::now();
+        if let Some(last) = self.last_port_toggle {
+            if now.duration_since(last).as_millis() < self.port_toggle_min_interval_ms as u128 {
+                // Provide user feedback (localized)
+                self.set_error(crate::i18n::lang().protocol.toggle_too_fast.clone());
+                return; // Ignore rapid toggle
+            }
+        }
         self.busy = true;
         if self.ports.is_empty() {
             self.busy = false;
@@ -868,6 +888,8 @@ impl Status {
                             } else {
                                 self.set_error(format!("failed to spawn runtime for {port_name}"));
                             }
+                            // Record successful state change for throttle
+                            self.last_port_toggle = Some(now);
                         }
                         Err(e) => {
                             // Cannot open -> likely occupied by other
@@ -887,6 +909,8 @@ impl Status {
                         }
                     }
                     *state = PortState::Free;
+                    // Record successful state change for throttle
+                    self.last_port_toggle = Some(now);
                 }
                 PortState::OccupiedByOther => {
                     // Don't change
@@ -940,6 +964,8 @@ impl Status {
         // Collect log additions first to avoid nested mutable borrows during iteration
         let mut pending_logs: Vec<LogEntry> = Vec::new();
         let mut pending_error: Option<String> = None;
+        // queued (runtime index, response frame) to send after borrow scope
+        let mut queued_responses: Vec<(usize, Vec<u8>)> = Vec::new();
         let selected = self.selected;
         for (idx, opt_rt) in self.port_runtimes.iter_mut().enumerate() {
             if let Some(rt) = opt_rt.as_mut() {
@@ -1044,6 +1070,251 @@ impl Status {
                                         handled = true;
                                     }
                                 }
+                                // Master mode acts as simulated slave: auto respond to recognized requests
+                                if !handled && self.port_mode == PortMode::Master {
+                                    let frame = bytes.as_ref();
+                                    if frame.len() >= 8 {
+                                        // minimal RTU frame length
+                                        let sid = frame[0];
+                                        let func = frame[1];
+                                        let mut reply: Option<Vec<u8>> = None;
+                                        // Snapshot of registers for read operations to avoid holding mutable borrow
+                                        let regs_snapshot: Option<Vec<RegisterEntry>> =
+                                            self.subpage_form.as_ref().map(|f| f.registers.clone());
+                                        let find_coil_bit =
+                                            |addr: u16, regs: &Vec<RegisterEntry>| -> u8 {
+                                                for reg in regs {
+                                                    if reg.slave_id == sid
+                                                        && (reg.mode == RegisterMode::Coils
+                                                            || reg.mode
+                                                                == RegisterMode::DiscreteInputs)
+                                                    {
+                                                        let start = reg.address;
+                                                        let end = start + reg.length - 1;
+                                                        if addr >= start && addr <= end {
+                                                            let off = (addr - start) as usize;
+                                                            return *reg
+                                                                .values
+                                                                .get(off)
+                                                                .unwrap_or(&0);
+                                                        }
+                                                    }
+                                                }
+                                                0
+                                            };
+                                        let find_holding =
+                                            |addr: u16, regs: &Vec<RegisterEntry>| -> u8 {
+                                                for reg in regs {
+                                                    if reg.slave_id == sid
+                                                        && (reg.mode == RegisterMode::Holding
+                                                            || reg.mode == RegisterMode::Input)
+                                                    {
+                                                        let start = reg.address;
+                                                        let end = start + reg.length - 1;
+                                                        if addr >= start && addr <= end {
+                                                            let off = (addr - start) as usize;
+                                                            return *reg
+                                                                .values
+                                                                .get(off)
+                                                                .unwrap_or(&0);
+                                                        }
+                                                    }
+                                                }
+                                                0
+                                            };
+                                        match func {
+                                            0x01 | 0x02 | 0x03 | 0x04 => {
+                                                // read functions
+                                                // parse start & qty
+                                                let start =
+                                                    u16::from_be_bytes([frame[2], frame[3]]);
+                                                let qty =
+                                                    u16::from_be_bytes([frame[4], frame[5]]).max(1);
+                                                let mut data: Vec<u8> = Vec::new();
+                                                if func == 0x01 || func == 0x02 {
+                                                    // coils / discretes bits
+                                                    let mut bit_acc: Vec<u8> =
+                                                        Vec::with_capacity(qty as usize);
+                                                    if let Some(regs) = regs_snapshot.as_ref() {
+                                                        for i in 0..qty {
+                                                            bit_acc.push(find_coil_bit(
+                                                                start + i,
+                                                                regs,
+                                                            ));
+                                                        }
+                                                    } else {
+                                                        bit_acc.resize(qty as usize, 0);
+                                                    }
+                                                    // pack LSB-first per Modbus spec
+                                                    let mut byte: u8 = 0;
+                                                    let mut count = 0;
+                                                    for (i, b) in bit_acc.iter().enumerate() {
+                                                        if *b != 0 {
+                                                            byte |= 1 << (i % 8);
+                                                        }
+                                                        count += 1;
+                                                        if count == 8 {
+                                                            data.push(byte);
+                                                            byte = 0;
+                                                            count = 0;
+                                                        }
+                                                    }
+                                                    if count > 0 {
+                                                        data.push(byte);
+                                                    }
+                                                } else {
+                                                    // holdings / input registers
+                                                    if let Some(regs) = regs_snapshot.as_ref() {
+                                                        for i in 0..qty {
+                                                            let v = find_holding(start + i, regs);
+                                                            data.push(0);
+                                                            data.push(v);
+                                                        }
+                                                    } else {
+                                                        for _ in 0..qty {
+                                                            data.push(0);
+                                                            data.push(0);
+                                                        }
+                                                    }
+                                                }
+                                                let mut resp = Vec::with_capacity(5 + data.len());
+                                                resp.push(sid);
+                                                resp.push(func);
+                                                resp.push(data.len() as u8);
+                                                resp.extend_from_slice(&data);
+                                                let crc = modbus_crc16(&resp);
+                                                resp.push((crc & 0xFF) as u8);
+                                                resp.push((crc >> 8) as u8);
+                                                reply = Some(resp);
+                                            }
+                                            0x05 => {
+                                                // write single coil
+                                                let addr = u16::from_be_bytes([frame[2], frame[3]]);
+                                                let value_hi = frame[4];
+                                                let value_lo = frame[5];
+                                                let on = value_hi == 0xFF && value_lo == 0x00;
+                                                if let Some(form) = self.subpage_form.as_mut() {
+                                                    for reg in form.registers.iter_mut() {
+                                                        if reg.slave_id == sid
+                                                            && (reg.mode == RegisterMode::Coils
+                                                                || reg.mode
+                                                                    == RegisterMode::DiscreteInputs)
+                                                        {
+                                                            let start = reg.address;
+                                                            let end = start + reg.length - 1;
+                                                            if addr >= start && addr <= end {
+                                                                let off = (addr - start) as usize;
+                                                                if off < reg.values.len() {
+                                                                    reg.values[off] =
+                                                                        if on { 1 } else { 0 };
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                // echo request as response
+                                                reply = Some(frame[..8].to_vec());
+                                            }
+                                            0x06 => {
+                                                // write single holding
+                                                let addr = u16::from_be_bytes([frame[2], frame[3]]);
+                                                let val_lo = frame[5]; // store low byte
+                                                if let Some(form) = self.subpage_form.as_mut() {
+                                                    for reg in form.registers.iter_mut() {
+                                                        if reg.slave_id == sid
+                                                            && (reg.mode == RegisterMode::Holding
+                                                                || reg.mode == RegisterMode::Input)
+                                                        {
+                                                            let start = reg.address;
+                                                            let end = start + reg.length - 1;
+                                                            if addr >= start && addr <= end {
+                                                                let off = (addr - start) as usize;
+                                                                if off < reg.values.len() {
+                                                                    reg.values[off] = val_lo;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                reply = Some(frame[..8].to_vec());
+                                            }
+                                            0x0F => {
+                                                // write multiple coils
+                                                if frame.len() >= 9 {
+                                                    // addr qty bytecount ... crc
+                                                    let addr =
+                                                        u16::from_be_bytes([frame[2], frame[3]]);
+                                                    let qty =
+                                                        u16::from_be_bytes([frame[4], frame[5]]);
+                                                    let byte_count = frame[6] as usize;
+                                                    if frame.len() >= 7 + byte_count + 2 {
+                                                        if let Some(form) =
+                                                            self.subpage_form.as_mut()
+                                                        {
+                                                            for reg in form.registers.iter_mut() {
+                                                                if reg.slave_id==sid && (reg.mode==RegisterMode::Coils || reg.mode==RegisterMode::DiscreteInputs) { let start=reg.address; let end=start+reg.length-1; for i in 0..qty { let cur=addr+i; if cur<start || cur> end { continue; } let off=(cur-start) as usize; let byte_index=(i/8) as usize; let bit_index= i %8; if byte_index < byte_count { let b=frame[7+ byte_index]; let bit=(b >> bit_index) & 1; if off < reg.values.len() { reg.values[off]=bit; } } } }
+                                                            }
+                                                        }
+                                                        // response: id func addr qty crc
+                                                        let mut resp = Vec::with_capacity(8);
+                                                        resp.extend_from_slice(&frame[0..6]);
+                                                        let crc = modbus_crc16(&resp);
+                                                        resp.push((crc & 0xFF) as u8);
+                                                        resp.push((crc >> 8) as u8);
+                                                        reply = Some(resp);
+                                                    }
+                                                }
+                                            }
+                                            0x10 => {
+                                                // write multiple holdings
+                                                if frame.len() >= 9 {
+                                                    let addr =
+                                                        u16::from_be_bytes([frame[2], frame[3]]);
+                                                    let qty =
+                                                        u16::from_be_bytes([frame[4], frame[5]]);
+                                                    let byte_count = frame[6] as usize;
+                                                    if frame.len() >= 7 + byte_count + 2 {
+                                                        if let Some(form) =
+                                                            self.subpage_form.as_mut()
+                                                        {
+                                                            for i in 0..qty {
+                                                                let base = 7 + (i as usize) * 2;
+                                                                if base + 1 < frame.len() {
+                                                                    let lo = frame[base + 1];
+                                                                    for reg in
+                                                                        form.registers.iter_mut()
+                                                                    {
+                                                                        if reg.slave_id==sid && (reg.mode==RegisterMode::Holding || reg.mode==RegisterMode::Input) { let start=reg.address; let end=start+reg.length-1; let cur=addr+i; if cur>=start && cur<=end { let off=(cur-start) as usize; if off < reg.values.len() { reg.values[off]=lo; } } }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        let mut resp = Vec::with_capacity(8);
+                                                        resp.extend_from_slice(&frame[0..6]);
+                                                        let crc = modbus_crc16(&resp);
+                                                        resp.push((crc & 0xFF) as u8);
+                                                        resp.push((crc >> 8) as u8);
+                                                        reply = Some(resp);
+                                                    }
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                        if let Some(resp) = reply {
+                                            let hex_resp = resp
+                                                .iter()
+                                                .map(|b| format!("{:02x}", b))
+                                                .collect::<Vec<_>>()
+                                                .join(" ");
+                                            queued_responses.push((idx, resp.clone()));
+                                            pending_logs.push(LogEntry {
+                                                when: Local::now(),
+                                                raw: format!("reply: {hex_resp}"),
+                                                parsed: None,
+                                            });
+                                        }
+                                    }
+                                }
                                 if !handled {
                                     // Fallback: treat as request reaching us (acts as slave) and update counters heuristically
                                     if let Some((slave_id, func, addr, qty)) =
@@ -1134,6 +1405,12 @@ impl Status {
         }
         if let Some(e) = pending_error {
             self.set_error(e);
+        }
+        // Now send queued responses (no conflicting borrows)
+        for (i, resp) in queued_responses {
+            if let Some(Some(rt)) = self.port_runtimes.get(i) {
+                let _ = rt.cmd_tx.send(RuntimeCommand::Write(resp));
+            }
         }
     }
 

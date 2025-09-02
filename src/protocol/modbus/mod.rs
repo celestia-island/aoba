@@ -4,7 +4,9 @@ mod pull_get_coils;
 mod pull_get_holdings;
 mod pull_set_coils;
 mod slave_coils;
+mod slave_discrete_inputs;
 mod slave_holdings;
+mod slave_inputs;
 
 use anyhow::Result;
 use bytes::Bytes;
@@ -23,7 +25,9 @@ pub use pull_get_coils::{generate_pull_get_coils_request, parse_pull_get_coils};
 pub use pull_get_holdings::{generate_pull_get_holdings_request, parse_pull_get_holdings};
 pub use pull_set_coils::{generate_pull_set_coils_request, parse_pull_set_coils};
 pub use slave_coils::parse_slave_coils;
+pub use slave_discrete_inputs::parse_slave_discrete_inputs;
 pub use slave_holdings::parse_slave_holdings;
+pub use slave_inputs::parse_slave_inputs;
 
 pub fn boot_modbus_pull_service(id: u8, request_sender: Sender<Bytes>) -> Result<()> {
     let request_tx = request_sender.to_owned();
@@ -94,7 +98,7 @@ pub fn boot_modbus_slave_service(
 
         match frame.func {
             0x01 => {
-                // Handle read coils requests
+                // Coils
                 if let Ok(Some(ret)) = parse_slave_coils(&mut frame, &mut context) {
                     log::info!(
                         "Parsed slave coils: {}",
@@ -108,8 +112,23 @@ pub fn boot_modbus_slave_service(
                     log::warn!("Failed to parse slave coils");
                 }
             }
+            0x02 => {
+                // Discrete Inputs
+                if let Ok(Some(ret)) = parse_slave_discrete_inputs(&mut frame, &mut context) {
+                    log::info!(
+                        "Parsed slave discrete inputs: {}",
+                        ret.iter()
+                            .map(|b| format!("{:02x}", b))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    );
+                    response_sender.send(Bytes::from(ret))?;
+                } else {
+                    log::warn!("Failed to parse slave discrete inputs");
+                }
+            }
             0x03 => {
-                // Handle read holding registers requests
+                // Holding Registers
                 if let Ok(Some(ret)) = parse_slave_holdings(&mut frame, &mut context) {
                     log::info!(
                         "Parsed slave holdings: {}",
@@ -121,6 +140,21 @@ pub fn boot_modbus_slave_service(
                     response_sender.send(Bytes::from(ret))?;
                 } else {
                     log::warn!("Failed to parse slave holdings");
+                }
+            }
+            0x04 => {
+                // Input Registers
+                if let Ok(Some(ret)) = parse_slave_inputs(&mut frame, &mut context) {
+                    log::info!(
+                        "Parsed slave input registers: {}",
+                        ret.iter()
+                            .map(|b| format!("{:02x}", b))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    );
+                    response_sender.send(Bytes::from(ret))?;
+                } else {
+                    log::warn!("Failed to parse slave input registers");
                 }
             }
             _ => {
