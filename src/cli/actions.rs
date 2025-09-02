@@ -23,7 +23,7 @@ struct PortInfo<'a> {
 }
 
 /// Handle one-shot CLI actions. Return true if an action was handled and the
-/// program should exit immediately.
+/// Program should exit immediately.
 pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     if matches.get_flag("list-ports") {
         let ports = crate::protocol::tty::available_ports_sorted();

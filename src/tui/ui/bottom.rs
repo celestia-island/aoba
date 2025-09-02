@@ -6,7 +6,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = Block::default().borders(Borders::NONE);
 
     // If app has an error message, display it on the first line (red),
-    // and on the second line show instructions on how to clear it.
+    // And on the second line show instructions on how to clear it.
     if let Some(err) = &_app.error {
         // Split the provided area into two rows
         let rows = ratatui::layout::Layout::default()
@@ -52,15 +52,15 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
             ])
             .split(area);
 
-        // page-specific hints (above)
+        // Page-specific hints (above)
         let page_hints = pages::bottom_hints_for_app(_app);
         render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
 
-        // global hints (bottom-most)
+        // Global hints (bottom-most)
         let global_hints = pages::global_hints_for_app(_app);
         render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
     } else {
-        // single-line bottom hints when not in a subpage
+        // Single-line bottom hints when not in a subpage
         let hints = pages::bottom_hints_for_app(_app);
         let text = format_hints(hints.iter().map(|s| s.as_str()));
         let help = Paragraph::new(text)
@@ -71,9 +71,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     }
 }
 
-/// Join hint fragments into a single string using the project's hint separator
-/// (localized via `i18n::lang().hint_separator`). Accepts any iterator of items
-/// convertible to &str.
+/// Join hint fragments into a single string.
 pub fn format_hints<I, S>(hints: I) -> String
 where
     I: IntoIterator<Item = S>,
@@ -92,7 +90,7 @@ where
 /// Provided here so pages / components can register consistent kv-styled hints.
 pub fn format_kv_hint(key: &str, value: &str) -> String {
     // Use localized template, replace {key} and {label}
-    let tmpl = lang().hint_kv_template.as_str();
+    let tmpl = lang().hotkeys.hint_kv_template.as_str();
     tmpl.replace("{key}", key).replace("{label}", value)
 }
 

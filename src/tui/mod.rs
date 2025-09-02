@@ -1,6 +1,6 @@
 pub mod input;
 pub mod ui;
-pub mod utils; // newly added helpers for form editing
+pub mod utils; // Newly added helpers for form editing
 
 use anyhow::Result;
 use std::{
@@ -104,7 +104,7 @@ fn run_app(
                 }
                 Err(_) => {
                     log::error!("[TUI] failed to lock app for drawing (poisoned)");
-                    // cannot set app.error because lock failed; just continue
+                    // Cannot set app.error because lock failed; just continue
                 }
             }
         }
@@ -140,7 +140,7 @@ fn run_app(
                             if f.editing {
                                 true
                             } else {
-                                // allow pre-confirm typing when editing_field is Baud and the current choice is Custom
+                                // Allow pre-confirm typing when editing_field is Baud and the current choice is Custom
                                 if let Some(crate::protocol::status::EditingField::Baud) =
                                     f.editing_field.clone()
                                 {
@@ -168,7 +168,7 @@ fn run_app(
                     Err(_) => false,
                 };
 
-                // unlock drop of 'lock' to avoid double-lock later
+                // Unlock drop of 'lock' to avoid double-lock later
                 drop(lock);
 
                 if mode_selector_active {
@@ -177,7 +177,7 @@ fn run_app(
                         match key.code {
                             KC::Up | KC::Char('k') => {
                                 if guard.mode_selector_index == 0 {
-                                    guard.mode_selector_index = 2; // wrap to last
+                                    guard.mode_selector_index = 2; // Wrap to last
                                 } else {
                                     guard.mode_selector_index -= 1;
                                 }
@@ -186,7 +186,7 @@ fn run_app(
                                 guard.mode_selector_index = (guard.mode_selector_index + 1) % 3;
                             }
                             KC::Enter => {
-                                // apply selection
+                                // Apply selection
                                 guard.port_mode = match guard.mode_selector_index {
                                     0 => PortMode::Master,
                                     _ => PortMode::SlaveStack,
@@ -206,7 +206,7 @@ fn run_app(
                     continue;
                 }
 
-                // re-evaluate editing after potential selector handling
+                // Re-evaluate editing after potential selector handling
                 let is_editing = match app.lock() {
                     Ok(g) => g.subpage_form.as_ref().map(|f| f.editing).unwrap_or(false),
                     Err(_) => false,
@@ -230,7 +230,7 @@ fn run_app(
                                             _ => form.input_buffer.push(c),
                                         }
                                     } else {
-                                        // pre-confirm case: assume Baud custom pending -> accept digits only
+                                        // Pre-confirm case: assume Baud custom pending -> accept digits only
                                         if c.is_ascii_digit() {
                                             form.input_buffer.push(c);
                                         }
@@ -240,7 +240,7 @@ fn run_app(
                                     form.input_buffer.pop();
                                 }
                                 KC::Left | KC::Right => {
-                                    // try to interpret and adjust current field numerically or toggle parity
+                                    // Try to interpret and adjust current field numerically or toggle parity
                                     if let Some(field) = &form.editing_field {
                                         let dir: i64 = match key.code {
                                             KC::Left => -1,
@@ -251,21 +251,21 @@ fn run_app(
                                             crate::protocol::status::EditingField::Baud => {
                                                 let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                                                 let custom_idx = presets.len();
-                                                // initialize edit_choice_index if missing
+                                                // Initialize edit_choice_index if missing
                                                 if form.edit_choice_index.is_none() {
                                                     let idx = presets.iter().position(|&p| p == form.baud).unwrap_or(custom_idx);
                                                     form.edit_choice_index = Some(idx);
                                                 }
                                                 if let Some(mut idx) = form.edit_choice_index {
                                                     if dir > 0 {
-                                                        // move right
+                                                        // Move right
                                                         if idx >= custom_idx {
                                                             idx = 0;
                                                         } else {
                                                             idx = idx + 1;
                                                         }
                                                     } else {
-                                                        // move left
+                                                        // Move left
                                                         if idx == 0 {
                                                             idx = custom_idx;
                                                         } else {
@@ -273,7 +273,7 @@ fn run_app(
                                                         }
                                                     }
                                                     form.edit_choice_index = Some(idx);
-                                                    // if moved to preset, clear buffer and update baud preview
+                                                    // If moved to preset, clear buffer and update baud preview
                                                     if idx < presets.len() {
                                                         form.input_buffer.clear();
                                                         form.baud = presets[idx];
@@ -281,14 +281,14 @@ fn run_app(
                                                 }
                                             }
                                             crate::protocol::status::EditingField::StopBits => {
-                                                // cycle among 1, 2
+                                                // Cycle among 1, 2
                                                 let options = [1, 2];
                                                 let cur_idx = options.iter().position(|&v| v == form.stop_bits).unwrap_or(0);
                                                 let next = if dir > 0 { (cur_idx + 1) % options.len() } else { (cur_idx + options.len() - 1) % options.len() };
                                                 form.stop_bits = options[next];
                                             }
                                             crate::protocol::status::EditingField::Parity => {
-                                                // cycle parity options
+                                                // Cycle parity options
                                                 let options = [crate::protocol::status::Parity::None, crate::protocol::status::Parity::Even, crate::protocol::status::Parity::Odd];
                                                 let idx = options.iter().position(|&p| p == form.parity).unwrap_or(0);
                                                 let next = if dir > 0 { (idx + 1) % options.len() } else { (idx + options.len() - 1) % options.len() };
@@ -343,7 +343,7 @@ fn run_app(
                                         let presets: [u32; 8] =
                                             [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                                         let custom_idx = presets.len();
-                                        // compute current index from edit_choice_index or derive from baud
+                                        // Compute current index from edit_choice_index or derive from baud
                                         let cur = form.edit_choice_index.unwrap_or_else(|| {
                                             presets
                                                 .iter()
@@ -351,10 +351,10 @@ fn run_app(
                                                 .unwrap_or(custom_idx)
                                         });
                                         if cur == custom_idx && !form.edit_confirmed {
-                                            // enter deeper confirmed edit stage
+                                            // Enter deeper confirmed edit stage
                                             form.edit_confirmed = true;
                                             form.editing = true;
-                                            // keep input_buffer as is (user may have typed)
+                                            // Keep input_buffer as is (user may have typed)
                                             continue;
                                         }
                                     }
@@ -370,7 +370,7 @@ fn run_app(
                                                     if idx < presets.len() {
                                                         form.baud = presets[idx];
                                                     } else {
-                                                        // custom: must parse and validate [1200..=2_000_000]
+                                                        // Custom: must parse and validate [1200..=2_000_000]
                                                         if !form.input_buffer.is_empty() {
                                                             if let Ok(v) =
                                                                 form.input_buffer.parse::<u32>()
@@ -380,6 +380,7 @@ fn run_app(
                                                                 } else {
                                                                     pending_error = Some(
                                                                         lang()
+                                                                            .protocol
                                                                             .invalid_baud_range
                                                                             .clone(),
                                                                     );
@@ -393,7 +394,7 @@ fn run_app(
                                                         }
                                                     }
                                                 } else {
-                                                    // fallback: if buffer present try parse and validate
+                                                    // Fallback: if buffer present try parse and validate
                                                     if !form.input_buffer.is_empty() {
                                                         if let Ok(v) =
                                                             form.input_buffer.parse::<u32>()
@@ -403,6 +404,7 @@ fn run_app(
                                                             } else {
                                                                 pending_error = Some(
                                                                     lang()
+                                                                        .protocol
                                                                         .invalid_baud_range
                                                                         .clone(),
                                                                 );
@@ -419,7 +421,7 @@ fn run_app(
                                             _ => {}
                                         }
                                     }
-                                    // exit editing only when commit succeeded
+                                    // Exit editing only when commit succeeded
                                     if commit_success {
                                         form.input_buffer.clear();
                                         form.editing_field = None;
@@ -431,7 +433,7 @@ fn run_app(
                                     }
                                 }
                                 KC::Esc => {
-                                    // cancel current field editing (revert input buffer)
+                                    // Cancel current field editing (revert input buffer)
                                     form.input_buffer.clear();
                                     form.editing_field = None;
                                     form.editing = false;
@@ -496,10 +498,10 @@ fn run_app(
                                 _ => {}
                             }
                             guard.clear_error();
-                            // force redraw so input buffer appears immediately
+                            // Force redraw so input buffer appears immediately
                             drop(guard);
                             redraw(terminal, &app);
-                            continue; // consumed
+                            continue; // Consumed
                         } else {
                             // Not editing: allow quick toggles for edit / mode
                             match key.code {
@@ -560,12 +562,12 @@ fn run_app(
                 if let Ok(mut guard) = app.lock() {
                     if crate::tui::ui::pages::handle_key_in_subpage(key, &mut *guard) {
                         guard.clear_error();
-                        continue; // consumed by subpage
+                        continue; // Consumed by subpage
                     }
                 }
 
                 {
-                    // try page-level mapping first (inner pages can override), fall back to global mapping
+                    // Try page-level mapping first (inner pages can override), fall back to global mapping
                     let mut action_opt: Option<Action> = None;
                     if let Ok(guard) = app.lock() {
                         action_opt = crate::tui::ui::pages::map_key_in_page(key, &*guard);
@@ -592,7 +594,7 @@ fn run_app(
                                     if allowed {
                                         break;
                                     } else {
-                                        // silently ignore quit when not allowed (do not show message)
+                                        // Silently ignore quit when not allowed (do not show message)
                                     }
                                 } else {
                                     log::error!("[TUI] failed to lock app for Quit check");
@@ -645,8 +647,8 @@ fn run_app(
                                             }
                                         }
                                     } else {
-                                        // use visual navigation so trailing virtual entries (Refresh / Manual)
-                                        // can be selected in the UI
+                                        // Use visual navigation so trailing virtual entries (Refresh / Manual)
+                                        // Can be selected in the UI
                                         guard.next_visual();
                                     }
                                     guard.clear_error();
@@ -706,7 +708,7 @@ fn run_app(
                             Action::JumpTop => {
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
-                                        // jump to top: bottom index becomes the last index of the first page
+                                        // Jump to top: bottom index becomes the last index of the first page
                                         guard.log_view_offset = 0;
                                         guard.log_auto_scroll = false;
                                     }
@@ -730,10 +732,10 @@ fn run_app(
                             Action::ToggleFollow => {
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
-                                        // toggle following newest logs
+                                        // Toggle following newest logs
                                         guard.log_auto_scroll = !guard.log_auto_scroll;
                                         if guard.log_auto_scroll {
-                                            // move view to bottom (latest)
+                                            // Move view to bottom (latest)
                                             let total = guard.logs.len();
                                             if total > 0 {
                                                 guard.log_view_offset = total - 1;
@@ -913,7 +915,7 @@ fn run_app(
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state != crate::protocol::status::PortState::OccupiedByThis {
-                                        // nothing to do: single-pane UI keeps left selection
+                                        // Nothing to do: single-pane UI keeps left selection
                                     }
                                 } else {
                                     log::error!("[TUI] failed to lock app for TogglePort");

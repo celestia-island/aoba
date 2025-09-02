@@ -17,9 +17,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 
     for port in raw_ports.into_iter() {
         // Normalize COM names. We avoid destructuring UsbPort fields directly
-        // because different serialport crate versions expose the variant in
-        // different shapes; prefer a conservative approach that still dedups
-        // by visible name and marks USB ports when necessary.
+        // Because different serialport crate versions expose the variant in
+        // Different shapes; prefer a conservative approach that still dedups
+        // By visible name and marks USB ports when necessary.
         let key = {
             let name_up = port.port_name.to_uppercase();
             // Extract COM<number> anywhere in the name (handles NULL_COM3 etc.)
@@ -86,7 +86,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
             }
             for i in idxs.into_iter() {
                 // If it's a usb-type port, attempt to append VID/PID/SN if
-                // we can extract them; otherwise append a generic (usb).
+                // We can extract them; otherwise append a generic (usb).
                 if matches!(ports[i].port_type, SerialPortType::UsbPort { .. }) {
                     if let Some((vid, pid, sn, _m, _p)) =
                         try_extract_vid_pid_serial(&ports[i].port_type)
@@ -133,9 +133,9 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 }
 
 // Attempt to conservatively extract vid/pid/serial from a SerialPortType
-// by inspecting its Debug representation. This is best-effort and should
-// not be relied on strictly, but helps annotate ports when metadata is
-// available across different serialport crate versions.
+// By inspecting its Debug representation. This is best-effort and should
+// Not be relied on strictly, but helps annotate ports when metadata is
+// Available across different serialport crate versions.
 pub fn try_extract_vid_pid_serial(
     pt: &SerialPortType,
 ) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {

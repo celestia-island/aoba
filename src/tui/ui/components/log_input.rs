@@ -12,7 +12,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut lines: Vec<Line> = Vec::new();
 
     if app.input_editing {
-        // show buffer on the first content line (right under the title)
+        // Show buffer on the first content line (right under the title)
         let content = if app.input_mode == InputMode::Hex {
             let mut s = String::new();
             let mut chars = app
@@ -33,32 +33,32 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
         } else {
             app.input_buffer.clone()
         };
-        // style editing content in yellow (match config page editing color)
+        // Style editing content in yellow (match config page editing color)
         let mut spans: Vec<ratatui::text::Span> = Vec::new();
-        // prefix editing line with single space (log list uses 2 incl. selector; here we keep compact)
+        // Prefix editing line with single space (log list uses 2 incl. selector; here we keep compact)
         spans.push(Span::raw(" "));
         spans.push(Span::styled(
             content.clone(),
             Style::default().fg(Color::Yellow),
         ));
-        // visual cursor block (green background)
+        // Visual cursor block (green background)
         spans.push(Span::styled(
             " ",
             Style::default().bg(Color::Green).fg(Color::Black),
         ));
         lines.push(ratatui::text::Line::from(spans));
-        // keep a spare empty middle line so layout remains 3 lines
-        // spare empty middle line should also keep two spaces for alignment
+        // Keep a spare empty middle line so layout remains 3 lines
+        // Spare empty middle line should also keep two spaces for alignment
         lines.push(Line::from(Span::raw(" ")));
-        // editing hint (submit)
+        // Editing hint (submit)
         lines.push(Line::from(Span::styled(
-            format!(" {}", lang().press_enter_submit.as_str()),
+            format!(" {}", lang().hotkeys.press_enter_submit.as_str()),
             Style::default().fg(Color::LightGreen),
         )));
 
-        // highlight title when editing (use library green)
+        // Highlight title when editing (use library green)
         let title = Span::styled(
-            format!(" {} ", lang().input_label.as_str()),
+            format!(" {} ", lang().input.input_label.as_str()),
             Style::default()
                 .bg(Color::Green)
                 .fg(Color::Black)
@@ -77,7 +77,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
 
     // Not editing: buffer preview and short hint (mode shown in title on right)
 
-    // buffer preview (or placeholder when empty)
+    // Buffer preview (or placeholder when empty)
     let content = if app.input_mode == InputMode::Hex {
         let mut s = String::new();
         let mut chars = app
@@ -100,13 +100,17 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
     };
     // If buffer empty and not editing, show faint gray italic placeholder indicating current input mode
     if content.is_empty() {
-        // show as: " {input_mode_current} {mode_text}" with a leading space to align with title
+        // Show as: " {input_mode_current} {mode_text}" with a leading space to align with title
         let mode_text = match app.input_mode {
-            InputMode::Ascii => lang().input_mode_ascii.as_str(),
-            InputMode::Hex => lang().input_mode_hex.as_str(),
+            InputMode::Ascii => lang().input.input_mode_ascii.as_str(),
+            InputMode::Hex => lang().input.input_mode_hex.as_str(),
         };
-        // add extra leading spaces to align with title
-        let placeholder = format!(" {} {}", lang().input_mode_current.as_str(), mode_text); // keep single leading space
+        // Add extra leading spaces to align with title
+        let placeholder = format!(
+            " {} {}",
+            lang().input.input_mode_current.as_str(),
+            mode_text
+        ); // Keep single leading space
         lines.push(Line::from(Span::styled(
             placeholder,
             Style::default()
@@ -114,18 +118,21 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
                 .add_modifier(Modifier::ITALIC),
         )));
     } else {
-        // raw content line also prefixed with two spaces for consistent alignment
+        // Raw content line also prefixed with two spaces for consistent alignment
         lines.push(Line::from(Span::raw(format!("  {}", content))));
     }
 
-    // hint (short)
-    // show dual-key hint: Enter / i
-    let edit_hint = format!("[Enter / i] {}", lang().hint_input_edit_short.as_str());
+    // Hint (short)
+    // Show dual-key hint: Enter / i
+    let edit_hint = format!(
+        "[Enter / i] {}",
+        lang().input.hint_input_edit_short.as_str()
+    );
     lines.push(Line::from(Span::raw(format!(" {}", edit_hint))));
 
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(format!(" {} ", lang().input_label.as_str()));
+        .title(format!(" {} ", lang().input.input_label.as_str()));
     let para = Paragraph::new(lines)
         .block(block)
         .wrap(ratatui::widgets::Wrap { trim: false });

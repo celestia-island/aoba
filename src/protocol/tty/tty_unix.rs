@@ -98,7 +98,7 @@ pub fn try_extract_vid_pid_serial(
             Some((*vid, *pid, sn, m, p))
         }
         // Some serialport versions have different field names; try to fall back
-        // to Debug parsing (best-effort).
+        // To Debug parsing (best-effort).
         _ => {
             let dbg = format!("{:?}", pt).to_lowercase();
             let vid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "vid");

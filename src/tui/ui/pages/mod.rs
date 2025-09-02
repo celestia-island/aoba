@@ -20,35 +20,35 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
             }
         }
     }
-    // default to entry hints when no subpage
+    // Default to entry hints when no subpage
     let hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
     // If the transient mode selector overlay is active, append its hints so the bottom bar
-    // can render them (keeps rendering centralized in bottom.rs)
+    // Can render them (keeps rendering centralized in bottom.rs)
     // Mode selector hints now rendered inside popup; do not append here to keep layout stable.
     hints
 }
 
 /// Return global bottom hints that should appear on the bottom-most line regardless
-/// of which subpage is active. This keeps page-specific hints separate (they can
-/// be shown on an extra line above).
+/// Of which subpage is active. This keeps page-specific hints separate (they can
+/// Be shown on an extra line above).
 pub fn global_hints_for_app(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     // If a subpage is active, show back/list and tab-switch hints as global controls.
     if app.active_subpage.is_some() {
-        hints.push(lang().hint_back_list.as_str().to_string());
-        hints.push(lang().hint_switch_tab.as_str().to_string());
+    hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
+    hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
     } else {
-        // default to entry hints when no subpage
+        // Default to entry hints when no subpage
         hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
     }
     // If the transient mode selector overlay is active, append its hints so the bottom bar
-    // can render them (keeps rendering centralized in bottom.rs)
+    // Can render them (keeps rendering centralized in bottom.rs)
     // Mode selector hints now rendered inside popup; do not append here.
     hints
 }
 
 /// Allow the active page to map a KeyEvent to a high-level Action when the global
-/// key mapping returns no action. Returns Some(Action) if mapped.
+/// Key mapping returns no action. Returns Some(Action) if mapped.
 pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
     if let Some(sub) = app.active_subpage {
         match sub {

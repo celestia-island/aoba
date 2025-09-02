@@ -49,18 +49,18 @@ pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mute
     // Right / central panel for details (sibling to the SidePanel)
     CentralPanel::default().show(ctx, |ui| {
         ui.group(|ui| {
-            ui.heading(lang().details.as_str());
+            ui.heading(lang().index.details.as_str());
             ui.separator();
             if ports.is_empty() {
-                ui.label(lang().no_com_ports.as_str());
+                ui.label(lang().index.no_com_ports.as_str());
             } else {
                 // Guard against out-of-bounds if selected is stale
                 let idx = if selected >= ports.len() { 0 } else { selected };
                 let p = &ports[idx];
-                ui.label(format!("{} {}", lang().name_label, p.port_name));
-                ui.label(format!("{} {:?}", lang().type_label, p.port_type));
+                ui.label(format!("{} {}", lang().index.name_label, p.port_name));
+                ui.label(format!("{} {:?}", lang().index.type_label, p.port_type));
                 ui.separator();
-                ui.label(lang().details_placeholder.as_str());
+                ui.label(lang().index.details_placeholder.as_str());
             }
         });
     });

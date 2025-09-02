@@ -19,9 +19,9 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     if let Some(form) = app.subpage_form.as_ref() {
         if form.registers.is_empty() {
             // Empty list -> highlight the 'new' entry with an arrow
-            let selected = form.master_cursor == 0; // cursor=0 means the 'new' entry
+            let selected = form.master_cursor == 0; // Cursor=0 means the 'new' entry
             let prefix = if selected { "> " } else { "  " };
-            let content = format!("{}[+] {}", prefix, lang().new_master);
+            let content = format!("{}[+] {}", prefix, lang().protocol.new_master);
             if selected {
                 all_lines.push(Line::styled(content, Style::default().fg(Color::Green)));
             } else {
@@ -30,12 +30,12 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         } else {
             for (i, r) in form.registers.iter().enumerate() {
                 let start = r.address as u32;
-                let end_inclusive = start + r.length as u32 - 1; // assume length >= 1
+                let end_inclusive = start + r.length as u32 - 1; // Assume length >= 1
                 let selected = form.master_cursor == i;
                 let mut line_spans: Vec<Span> = Vec::new();
                 // Fixed prefix: selector arrow + two spaces + # index (keeps # aligned).
                 if selected {
-                    line_spans.push(Span::raw("> ")); // arrow
+                    line_spans.push(Span::raw("> ")); // Arrow
                 }
                 line_spans.push(Span::raw(format!("#{}", i + 1))); // '#' start column fixed
                 line_spans.push(Span::raw(", "));
@@ -52,11 +52,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                 };
                 use crate::protocol::status::MasterEditField as MEF;
                 // Style helpers.
-                let browse_style = Style::default().fg(Color::Green); // browse layer selection color
+                let browse_style = Style::default().fg(Color::Green); // Browse layer selection color
                 let chosen_style = Style::default()
                     .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD); // current field selection
-                let active_field_style = Style::default().fg(Color::Yellow); // editing this field plain yellow
+                    .add_modifier(Modifier::BOLD); // Current field selection
+                let active_field_style = Style::default().fg(Color::Yellow); // Editing this field plain yellow
                 let normal_style = Style::default();
                 let master_base_style = if this_selected_master {
                     browse_style
@@ -85,12 +85,12 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                 line_spans.push(Span::raw(", "));
                 // Register type: single current value; in editing show spinner style.
                 let types = [
-                    lang().reg_type_coils.as_str(),
-                    lang().reg_type_discrete_inputs.as_str(),
-                    lang().reg_type_holding.as_str(),
-                    lang().reg_type_input.as_str(),
+                    lang().protocol.reg_type_coils.as_str(),
+                    lang().protocol.reg_type_discrete_inputs.as_str(),
+                    lang().protocol.reg_type_holding.as_str(),
+                    lang().protocol.reg_type_input.as_str(),
                 ];
-                let cur_type_idx = ((r.mode as u8 as usize).saturating_sub(1)).min(3); // enum discriminant 1..4 -> index 0..3
+                let cur_type_idx = ((r.mode as u8 as usize).saturating_sub(1)).min(3); // Enum discriminant 1..4 -> index 0..3
                 if matches!(cur_field, Some(MEF::Type)) && this_master_editing_field {
                     line_spans.push(Span::styled("< ", master_base_style));
                     line_spans.push(Span::styled(
@@ -114,7 +114,7 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                 // Address range (start-end).
                 let range_prefix_style = master_base_style;
                 line_spans.push(Span::styled(
-                    format!("{} = ", lang().label_address_range),
+                    format!("{} = ", lang().protocol.label_address_range),
                     range_prefix_style,
                 ));
                 let start_active =
@@ -224,7 +224,7 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             let new_line = format!(
                 "{}[+] {}",
                 if new_sel { "> " } else { "  " },
-                lang().new_master
+                lang().protocol.new_master
             );
             if new_sel {
                 all_lines.push(Line::styled(new_line, Style::default().fg(Color::Green)));
@@ -233,11 +233,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             }
         }
     } else {
-        all_lines.push(Line::from(lang().details_placeholder.as_str()));
-        all_lines.push(Line::from(format!("[+] {}", lang().new_master)));
+    all_lines.push(Line::from(lang().index.details_placeholder.as_str()));
+    all_lines.push(Line::from(format!("[+] {}", lang().protocol.new_master)));
     }
     // Compute scroll window
-    let inner_height = area.height.saturating_sub(2) as usize; // number of lines visible inside the border
+    let inner_height = area.height.saturating_sub(2) as usize; // Number of lines visible inside the border
     let mut first_visible = 0usize;
     if let Some(form) = app.subpage_form.as_ref() {
         // Compute starting line index of current cursor's header
@@ -253,11 +253,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             } else {
                 (r.length as usize + 7) / 8
             };
-            accum += 1 + value_lines + 1; // header + values + blank
+            accum += 1 + value_lines + 1; // Header + values + blank
         }
         if form.master_cursor == form.registers.len() {
             // 'New' line
-            cursor_line = accum; // accumulated lines of all masters
+            cursor_line = accum; // Accumulated lines of all masters
         }
         // If editing a value field, ensure its line is visible
         if form.master_field_selected {
@@ -276,11 +276,11 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                                         (r2.length as usize + 7) / 8
                                     };
                                     if i2 == idx {
-                                        line_no += 1; // header line
+                                        line_no += 1; // Header line
                                         if r2.length > 0 {
                                             let offset = *addr as usize - r2.address as usize;
                                             let val_line_index = offset / 8;
-                                            line_no += val_line_index; // value line offset
+                                            line_no += val_line_index; // Value line offset
                                         }
                                         if line_no < first_visible {
                                             first_visible = line_no;
@@ -289,7 +289,7 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                                         }
                                         break;
                                     } else {
-                                        line_no += 1 + val_lines2 + 1; // header + values + blank
+                                        line_no += 1 + val_lines2 + 1; // Header + values + blank
                                     }
                                 }
                             }
@@ -314,7 +314,7 @@ pub fn render_master_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Scroll bar
     if total_lines > inner_height && inner_height > 0 {
         let bar_x = area.x + area.width.saturating_sub(1);
-        let bar_y = area.y + 1; // inside border
+        let bar_y = area.y + 1; // Inside border
         let bar_h = area.height.saturating_sub(2);
         let denom = (total_lines.saturating_sub(inner_height)) as f32;
         let ratio = if denom > 0.0 {

@@ -12,7 +12,7 @@ use ratatui::{
 };
 
 /// Render a boxed paragraph. Accepts a list of lines, a target rect, and an optional style for the
-/// paragraph content. The block will use all borders by default.
+/// Paragraph content. The block will use all borders by default.
 pub fn render_boxed_paragraph(
     f: &mut Frame,
     area: Rect,
