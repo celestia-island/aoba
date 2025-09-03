@@ -14,7 +14,7 @@ use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
-    // First hint: switching COM ports with Up/Down or k/j
+    // First hint: switching COM ports with Up / Down or k / j
     hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
     // Second hint: press 'l' to enter subpage
     hints.push(lang().hotkeys.hint_enter_subpage.as_str().to_string());
@@ -254,25 +254,41 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             // Build styled lines and align values into a right-hand column.
             let mut info_lines: Vec<Line> = Vec::new();
 
-            // Prepare label/value pairs (value strings already include leading space where needed)
+            // Prepare label / value pairs (value strings already include leading space where needed)
             let mut pairs: Vec<(String, String, Option<Style>)> = Vec::new();
             pairs.push((
-                lang().protocol.label_port.as_str().to_string(),
+                lang().protocol.common.label_port.as_str().to_string(),
                 format!("{}", p.port_name),
                 None,
             ));
             pairs.push((
-                lang().protocol.label_type.as_str().to_string(),
+                lang().protocol.common.label_type.as_str().to_string(),
                 format!("{:?}", p.port_type),
                 None,
             ));
             pairs.push((
-                lang().protocol.label_status.as_str().to_string(),
+                lang().protocol.common.label_status.as_str().to_string(),
                 format!("{}", status_text),
                 Some(status_style),
             ));
+            // Current per-port application mode (ModBus / MQTT)
+            if selected_state == crate::protocol::status::PortState::OccupiedByThis {
+                let mode_label = match app.app_mode {
+                    crate::protocol::status::AppMode::Modbus => {
+                        lang().protocol.common.mode_modbus.as_str()
+                    }
+                    crate::protocol::status::AppMode::Mqtt => {
+                        lang().protocol.common.mode_mqtt.as_str()
+                    }
+                };
+                pairs.push((
+                    lang().protocol.common.label_mode.as_str().to_string(),
+                    mode_label.to_string(),
+                    None,
+                ));
+            }
 
-            // Mode always unified; hide previous master/slave mode line.
+            // Mode always unified; hide previous master / slave mode line.
 
             if selected_state == crate::protocol::status::PortState::OccupiedByThis {
                 if let Some(cfg) = runtime_cfg.clone() {
@@ -280,27 +296,33 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     let data_bits = cfg.data_bits.to_string();
                     let parity = match cfg.parity {
                         crate::protocol::status::Parity::None => {
-                            lang().protocol.parity_none.clone()
+                            lang().protocol.common.parity_none.clone()
                         }
                         crate::protocol::status::Parity::Even => {
-                            lang().protocol.parity_even.clone()
+                            lang().protocol.common.parity_even.clone()
                         }
-                        crate::protocol::status::Parity::Odd => lang().protocol.parity_odd.clone(),
+                        crate::protocol::status::Parity::Odd => {
+                            lang().protocol.common.parity_odd.clone()
+                        }
                     };
                     let stop = cfg.stop_bits.to_string();
-                    pairs.push((lang().protocol.label_baud.as_str().to_string(), baud, None));
                     pairs.push((
-                        lang().protocol.label_data_bits.as_str().to_string(),
+                        lang().protocol.common.label_baud.as_str().to_string(),
+                        baud,
+                        None,
+                    ));
+                    pairs.push((
+                        lang().protocol.common.label_data_bits.as_str().to_string(),
                         data_bits,
                         None,
                     ));
                     pairs.push((
-                        lang().protocol.label_parity.as_str().to_string(),
+                        lang().protocol.common.label_parity.as_str().to_string(),
                         parity,
                         None,
                     ));
                     pairs.push((
-                        lang().protocol.label_stop_bits.as_str().to_string(),
+                        lang().protocol.common.label_stop_bits.as_str().to_string(),
                         stop,
                         None,
                     ));
@@ -358,7 +380,7 @@ pub fn handle_subpage_key(
     _app: &mut crate::protocol::status::Status,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
-    // Provide simple handling for listen mode: consume Up/Down/Enter to avoid bubbling
+    // Provide simple handling for listen mode: consume Up / Down / Enter to avoid bubbling
     match _key.code {
         KC::Up
         | KC::Down

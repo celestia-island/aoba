@@ -2,7 +2,6 @@ use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use yuuka::derive_struct;
 
-// Include translation TOML at compile time
 const EN_US_TOML: &str = include_str!("../res/i18n/en_us.toml");
 const ZH_CHS_TOML: &str = include_str!("../res/i18n/zh_chs.toml");
 const ZH_CHT_TOML: &str = include_str!("../res/i18n/zh_cht.toml");
@@ -45,6 +44,7 @@ derive_struct! {
             hint_kv_template: String = "hint_kv_template".to_string(),
 
             press_c_clear: String = "press_c_clear".to_string(),
+            press_m_switch_protocol: String = "press_m_switch_protocol".to_string(),
             press_enter_toggle: String = "press_enter_toggle".to_string(),
             press_enter_select: String = "press_enter_select".to_string(),
             press_enter_enable: String = "press_enter_enable".to_string(),
@@ -80,12 +80,8 @@ derive_struct! {
         },
 
         tabs: {
-            // Removed tab_master/tab_slave after unifying ModBus modes
-            // master_mode / slave_mode removed after unifying UI
-
             tab_config: String = "tab_config".to_string(),
             tab_log: String = "tab_log".to_string(),
-            // Removed mode_selector_title after unifying ModBus modes
             log_dir_send: String = "log_dir_send".to_string(),
             log_dir_recv: String = "log_dir_recv".to_string(),
 
@@ -110,41 +106,54 @@ derive_struct! {
         },
 
         protocol: {
-            serial_unknown: String = "serial_unknown".to_string(),
-            label_port: String = "label_port".to_string(),
-            label_type: String = "label_type".to_string(),
-            label_status: String = "label_status".to_string(),
-            label_mode: String = "label_mode".to_string(),
-            label_baud: String = "label_baud".to_string(),
-            label_data_bits: String = "label_data_bits".to_string(),
-            label_parity: String = "label_parity".to_string(),
-            label_stop_bits: String = "label_stop_bits".to_string(),
-            custom: String = "custom".to_string(),
-
-            parity_none: String = "parity_none".to_string(),
-            parity_even: String = "parity_even".to_string(),
-            parity_odd: String = "parity_odd".to_string(),
-            edit_suffix: String = "edit_suffix".to_string(),
-            registers_list: String = "registers_list".to_string(),
-            label_master_list: String = "label_master_list".to_string(),
-            label_slave_listen: String = "label_slave_listen".to_string(),
-            label_modbus_settings: String = "label_modbus_settings".to_string(),
-            invalid_baud_range: String = "invalid_baud_range".to_string(),
-            new_master: String = "new_master".to_string(),
-            new_slave: String = "new_slave".to_string(),
-            new_entry: String = "new_entry".to_string(),
-            label_address_range: String = "label_address_range".to_string(),
-            reg_type_coils: String = "reg_type_coils".to_string(),
-            reg_type_discrete_inputs: String = "reg_type_discrete_inputs".to_string(),
-            reg_type_holding: String = "reg_type_holding".to_string(),
-            reg_type_input: String = "reg_type_input".to_string(),
-            label_req_counter: String = "label_req_counter".to_string(),
-            refresh_rate: String = "refresh_rate".to_string(),
-            value_true: String = "value_true".to_string(),
-            value_false: String = "value_false".to_string(),
-            toggle_too_fast: String = "toggle_too_fast".to_string(),
-            role_master: String = "role_master".to_string(),
-            role_slave: String = "role_slave".to_string(),
+            common: {
+                serial_unknown: String = "serial_unknown".to_string(),
+                label_port: String = "label_port".to_string(),
+                label_type: String = "label_type".to_string(),
+                label_status: String = "label_status".to_string(),
+                label_mode: String = "label_mode".to_string(),
+                label_baud: String = "label_baud".to_string(),
+                label_data_bits: String = "label_data_bits".to_string(),
+                label_parity: String = "label_parity".to_string(),
+                label_stop_bits: String = "label_stop_bits".to_string(),
+                custom: String = "custom".to_string(),
+                parity_none: String = "parity_none".to_string(),
+                parity_even: String = "parity_even".to_string(),
+                parity_odd: String = "parity_odd".to_string(),
+                toggle_too_fast: String = "toggle_too_fast".to_string(),
+                mode_modbus: String = "mode_modbus".to_string(),
+                mode_mqtt: String = "mode_mqtt".to_string(),
+                mode_tcp: String = "mode_tcp".to_string(),
+                mode_overlay_title: String = "mode_overlay_title".to_string(),
+                mode_overlay_hint: String = "mode_overlay_hint".to_string(),
+            },
+            modbus: {
+                edit_suffix: String = "edit_suffix".to_string(),
+                registers_list: String = "registers_list".to_string(),
+                label_master_list: String = "label_master_list".to_string(),
+                label_slave_listen: String = "label_slave_listen".to_string(),
+                label_modbus_settings: String = "label_modbus_settings".to_string(),
+                invalid_baud_range: String = "invalid_baud_range".to_string(),
+                new_master: String = "new_master".to_string(),
+                new_slave: String = "new_slave".to_string(),
+                new_entry: String = "new_entry".to_string(),
+                label_address_range: String = "label_address_range".to_string(),
+                reg_type_coils: String = "reg_type_coils".to_string(),
+                reg_type_discrete_inputs: String = "reg_type_discrete_inputs".to_string(),
+                reg_type_holding: String = "reg_type_holding".to_string(),
+                reg_type_input: String = "reg_type_input".to_string(),
+                label_req_counter: String = "label_req_counter".to_string(),
+                refresh_rate: String = "refresh_rate".to_string(),
+                value_true: String = "value_true".to_string(),
+                value_false: String = "value_false".to_string(),
+                role_master: String = "role_master".to_string(),
+                role_slave: String = "role_slave".to_string(),
+            },
+            mqtt: {
+                // Placeholder texts for MQTT panel (new)
+                panel_placeholder: String = "panel_placeholder".to_string(),
+                panel_not_current: String = "panel_not_current".to_string(),
+            }
         },
     }
 }

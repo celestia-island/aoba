@@ -20,7 +20,7 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         if form.registers.is_empty() {
             let sel = form.master_cursor == 0;
             let prefix = if sel { "> " } else { "  " };
-            let line = format!("{}[+] {}", prefix, lang().protocol.new_entry);
+            let line = format!("{}[+] {}", prefix, lang().protocol.modbus.new_entry);
             if sel {
                 lines.push(Line::styled(line, Style::default().fg(Color::Green)));
             } else {
@@ -36,7 +36,7 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             let new_line = format!(
                 "{}[+] {}",
                 if new_sel { "> " } else { "  " },
-                lang().protocol.new_entry
+                lang().protocol.modbus.new_entry
             );
             if new_sel {
                 lines.push(Line::styled(new_line, Style::default().fg(Color::Green)));
@@ -46,10 +46,13 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         }
     } else {
         lines.push(Line::from(lang().index.details_placeholder.as_str()));
-        lines.push(Line::from(format!("[+] {}", lang().protocol.new_entry)));
+        lines.push(Line::from(format!(
+            "[+] {}",
+            lang().protocol.modbus.new_entry
+        )));
     }
 
-    // Scroll logic copied from master/pull panels
+    // Scroll logic copied from master / pull panels
     let inner_height = area.height.saturating_sub(2) as usize;
     let mut first_visible = 0usize;
     if let Some(form) = app.subpage_form.as_ref() {
@@ -145,10 +148,23 @@ fn render_entry_header(
     let normal = Style::default();
     let base = if selected { browse } else { normal };
     let mut spans: Vec<Span> = Vec::new();
+    // Prefix + index coloring rule:
+    //  - Cursor hover (selected but not chosen / editing): Green
+    //  - Entry has a specific field selected / editing (chosen): Yellow (non-bold)
+    //  - Otherwise: normal
+    let prefix_style = if selected {
+        if chosen {
+            chosen_style
+        } else {
+            browse
+        }
+    } else {
+        normal
+    };
     if selected {
-        spans.push(Span::raw("> "));
+        spans.push(Span::styled("> ", prefix_style));
     }
-    spans.push(Span::raw(format!("#{}", idx + 1)));
+    spans.push(Span::styled(format!("#{}", idx + 1), prefix_style));
     spans.push(Span::raw(", "));
     // Role field (new first editable)
     let role_active = matches!(cur_field, Some(F::Role)) && editing;
@@ -160,10 +176,13 @@ fn render_entry_header(
         base
     };
     let role_label = match r.role {
-        EntryRole::Master => lang().protocol.role_master.as_str(),
-        EntryRole::Slave => lang().protocol.role_slave.as_str(),
+        EntryRole::Master => lang().protocol.modbus.role_master.as_str(),
+        EntryRole::Slave => lang().protocol.modbus.role_slave.as_str(),
     };
     if role_active {
+        spans.push(Span::styled(format!("[{}]", role_label), role_style));
+    } else if chosen && matches!(cur_field, Some(F::Role)) {
+        // Chosen (non-edit) state: add brackets for non-color terminals
         spans.push(Span::styled(format!("[{}]", role_label), role_style));
     } else {
         spans.push(Span::styled(role_label.to_string(), role_style));
@@ -185,16 +204,18 @@ fn render_entry_header(
             form.master_input_buffer.as_str()
         };
         spans.push(Span::styled(format!("ID = [{}]", content), id_style));
+    } else if chosen && matches!(cur_field, Some(F::Id)) {
+        spans.push(Span::styled(format!("ID = [{:02X}]", r.slave_id), id_style));
     } else {
         spans.push(Span::styled(format!("ID = {:02X}", r.slave_id), id_style));
     }
     spans.push(Span::raw(", "));
     // Type
     let types = [
-        lang().protocol.reg_type_coils.as_str(),
-        lang().protocol.reg_type_discrete_inputs.as_str(),
-        lang().protocol.reg_type_holding.as_str(),
-        lang().protocol.reg_type_input.as_str(),
+        lang().protocol.modbus.reg_type_coils.as_str(),
+        lang().protocol.modbus.reg_type_discrete_inputs.as_str(),
+        lang().protocol.modbus.reg_type_holding.as_str(),
+        lang().protocol.modbus.reg_type_input.as_str(),
     ];
     let type_idx = ((r.mode as u8 as usize).saturating_sub(1)).min(3);
     if matches!(cur_field, Some(F::Type)) && editing {
@@ -211,7 +232,7 @@ fn render_entry_header(
     let start = r.address as u32;
     let end_inclusive = start + r.length as u32 - 1;
     spans.push(Span::styled(
-        format!("{} = ", lang().protocol.label_address_range),
+        format!("{} = ", lang().protocol.modbus.label_address_range),
         base,
     ));
     let start_active = matches!(cur_field, Some(F::Start)) && editing;
@@ -229,6 +250,8 @@ fn render_entry_header(
             form.master_input_buffer.as_str()
         };
         spans.push(Span::styled(format!("0x[{}]", content), start_style));
+    } else if chosen && matches!(cur_field, Some(F::Start)) {
+        spans.push(Span::styled(format!("0x[{:04X}]", start), start_style));
     } else {
         spans.push(Span::styled(format!("0x{:04X}", start), start_style));
     }
@@ -248,6 +271,11 @@ fn render_entry_header(
             form.master_input_buffer.as_str()
         };
         spans.push(Span::styled(format!("0x[{}]", content), end_style));
+    } else if chosen && matches!(cur_field, Some(F::End)) {
+        spans.push(Span::styled(
+            format!("0x[{:04X}]", end_inclusive),
+            end_style,
+        ));
     } else {
         spans.push(Span::styled(format!("0x{:04X}", end_inclusive), end_style));
     }
@@ -261,7 +289,7 @@ fn render_entry_header(
     } else {
         base
     };
-    let refresh_label = lang().protocol.refresh_rate.as_str();
+    let refresh_label = lang().protocol.modbus.refresh_rate.as_str();
     if refresh_active {
         let content = if form.master_input_buffer.is_empty() {
             "_"
@@ -272,6 +300,11 @@ fn render_entry_header(
             format!("{} = [{}] ms", refresh_label, content),
             refresh_style,
         ));
+    } else if chosen && matches!(cur_field, Some(F::Refresh)) {
+        spans.push(Span::styled(
+            format!("{} = [{}] ms", refresh_label, r.refresh_ms),
+            refresh_style,
+        ));
     } else {
         spans.push(Span::styled(
             format!("{} = {} ms", refresh_label, r.refresh_ms),
@@ -279,17 +312,24 @@ fn render_entry_header(
         ));
     }
     spans.push(Span::raw(", "));
-    let counter_label = lang().protocol.label_req_counter.as_str();
+    let counter_label = lang().protocol.modbus.label_req_counter.as_str();
     let counter_selected = chosen && matches!(cur_field, Some(F::Counter));
     let counter_style = if counter_selected {
         chosen_style
     } else {
         Style::default().fg(Color::Green)
     };
-    spans.push(Span::styled(
-        format!("{} = {} / {}", counter_label, r.req_success, r.req_total),
-        counter_style,
-    ));
+    if counter_selected {
+        spans.push(Span::styled(
+            format!("{} = [{} / {}]", counter_label, r.req_success, r.req_total),
+            counter_style,
+        ));
+    } else {
+        spans.push(Span::styled(
+            format!("{} = {} / {}", counter_label, r.req_success, r.req_total),
+            counter_style,
+        ));
+    }
     out.push(Line::from(spans));
 }
 
@@ -353,9 +393,9 @@ fn render_entry_values(
                 if *a as usize == cur && editing {
                     if r.mode == crate::protocol::status::RegisterMode::Coils {
                         let lbl = if raw_val != 0 {
-                            lang().protocol.value_true.as_str()
+                            lang().protocol.modbus.value_true.as_str()
                         } else {
-                            lang().protocol.value_false.as_str()
+                            lang().protocol.modbus.value_false.as_str()
                         };
                         spans.push(Span::styled(format!("[{}]", lbl), style));
                     } else {
@@ -369,15 +409,28 @@ fn render_entry_values(
                     continue;
                 }
             }
+            let is_chosen_value = if let Some(F::Value(a)) = &cur_field {
+                !editing && *a as usize == cur
+            } else {
+                false
+            };
             if r.mode == crate::protocol::status::RegisterMode::Coils {
                 let lbl = if raw_val != 0 {
-                    lang().protocol.value_true.as_str()
+                    lang().protocol.modbus.value_true.as_str()
                 } else {
-                    lang().protocol.value_false.as_str()
+                    lang().protocol.modbus.value_false.as_str()
                 };
-                spans.push(Span::styled(lbl.to_string(), style));
+                if is_chosen_value {
+                    spans.push(Span::styled(format!("[{}]", lbl), style));
+                } else {
+                    spans.push(Span::styled(lbl.to_string(), style));
+                }
             } else {
-                spans.push(Span::styled(format!("{:02X}", raw_val), style));
+                if is_chosen_value {
+                    spans.push(Span::styled(format!("[{:02X}]", raw_val), style));
+                } else {
+                    spans.push(Span::styled(format!("{:02X}", raw_val), style));
+                }
             }
         }
         out.push(Line::from(spans));

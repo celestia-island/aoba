@@ -12,8 +12,6 @@ use std::{
 #[allow(dead_code)]
 const LOG_GROUP_HEIGHT: usize = 3; // fallback; adjust if original constant differs
 
-// ===== Core unified ModBus data types =====
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryRole {
     Master,
@@ -53,8 +51,8 @@ pub struct RegisterEntry {
     pub slave_id: u8,
     pub mode: RegisterMode,
     pub address: u16,    // start address
-    pub length: u16,     // number of points/registers
-    pub values: Vec<u8>, // value bytes / bits (coils: 0/1; registers: low bytes retained)
+    pub length: u16,     // number of points / registers
+    pub values: Vec<u8>, // value bytes / bits (coils: 0 / 1; registers: low bytes retained)
     pub refresh_ms: u32, // polling interval
     pub next_poll_at: std::time::Instant,
     pub req_success: u32,
@@ -82,6 +80,26 @@ impl Default for RegisterEntry {
 pub enum InputMode {
     Ascii,
     Hex,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppMode {
+    Modbus,
+    Mqtt,
+}
+impl AppMode {
+    pub fn cycle(self) -> Self {
+        match self {
+            AppMode::Modbus => AppMode::Mqtt,
+            AppMode::Mqtt => AppMode::Modbus,
+        }
+    }
+    pub fn label(self) -> &'static str {
+        match self {
+            AppMode::Modbus => "ModBus RTU",
+            AppMode::Mqtt => "MQTT",
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -157,6 +175,7 @@ pub(crate) struct PerPortState {
     input_mode: InputMode,
     input_editing: bool,
     input_buffer: String,
+    app_mode: AppMode,
 }
 
 #[derive(Debug)]
@@ -184,6 +203,10 @@ pub struct Status {
     pub input_mode: InputMode,
     pub input_editing: bool,
     pub input_buffer: String,
+
+    pub app_mode: AppMode,
+    pub mode_overlay_active: bool,
+    pub mode_overlay_index: usize,
 
     pub(crate) per_port_states: HashMap<String, PerPortState>,
     pub last_scan_info: Vec<String>,
@@ -217,6 +240,9 @@ impl Status {
             input_mode: InputMode::Ascii,
             input_editing: false,
             input_buffer: String::new(),
+            app_mode: AppMode::Modbus,
+            mode_overlay_active: false,
+            mode_overlay_index: 0,
             per_port_states: HashMap::new(),
             last_scan_info: Vec::new(),
             last_scan_time: None,
@@ -589,12 +615,12 @@ impl Status {
         self.busy = false;
     }
 
-    /// Quick device scan: update last_scan_info/time without re-enumerating serial ports
+    /// Quick device scan: update last_scan_info / time without re-enumerating serial ports
     pub fn quick_scan(&mut self) {
         self.perform_device_scan();
     }
 
-    fn save_current_port_state(&mut self) {
+    pub fn save_current_port_state(&mut self) {
         if self.selected < self.ports.len() {
             if let Some(info) = self.ports.get(self.selected) {
                 let snap = PerPortState {
@@ -608,6 +634,7 @@ impl Status {
                     input_mode: self.input_mode,
                     input_editing: self.input_editing,
                     input_buffer: self.input_buffer.clone(),
+                    app_mode: self.app_mode,
                 };
                 self.per_port_states.insert(info.port_name.clone(), snap);
             }
@@ -628,6 +655,7 @@ impl Status {
                     self.input_mode = snap.input_mode;
                     self.input_editing = snap.input_editing;
                     self.input_buffer = snap.input_buffer;
+                    self.app_mode = snap.app_mode;
                 } else {
                     // Fresh defaults
                     self.subpage_active = false;
@@ -640,6 +668,7 @@ impl Status {
                     self.input_mode = InputMode::Ascii;
                     self.input_editing = false;
                     self.input_buffer.clear();
+                    self.app_mode = AppMode::Modbus;
                 }
             }
         }
@@ -671,12 +700,12 @@ impl Status {
 
     /// Toggle the selected port's occupancy by this app. No-op if other program occupies the port.
     pub fn toggle_selected_port(&mut self) {
-        // Throttle rapid toggles to prevent OS / driver self-lock due to fast open/close bursts.
+        // Throttle rapid toggles to prevent OS / driver self-lock due to fast open / close bursts.
         let now = std::time::Instant::now();
         if let Some(last) = self.last_port_toggle {
             if now.duration_since(last).as_millis() < self.port_toggle_min_interval_ms as u128 {
                 // Provide user feedback (localized)
-                self.set_error(crate::i18n::lang().protocol.toggle_too_fast.clone());
+                self.set_error(crate::i18n::lang().protocol.common.toggle_too_fast.clone());
                 return; // Ignore rapid toggle
             }
         }
@@ -980,8 +1009,6 @@ impl Status {
     }
 }
 
-// ===== Additional supporting items restored after refactor =====
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortState {
     Free,
@@ -997,7 +1024,7 @@ fn available_ports_sorted() -> Vec<SerialPortInfo> {
         Err(_) => Vec::new(),
     };
     // Filtering strategy:
-    // 1. Exclude names containing or starting with "NULL_" (Windows some virtual/placeholder) or "_NULL" / pure NULL_COMx
+    // 1. Exclude names containing or starting with "NULL_" (Windows some virtual / placeholder) or "_NULL" / pure NULL_COMx
     // 2. Exclude empty strings
     // 3. Optionally de-duplicate names (keep the first occurrence)
     let mut seen: HashSet<String> = HashSet::new();
@@ -1106,7 +1133,7 @@ fn parse_modbus_request(frame: &[u8]) -> Option<(u8, u8, u16, u16)> {
             Some((slave_id, func, addr, qty.max(1)))
         }
         0x05 | 0x06 => {
-            // single coil/register write
+            // single coil / register write
             if frame.len() < 8 {
                 return None;
             }
