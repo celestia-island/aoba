@@ -1,53 +1,23 @@
-use chrono::{DateTime, Local};
-use std::cmp::{max, min};
-use std::{collections::HashMap, time::Duration};
-
-use serialport::new as sp_new;
-use serialport::{Parity as SerialParity, SerialPort, SerialPortInfo, StopBits};
-
+//! Runtime status & ModBus unified data structures.
 use crate::protocol::runtime::{PortRuntimeHandle, RuntimeCommand, RuntimeEvent, SerialConfig};
-use crate::protocol::tty::available_ports_sorted;
-use crate::tui::utils::constants::LOG_GROUP_HEIGHT;
+use chrono::{DateTime, Local};
+use serialport::{SerialPort, SerialPortInfo};
+use std::{
+    cmp::{max, min},
+    collections::HashMap,
+    collections::HashSet,
+    time::Duration,
+};
+// If LOG_GROUP_HEIGHT was defined previously in tui module, re‑import; else define fallback.
+#[allow(dead_code)]
+const LOG_GROUP_HEIGHT: usize = 3; // fallback; adjust if original constant differs
 
-/// Minimum interval (milliseconds) between consecutive port occupancy toggles to prevent OS driver self-lock.
-pub const PORT_TOGGLE_MIN_INTERVAL_MS: u64 = 1500; // 1.5 seconds
-
-/// Parsed summary of a captured protocol request / response for UI display.
-#[derive(Debug, Clone)]
-pub struct ParsedRequest {
-    /// Origin of the message (e.g. "master-stack" or "main-stack")
-    pub origin: String,
-    /// "R" or "W"
-    pub rw: String,
-    /// Textual command or function code (e.g. "Read Coils / 0x01")
-    pub command: String,
-    pub slave_id: u8,
-    pub address: u16,
-    pub length: u16,
-}
-
-/// A single captured log entry for UI presentation.
-#[derive(Debug, Clone)]
-pub struct LogEntry {
-    pub when: DateTime<Local>,
-    /// Raw bytes or textual payload (displayed truncated)
-    pub raw: String,
-    /// Optional parsed summary
-    pub parsed: Option<ParsedRequest>,
-}
-
-/// Input mode for the log input box: ASCII text or Hex bytes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InputMode {
-    Ascii,
-    Hex,
-}
+// ===== Core unified ModBus data types =====
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Parity {
-    None,
-    Even,
-    Odd,
+pub enum EntryRole {
+    Master,
+    Slave,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,8 +27,15 @@ pub enum RegisterMode {
     Holding = 3,
     Input = 4,
 }
-
 impl RegisterMode {
+    pub const fn all() -> &'static [RegisterMode] {
+        &[
+            RegisterMode::Coils,
+            RegisterMode::DiscreteInputs,
+            RegisterMode::Holding,
+            RegisterMode::Input,
+        ]
+    }
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => Self::Coils,
@@ -68,342 +45,169 @@ impl RegisterMode {
             _ => Self::Coils,
         }
     }
-    pub fn as_u8(self) -> u8 {
-        self as u8
-    }
-    pub fn all() -> [RegisterMode; 4] {
-        [
-            Self::Coils,
-            Self::DiscreteInputs,
-            Self::Holding,
-            Self::Input,
-        ]
-    }
 }
 
 #[derive(Debug, Clone)]
 pub struct RegisterEntry {
+    pub role: EntryRole, // Master or Slave role per entry
     pub slave_id: u8,
     pub mode: RegisterMode,
+    pub address: u16,    // start address
+    pub length: u16,     // number of points/registers
+    pub values: Vec<u8>, // value bytes / bits (coils: 0/1; registers: low bytes retained)
+    pub refresh_ms: u32, // polling interval
+    pub next_poll_at: std::time::Instant,
+    pub req_success: u32,
+    pub req_total: u32,
+}
+
+impl Default for RegisterEntry {
+    fn default() -> Self {
+        Self {
+            role: EntryRole::Slave,
+            slave_id: 1,
+            mode: RegisterMode::Holding,
+            address: 0,
+            length: 1,
+            values: vec![0],
+            refresh_ms: 1000,
+            next_poll_at: std::time::Instant::now(),
+            req_success: 0,
+            req_total: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputMode {
+    Ascii,
+    Hex,
+}
+
+#[derive(Clone, Debug)]
+pub struct ParsedRequest {
+    pub origin: String,
+    pub rw: String,
+    pub command: String,
+    pub slave_id: u8,
     pub address: u16,
     pub length: u16,
-    /// Placeholder register values for UI editing (length-sized, hex display)
-    pub values: Vec<u8>,
-    /// Refresh interval in milliseconds (for listen panel)
-    pub refresh_ms: u32,
-    /// Successful request count
-    pub req_success: u64,
-    /// Total request count
-    pub req_total: u64,
-    /// Next scheduled poll instant (monotonic) for active polling modes
-    pub next_poll_at: std::time::Instant,
+}
+#[derive(Clone, Debug)]
+pub struct LogEntry {
+    pub when: DateTime<Local>,
+    pub raw: String,
+    pub parsed: Option<ParsedRequest>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SubpageForm {
     pub baud: u32,
-    pub parity: Parity,
     pub data_bits: u8,
     pub stop_bits: u8,
+    pub parity: Parity,
     pub registers: Vec<RegisterEntry>,
-    // UI state
-    pub cursor: usize, // Which field or register is focused
-    pub editing: bool, // Whether in edit mode
-    // Which specific field is being edited (None when not editing)
+    pub editing: bool,
     pub editing_field: Option<EditingField>,
-    // Input buffer for the current editing session (text)
-    pub input_buffer: String,
-    /// Temporary index used when editing a multi-option field (like Baud presets + Custom)
     pub edit_choice_index: Option<usize>,
-    /// Whether we've entered the deeper confirm / editing stage for a choice (e.g. Custom baud)
     pub edit_confirmed: bool,
-    // --- Master list (tab 1) dedicated UI state ---
-    /// Cursor in master list panel (points to a master or the trailing "new" entry)
-    pub master_cursor: usize,
-    /// Whether currently editing a master entry (deprecated flag, kept for future use)
-    pub master_editing: bool,
-    /// Whether a specific master field is selected (field selection layer)
-    pub master_field_selected: bool,
-    /// Whether the current field is in active input editing (vs merely selected)
-    pub master_field_editing: bool,
-    /// Currently focused master field
-    pub master_edit_field: Option<MasterEditField>,
-    /// Input buffer for master field editing (hex / decimal)
-    pub master_input_buffer: String,
-    /// Index of the master being edited
+    pub input_buffer: String,
     pub master_edit_index: Option<usize>,
+    pub master_edit_field: Option<MasterEditField>,
+    pub master_input_buffer: String,
+    pub cursor: usize,
+    // Fields used by unified ModBus panel (ported from legacy master page)
+    pub master_cursor: usize, // current selected entry (or new-entry line) in modbus panel
+    pub master_field_selected: bool, // row is selected (field selection layer)
+    pub master_field_editing: bool, // currently editing a field
 }
-
 impl Default for SubpageForm {
     fn default() -> Self {
         Self {
             baud: 9600,
-            parity: Parity::None,
             data_bits: 8,
             stop_bits: 1,
-            registers: vec![],
-            cursor: 0,
+            parity: Parity::None,
+            registers: vec![RegisterEntry::default()],
             editing: false,
             editing_field: None,
-            input_buffer: String::new(),
             edit_choice_index: None,
             edit_confirmed: false,
-            master_cursor: 0,
-            master_editing: false,
-            master_field_selected: false,
-            master_field_editing: false,
+            input_buffer: String::new(),
+            master_edit_index: None,
             master_edit_field: None,
             master_input_buffer: String::new(),
-            master_edit_index: None,
+            cursor: 0,
+            master_cursor: 0,
+            master_field_selected: false,
+            master_field_editing: false,
         }
     }
 }
 
-/// Which concrete field inside the SubpageForm is currently being edited.
 #[derive(Debug, Clone)]
-pub enum EditingField {
-    Baud,
-    Parity,
-    DataBits,
-    StopBits,
-    RegisterField { idx: usize, field: RegisterField },
-}
-
-#[derive(Debug, Clone)]
-pub enum RegisterField {
-    SlaveId,
-    Mode,
-    Address,
-    Length,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum MasterEditField {
-    Id,
-    Type,
-    Start,
-    End,
-    /// Single register value (absolute address)
-    Value(u16),
-    /// Refresh interval (ms) for listen panel
-    Refresh,
-    /// Request counter (for reset action via Enter)
-    Counter,
-}
-
-// Focus enum removed: UI now uses single-pane left list only
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PortMode {
-    Master,
-    SlaveStack,
+pub(crate) struct PerPortState {
+    subpage_active: bool,
+    subpage_form: Option<SubpageForm>,
+    subpage_tab_index: usize,
+    logs: Vec<LogEntry>,
+    log_selected: usize,
+    log_view_offset: usize,
+    log_auto_scroll: bool,
+    input_mode: InputMode,
+    input_editing: bool,
+    input_buffer: String,
 }
 
 #[derive(Debug)]
 pub struct Status {
     pub ports: Vec<SerialPortInfo>,
-    /// Occupancy state for each port (same index as `ports`)
     pub port_states: Vec<PortState>,
-    /// Optional open handle when this app occupies the port
     pub port_handles: Vec<Option<Box<dyn SerialPort>>>,
-    /// Active runtime listeners per occupied port
     pub port_runtimes: Vec<Option<PortRuntimeHandle>>,
     pub selected: usize,
+
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
+    // GUI requires timestamp to show when the error occurred; TUI only uses message. Store unified as (msg, ts).
     pub error: Option<(String, DateTime<Local>)>,
-    pub port_mode: PortMode,
-    /// When Some, a subpage for the right side is active (entered). None means main entry view.
-    pub active_subpage: Option<PortMode>,
-    /// Transient UI state for the active subpage (editable form)
+
+    pub subpage_active: bool,
     pub subpage_form: Option<SubpageForm>,
-    /// Selected tab index inside the active right-side subpage
     pub subpage_tab_index: usize,
-    /// Recent protocol / log entries (current working port)
+
     pub logs: Vec<LogEntry>,
     pub log_selected: usize,
     pub log_view_offset: usize,
     pub log_auto_scroll: bool,
+
     pub input_mode: InputMode,
     pub input_editing: bool,
     pub input_buffer: String,
-    /// Cached per-port UI states keyed by port name
-    pub per_port_states: HashMap<String, PerPortState>,
-    /// Transient mode selector overlay state (not per-port)
-    pub mode_selector_active: bool,
-    pub mode_selector_index: usize,
-    /// Raw device tree info from last manual refresh (e.g., lsusb output on Linux)
+
+    pub(crate) per_port_states: HashMap<String, PerPortState>,
     pub last_scan_info: Vec<String>,
-    /// Timestamp of last manual refresh scan (device enumeration time)
     pub last_scan_time: Option<DateTime<Local>>,
-    /// Whether a time‑consuming background mutation is in progress (mode switch / port reload etc.)
+
     pub busy: bool,
-    /// Spinner frame index
     pub spinner_frame: u8,
-    /// Whether slave listen polling is temporarily paused due to parameter editing
     pub polling_paused: bool,
-    /// Last time a port occupancy toggle was performed (throttling rapid Enter presses)
     pub last_port_toggle: Option<std::time::Instant>,
-    /// Minimum interval between port toggles
     pub port_toggle_min_interval_ms: u64,
 }
 
-#[derive(Debug, Clone)]
-pub struct PerPortState {
-    pub port_mode: PortMode,
-    pub active_subpage: Option<PortMode>,
-    pub subpage_form: Option<SubpageForm>,
-    pub subpage_tab_index: usize,
-    pub logs: Vec<LogEntry>,
-    pub log_selected: usize,
-    pub log_view_offset: usize,
-    pub log_auto_scroll: bool,
-    pub input_mode: InputMode,
-    pub input_editing: bool,
-    pub input_buffer: String,
-}
-
-impl Default for PerPortState {
-    fn default() -> Self {
-        Self {
-            port_mode: PortMode::Master,
-            active_subpage: None,
-            subpage_form: None,
-            subpage_tab_index: 0,
-            logs: Vec::new(),
-            log_selected: 0,
-            log_view_offset: 0,
-            log_auto_scroll: true,
-            input_mode: InputMode::Ascii,
-            input_editing: false,
-            input_buffer: String::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PortState {
-    Free,
-    OccupiedByThis,
-    OccupiedByOther,
-}
-
 impl Status {
-    /// Platform specific device scan. Populates last_scan_info and updates last_scan_time.
-    /// Shared by refresh() and quick_scan() to avoid duplication.
-    fn perform_device_scan(&mut self) {
-        self.last_scan_info.clear();
-        #[cfg(target_os = "linux")]
-        {
-            use std::process::Command;
-            if let Ok(out) = Command::new("lsusb").output() {
-                if out.status.success() {
-                    if let Ok(text) = String::from_utf8(out.stdout) {
-                        for line in text.lines() {
-                            self.last_scan_info.push(line.to_string());
-                        }
-                    }
-                } else if let Ok(err_text) = String::from_utf8(out.stderr) {
-                    self.last_scan_info
-                        .push(format!("ERROR: lsusb: {}", err_text.trim()));
-                }
-            } else {
-                self.last_scan_info
-                    .push("ERROR: lsusb invocation failed".to_string());
-            }
-        }
-        #[cfg(target_os = "windows")]
-        {
-            use std::process::{Command, Stdio};
-            use std::thread;
-            use std::time::Duration as StdDuration;
-            // Run powershell in a helper thread so we can implement a simple timeout.
-            let (tx, rx) = std::sync::mpsc::channel();
-            thread::spawn(move || {
-                let ps_cmd = [
-                    "-NoLogo",
-                    "-NoProfile",
-                    "-Command",
-                    "Get-PnpDevice -Class Ports | Select-Object -Property FriendlyName,InstanceId | Format-Table -HideTableHeaders",
-                ];
-                let result = Command::new("powershell")
-                    .args(&ps_cmd)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .output();
-                let _ = tx.send(result);
-            });
-            let mut any_success = false;
-            if let Ok(res) = rx.recv_timeout(StdDuration::from_millis(1500)) {
-                match res {
-                    Ok(out) => {
-                        if out.status.success() {
-                            if let Ok(text) = String::from_utf8(out.stdout) {
-                                for line in text.lines() {
-                                    if !line.trim().is_empty() {
-                                        self.last_scan_info.push(line.trim().to_string());
-                                    }
-                                }
-                                any_success = true;
-                            }
-                        } else if let Ok(err_text) = String::from_utf8(out.stderr) {
-                            self.last_scan_info.push(format!(
-                                "ERROR: powershell Get-PnpDevice: {}",
-                                err_text.trim()
-                            ));
-                        }
-                    }
-                    Err(e) => {
-                        self.last_scan_info
-                            .push(format!("ERROR: powershell exec error: {e}"));
-                    }
-                }
-            } else {
-                self.last_scan_info
-                    .push("ERROR: powershell scan timeout".to_string());
-            }
-            if !any_success {
-                if let Ok(out) = Command::new("wmic")
-                    .args(["path", "Win32_SerialPort", "get", "Name,DeviceID"])
-                    .output()
-                {
-                    if out.status.success() {
-                        if let Ok(text) = String::from_utf8(out.stdout) {
-                            for line in text.lines() {
-                                if !line.trim().is_empty() {
-                                    self.last_scan_info.push(line.trim().to_string());
-                                }
-                            }
-                        }
-                    } else if let Ok(err_text) = String::from_utf8(out.stderr) {
-                        self.last_scan_info
-                            .push(format!("ERROR: wmic Win32_SerialPort: {}", err_text.trim()));
-                    }
-                } else {
-                    self.last_scan_info
-                        .push("ERROR: failed to invoke wmic".to_string());
-                }
-            }
-        }
-        self.last_scan_time = Some(Local::now());
-    }
     pub fn new() -> Self {
-        let ports = available_ports_sorted();
-        let port_states = Self::detect_port_states(&ports);
-        let port_handles = ports.iter().map(|_| None).collect();
-        let port_runtimes = ports.iter().map(|_| None).collect();
         Self {
-            ports,
-            port_states,
-            port_handles,
-            port_runtimes,
+            ports: Vec::new(),
+            port_states: Vec::new(),
+            port_handles: Vec::new(),
+            port_runtimes: Vec::new(),
             selected: 0,
-
             auto_refresh: true,
             last_refresh: None,
             error: None,
-            port_mode: PortMode::Master,
-            active_subpage: None,
+            subpage_active: false,
             subpage_form: None,
             subpage_tab_index: 0,
             logs: Vec::new(),
@@ -414,8 +218,6 @@ impl Status {
             input_editing: false,
             input_buffer: String::new(),
             per_port_states: HashMap::new(),
-            mode_selector_active: false,
-            mode_selector_index: 0,
             last_scan_info: Vec::new(),
             last_scan_time: None,
             busy: false,
@@ -426,12 +228,124 @@ impl Status {
         }
     }
 
+    pub fn with_ports(ports: Vec<SerialPortInfo>) -> Self {
+        let mut s = Status::new();
+        s.ports = ports.clone();
+        s.port_states = Self::detect_port_states(&s.ports);
+        s.port_handles = s.ports.iter().map(|_| None).collect();
+        s.port_runtimes = s.ports.iter().map(|_| None).collect();
+        s
+    }
+
+    /// Final authoritative drain_runtime_events implementation (re-added after cleanup)
+    pub fn drain_runtime_events(&mut self) {
+        if self.ports.is_empty() {
+            return;
+        }
+        let selected = self.selected;
+        let mut pending_logs: Vec<LogEntry> = Vec::new();
+        let mut pending_error: Option<String> = None;
+        for (idx, rt_opt) in self.port_runtimes.iter_mut().enumerate() {
+            if let Some(rt) = rt_opt.as_mut() {
+                loop {
+                    match rt.evt_rx.try_recv() {
+                        Ok(evt) => match evt {
+                            RuntimeEvent::FrameReceived(bytes) => {
+                                if idx == selected {
+                                    let mut handled = false;
+                                    if let Some((sid, func, data)) = parse_modbus_response(&bytes) {
+                                        handled = true;
+                                        pending_logs.push(LogEntry {
+                                            when: Local::now(),
+                                            raw: format!(
+                                                "resp sid={sid} func=0x{func:02X} bytes={}",
+                                                data.len()
+                                            ),
+                                            parsed: None,
+                                        });
+                                        if let Some(form) = self.subpage_form.as_mut() {
+                                            for reg in form.registers.iter_mut() {
+                                                if reg.role == EntryRole::Master
+                                                    && reg.slave_id == sid
+                                                {
+                                                    let expect = match reg.mode {
+                                                        RegisterMode::Coils => 0x01,
+                                                        RegisterMode::DiscreteInputs => 0x02,
+                                                        RegisterMode::Holding => 0x03,
+                                                        RegisterMode::Input => 0x04,
+                                                    };
+                                                    if expect == func {
+                                                        reg.req_total =
+                                                            reg.req_total.saturating_add(1);
+                                                        reg.req_success =
+                                                            reg.req_success.saturating_add(1);
+                                                        reg.values.clear();
+                                                        reg.values.extend(
+                                                            data.iter().take(reg.length as usize),
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if !handled {
+                                        let hex = bytes
+                                            .iter()
+                                            .map(|b| format!("{:02x}", b))
+                                            .collect::<Vec<_>>()
+                                            .join(" ");
+                                        pending_logs.push(LogEntry {
+                                            when: Local::now(),
+                                            raw: hex,
+                                            parsed: None,
+                                        });
+                                    }
+                                }
+                            }
+                            RuntimeEvent::FrameSent(bytes) => {
+                                if idx == selected {
+                                    let hex = bytes
+                                        .iter()
+                                        .map(|b| format!("{:02x}", b))
+                                        .collect::<Vec<_>>()
+                                        .join(" ");
+                                    pending_logs.push(LogEntry {
+                                        when: Local::now(),
+                                        raw: format!("sent: {hex}"),
+                                        parsed: None,
+                                    });
+                                }
+                            }
+                            RuntimeEvent::Reconfigured(cfg) => {
+                                if idx == selected {
+                                    pending_logs.push(LogEntry { when: Local::now(), raw: format!("reconfigured: baud={} data_bits={} stop_bits={} parity={:?}", cfg.baud, cfg.data_bits, cfg.stop_bits, cfg.parity), parsed: None });
+                                }
+                            }
+                            RuntimeEvent::Error(e) => {
+                                if idx == selected {
+                                    pending_error = Some(e);
+                                }
+                            }
+                            RuntimeEvent::Stopped => {}
+                        },
+                        Err(_) => break,
+                    }
+                }
+            }
+        }
+        for l in pending_logs {
+            self.append_log(l);
+        }
+        if let Some(e) = pending_error {
+            self.set_error(e);
+        }
+    }
     /// Adjust the log view window according to the current terminal height so the selected entry stays visible.
     pub fn adjust_log_view(&mut self, term_height: u16) {
         if self.logs.is_empty() {
             return;
         }
-        let bottom_len = if self.error.is_some() || self.active_subpage.is_some() {
+        let bottom_len = if self.error.is_some() || self.subpage_active {
             2
         } else {
             1
@@ -479,88 +393,14 @@ impl Status {
         if self.logs.is_empty() {
             return;
         }
-        let total = self.logs.len();
-        self.log_view_offset = min(total - 1, self.log_view_offset.saturating_add(page));
-        self.log_auto_scroll = false;
-    }
-
-    /// Initialize subpage_form from selected port when entering a subpage
-    pub fn init_subpage_form(&mut self) {
-        // If no ports or selected is virtual, create a default form
-        if self.ports.is_empty() || self.selected >= self.ports.len() {
-            self.subpage_form = Some(SubpageForm::default());
-            return;
-        }
-        // Try to populate from existing open handle if available
-        let mut form = SubpageForm::default();
-        if let Some(slot) = self.port_handles.get(self.selected) {
-            if let Some(handle) = slot.as_ref() {
-                form.baud = handle.baud_rate().unwrap_or(9600);
-                form.stop_bits = handle
-                    .stop_bits()
-                    .map(|s| match s {
-                        StopBits::One => 1,
-                        StopBits::Two => 2,
-                    })
-                    .unwrap_or(1);
-                // Parity mapping
-                if let Ok(p) = handle.parity() {
-                    form.parity = match p {
-                        SerialParity::None => Parity::None,
-                        SerialParity::Even => Parity::Even,
-                        SerialParity::Odd => Parity::Odd,
-                    };
-                }
-            }
-        }
-        self.subpage_form = Some(form);
-    }
-
-    pub fn set_error(&mut self, msg: impl Into<String>) {
-        self.error = Some((msg.into(), Local::now()));
-    }
-
-    pub fn clear_error(&mut self) {
-        self.error = None;
-    }
-
-    /// Create an App with provided ports (useful for tests)
-    #[cfg(test)]
-    pub fn with_ports(ports: Vec<SerialPortInfo>) -> Self {
-        let port_states = ports.iter().map(|_| PortState::Free).collect();
-        let port_handles = ports.iter().map(|_| None).collect();
-        let port_runtimes = ports.iter().map(|_| None).collect();
-        Self {
-            ports,
-            port_states,
-            port_handles,
-            port_runtimes,
-            selected: 0,
-
-            auto_refresh: false,
-            last_refresh: None,
-            error: None,
-            port_mode: PortMode::Master,
-            active_subpage: None,
-            subpage_form: None,
-            subpage_tab_index: 0,
-            logs: Vec::new(),
-            log_selected: 0,
-            log_view_offset: 0,
-            log_auto_scroll: true,
-            input_mode: InputMode::Ascii,
-            input_editing: false,
-            input_buffer: String::new(),
-            per_port_states: HashMap::new(),
-            mode_selector_active: false,
-            mode_selector_index: 0,
-            last_scan_info: Vec::new(),
-            last_scan_time: None,
-            busy: false,
-            spinner_frame: 0,
-            polling_paused: false,
-            last_port_toggle: None,
-            port_toggle_min_interval_ms: PORT_TOGGLE_MIN_INTERVAL_MS,
+        let max_bottom = self.logs.len().saturating_sub(1);
+        let new_bottom = (self.log_view_offset).saturating_add(page);
+        self.log_view_offset = std::cmp::min(max_bottom, new_bottom);
+        // If we've reached the end, re‑enable auto scroll, else freeze.
+        if self.log_view_offset >= max_bottom {
+            self.log_auto_scroll = true;
+        } else {
+            self.log_auto_scroll = false;
         }
     }
 
@@ -758,8 +598,7 @@ impl Status {
         if self.selected < self.ports.len() {
             if let Some(info) = self.ports.get(self.selected) {
                 let snap = PerPortState {
-                    port_mode: self.port_mode,
-                    active_subpage: self.active_subpage,
+                    subpage_active: self.subpage_active,
                     subpage_form: self.subpage_form.clone(),
                     subpage_tab_index: self.subpage_tab_index,
                     logs: self.logs.clone(),
@@ -779,8 +618,7 @@ impl Status {
         if self.selected < self.ports.len() {
             if let Some(info) = self.ports.get(self.selected) {
                 if let Some(snap) = self.per_port_states.get(&info.port_name).cloned() {
-                    self.port_mode = snap.port_mode;
-                    self.active_subpage = snap.active_subpage;
+                    self.subpage_active = snap.subpage_active;
                     self.subpage_form = snap.subpage_form;
                     self.subpage_tab_index = snap.subpage_tab_index;
                     self.logs = snap.logs;
@@ -792,8 +630,7 @@ impl Status {
                     self.input_buffer = snap.input_buffer;
                 } else {
                     // Fresh defaults
-                    self.port_mode = PortMode::Master;
-                    self.active_subpage = None;
+                    self.subpage_active = false;
                     self.subpage_form = None;
                     self.subpage_tab_index = 0;
                     self.logs.clear();
@@ -959,460 +796,7 @@ impl Status {
         }
     }
 
-    /// Drain runtime events and push to logs / errors
-    pub fn drain_runtime_events(&mut self) {
-        // Collect log additions first to avoid nested mutable borrows during iteration
-        let mut pending_logs: Vec<LogEntry> = Vec::new();
-        let mut pending_error: Option<String> = None;
-        // queued (runtime index, response frame) to send after borrow scope
-        let mut queued_responses: Vec<(usize, Vec<u8>)> = Vec::new();
-        let selected = self.selected;
-        for (idx, opt_rt) in self.port_runtimes.iter_mut().enumerate() {
-            if let Some(rt) = opt_rt.as_mut() {
-                while let Ok(evt) = rt.evt_rx.try_recv() {
-                    match evt {
-                        RuntimeEvent::FrameReceived(bytes) => {
-                            if idx == selected {
-                                // First attempt to interpret frame as a response (most common in SlaveStack polling mode)
-                                let mut handled = false;
-                                if self.port_mode == PortMode::SlaveStack {
-                                    if let Some((sid, func, data)) =
-                                        parse_modbus_response(bytes.as_ref())
-                                    {
-                                        let dbg_resp = ModbusResponse {
-                                            slave_id: sid,
-                                            function: func,
-                                            data: data.clone(),
-                                        };
-                                        if let Some(form) = self.subpage_form.as_mut() {
-                                            // Determine register mode from function code
-                                            let mode = match func {
-                                                0x01 => Some(RegisterMode::Coils),
-                                                0x02 => Some(RegisterMode::DiscreteInputs),
-                                                0x03 => Some(RegisterMode::Holding),
-                                                0x04 => Some(RegisterMode::Input),
-                                                _ => None,
-                                            };
-                                            if let Some(m) = mode {
-                                                for reg in form.registers.iter_mut() {
-                                                    if reg.slave_id != sid || reg.mode != m {
-                                                        continue;
-                                                    }
-                                                    // Expected data size check
-                                                    let expected = match m {
-                                                        RegisterMode::Coils
-                                                        | RegisterMode::DiscreteInputs => {
-                                                            (reg.length as usize + 7) / 8
-                                                        }
-                                                        RegisterMode::Holding
-                                                        | RegisterMode::Input => {
-                                                            reg.length as usize * 2
-                                                        }
-                                                    };
-                                                    if data.len() != expected {
-                                                        continue;
-                                                    }
-                                                    // Update values vector
-                                                    match m {
-                                                        RegisterMode::Coils
-                                                        | RegisterMode::DiscreteInputs => {
-                                                            // Bit unpack (high bit -> low bit each byte)
-                                                            let mut bits: Vec<u8> =
-                                                                Vec::with_capacity(
-                                                                    reg.length as usize,
-                                                                );
-                                                            for b in &data {
-                                                                for i in (0..8).rev() {
-                                                                    if bits.len()
-                                                                        >= reg.length as usize
-                                                                    {
-                                                                        break;
-                                                                    }
-                                                                    bits.push(
-                                                                        if (b & (1 << i)) != 0 {
-                                                                            1
-                                                                        } else {
-                                                                            0
-                                                                        },
-                                                                    );
-                                                                }
-                                                            }
-                                                            reg.values = bits;
-                                                        }
-                                                        RegisterMode::Holding
-                                                        | RegisterMode::Input => {
-                                                            // Interpret each register (two bytes BE); store low byte for UI (FIXME: support 16‑bit display later)
-                                                            let mut vals: Vec<u8> =
-                                                                Vec::with_capacity(
-                                                                    reg.length as usize,
-                                                                );
-                                                            for chunk in data.chunks_exact(2) {
-                                                                if vals.len() == reg.length as usize
-                                                                {
-                                                                    break;
-                                                                }
-                                                                vals.push(chunk[1]);
-                                                            }
-                                                            reg.values = vals;
-                                                        }
-                                                    }
-                                                    reg.req_success =
-                                                        reg.req_success.saturating_add(1);
-                                                }
-                                            }
-                                        }
-                                        // Push a parsed debug log entry
-                                        pending_logs.push(LogEntry {
-                                            when: Local::now(),
-                                            raw: format!("{:?}", dbg_resp),
-                                            parsed: None,
-                                        });
-                                        handled = true;
-                                    }
-                                }
-                                // Master mode acts as simulated slave: auto respond to recognized requests
-                                if !handled && self.port_mode == PortMode::Master {
-                                    let frame = bytes.as_ref();
-                                    if frame.len() >= 8 {
-                                        // minimal RTU frame length
-                                        let sid = frame[0];
-                                        let func = frame[1];
-                                        let mut reply: Option<Vec<u8>> = None;
-                                        // Snapshot of registers for read operations to avoid holding mutable borrow
-                                        let regs_snapshot: Option<Vec<RegisterEntry>> =
-                                            self.subpage_form.as_ref().map(|f| f.registers.clone());
-                                        let find_coil_bit =
-                                            |addr: u16, regs: &Vec<RegisterEntry>| -> u8 {
-                                                for reg in regs {
-                                                    if reg.slave_id == sid
-                                                        && (reg.mode == RegisterMode::Coils
-                                                            || reg.mode
-                                                                == RegisterMode::DiscreteInputs)
-                                                    {
-                                                        let start = reg.address;
-                                                        let end = start + reg.length - 1;
-                                                        if addr >= start && addr <= end {
-                                                            let off = (addr - start) as usize;
-                                                            return *reg
-                                                                .values
-                                                                .get(off)
-                                                                .unwrap_or(&0);
-                                                        }
-                                                    }
-                                                }
-                                                0
-                                            };
-                                        let find_holding =
-                                            |addr: u16, regs: &Vec<RegisterEntry>| -> u8 {
-                                                for reg in regs {
-                                                    if reg.slave_id == sid
-                                                        && (reg.mode == RegisterMode::Holding
-                                                            || reg.mode == RegisterMode::Input)
-                                                    {
-                                                        let start = reg.address;
-                                                        let end = start + reg.length - 1;
-                                                        if addr >= start && addr <= end {
-                                                            let off = (addr - start) as usize;
-                                                            return *reg
-                                                                .values
-                                                                .get(off)
-                                                                .unwrap_or(&0);
-                                                        }
-                                                    }
-                                                }
-                                                0
-                                            };
-                                        match func {
-                                            0x01 | 0x02 | 0x03 | 0x04 => {
-                                                // read functions
-                                                // parse start & qty
-                                                let start =
-                                                    u16::from_be_bytes([frame[2], frame[3]]);
-                                                let qty =
-                                                    u16::from_be_bytes([frame[4], frame[5]]).max(1);
-                                                let mut data: Vec<u8> = Vec::new();
-                                                if func == 0x01 || func == 0x02 {
-                                                    // coils / discretes bits
-                                                    let mut bit_acc: Vec<u8> =
-                                                        Vec::with_capacity(qty as usize);
-                                                    if let Some(regs) = regs_snapshot.as_ref() {
-                                                        for i in 0..qty {
-                                                            bit_acc.push(find_coil_bit(
-                                                                start + i,
-                                                                regs,
-                                                            ));
-                                                        }
-                                                    } else {
-                                                        bit_acc.resize(qty as usize, 0);
-                                                    }
-                                                    // pack LSB-first per Modbus spec
-                                                    let mut byte: u8 = 0;
-                                                    let mut count = 0;
-                                                    for (i, b) in bit_acc.iter().enumerate() {
-                                                        if *b != 0 {
-                                                            byte |= 1 << (i % 8);
-                                                        }
-                                                        count += 1;
-                                                        if count == 8 {
-                                                            data.push(byte);
-                                                            byte = 0;
-                                                            count = 0;
-                                                        }
-                                                    }
-                                                    if count > 0 {
-                                                        data.push(byte);
-                                                    }
-                                                } else {
-                                                    // holdings / input registers
-                                                    if let Some(regs) = regs_snapshot.as_ref() {
-                                                        for i in 0..qty {
-                                                            let v = find_holding(start + i, regs);
-                                                            data.push(0);
-                                                            data.push(v);
-                                                        }
-                                                    } else {
-                                                        for _ in 0..qty {
-                                                            data.push(0);
-                                                            data.push(0);
-                                                        }
-                                                    }
-                                                }
-                                                let mut resp = Vec::with_capacity(5 + data.len());
-                                                resp.push(sid);
-                                                resp.push(func);
-                                                resp.push(data.len() as u8);
-                                                resp.extend_from_slice(&data);
-                                                let crc = modbus_crc16(&resp);
-                                                resp.push((crc & 0xFF) as u8);
-                                                resp.push((crc >> 8) as u8);
-                                                reply = Some(resp);
-                                            }
-                                            0x05 => {
-                                                // write single coil
-                                                let addr = u16::from_be_bytes([frame[2], frame[3]]);
-                                                let value_hi = frame[4];
-                                                let value_lo = frame[5];
-                                                let on = value_hi == 0xFF && value_lo == 0x00;
-                                                if let Some(form) = self.subpage_form.as_mut() {
-                                                    for reg in form.registers.iter_mut() {
-                                                        if reg.slave_id == sid
-                                                            && (reg.mode == RegisterMode::Coils
-                                                                || reg.mode
-                                                                    == RegisterMode::DiscreteInputs)
-                                                        {
-                                                            let start = reg.address;
-                                                            let end = start + reg.length - 1;
-                                                            if addr >= start && addr <= end {
-                                                                let off = (addr - start) as usize;
-                                                                if off < reg.values.len() {
-                                                                    reg.values[off] =
-                                                                        if on { 1 } else { 0 };
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                // echo request as response
-                                                reply = Some(frame[..8].to_vec());
-                                            }
-                                            0x06 => {
-                                                // write single holding
-                                                let addr = u16::from_be_bytes([frame[2], frame[3]]);
-                                                let val_lo = frame[5]; // store low byte
-                                                if let Some(form) = self.subpage_form.as_mut() {
-                                                    for reg in form.registers.iter_mut() {
-                                                        if reg.slave_id == sid
-                                                            && (reg.mode == RegisterMode::Holding
-                                                                || reg.mode == RegisterMode::Input)
-                                                        {
-                                                            let start = reg.address;
-                                                            let end = start + reg.length - 1;
-                                                            if addr >= start && addr <= end {
-                                                                let off = (addr - start) as usize;
-                                                                if off < reg.values.len() {
-                                                                    reg.values[off] = val_lo;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                reply = Some(frame[..8].to_vec());
-                                            }
-                                            0x0F => {
-                                                // write multiple coils
-                                                if frame.len() >= 9 {
-                                                    // addr qty bytecount ... crc
-                                                    let addr =
-                                                        u16::from_be_bytes([frame[2], frame[3]]);
-                                                    let qty =
-                                                        u16::from_be_bytes([frame[4], frame[5]]);
-                                                    let byte_count = frame[6] as usize;
-                                                    if frame.len() >= 7 + byte_count + 2 {
-                                                        if let Some(form) =
-                                                            self.subpage_form.as_mut()
-                                                        {
-                                                            for reg in form.registers.iter_mut() {
-                                                                if reg.slave_id==sid && (reg.mode==RegisterMode::Coils || reg.mode==RegisterMode::DiscreteInputs) { let start=reg.address; let end=start+reg.length-1; for i in 0..qty { let cur=addr+i; if cur<start || cur> end { continue; } let off=(cur-start) as usize; let byte_index=(i/8) as usize; let bit_index= i %8; if byte_index < byte_count { let b=frame[7+ byte_index]; let bit=(b >> bit_index) & 1; if off < reg.values.len() { reg.values[off]=bit; } } } }
-                                                            }
-                                                        }
-                                                        // response: id func addr qty crc
-                                                        let mut resp = Vec::with_capacity(8);
-                                                        resp.extend_from_slice(&frame[0..6]);
-                                                        let crc = modbus_crc16(&resp);
-                                                        resp.push((crc & 0xFF) as u8);
-                                                        resp.push((crc >> 8) as u8);
-                                                        reply = Some(resp);
-                                                    }
-                                                }
-                                            }
-                                            0x10 => {
-                                                // write multiple holdings
-                                                if frame.len() >= 9 {
-                                                    let addr =
-                                                        u16::from_be_bytes([frame[2], frame[3]]);
-                                                    let qty =
-                                                        u16::from_be_bytes([frame[4], frame[5]]);
-                                                    let byte_count = frame[6] as usize;
-                                                    if frame.len() >= 7 + byte_count + 2 {
-                                                        if let Some(form) =
-                                                            self.subpage_form.as_mut()
-                                                        {
-                                                            for i in 0..qty {
-                                                                let base = 7 + (i as usize) * 2;
-                                                                if base + 1 < frame.len() {
-                                                                    let lo = frame[base + 1];
-                                                                    for reg in
-                                                                        form.registers.iter_mut()
-                                                                    {
-                                                                        if reg.slave_id==sid && (reg.mode==RegisterMode::Holding || reg.mode==RegisterMode::Input) { let start=reg.address; let end=start+reg.length-1; let cur=addr+i; if cur>=start && cur<=end { let off=(cur-start) as usize; if off < reg.values.len() { reg.values[off]=lo; } } }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        let mut resp = Vec::with_capacity(8);
-                                                        resp.extend_from_slice(&frame[0..6]);
-                                                        let crc = modbus_crc16(&resp);
-                                                        resp.push((crc & 0xFF) as u8);
-                                                        resp.push((crc >> 8) as u8);
-                                                        reply = Some(resp);
-                                                    }
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                        if let Some(resp) = reply {
-                                            let hex_resp = resp
-                                                .iter()
-                                                .map(|b| format!("{:02x}", b))
-                                                .collect::<Vec<_>>()
-                                                .join(" ");
-                                            queued_responses.push((idx, resp.clone()));
-                                            pending_logs.push(LogEntry {
-                                                when: Local::now(),
-                                                raw: format!("reply: {hex_resp}"),
-                                                parsed: None,
-                                            });
-                                        }
-                                    }
-                                }
-                                if !handled {
-                                    // Fallback: treat as request reaching us (acts as slave) and update counters heuristically
-                                    if let Some((slave_id, func, addr, qty)) =
-                                        parse_modbus_request(bytes.as_ref())
-                                    {
-                                        if let Some(form) = self.subpage_form.as_mut() {
-                                            let target_modes: &[RegisterMode] = match func {
-                                                0x01 => &[RegisterMode::Coils],
-                                                0x02 => &[RegisterMode::DiscreteInputs],
-                                                0x03 => &[RegisterMode::Holding],
-                                                0x04 => &[RegisterMode::Input],
-                                                0x05 => &[RegisterMode::Coils],
-                                                0x06 => &[RegisterMode::Holding],
-                                                0x0F => &[RegisterMode::Coils],
-                                                0x10 => &[RegisterMode::Holding],
-                                                _ => &[],
-                                            };
-                                            if !target_modes.is_empty() {
-                                                for reg in form.registers.iter_mut() {
-                                                    if reg.slave_id != slave_id {
-                                                        continue;
-                                                    }
-                                                    if !target_modes.iter().any(|m| *m == reg.mode)
-                                                    {
-                                                        continue;
-                                                    }
-                                                    let reg_start = reg.address as u32;
-                                                    let reg_end = reg_start + reg.length as u32 - 1;
-                                                    let req_start = addr as u32;
-                                                    let req_end = req_start + qty as u32 - 1;
-                                                    if req_end < reg_start || req_start > reg_end {
-                                                        continue;
-                                                    }
-                                                    reg.req_total = reg.req_total.saturating_add(1);
-                                                    if req_start >= reg_start && req_end <= reg_end
-                                                    {
-                                                        reg.req_success =
-                                                            reg.req_success.saturating_add(1);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                let hex = bytes
-                                    .iter()
-                                    .map(|b| format!("{:02x}", b))
-                                    .collect::<Vec<_>>()
-                                    .join(" ");
-                                pending_logs.push(LogEntry {
-                                    when: Local::now(),
-                                    raw: hex,
-                                    parsed: None,
-                                });
-                            }
-                        }
-                        RuntimeEvent::FrameSent(bytes) => {
-                            if idx == selected {
-                                let hex = bytes
-                                    .iter()
-                                    .map(|b| format!("{:02x}", b))
-                                    .collect::<Vec<_>>()
-                                    .join(" ");
-                                pending_logs.push(LogEntry {
-                                    when: Local::now(),
-                                    raw: format!("sent: {hex}"),
-                                    parsed: None,
-                                });
-                            }
-                        }
-                        RuntimeEvent::Reconfigured(cfg) => {
-                            if idx == selected {
-                                pending_logs.push(LogEntry { when: Local::now(), raw: format!("reconfigured: baud={} data_bits={} stop_bits={} parity={:?}", cfg.baud, cfg.data_bits, cfg.stop_bits, cfg.parity), parsed: None });
-                            }
-                        }
-                        RuntimeEvent::Error(e) => {
-                            if idx == selected {
-                                pending_error = Some(e);
-                            }
-                        }
-                        RuntimeEvent::Stopped => {}
-                    }
-                }
-            }
-        }
-        for l in pending_logs {
-            self.append_log(l);
-        }
-        if let Some(e) = pending_error {
-            self.set_error(e);
-        }
-        // Now send queued responses (no conflicting borrows)
-        for (i, resp) in queued_responses {
-            if let Some(Some(rt)) = self.port_runtimes.get(i) {
-                let _ = rt.cmd_tx.send(RuntimeCommand::Write(resp));
-            }
-        }
-    }
+    // (legacy duplicate drain_runtime_events block removed)
 
     pub fn toggle_auto_refresh(&mut self) {
         self.auto_refresh = !self.auto_refresh;
@@ -1482,11 +866,8 @@ impl Status {
     /// Drive periodic polling for slave listen entries (actively send Modbus queries for read‑type entries when in Master mode).
     /// For now, only generates synthetic increments (placeholder) if no active writer exists.
     pub fn drive_slave_polling(&mut self) {
-        // Only when current port is occupied & active subpage in SlaveStack mode
-        if self.port_mode != PortMode::SlaveStack {
-            return;
-        }
-        if self.active_subpage != Some(PortMode::SlaveStack) {
+        // Unified mode: poll whenever subpage active and not paused
+        if !self.subpage_active {
             return;
         }
         if self.polling_paused {
@@ -1548,6 +929,145 @@ impl Status {
             }
         }
     }
+
+    /// Reset counters & logs and pause polling while user edits slave parameters.
+    pub fn pause_and_reset_slave_listen(&mut self) {
+        if let Some(form) = self.subpage_form.as_mut() {
+            for reg in form.registers.iter_mut() {
+                reg.req_success = 0;
+                reg.req_total = 0;
+                for v in reg.values.iter_mut() {
+                    *v = 0;
+                }
+                reg.next_poll_at = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+            }
+        }
+        self.logs.clear();
+        self.log_selected = 0;
+        self.log_view_offset = 0;
+        self.polling_paused = true;
+    }
+
+    /// Resume polling immediately after parameters confirmed.
+    pub fn resume_slave_listen(&mut self) {
+        if let Some(form) = self.subpage_form.as_mut() {
+            for reg in form.registers.iter_mut() {
+                reg.next_poll_at = std::time::Instant::now();
+            }
+        }
+        self.polling_paused = false;
+    }
+
+    pub fn set_error<T: Into<String>>(&mut self, msg: T) {
+        self.error = Some((msg.into(), Local::now()));
+    }
+
+    pub fn clear_error(&mut self) {
+        self.error = None;
+    }
+
+    pub fn init_subpage_form(&mut self) {
+        if self.subpage_form.is_none() {
+            self.subpage_form = Some(SubpageForm::default());
+        }
+        self.subpage_active = true;
+    }
+
+    fn perform_device_scan(&mut self) {
+        // Placeholder: previously may have probed devices; now just stamp time.
+        self.last_scan_info.clear();
+        self.last_scan_time = Some(Local::now());
+    }
+}
+
+// ===== Additional supporting items restored after refactor =====
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortState {
+    Free,
+    OccupiedByThis,
+    OccupiedByOther,
+}
+
+const PORT_TOGGLE_MIN_INTERVAL_MS: u64 = 300; // throttle rapid toggles
+
+fn available_ports_sorted() -> Vec<SerialPortInfo> {
+    let mut ports = match serialport::available_ports() {
+        Ok(v) => v,
+        Err(_) => Vec::new(),
+    };
+    // Filtering strategy:
+    // 1. Exclude names containing or starting with "NULL_" (Windows some virtual/placeholder) or "_NULL" / pure NULL_COMx
+    // 2. Exclude empty strings
+    // 3. Optionally de-duplicate names (keep the first occurrence)
+    let mut seen: HashSet<String> = HashSet::new();
+    ports.retain(|p| {
+        let name = p.port_name.trim();
+        if name.is_empty() {
+            return false;
+        }
+        let upper = name.to_ascii_uppercase();
+        if upper.contains("NULL_")
+            || upper.starts_with("NULL_")
+            || upper.starts_with("NULLCOM")
+            || upper.contains("_NULL")
+        {
+            return false;
+        }
+        if !seen.insert(upper) {
+            return false;
+        }
+        true
+    });
+    ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
+    ports
+}
+
+// Re-export a helper for opening serial ports (previously sp_new wrapper)
+fn sp_new(name: &str, baud: u32) -> serialport::SerialPortBuilder {
+    serialport::new(name, baud)
+}
+
+// Provide a simple public parity enum shim if original Parity wasn't public
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Parity {
+    None,
+    Even,
+    Odd,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RegisterField {
+    SlaveId,
+    Mode,
+    Address,
+    Length,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditingField {
+    Baud,
+    Parity,
+    StopBits,
+    DataBits,
+    RegisterField { idx: usize, field: RegisterField },
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MasterEditField {
+    Role,
+    Id,
+    Type,
+    Start,
+    End,
+    Refresh,
+    Counter,
+    Value(u16),
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dir {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
 /// Compute Modbus RTU CRC16 (little-endian in frame: low byte then high byte)
@@ -1690,42 +1210,7 @@ impl std::fmt::Debug for ModbusResponse {
     }
 }
 
-impl Status {
-    /// Reset counters & logs and pause polling while user edits slave parameters.
-    pub fn pause_and_reset_slave_listen(&mut self) {
-        if self.port_mode != PortMode::SlaveStack {
-            return;
-        }
-        if let Some(form) = self.subpage_form.as_mut() {
-            for reg in form.registers.iter_mut() {
-                reg.req_success = 0;
-                reg.req_total = 0;
-                for v in reg.values.iter_mut() {
-                    *v = 0;
-                }
-                // Push next poll far away until resume
-                reg.next_poll_at = std::time::Instant::now() + std::time::Duration::from_secs(3600);
-            }
-        }
-        self.logs.clear();
-        self.log_selected = 0;
-        self.log_view_offset = 0;
-        self.polling_paused = true;
-    }
-
-    /// Resume polling immediately after parameters confirmed.
-    pub fn resume_slave_listen(&mut self) {
-        if self.port_mode != PortMode::SlaveStack {
-            return;
-        }
-        if let Some(form) = self.subpage_form.as_mut() {
-            for reg in form.registers.iter_mut() {
-                reg.next_poll_at = std::time::Instant::now();
-            }
-        }
-        self.polling_paused = false;
-    }
-}
+// (methods moved into main impl earlier)
 
 #[cfg(test)]
 mod tests {

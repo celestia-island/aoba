@@ -15,11 +15,10 @@ pub enum Action {
     MoveNext,
     MovePrev,
     ClearError,
-    SwitchMode(usize),
-    CycleMode,
+    // Removed SwitchMode/CycleMode after unifying ModBus mode
     EnterSubpage(char),
     ExitSubpage,
-    ShowModeSelector,
+    // Removed ShowModeSelector (mode selector overlay deleted)
     SwitchNext,
     SwitchPrev,
     TogglePort,
@@ -45,7 +44,7 @@ pub fn map_key(code: KeyCode) -> Action {
         KeyCode::Char('n') => Action::AddRegister,
         KeyCode::Char('d') => Action::DeleteRegister,
         KeyCode::Char('p') => Action::ToggleFollow,
-        KeyCode::Char('m') => Action::ShowModeSelector,
+        // 'm' previously opened mode selector; now unused
         KeyCode::Char('r') => Action::QuickScan,
         KeyCode::Tab => Action::SwitchNext,
         KeyCode::BackTab => Action::SwitchPrev,

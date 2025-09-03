@@ -1,10 +1,7 @@
 pub mod config_panel;
 pub mod log_input;
 pub mod log_panel;
-pub mod master_list_panel;
-pub mod mode_selector;
-pub mod pull_list_panel;
-pub mod slave_listen_panel;
+pub mod modbus_panel; // unified ModBus panel
 
 use ratatui::{
     prelude::*,
