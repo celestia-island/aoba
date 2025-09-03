@@ -59,7 +59,6 @@ derive_struct! {
 
             hint_enter_subpage: String = "hint_enter_subpage".to_string(),
             hint_back_list: String = "hint_back_list".to_string(),
-            hint_mode_menu: String = "hint_mode_menu".to_string(),
             hint_switch_tab: String = "hint_switch_tab".to_string(),
             hint_move_vertical: String = "hint_move_vertical".to_string(),
             hint_move_with_panels: String = "hint_move_with_panels".to_string(),
@@ -81,14 +80,12 @@ derive_struct! {
         },
 
         tabs: {
-            tab_master: String = "tab_master".to_string(),
-            tab_slave: String = "tab_slave".to_string(),
-            master_mode: String = "master_mode".to_string(),
-            slave_mode: String = "slave_mode".to_string(),
+            // Removed tab_master/tab_slave after unifying ModBus modes
+            // master_mode / slave_mode removed after unifying UI
 
             tab_config: String = "tab_config".to_string(),
             tab_log: String = "tab_log".to_string(),
-            mode_selector_title: String = "mode_selector_title".to_string(),
+            // Removed mode_selector_title after unifying ModBus modes
             log_dir_send: String = "log_dir_send".to_string(),
             log_dir_recv: String = "log_dir_recv".to_string(),
 
@@ -131,9 +128,11 @@ derive_struct! {
             registers_list: String = "registers_list".to_string(),
             label_master_list: String = "label_master_list".to_string(),
             label_slave_listen: String = "label_slave_listen".to_string(),
+            label_modbus_settings: String = "label_modbus_settings".to_string(),
             invalid_baud_range: String = "invalid_baud_range".to_string(),
             new_master: String = "new_master".to_string(),
             new_slave: String = "new_slave".to_string(),
+            new_entry: String = "new_entry".to_string(),
             label_address_range: String = "label_address_range".to_string(),
             reg_type_coils: String = "reg_type_coils".to_string(),
             reg_type_discrete_inputs: String = "reg_type_discrete_inputs".to_string(),
@@ -144,6 +143,8 @@ derive_struct! {
             value_true: String = "value_true".to_string(),
             value_false: String = "value_false".to_string(),
             toggle_too_fast: String = "toggle_too_fast".to_string(),
+            role_master: String = "role_master".to_string(),
+            role_slave: String = "role_slave".to_string(),
         },
     }
 }

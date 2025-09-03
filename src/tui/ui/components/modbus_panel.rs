@@ -1,37 +1,42 @@
 use std::cmp::min;
 
-use crate::protocol::status::RegisterEntry;
-use crate::{i18n::lang, protocol::status::Status, tui::ui::components::render_boxed_paragraph};
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::Line,
 };
 
-/// Pull (slave stack) list panel simplified: single header line merges refresh + counter.
-pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
+use crate::{
+    i18n::lang,
+    protocol::status::{EntryRole, MasterEditField, RegisterEntry, Status},
+    tui::ui::components::render_boxed_paragraph,
+};
+
+/// Unified ModBus list panel: each entry has a Role (Master / Slave) + fields previously split.
+/// Added first editable field: Role, allowing switching between Master and Slave behaviors.
+pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut lines: Vec<Line> = Vec::new();
     if let Some(form) = app.subpage_form.as_ref() {
         if form.registers.is_empty() {
             let sel = form.master_cursor == 0;
             let prefix = if sel { "> " } else { "  " };
-            let content = format!("{}[+] {}", prefix, lang().protocol.new_slave);
+            let line = format!("{}[+] {}", prefix, lang().protocol.new_entry);
             if sel {
-                lines.push(Line::styled(content, Style::default().fg(Color::Green)));
+                lines.push(Line::styled(line, Style::default().fg(Color::Green)));
             } else {
-                lines.push(Line::from(content));
+                lines.push(Line::from(line));
             }
         } else {
             for (i, r) in form.registers.iter().enumerate() {
-                render_pull_header(&mut lines, i, r, form);
-                render_pull_values(&mut lines, i, r, form);
+                render_entry_header(&mut lines, i, r, form);
+                render_entry_values(&mut lines, i, r, form);
                 lines.push(Line::from(""));
             }
             let new_sel = form.master_cursor == form.registers.len();
             let new_line = format!(
                 "{}[+] {}",
                 if new_sel { "> " } else { "  " },
-                lang().protocol.new_slave
+                lang().protocol.new_entry
             );
             if new_sel {
                 lines.push(Line::styled(new_line, Style::default().fg(Color::Green)));
@@ -41,10 +46,10 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         }
     } else {
         lines.push(Line::from(lang().index.details_placeholder.as_str()));
-        lines.push(Line::from(format!("[+] {}", lang().protocol.new_slave)));
+        lines.push(Line::from(format!("[+] {}", lang().protocol.new_entry)));
     }
 
-    // Scroll calc
+    // Scroll logic copied from master/pull panels
     let inner_height = area.height.saturating_sub(2) as usize;
     let mut first_visible = 0usize;
     if let Some(form) = app.subpage_form.as_ref() {
@@ -69,7 +74,7 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             if let Some(idx) = form.master_edit_index {
                 if idx < form.registers.len() {
                     if let Some(field) = &form.master_edit_field {
-                        if let crate::protocol::status::MasterEditField::Value(a) = field {
+                        if let MasterEditField::Value(a) = field {
                             let r_cur = &form.registers[idx];
                             if *a >= r_cur.address && *a < r_cur.address + r_cur.length {
                                 let mut line_no = 0usize;
@@ -113,17 +118,17 @@ pub fn render_pull_list_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let end = min(total, first_visible + inner_height);
     render_boxed_paragraph(f, area, lines[first_visible..end].to_vec(), None);
     if total > inner_height && inner_height > 0 {
-        render_pull_scroll_bar(f, area, first_visible, inner_height, total);
+        render_scroll_bar(f, area, first_visible, inner_height, total);
     }
 }
 
-fn render_pull_header(
+fn render_entry_header(
     out: &mut Vec<Line>,
     idx: usize,
     r: &RegisterEntry,
     form: &crate::protocol::status::SubpageForm,
 ) {
-    use crate::protocol::status::MasterEditField as MEF;
+    use MasterEditField as F;
     let selected = form.master_cursor == idx;
     let chosen = form.master_field_selected && form.master_edit_index == Some(idx);
     let editing = form.master_field_editing && form.master_edit_index == Some(idx);
@@ -145,11 +150,30 @@ fn render_pull_header(
     }
     spans.push(Span::raw(format!("#{}", idx + 1)));
     spans.push(Span::raw(", "));
+    // Role field (new first editable)
+    let role_active = matches!(cur_field, Some(F::Role)) && editing;
+    let role_style = if role_active {
+        active
+    } else if chosen && matches!(cur_field, Some(F::Role)) {
+        chosen_style
+    } else {
+        base
+    };
+    let role_label = match r.role {
+        EntryRole::Master => lang().protocol.role_master.as_str(),
+        EntryRole::Slave => lang().protocol.role_slave.as_str(),
+    };
+    if role_active {
+        spans.push(Span::styled(format!("[{}]", role_label), role_style));
+    } else {
+        spans.push(Span::styled(role_label.to_string(), role_style));
+    }
+    spans.push(Span::raw(", "));
     // ID
-    let id_active = matches!(cur_field, Some(MEF::Id)) && editing;
+    let id_active = matches!(cur_field, Some(F::Id)) && editing;
     let id_style = if id_active {
         active
-    } else if chosen && matches!(cur_field, Some(MEF::Id)) {
+    } else if chosen && matches!(cur_field, Some(F::Id)) {
         chosen_style
     } else {
         base
@@ -173,11 +197,11 @@ fn render_pull_header(
         lang().protocol.reg_type_input.as_str(),
     ];
     let type_idx = ((r.mode as u8 as usize).saturating_sub(1)).min(3);
-    if matches!(cur_field, Some(MEF::Type)) && editing {
+    if matches!(cur_field, Some(F::Type)) && editing {
         spans.push(Span::styled("< ", base));
         spans.push(Span::styled(format!("[{}]", types[type_idx]), active));
         spans.push(Span::styled(" >", base));
-    } else if chosen && matches!(cur_field, Some(MEF::Type)) {
+    } else if chosen && matches!(cur_field, Some(F::Type)) {
         spans.push(Span::styled(format!("[{}]", types[type_idx]), chosen_style));
     } else {
         spans.push(Span::styled(types[type_idx].to_string(), base));
@@ -190,10 +214,10 @@ fn render_pull_header(
         format!("{} = ", lang().protocol.label_address_range),
         base,
     ));
-    let start_active = matches!(cur_field, Some(MEF::Start)) && editing;
+    let start_active = matches!(cur_field, Some(F::Start)) && editing;
     let start_style = if start_active {
         active
-    } else if chosen && matches!(cur_field, Some(MEF::Start)) {
+    } else if chosen && matches!(cur_field, Some(F::Start)) {
         chosen_style
     } else {
         base
@@ -209,10 +233,10 @@ fn render_pull_header(
         spans.push(Span::styled(format!("0x{:04X}", start), start_style));
     }
     spans.push(Span::raw(" - "));
-    let end_active = matches!(cur_field, Some(MEF::End)) && editing;
+    let end_active = matches!(cur_field, Some(F::End)) && editing;
     let end_style = if end_active {
         active
-    } else if chosen && matches!(cur_field, Some(MEF::End)) {
+    } else if chosen && matches!(cur_field, Some(F::End)) {
         chosen_style
     } else {
         base
@@ -227,12 +251,12 @@ fn render_pull_header(
     } else {
         spans.push(Span::styled(format!("0x{:04X}", end_inclusive), end_style));
     }
+    // Refresh + counter
     spans.push(Span::raw(", "));
-    // Refresh + counter merged
-    let refresh_active = matches!(cur_field, Some(MEF::Refresh)) && editing;
+    let refresh_active = matches!(cur_field, Some(F::Refresh)) && editing;
     let refresh_style = if refresh_active {
         active
-    } else if chosen && matches!(cur_field, Some(MEF::Refresh)) {
+    } else if chosen && matches!(cur_field, Some(F::Refresh)) {
         chosen_style
     } else {
         base
@@ -256,7 +280,7 @@ fn render_pull_header(
     }
     spans.push(Span::raw(", "));
     let counter_label = lang().protocol.label_req_counter.as_str();
-    let counter_selected = chosen && matches!(cur_field, Some(MEF::Counter));
+    let counter_selected = chosen && matches!(cur_field, Some(F::Counter));
     let counter_style = if counter_selected {
         chosen_style
     } else {
@@ -269,13 +293,13 @@ fn render_pull_header(
     out.push(Line::from(spans));
 }
 
-fn render_pull_values(
+fn render_entry_values(
     out: &mut Vec<Line>,
     idx: usize,
     r: &RegisterEntry,
     form: &crate::protocol::status::SubpageForm,
 ) {
-    use crate::protocol::status::MasterEditField as MEF;
+    use MasterEditField as F;
     if r.length == 0 {
         return;
     }
@@ -309,8 +333,8 @@ fn render_pull_values(
                 continue;
             }
             let offset = cur - start;
-            let val = r.values.get(offset).cloned().unwrap_or(0);
-            let style = if let Some(MEF::Value(a)) = &cur_field {
+            let raw_val = r.values.get(offset).cloned().unwrap_or(0);
+            let style = if let Some(F::Value(a)) = &cur_field {
                 if *a as usize == cur && editing {
                     active
                 } else if !editing && *a as usize == cur {
@@ -325,26 +349,35 @@ fn render_pull_values(
             } else {
                 normal
             };
-            if let Some(MEF::Value(a)) = &cur_field {
+            if let Some(F::Value(a)) = &cur_field {
                 if *a as usize == cur && editing {
-                    let content = if form.master_input_buffer.is_empty() {
-                        "_"
+                    if r.mode == crate::protocol::status::RegisterMode::Coils {
+                        let lbl = if raw_val != 0 {
+                            lang().protocol.value_true.as_str()
+                        } else {
+                            lang().protocol.value_false.as_str()
+                        };
+                        spans.push(Span::styled(format!("[{}]", lbl), style));
                     } else {
-                        form.master_input_buffer.as_str()
-                    };
-                    spans.push(Span::styled(format!("[{}]", content), style));
+                        let content = if form.master_input_buffer.is_empty() {
+                            "_"
+                        } else {
+                            form.master_input_buffer.as_str()
+                        };
+                        spans.push(Span::styled(format!("[{}]", content), style));
+                    }
                     continue;
                 }
             }
             if r.mode == crate::protocol::status::RegisterMode::Coils {
-                let lbl = if val != 0 {
-                    crate::i18n::lang().protocol.value_true.as_str()
+                let lbl = if raw_val != 0 {
+                    lang().protocol.value_true.as_str()
                 } else {
-                    crate::i18n::lang().protocol.value_false.as_str()
+                    lang().protocol.value_false.as_str()
                 };
                 spans.push(Span::styled(lbl.to_string(), style));
             } else {
-                spans.push(Span::styled(format!("{:02X}", val), style));
+                spans.push(Span::styled(format!("{:02X}", raw_val), style));
             }
         }
         out.push(Line::from(spans));
@@ -352,7 +385,7 @@ fn render_pull_values(
     }
 }
 
-fn render_pull_scroll_bar(
+fn render_scroll_bar(
     f: &mut Frame,
     area: Rect,
     first_visible: usize,
@@ -364,7 +397,7 @@ fn render_pull_scroll_bar(
     let bar_h = area.height.saturating_sub(2);
     let denom = (total.saturating_sub(inner_height)) as f32;
     let ratio = if denom > 0.0 {
-        (first_visible as f32) / denom
+        first_visible as f32 / denom
     } else {
         0.0
     };
@@ -376,3 +409,5 @@ fn render_pull_scroll_bar(
         f.render_widget(p, Rect::new(bar_x, bar_y + i, 1, 1));
     }
 }
+
+// End of unified ModBus panel

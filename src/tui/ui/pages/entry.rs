@@ -9,13 +9,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{
-    tui::{
-        input::Action,
-        ui::pages::{pull, slave},
-    },
-    {i18n::lang, protocol::status::Status},
-};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
@@ -25,24 +19,13 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     // Second hint: press 'l' to enter subpage
     hints.push(lang().hotkeys.hint_enter_subpage.as_str().to_string());
 
-    // If selected port is occupied by this app and no subpage overlay is active,
-    // Add mode menu hint
-    let state = app
-        .port_states
-        .get(app.selected)
-        .cloned()
-        .unwrap_or(crate::protocol::status::PortState::Free);
-    if state == crate::protocol::status::PortState::OccupiedByThis && app.active_subpage.is_none() {
-        hints.push(lang().hotkeys.hint_mode_menu.as_str().to_string());
-    }
-
     // Append quit hint only when allowed (mirror global rule)
     let in_subpage_editing = app
         .subpage_form
         .as_ref()
         .map(|f| f.editing)
         .unwrap_or(false);
-    let can_quit = app.active_subpage.is_none() && !app.mode_selector_active && !in_subpage_editing;
+    let can_quit = !app.subpage_active && !in_subpage_editing;
     if can_quit {
         hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
@@ -176,11 +159,8 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         .unwrap_or(crate::protocol::status::PortState::Free);
 
     // If a subpage is active, delegate the entire right area to it.
-    if let Some(sub) = app.active_subpage {
-        match sub {
-            crate::protocol::status::PortMode::Master => slave::render_slave(f, right, app),
-            crate::protocol::status::PortMode::SlaveStack => pull::render_pull(f, right, app),
-        }
+    if app.subpage_active {
+        // Unified ModBus page now handled elsewhere; entry no longer renders legacy subpages.
         return;
     }
 
@@ -205,7 +185,11 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     Style::default().fg(Color::LightBlue),
                 )));
                 if let Some(ts) = app.last_scan_time {
-                    lines.push(Line::from(format!("{} {}", lang().index.scan_last_header.as_str(), ts.format("%Y-%m-%d %H:%M:%S"))));
+                    lines.push(Line::from(format!(
+                        "{} {}",
+                        lang().index.scan_last_header.as_str(),
+                        ts.format("%Y-%m-%d %H:%M:%S")
+                    )));
                 } else {
                     lines.push(Line::from(lang().index.scan_none.as_str()));
                 }
@@ -213,15 +197,23 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
                 } else {
                     lines.push(Line::from(lang().index.scan_raw_header.as_str()));
-                    for l in app.last_scan_info.iter().take(100) { // cap lines to avoid overflow
+                    for l in app.last_scan_info.iter().take(100) {
+                        // cap lines to avoid overflow
                         if l.starts_with("ERROR:") {
-                            lines.push(Line::from(Span::styled(l.as_str(), Style::default().fg(Color::Red))));
+                            lines.push(Line::from(Span::styled(
+                                l.as_str(),
+                                Style::default().fg(Color::Red),
+                            )));
                         } else {
                             lines.push(Line::from(l.as_str()));
                         }
                     }
                     if app.last_scan_info.len() > 100 {
-                        lines.push(Line::from(format!("... ({} {})", app.last_scan_info.len() - 100, lang().index.scan_truncated_suffix.as_str())));
+                        lines.push(Line::from(format!(
+                            "... ({} {})",
+                            app.last_scan_info.len() - 100,
+                            lang().index.scan_truncated_suffix.as_str()
+                        )));
                     }
                 }
                 Paragraph::new(lines).block(content_block)
@@ -280,18 +272,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 Some(status_style),
             ));
 
-            // If occupied by this app, show current right mode (localized)
-            if selected_state == crate::protocol::status::PortState::OccupiedByThis {
-                let mode_text = match app.port_mode {
-                    crate::protocol::status::PortMode::Master => lang().tabs.master_mode.clone(),
-                    crate::protocol::status::PortMode::SlaveStack => lang().tabs.slave_mode.clone(),
-                };
-                pairs.push((
-                    lang().protocol.label_mode.as_str().to_string(),
-                    mode_text,
-                    None,
-                ));
-            }
+            // Mode always unified; hide previous master/slave mode line.
 
             if selected_state == crate::protocol::status::PortState::OccupiedByThis {
                 if let Some(cfg) = runtime_cfg.clone() {
@@ -368,10 +349,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     };
     f.render_widget(content, right);
 
-    // If mode selector overlay is active, render it via reusable component
-    if app.mode_selector_active {
-        crate::tui::ui::components::mode_selector::render_mode_selector(f, app.mode_selector_index);
-    }
+    // Mode selector removed (unified ModBus RTU) – overlay no longer rendered.
 }
 
 /// Handle key events when entry is used as a full-area subpage (listen). Return true if consumed.

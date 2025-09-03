@@ -8,8 +8,14 @@ pub fn parse_slave_discrete_inputs(
     context: &mut ModbusStorageSmall,
 ) -> Result<Option<Vec<u8>>> {
     if request.processing_required {
-        let result = if request.readonly { request.process_read(context) } else { request.process_write(context) };
-        if result.is_err() { return Err(anyhow!("Frame processing error")); }
+        let result = if request.readonly {
+            request.process_read(context)
+        } else {
+            request.process_write(context)
+        };
+        if result.is_err() {
+            return Err(anyhow!("Frame processing error"));
+        }
     }
     if request.response_required {
         request.finalize_response()?;

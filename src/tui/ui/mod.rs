@@ -11,7 +11,7 @@ pub fn render_ui(f: &mut Frame, app: &mut Status) {
     let area = f.area();
     // Reduce outer margin so middle panel is closer to title and bottom bar.
     // Reserve 2 lines for bottom when there's an error or when a subpage is active
-    let bottom_len = if app.error.is_some() || app.active_subpage.is_some() {
+    let bottom_len = if app.error.is_some() || app.subpage_active {
         2
     } else {
         1
@@ -31,8 +31,5 @@ pub fn render_ui(f: &mut Frame, app: &mut Status) {
     pages::render_panels(f, main_chunks[1], app);
     bottom::render_bottom(f, main_chunks[2], app);
 
-    // If a global mode selector is active, render it last so it appears above everything
-    if app.mode_selector_active {
-        crate::tui::ui::components::mode_selector::render_mode_selector(f, app.mode_selector_index);
-    }
+    // Mode selector overlay removed after unifying ModBus modes.
 }

@@ -24,7 +24,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         );
-        let msg = &err.0;
+        let (msg, _ts) = err;
         let p = Paragraph::new(msg.as_str())
             .alignment(Alignment::Left)
             .block(err_block);
@@ -42,7 +42,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
-    if _app.active_subpage.is_some() {
+    if _app.subpage_active {
         let rows = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
             .margin(0)

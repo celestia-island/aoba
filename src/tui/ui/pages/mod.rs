@@ -1,6 +1,5 @@
 pub mod entry;
-pub mod pull;
-pub mod slave;
+pub mod modbus;
 
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
@@ -9,16 +8,8 @@ use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
 /// Return page-provided bottom hints for the current app state.
 pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
-    // If a subpage is active, delegate to it; otherwise use entry's hints.
-    if let Some(sub) = app.active_subpage {
-        match sub {
-            crate::protocol::status::PortMode::Master => {
-                return crate::tui::ui::pages::slave::page_bottom_hints(app)
-            }
-            crate::protocol::status::PortMode::SlaveStack => {
-                return crate::tui::ui::pages::pull::page_bottom_hints(app)
-            }
-        }
+    if app.subpage_active {
+        return crate::tui::ui::pages::modbus::page_bottom_hints(app);
     }
     // Default to entry hints when no subpage
     let hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
@@ -34,9 +25,9 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
 pub fn global_hints_for_app(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     // If a subpage is active, show back/list and tab-switch hints as global controls.
-    if app.active_subpage.is_some() {
-    hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
-    hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
+    if app.subpage_active {
+        hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
+        hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
     } else {
         // Default to entry hints when no subpage
         hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
@@ -50,15 +41,8 @@ pub fn global_hints_for_app(app: &Status) -> Vec<String> {
 /// Allow the active page to map a KeyEvent to a high-level Action when the global
 /// Key mapping returns no action. Returns Some(Action) if mapped.
 pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
-    if let Some(sub) = app.active_subpage {
-        match sub {
-            crate::protocol::status::PortMode::Master => {
-                return crate::tui::ui::pages::slave::map_key(key, app)
-            }
-            crate::protocol::status::PortMode::SlaveStack => {
-                return crate::tui::ui::pages::pull::map_key(key, app)
-            }
-        }
+    if app.subpage_active {
+        return crate::tui::ui::pages::modbus::map_key(key, app);
     }
     crate::tui::ui::pages::entry::map_key(key, app)
 }
@@ -73,26 +57,16 @@ pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status) -> bool {
         return false;
     }
 
-    if let Some(sub) = app.active_subpage {
-        match sub {
-            crate::protocol::status::PortMode::Master => {
-                return slave::handle_subpage_key(key, app)
-            }
-            crate::protocol::status::PortMode::SlaveStack => {
-                return pull::handle_subpage_key(key, app)
-            }
-        }
+    if app.subpage_active {
+        return modbus::handle_subpage_key(key, app);
     }
     false
 }
 
 pub fn render_panels(f: &mut Frame, area: Rect, app: &mut Status) {
     // If a subpage is active, render it full-screen; otherwise render the normal entry view
-    if let Some(sub) = app.active_subpage {
-        match sub {
-            crate::protocol::status::PortMode::Master => slave::render_slave(f, area, app),
-            crate::protocol::status::PortMode::SlaveStack => pull::render_pull(f, area, app),
-        }
+    if app.subpage_active {
+        modbus::render_modbus(f, area, app);
     } else {
         entry::render_entry(f, area, app);
     }

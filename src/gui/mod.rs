@@ -52,7 +52,7 @@ impl GuiApp {
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Snapshot state quickly to avoid holding lock while drawing
-        let (_ports, _selected, auto_refresh, last_refresh, error) = {
+        let (_ports, _selected, auto_refresh, last_refresh, _error) = {
             if let Ok(guard) = self.status.lock() {
                 (
                     guard.ports.clone(),
@@ -69,6 +69,13 @@ impl eframe::App for GuiApp {
         // Use modular renderers
         ui::title::render_title(ctx);
         ui::pages::render_panels(ctx, &self.status);
-        ui::status::render_status(ctx, &last_refresh, auto_refresh, &error, &self.status);
+        // Wrap internal state error into GUI-friendly (message, timestamp) format
+        let err_ts: Option<(String, chrono::DateTime<chrono::Local>)> =
+            if let Ok(g) = self.status.lock() {
+                g.error.clone()
+            } else {
+                None
+            };
+        ui::status::render_status(ctx, &last_refresh, auto_refresh, &err_ts, &self.status);
     }
 }

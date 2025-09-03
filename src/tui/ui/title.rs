@@ -31,7 +31,7 @@ pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
     }
 
     // Title text (center area)
-    let title_text = if app.active_subpage.is_some() {
+    let title_text = if app.subpage_active {
         if !app.ports.is_empty() && app.selected < app.ports.len() {
             let p = &app.ports[app.selected];
             format!("{} - {}", p.port_name, lang().index.title.as_str())

@@ -2,7 +2,7 @@ pub fn replace_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
     fonts.font_data.insert(
-        "更纱黑体".to_owned(),
+        "更纱黑体".to_owned(), // Chinese font family
         std::sync::Arc::new(egui::FontData::from_static(include_bytes!(
             "../../res/mono-sc-nerd.ttf"
         ))),
