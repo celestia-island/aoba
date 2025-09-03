@@ -14,7 +14,7 @@ use crate::i18n::lang;
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
-    protocol::status::{InputMode, LogEntry, PortMode, Status},
+    protocol::status::{InputMode, LogEntry, Status},
     tui::{
         input::{map_key, Action},
         utils::constants::LOG_PAGE_JUMP,
@@ -26,11 +26,7 @@ use crate::{
 //  - Master / SlaveStack: 3 tabs [0=config,1=list,2=log] -> log index=2
 //  - Listen: 2 tabs [0=config,1=log] -> log index=1
 fn is_log_tab(app: &Status) -> bool {
-    if let Some(mode) = app.active_subpage {
-        matches!(mode, PortMode::Master | PortMode::SlaveStack) && app.subpage_tab_index == 2
-    } else {
-        false
-    }
+    app.subpage_active && app.subpage_tab_index == 2
 }
 
 // ---- Internal helpers ----------------------------------------------------
@@ -151,26 +147,11 @@ fn run_app(
 
         // Poll for input
         if crossterm::event::poll(Duration::from_millis(100))? {
-            let evt = match crossterm::event::read() {
-                Ok(e) => e,
-                Err(e) => {
-                    if let Ok(mut guard) = app.lock() {
-                        guard.set_error(format!("input read error: {}", e));
-                    } else {
-                        log::error!("[TUI] input read error: {}", e);
-                    }
-                    continue;
+            if let crossterm::event::Event::Key(key) = crossterm::event::read()? {
+                if key.kind != crossterm::event::KeyEventKind::Press {
+                    continue; // Ignore non-initial key press (repeat / release)
                 }
-            };
-
-            if let crossterm::event::Event::Key(key) = evt {
-                // Only handle initial key press.
-                match key.kind {
-                    crossterm::event::KeyEventKind::Press => {}
-                    crossterm::event::KeyEventKind::Repeat => continue,
-                    _ => continue, // Release or other kinds
-                }
-
+                // Main keyboard event handling entry
                 let lock = app.lock();
                 let _is_editing = match &lock {
                     Ok(g) => g
@@ -203,49 +184,8 @@ fn run_app(
                     Err(_) => false,
                 };
 
-                let mode_selector_active = match &lock {
-                    Ok(g) => g.mode_selector_active,
-                    Err(_) => false,
-                };
-
-                // Unlock drop of 'lock' to avoid double-lock later
+                // Mode selector removed; no overlay handling
                 drop(lock);
-
-                if mode_selector_active {
-                    use crossterm::event::KeyCode as KC;
-                    if let Ok(mut guard) = app.lock() {
-                        match key.code {
-                            KC::Up | KC::Char('k') => {
-                                if guard.mode_selector_index > 0 {
-                                    guard.mode_selector_index -= 1;
-                                }
-                            }
-                            KC::Down | KC::Char('j') => {
-                                if guard.mode_selector_index < 1 {
-                                    guard.mode_selector_index += 1;
-                                }
-                            }
-                            KC::Enter => {
-                                // Apply selection
-                                guard.port_mode = if guard.mode_selector_index == 0 {
-                                    PortMode::Master
-                                } else {
-                                    PortMode::SlaveStack
-                                };
-                                if guard.active_subpage.is_some() {
-                                    guard.active_subpage = Some(guard.port_mode);
-                                }
-                                guard.mode_selector_active = false;
-                            }
-                            KC::Esc => {
-                                guard.mode_selector_active = false;
-                            }
-                            _ => {}
-                        }
-                        guard.clear_error();
-                    }
-                    continue;
-                }
 
                 // Re-evaluate editing after potential selector handling
                 let is_editing = match app.lock() {
@@ -629,9 +569,7 @@ fn run_app(
                                         .as_ref()
                                         .map(|f| f.editing)
                                         .unwrap_or(false);
-                                    let allowed = guard.active_subpage.is_none()
-                                        && !guard.mode_selector_active
-                                        && !in_editing;
+                                    let allowed = !guard.subpage_active && !in_editing;
                                     if allowed {
                                         let _ =
                                             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Quit);
@@ -645,8 +583,8 @@ fn run_app(
                             }
                             Action::LeavePage => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some() {
-                                        guard.active_subpage = None;
+                                    if guard.subpage_active {
+                                        guard.subpage_active = false;
                                     }
                                     guard.clear_error();
                                 } else {
@@ -661,7 +599,7 @@ fn run_app(
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.active_subpage = Some(guard.port_mode);
+                                        guard.subpage_active = true;
                                         guard.subpage_tab_index = 0;
                                         guard.init_subpage_form();
                                     }
@@ -672,7 +610,7 @@ fn run_app(
                             }
                             Action::MoveNext => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some() {
+                                    if guard.subpage_active {
                                         // Log tab navigation else form cursor
                                         if is_log_tab(&guard) {
                                             let total = guard.logs.len();
@@ -701,7 +639,7 @@ fn run_app(
                             }
                             Action::MovePrev => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some() {
+                                    if guard.subpage_active {
                                         if is_log_tab(&guard) {
                                             let total = guard.logs.len();
                                             if total > 0 {
@@ -790,55 +728,8 @@ fn run_app(
                                     guard.clear_error();
                                 }
                             }
-                            Action::SwitchMode(i) => {
-                                if let Ok(mut guard) = app.lock() {
-                                    guard.port_mode = if i == 0 {
-                                        PortMode::Master
-                                    } else {
-                                        PortMode::SlaveStack
-                                    };
-                                    if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.port_mode);
-                                    }
-                                    guard.clear_error();
-                                } else {
-                                    log::error!("[TUI] failed to lock app for SwitchMode");
-                                }
-                            }
-                            Action::CycleMode => {
-                                if let Ok(mut guard) = app.lock() {
-                                    guard.port_mode = match guard.port_mode {
-                                        PortMode::Master => PortMode::SlaveStack,
-                                        PortMode::SlaveStack => PortMode::Master,
-                                    };
-                                    if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.port_mode);
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::ShowModeSelector => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_none() {
-                                        let state = guard
-                                            .port_states
-                                            .get(guard.selected)
-                                            .cloned()
-                                            .unwrap_or(crate::protocol::status::PortState::Free);
-                                        if state
-                                            == crate::protocol::status::PortState::OccupiedByThis
-                                        {
-                                            guard.mode_selector_active = true;
-                                            guard.mode_selector_index = match guard.port_mode {
-                                                PortMode::Master => 0,
-                                                PortMode::SlaveStack => 1,
-                                            };
-                                        }
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::EnterSubpage(ch) => {
+                            // Removed SwitchMode / CycleMode / ShowModeSelector branches after unifying mode
+                            Action::EnterSubpage(_) => {
                                 if let Ok(mut guard) = app.lock() {
                                     let state = guard
                                         .port_states
@@ -846,11 +737,7 @@ fn run_app(
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.active_subpage = match ch {
-                                            'p' => Some(PortMode::SlaveStack),
-                                            's' => Some(PortMode::Master),
-                                            _ => guard.active_subpage,
-                                        };
+                                        guard.subpage_active = true;
                                         guard.init_subpage_form();
                                     }
                                     guard.clear_error();
@@ -858,7 +745,7 @@ fn run_app(
                             }
                             Action::AddRegister => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.active_subpage.is_some() {
+                                    if guard.subpage_active {
                                         if guard.subpage_form.is_none() {
                                             guard.init_subpage_form();
                                         }
@@ -866,15 +753,16 @@ fn run_app(
                                             form.registers.push(
                                                 crate::protocol::status::RegisterEntry {
                                                     slave_id: 1,
+                                                    role: crate::protocol::status::EntryRole::Slave,
                                                     mode: crate::protocol::status::RegisterMode::Coils,
                                                     address: 0,
                                                     length: 1,
-                                                    values: vec![0u8;1],
+                                                    values: vec![0u8; 1],
                                                     refresh_ms: 1000,
                                                     req_success: 0,
                                                     req_total: 0,
                                                     next_poll_at: std::time::Instant::now(),
-                                                },
+                                                }
                                             );
                                         }
                                     }
@@ -946,7 +834,7 @@ fn run_app(
                             }
                             Action::ExitSubpage => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.active_subpage = None;
+                                    guard.subpage_active = false;
                                     guard.clear_error();
                                 }
                             }
@@ -967,26 +855,13 @@ fn run_app(
                             }
                             Action::SwitchNext => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.port_mode = match guard.port_mode {
-                                        PortMode::Master => PortMode::SlaveStack,
-                                        PortMode::SlaveStack => PortMode::Master,
-                                    };
-                                    if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.port_mode);
-                                    }
+                                    // unified mode: SwitchNext now no-op
                                     guard.clear_error();
                                 }
                             }
                             Action::SwitchPrev => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.port_mode = match guard.port_mode {
-                                        PortMode::Master => PortMode::SlaveStack,
-                                        PortMode::SlaveStack => PortMode::Master,
-                                    };
-                                    if guard.active_subpage.is_some() {
-                                        guard.active_subpage = Some(guard.port_mode);
-                                        guard.init_subpage_form();
-                                    }
+                                    // unified mode: SwitchPrev now no-op
                                     guard.clear_error();
                                 }
                             }
@@ -1010,11 +885,10 @@ fn run_app(
                         }
                     }
                 }
-            }
-        }
-
-        // No automatic error clearing; errors are cleared manually via the UI
-    }
+            } // end key event match
+        } // end poll
+          // No automatic error clearing; errors are cleared manually via the UI
+    } // end loop
 
     terminal.clear()?;
     Ok(())

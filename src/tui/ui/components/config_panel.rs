@@ -45,7 +45,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         // Value line: if editing show edit buffer (yellow), otherwise show value (green if selected)
         if editing {
             // In editing state we do not show the selection marker '>' — only show the edit buffer.
-        let rendered = lang().protocol.edit_suffix.replace("{}", buffer);
+            let rendered = lang().protocol.edit_suffix.replace("{}", buffer);
             let val_text = format!("{}{}", base_prefix, rendered);
             let val_style = Style::default().fg(Color::Yellow);
             lines.push(ratatui::text::Line::from(Span::styled(val_text, val_style)));
@@ -71,7 +71,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         // Presets stop at 115200; append a 'Custom' slot so user can select and type a custom baud
         let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
         let mut options: Vec<String> = presets.iter().map(|p| p.to_string()).collect();
-    options.push(lang().protocol.custom.clone());
+        options.push(lang().protocol.custom.clone());
         let custom_idx = options.len() - 1;
 
         // Determine current index in options from form.edit_choice_index when available
@@ -96,7 +96,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 0usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-    let title_text = format!("{}{}", base_prefix, lang().protocol.label_baud.as_str());
+        let title_text = format!("{}{}", base_prefix, lang().protocol.label_baud.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -112,7 +112,10 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         // If custom is selected and we're in the deeper confirmed edit stage, show editable buffer
         if current_idx == custom_idx && form.edit_confirmed {
             // Confirmed editing: show buffer and yellow highlight
-            let rendered = lang().protocol.edit_suffix.replace("{}", form.input_buffer.as_str());
+            let rendered = lang()
+                .protocol
+                .edit_suffix
+                .replace("{}", form.input_buffer.as_str());
             // Editing confirmed: do not show '>' marker; show edit buffer only.
             let val_text = format!("{}{}", base_prefix, rendered);
             lines.push(ratatui::text::Line::from(Span::styled(
@@ -176,7 +179,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 1usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-    let title_text = format!("{}{}", base_prefix, lang().protocol.label_parity.as_str());
+        let title_text = format!("{}{}", base_prefix, lang().protocol.label_parity.as_str());
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -227,7 +230,11 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 2usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-    let title_text = format!("{}{}", base_prefix, lang().protocol.label_data_bits.as_str());
+        let title_text = format!(
+            "{}{}",
+            base_prefix,
+            lang().protocol.label_data_bits.as_str()
+        );
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -278,7 +285,11 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 3usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-    let title_text = format!("{}{}", base_prefix, lang().protocol.label_stop_bits.as_str());
+        let title_text = format!(
+            "{}{}",
+            base_prefix,
+            lang().protocol.label_stop_bits.as_str()
+        );
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)

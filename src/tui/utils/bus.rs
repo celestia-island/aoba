@@ -28,5 +28,7 @@ pub struct Bus {
 }
 
 impl Bus {
-    pub fn new(core_rx: Receiver<CoreToUi>, ui_tx: Sender<UiToCore>) -> Self { Self { core_rx, ui_tx } }
+    pub fn new(core_rx: Receiver<CoreToUi>, ui_tx: Sender<UiToCore>) -> Self {
+        Self { core_rx, ui_tx }
+    }
 }
