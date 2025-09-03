@@ -25,7 +25,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                       editing: bool,
                       buffer: &str| {
         let selected = idx == form.cursor;
-        // Always indent title/value by two spaces so items don't jump when navigating.
+        // Always indent title / value by two spaces so items don't jump when navigating.
         let base_prefix = "  ";
 
         // Title line (bold) — do NOT add extra selection-indent here, only style changes.
@@ -45,7 +45,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         // Value line: if editing show edit buffer (yellow), otherwise show value (green if selected)
         if editing {
             // In editing state we do not show the selection marker '>' — only show the edit buffer.
-            let rendered = lang().protocol.edit_suffix.replace("{}", buffer);
+            let rendered = lang().protocol.modbus.edit_suffix.replace("{}", buffer);
             let val_text = format!("{}{}", base_prefix, rendered);
             let val_style = Style::default().fg(Color::Yellow);
             lines.push(ratatui::text::Line::from(Span::styled(val_text, val_style)));
@@ -66,12 +66,12 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
 
     let editing_field = form.editing_field.clone();
 
-    // --- Baud (idx 0) ---
+    // Baud (idx 0)
     if matches!(editing_field, Some(EditingField::Baud)) {
         // Presets stop at 115200; append a 'Custom' slot so user can select and type a custom baud
         let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
         let mut options: Vec<String> = presets.iter().map(|p| p.to_string()).collect();
-        options.push(lang().protocol.custom.clone());
+        options.push(lang().protocol.common.custom.clone());
         let custom_idx = options.len() - 1;
 
         // Determine current index in options from form.edit_choice_index when available
@@ -92,11 +92,15 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        // Render title + selector/edit line
+        // Render title + selector / edit line
         let idx_field = 0usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-        let title_text = format!("{}{}", base_prefix, lang().protocol.label_baud.as_str());
+        let title_text = format!(
+            "{}{}",
+            base_prefix,
+            lang().protocol.common.label_baud.as_str()
+        );
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -114,6 +118,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             // Confirmed editing: show buffer and yellow highlight
             let rendered = lang()
                 .protocol
+                .modbus
                 .edit_suffix
                 .replace("{}", form.input_buffer.as_str());
             // Editing confirmed: do not show '>' marker; show edit buffer only.
@@ -141,24 +146,24 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             0,
-            lang().protocol.label_baud.as_str(),
+            lang().protocol.common.label_baud.as_str(),
             form.baud.to_string(),
             matches!(editing_field, Some(EditingField::Baud)),
             form.input_buffer.as_str(),
         );
     }
 
-    // --- Parity (idx 1) ---
+    // Parity (idx 1)
     let parity_text = match form.parity {
-        crate::protocol::status::Parity::None => lang().protocol.parity_none.clone(),
-        crate::protocol::status::Parity::Even => lang().protocol.parity_even.clone(),
-        crate::protocol::status::Parity::Odd => lang().protocol.parity_odd.clone(),
+        crate::protocol::status::Parity::None => lang().protocol.common.parity_none.clone(),
+        crate::protocol::status::Parity::Even => lang().protocol.common.parity_even.clone(),
+        crate::protocol::status::Parity::Odd => lang().protocol.common.parity_odd.clone(),
     };
     if matches!(editing_field, Some(EditingField::Parity)) {
         let options = vec![
-            lang().protocol.parity_none.clone(),
-            lang().protocol.parity_even.clone(),
-            lang().protocol.parity_odd.clone(),
+            lang().protocol.common.parity_none.clone(),
+            lang().protocol.common.parity_even.clone(),
+            lang().protocol.common.parity_odd.clone(),
         ];
         let cur_idx = match form.parity {
             crate::protocol::status::Parity::None => 0usize,
@@ -179,7 +184,11 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let idx_field = 1usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
-        let title_text = format!("{}{}", base_prefix, lang().protocol.label_parity.as_str());
+        let title_text = format!(
+            "{}{}",
+            base_prefix,
+            lang().protocol.common.label_parity.as_str()
+        );
         let title_style = if selected {
             Style::default()
                 .fg(Color::Green)
@@ -201,14 +210,14 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             1,
-            lang().protocol.label_parity.as_str(),
+            lang().protocol.common.label_parity.as_str(),
             parity_text,
             matches!(editing_field, Some(EditingField::Parity)),
             form.input_buffer.as_str(),
         );
     }
 
-    // --- Data bits (idx 2) ---
+    // Data bits (idx 2)
     let data_bits_text = format!("{}", form.data_bits);
     if matches!(editing_field, Some(EditingField::DataBits)) {
         let options = vec![5u8, 6u8, 7u8, 8u8];
@@ -233,7 +242,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let title_text = format!(
             "{}{}",
             base_prefix,
-            lang().protocol.label_data_bits.as_str()
+            lang().protocol.common.label_data_bits.as_str()
         );
         let title_style = if selected {
             Style::default()
@@ -256,14 +265,14 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             2,
-            lang().protocol.label_data_bits.as_str(),
+            lang().protocol.common.label_data_bits.as_str(),
             data_bits_text,
             matches!(editing_field, Some(EditingField::DataBits)),
             form.input_buffer.as_str(),
         );
     }
 
-    // --- Stop bits (idx 3) ---
+    // Stop bits (idx 3)
     if matches!(editing_field, Some(EditingField::StopBits)) {
         let opts_vals = vec![1, 2];
         let cur_idx = opts_vals
@@ -288,7 +297,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let title_text = format!(
             "{}{}",
             base_prefix,
-            lang().protocol.label_stop_bits.as_str()
+            lang().protocol.common.label_stop_bits.as_str()
         );
         let title_style = if selected {
             Style::default()
@@ -311,7 +320,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         push_field(
             &mut lines,
             3,
-            lang().protocol.label_stop_bits.as_str(),
+            lang().protocol.common.label_stop_bits.as_str(),
             form.stop_bits.to_string(),
             matches!(editing_field, Some(EditingField::StopBits)),
             form.input_buffer.as_str(),

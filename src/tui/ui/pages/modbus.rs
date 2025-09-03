@@ -9,15 +9,14 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{EntryRole, MasterEditField, RegisterMode, Status, SubpageForm},
+    protocol::status::{AppMode, EntryRole, MasterEditField, RegisterMode, Status, SubpageForm},
     tui::ui::components::{
         config_panel::render_config_panel, log_panel::render_log_panel,
-        modbus_panel::render_modbus_panel,
+        modbus_panel::render_modbus_panel, mqtt_panel::render_mqtt_panel,
     },
     tui::{input::Action, utils::edit},
 };
 
-// ===================== Render =====================
 /// Unified ModBus page (merges previous master / slave pages).
 pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     let port_name = if !app.ports.is_empty() && app.selected < app.ports.len() {
@@ -25,9 +24,13 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     } else {
         "-".to_string()
     };
+    let mid_label = match app.app_mode {
+        AppMode::Modbus => lang().protocol.modbus.label_modbus_settings.as_str(),
+        AppMode::Mqtt => "MQTT",
+    };
     let tabs = vec![
         lang().tabs.tab_config.as_str(),
-        lang().protocol.label_modbus_settings.as_str(),
+        mid_label,
         lang().tabs.tab_log.as_str(),
     ];
     let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
@@ -37,7 +40,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     ])
     .areas(area);
 
-    let mode_text = "ModBus RTU"; // constant label; could be localized later
+    let mode_text = app.app_mode.label();
     let right_label = format!("{} - {}", port_name, mode_text);
     let right_width = UnicodeWidthStr::width(right_label.as_str());
     let h_chunks = ratatui::layout::Layout::default()
@@ -62,13 +65,18 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     f.render_widget(right_para, h_chunks[1]);
     match tab_index {
         0 => render_config_panel(f, content_area, app, None),
-        1 => render_modbus_panel(f, content_area, app),
+        1 => {
+            if matches!(app.app_mode, AppMode::Modbus) {
+                render_modbus_panel(f, content_area, app)
+            } else {
+                render_mqtt_panel(f, content_area, app)
+            }
+        }
         2 => render_log_panel(f, content_area, app),
         _ => render_config_panel(f, content_area, app, None),
     }
 }
 
-// ===================== Input Handling =====================
 pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
     // Ensure form exists when interacting with modbus settings tab
     if app.subpage_tab_index == 1 && app.subpage_form.is_none() {
@@ -77,8 +85,8 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
 
     if app.subpage_tab_index == 1 {
         if let Some(form) = app.subpage_form.as_mut() {
-            // Editing layer ---------------------------------
             if form.master_field_editing {
+                // Editing layer
                 let is_type = matches!(form.master_edit_field, Some(MasterEditField::Type));
                 let is_role = matches!(form.master_edit_field, Some(MasterEditField::Role));
                 match key.code {
@@ -117,7 +125,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                             cycle_role(form, forward);
                             return true;
                         }
-                        // Value editing: coil toggle (left/right) in coils mode
+                        // Value editing: coil toggle (left / right) in coils mode
                         if let Some(MasterEditField::Value(addr)) = form.master_edit_field.clone() {
                             if let Some(idx) = form.master_edit_index {
                                 if let Some(entry) = form.registers.get_mut(idx) {
@@ -166,8 +174,8 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                     }
                     _ => return true,
                 }
-            // Selection layer ---------------------------------
             } else if form.master_field_selected {
+                // Selection layer
                 match key.code {
                     KC::Esc => {
                         form.master_field_selected = false;
@@ -212,8 +220,8 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                     }
                     _ => {}
                 }
-            // Browsing layer ---------------------------------
             } else {
+                // Browsing layer
                 match key.code {
                     KC::Enter => {
                         if form.master_cursor == form.registers.len() {
@@ -307,7 +315,6 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
     }
 }
 
-// ===================== Bottom Hints =====================
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     if app.subpage_tab_index == 0 {
@@ -404,7 +411,6 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     hints
 }
 
-// ===================== Global Key Map (non-edit) =====================
 pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
     match key.code {
         KC::Tab => Some(Action::SwitchNext),
@@ -413,7 +419,6 @@ pub fn map_key(key: KeyEvent, _app: &Status) -> Option<Action> {
     }
 }
 
-// ===================== Editing Helpers =====================
 #[derive(Clone, Copy)]
 pub(crate) enum Dir {
     Up,
@@ -634,5 +639,3 @@ pub(crate) fn current_entry_is_master(form: &SubpageForm) -> bool {
     }
     false
 }
-
-// ===================== End of unified ModBus page =====================

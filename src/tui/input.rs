@@ -15,7 +15,7 @@ pub enum Action {
     MoveNext,
     MovePrev,
     ClearError,
-    // Removed SwitchMode/CycleMode after unifying ModBus mode
+    // Removed SwitchMode / CycleMode after unifying ModBus mode
     EnterSubpage(char),
     ExitSubpage,
     // Removed ShowModeSelector (mode selector overlay deleted)

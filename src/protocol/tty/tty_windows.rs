@@ -5,7 +5,7 @@ use std::{
 
 use serialport::{SerialPortInfo, SerialPortType};
 
-/// Return the list of available serial ports sorted/deduped for Windows.
+/// Return the list of available serial ports sorted / deduped for Windows.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     let raw_ports = serialport::available_ports().unwrap_or_default();
     sort_and_dedup_ports(raw_ports)
@@ -85,7 +85,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                 continue;
             }
             for i in idxs.into_iter() {
-                // If it's a usb-type port, attempt to append VID/PID/SN if
+                // If it's a usb-type port, attempt to append VID / PID / SN if
                 // We can extract them; otherwise append a generic (usb).
                 if matches!(ports[i].port_type, SerialPortType::UsbPort { .. }) {
                     if let Some((vid, pid, sn, _m, _p)) =
@@ -132,7 +132,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     ports
 }
 
-// Attempt to conservatively extract vid/pid/serial from a SerialPortType
+// Attempt to conservatively extract vid / pid / serial from a SerialPortType
 // By inspecting its Debug representation. This is best-effort and should
 // Not be relied on strictly, but helps annotate ports when metadata is
 // Available across different serialport crate versions.

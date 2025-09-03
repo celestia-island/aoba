@@ -3,7 +3,7 @@ use flume::{Receiver, Sender};
 /// Messages sent from UI thread to core worker thread.
 #[derive(Debug)]
 pub enum UiToCore {
-    /// Request an immediate full port/device refresh (equivalent to pressing 'r').
+    /// Request an immediate full port / device refresh (equivalent to pressing 'r').
     Refresh,
     /// Graceful shutdown request.
     Quit,
