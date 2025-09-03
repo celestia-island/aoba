@@ -7,15 +7,7 @@ use ratatui::{
 };
 
 use crate::i18n::lang;
-use unicode_width::UnicodeWidthStr;
-
-/// Return the hint fragments shown in the mode selector popup.
-pub fn mode_selector_hints() -> Vec<String> {
-    vec![
-    lang().hotkeys.press_enter_select.as_str().to_string(),
-    lang().hotkeys.press_esc_cancel.as_str().to_string(),
-    ]
-}
+// Hint line removed per user request: no bottom inline hints inside popup.
 
 /// Render a centered mode selector popup. `index` is the currently selected option index.
 pub fn render_mode_selector(f: &mut Frame, index: usize) {
@@ -33,7 +25,7 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
         .borders(ratatui::widgets::Borders::ALL)
         .style(Style::default().bg(Color::DarkGray))
         .title(Span::styled(
-            lang().tabs.mode_selector_title.as_str(),
+            lang().protocol.common.mode_overlay_title.as_str(),
             Style::default().fg(Color::White),
         ));
     f.render_widget(bg_block, popup);
@@ -47,7 +39,10 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     );
 
     // Options (each line centered horizontally, and vertically centered in inner area)
-    let options = vec![lang().tabs.tab_master.as_str(), lang().tabs.tab_slave.as_str()];
+    let options = vec![
+        lang().protocol.common.mode_modbus.as_str(),
+        lang().protocol.common.mode_mqtt.as_str(),
+    ];
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
     for (i, o) in options.iter().enumerate() {
         let span = if i == index {
@@ -69,30 +64,5 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let opts_para = Paragraph::new(lines).alignment(ratatui::layout::Alignment::Center);
     f.render_widget(opts_para, opts_rect);
 
-    // Overlay hint text on the bottom border line (left side) with a leading space.
-    // We overwrite part of the horizontal border to place the hints without shifting layout.
-    let hint_line_y = popup.y + popup.height - 1;
-    if popup.height >= 1 && popup.width > 2 {
-        let mut hint_text = format!(" {}", mode_selector_hints().join("  "));
-        let max_w = popup.width.saturating_sub(2) as usize; // Exclude corners
-        if UnicodeWidthStr::width(hint_text.as_str()) > max_w {
-            // Trim and add ellipsis if needed
-            let mut acc = String::new();
-            for ch in hint_text.chars() {
-                let next = format!("{}{}", acc, ch);
-                if UnicodeWidthStr::width(next.as_str()) > max_w.saturating_sub(1) {
-                    // Reserve 1 for ellipsis
-                    acc.push('…');
-                    break;
-                }
-                acc.push(ch);
-            }
-            hint_text = acc;
-        }
-        let hint_rect = Rect::new(popup.x + 1, hint_line_y, popup.width.saturating_sub(2), 1);
-        let hint_para = Paragraph::new(hint_text)
-            .alignment(ratatui::layout::Alignment::Left)
-            .style(Style::default().fg(Color::White).bg(Color::DarkGray));
-        f.render_widget(hint_para, hint_rect);
-    }
+    // (Bottom inline hint removed)
 }

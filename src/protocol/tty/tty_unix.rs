@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serialport::{SerialPortInfo, SerialPortType};
 
-/// Return the list of available serial ports sorted/deduped for Unix.
+/// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     let raw_ports = serialport::available_ports().unwrap_or_default();
     sort_and_dedup_ports(raw_ports)
@@ -31,7 +31,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 
     let mut ports = unique;
 
-    // Annotate devices sharing same basename with vid/pid so user can distinguish
+    // Annotate devices sharing same basename with vid / pid so user can distinguish
     let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, p) in ports.iter().enumerate() {
         let base = match p.port_name.rsplit('/').next() {
@@ -53,7 +53,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         }
     }
 
-    // Priority sort: USB/ACM first, then ttys
+    // Priority sort: USB / ACM first, then ttys
     fn priority(name: &str) -> i32 {
         let n = name.to_lowercase();
         if n.contains("ttyusb") || n.contains("usb") {
@@ -80,7 +80,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     ports
 }
 
-/// Try to extract vid/pid/serial from a SerialPortType on Unix platforms.
+/// Try to extract vid / pid / serial from a SerialPortType on Unix platforms.
 pub fn try_extract_vid_pid_serial(
     pt: &serialport::SerialPortType,
 ) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {

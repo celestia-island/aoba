@@ -11,6 +11,7 @@ use std::{
 };
 
 use crate::i18n::lang;
+use crate::protocol::status::AppMode;
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
@@ -29,7 +30,6 @@ fn is_log_tab(app: &Status) -> bool {
     app.subpage_active && app.subpage_tab_index == 2
 }
 
-// ---- Internal helpers ----------------------------------------------------
 /// Recompute log viewport (bottom anchored) after `log_selected` potentially changed.
 fn adjust_log_view(app: &mut Status, term_height: u16) {
     app.adjust_log_view(term_height);
@@ -184,8 +184,49 @@ fn run_app(
                     Err(_) => false,
                 };
 
-                // Mode selector removed; no overlay handling
-                drop(lock);
+                // Mode overlay handling
+                let overlay_active = lock
+                    .as_ref()
+                    .map(|g| g.mode_overlay_active)
+                    .unwrap_or(false);
+                if overlay_active {
+                    use crossterm::event::KeyCode as KC;
+                    // Release read lock before acquiring mutable
+                    drop(lock);
+                    if let Ok(mut guard) = app.lock() {
+                        match key.code {
+                            KC::Esc => {
+                                guard.mode_overlay_active = false;
+                            }
+                            KC::Up | KC::Char('k') => {
+                                guard.mode_overlay_index =
+                                    if guard.mode_overlay_index == 0 { 1 } else { 0 };
+                            }
+                            KC::Down | KC::Char('j') => {
+                                guard.mode_overlay_index = (guard.mode_overlay_index + 1) % 2;
+                            }
+                            KC::Enter => {
+                                let sel = if guard.mode_overlay_index % 2 == 0 {
+                                    AppMode::Modbus
+                                } else {
+                                    AppMode::Mqtt
+                                };
+                                if guard.app_mode != sel {
+                                    guard.app_mode = sel;
+                                    guard.save_current_port_state();
+                                }
+                                guard.mode_overlay_active = false;
+                            }
+                            _ => {}
+                        }
+                        guard.clear_error();
+                        // Redraw immediately
+                        terminal.draw(|f| crate::tui::ui::render_ui(f, &mut *guard))?;
+                    }
+                    continue;
+                } else {
+                    drop(lock);
+                }
 
                 // Re-evaluate editing after potential selector handling
                 let is_editing = match app.lock() {
@@ -362,6 +403,7 @@ fn run_app(
                                                                     pending_error = Some(
                                                                         lang()
                                                                             .protocol
+                                                                            .modbus
                                                                             .invalid_baud_range
                                                                             .clone(),
                                                                     );
@@ -386,6 +428,7 @@ fn run_app(
                                                                 pending_error = Some(
                                                                     lang()
                                                                         .protocol
+                                                                        .modbus
                                                                         .invalid_baud_range
                                                                         .clone(),
                                                                 );
@@ -535,6 +578,22 @@ fn run_app(
                                 }
                                 _ => {}
                             }
+                        }
+                    } else {
+                        // Global mode cycle (m) when not in log tab quick-toggle context
+                        use crossterm::event::KeyCode as KC;
+                        if key.code == KC::Char('m') {
+                            // Open overlay instead of immediate cycle
+                            guard.mode_overlay_active = true;
+                            // Sync overlay index to current mode
+                            guard.mode_overlay_index = match guard.app_mode {
+                                AppMode::Modbus => 0,
+                                AppMode::Mqtt => 1,
+                            };
+                            guard.clear_error();
+                            drop(guard);
+                            redraw(terminal, &app);
+                            continue;
                         }
                     }
                 }

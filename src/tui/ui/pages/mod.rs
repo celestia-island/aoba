@@ -12,10 +12,8 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
         return crate::tui::ui::pages::modbus::page_bottom_hints(app);
     }
     // Default to entry hints when no subpage
-    let hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
-    // If the transient mode selector overlay is active, append its hints so the bottom bar
-    // Can render them (keeps rendering centralized in bottom.rs)
-    // Mode selector hints now rendered inside popup; do not append here to keep layout stable.
+    let mut hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
+    hints.push(lang().hotkeys.press_m_switch_protocol.as_str().to_string());
     hints
 }
 
@@ -24,13 +22,14 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
 /// Be shown on an extra line above).
 pub fn global_hints_for_app(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
-    // If a subpage is active, show back/list and tab-switch hints as global controls.
+    // If a subpage is active, show back / list and tab-switch hints as global controls.
     if app.subpage_active {
         hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
         hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
     } else {
         // Default to entry hints when no subpage
         hints = crate::tui::ui::pages::entry::page_bottom_hints(app);
+        hints.push(lang().hotkeys.press_m_switch_protocol.as_str().to_string());
     }
     // If the transient mode selector overlay is active, append its hints so the bottom bar
     // Can render them (keeps rendering centralized in bottom.rs)

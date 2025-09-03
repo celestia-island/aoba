@@ -9,7 +9,7 @@ use super::parse_modbus_header;
 
 /// Read a Modbus RTU frame from the provided serial port wrapper.
 /// Returns Ok(Some(Bytes)) when a full frame is read, Ok(None) for timeout / no data,
-/// or Err for unexpected I/O / locking errors.
+/// or Err for unexpected I / O / locking errors.
 pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Result<Option<Bytes>> {
     // Incremental read helper: read until we have 'need' bytes or the port times out.
     fn read_until(
