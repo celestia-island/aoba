@@ -4,6 +4,9 @@ use ratatui::{
     text::Span,
 };
 
+use crate::tui::ui::components::{
+    render_boxed_paragraph, styled_spans, styled_title_span, StyledSpanKind, TextState,
+};
 use crate::{
     i18n::lang,
     protocol::status::{EditingField, Status},
@@ -124,18 +127,6 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             .or_else(|| presets.iter().position(|&p| p == form.baud))
             .unwrap_or(custom_idx);
 
-        // Build parts showing all options but highlight current
-        let mut parts: Vec<String> = Vec::new();
-        parts.push("<-".to_string());
-        for (i, opt) in options.iter().enumerate() {
-            if i == current_idx {
-                parts.push(format!("[{opt}]"));
-            } else {
-                parts.push(format!(" {opt} "));
-            }
-        }
-        parts.push("->".to_string());
-
         // Render title + selector / edit line
         let idx_field = 1usize;
         let selected = idx_field == form.cursor;
@@ -145,45 +136,46 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_baud.as_str()
         );
-        let title_style = if selected {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::BOLD)
-        };
-        lines.push(ratatui::text::Line::from(Span::styled(
-            title_text,
-            title_style,
+        lines.push(ratatui::text::Line::from(styled_title_span(
+            title_text.as_str(),
+            selected,
+            false,
         )));
 
-        // If custom is selected and we're in the deeper confirmed edit stage, show editable buffer
+        // content style computed inline where needed; removed unused binding
+
+        // If custom is selected and we're in the deeper confirmed edit stage, show editable buffer using input-style wrapper > [ ... ] <
         if current_idx == custom_idx && form.edit_confirmed {
-            // Confirmed editing: show buffer and yellow highlight
-            let rendered = lang()
-                .protocol
-                .modbus
-                .edit_suffix
-                .replace("{}", form.input_buffer.as_str());
-            // Editing confirmed: do not show '>' marker; show edit buffer only.
-            let val_text = format!("{base_prefix}{rendered}");
-            lines.push(ratatui::text::Line::from(Span::styled(
-                val_text,
-                Style::default().fg(Color::Yellow),
-            )));
-        } else if current_idx == custom_idx && !form.edit_confirmed {
-            // Custom selected but not yet confirmed: show selector parts (no extra inline hint)
-            // Custom selector while editing: do not show selection marker here.
-            let val_text = format!("{}{}", base_prefix, parts.join(" "));
-            lines.push(ratatui::text::Line::from(Span::styled(
-                val_text,
-                Style::default().fg(Color::Yellow),
+            let buf = if form.input_buffer.is_empty() {
+                "_".to_string()
+            } else {
+                form.input_buffer.clone()
+            };
+            lines.push(ratatui::text::Line::from(styled_spans(
+                StyledSpanKind::Input {
+                    base_prefix,
+                    buffer: buf.as_str(),
+                    hovered: selected,
+                    editing: true,
+                    with_prefix: true,
+                },
             )));
         } else {
-            let val_text = format!("{}{}", base_prefix, parts.join(" "));
-            lines.push(ratatui::text::Line::from(Span::styled(
-                val_text,
-                Style::default().fg(Color::Yellow),
+            // For cycling selector show < [current] > style; if custom but not confirmed, show [Custom]
+            let cur_label = options
+                .get(current_idx)
+                .cloned()
+                .unwrap_or_else(|| lang().protocol.common.custom.clone());
+            lines.push(ratatui::text::Line::from(styled_spans(
+                StyledSpanKind::Selector {
+                    base_prefix,
+                    label: cur_label.as_str(),
+                    state: if selected {
+                        TextState::Selected
+                    } else {
+                        TextState::Normal
+                    },
+                },
             )));
         }
     } else {
@@ -204,9 +196,11 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         Parity::Odd => lang().protocol.common.parity_odd.clone(),
     };
     if matches!(editing_field, Some(EditingField::Parity)) {
-        let options = [lang().protocol.common.parity_none.clone(),
+        let options = [
+            lang().protocol.common.parity_none.clone(),
             lang().protocol.common.parity_even.clone(),
-            lang().protocol.common.parity_odd.clone()];
+            lang().protocol.common.parity_odd.clone(),
+        ];
         let cur_idx = match form.parity {
             Parity::None => 0usize,
             Parity::Even => 1usize,
@@ -231,22 +225,22 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_parity.as_str()
         );
-        let title_style = if selected {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::BOLD)
-        };
-        lines.push(ratatui::text::Line::from(Span::styled(
-            title_text,
-            title_style,
+        lines.push(ratatui::text::Line::from(styled_title_span(
+            title_text.as_str(),
+            selected,
+            false,
         )));
-        // In editing state do not show the selection marker; show selector parts plainly.
-        let val_text = format!("{}{}", base_prefix, parts.join(" "));
-        lines.push(ratatui::text::Line::from(Span::styled(
-            val_text,
-            Style::default().fg(Color::Yellow),
+        let cur_label = options.get(cur_idx).cloned().unwrap_or_default();
+        lines.push(ratatui::text::Line::from(styled_spans(
+            StyledSpanKind::Selector {
+                base_prefix,
+                label: cur_label.as_str(),
+                state: if selected {
+                    TextState::Selected
+                } else {
+                    TextState::Normal
+                },
+            },
         )));
     } else {
         push_field(
@@ -286,22 +280,25 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_data_bits.as_str()
         );
-        let title_style = if selected {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::BOLD)
-        };
-        lines.push(ratatui::text::Line::from(Span::styled(
-            title_text,
-            title_style,
+        lines.push(ratatui::text::Line::from(styled_title_span(
+            title_text.as_str(),
+            selected,
+            false,
         )));
-        // Editing selector — don't render '>' marker here.
-        let val_text = format!("{}{}", base_prefix, parts.join(" "));
-        lines.push(ratatui::text::Line::from(Span::styled(
-            val_text,
-            Style::default().fg(Color::Yellow),
+        let cur_label = options
+            .get(cur_idx)
+            .map(|d| d.to_string())
+            .unwrap_or_else(|| "8".to_string());
+        lines.push(ratatui::text::Line::from(styled_spans(
+            StyledSpanKind::Selector {
+                base_prefix,
+                label: cur_label.as_str(),
+                state: if selected {
+                    TextState::Selected
+                } else {
+                    TextState::Normal
+                },
+            },
         )));
     } else {
         push_field(
@@ -341,22 +338,27 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_stop_bits.as_str()
         );
-        let title_style = if selected {
-            Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            Style::default().add_modifier(Modifier::BOLD)
-        };
-        lines.push(ratatui::text::Line::from(Span::styled(
-            title_text,
-            title_style,
+        // title style computed inline via helper; removed unused binding
+        lines.push(ratatui::text::Line::from(styled_title_span(
+            title_text.as_str(),
+            selected,
+            false,
         )));
-        // Editing selector — don't render '>' marker here.
-        let val_text = format!("{}{}", base_prefix, parts.join(" "));
-        lines.push(ratatui::text::Line::from(Span::styled(
-            val_text,
-            Style::default().fg(Color::Yellow),
+        let cur_label = opts_labels
+            .get(cur_idx)
+            .cloned()
+            .unwrap_or(&"1")
+            .to_string();
+        lines.push(ratatui::text::Line::from(styled_spans(
+            StyledSpanKind::Selector {
+                base_prefix,
+                label: cur_label.as_str(),
+                state: if selected {
+                    TextState::Selected
+                } else {
+                    TextState::Normal
+                },
+            },
         )));
     } else {
         push_field(
@@ -369,27 +371,101 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Global interval (idx 5)
-    let interval_display = format!("{} ms", form.global_interval_ms);
-    push_field(
-        &mut lines,
-        5,
-        lang().protocol.modbus.global_interval.as_str(),
-        interval_display,
-        matches!(editing_field, Some(EditingField::GlobalInterval)),
-        form.input_buffer.as_str(),
-    );
+    // Global interval (idx 5) — render value in right column like other fields. When editing,
+    // show input-style spans but keep them on the same line as the title.
+    {
+        let idx_field = 5usize;
+        let selected = idx_field == form.cursor;
+        if matches!(editing_field, Some(EditingField::GlobalInterval)) {
+            // Build title + filler then append input spans (skip the input's base_prefix)
+            let base_prefix = "  ";
+            let label = lang().protocol.modbus.global_interval.as_str();
+            let label_text = format!("{}{}", base_prefix, label);
+            let left_width = 36usize;
+            let label_w = UnicodeWidthStr::width(label_text.as_str());
+            let pad_count = if label_w >= left_width {
+                2usize
+            } else {
+                left_width - label_w
+            };
+            let filler = " ".repeat(pad_count);
 
-    // Global timeout (idx 6)
-    let timeout_display = format!("{} ms", form.global_timeout_ms);
-    push_field(
-        &mut lines,
-        6,
-        lang().protocol.modbus.global_timeout.as_str(),
-        timeout_display,
-        matches!(editing_field, Some(EditingField::GlobalTimeout)),
-        form.input_buffer.as_str(),
-    );
+            let mut spans = Vec::new();
+            spans.push(styled_title_span(label_text.as_str(), selected, true));
+            spans.push(Span::raw(filler));
 
-    crate::tui::ui::components::render_boxed_paragraph(f, area, lines, style);
+            let buf = if form.input_buffer.is_empty() {
+                "_".to_string()
+            } else {
+                form.input_buffer.clone()
+            };
+            let input_spans = styled_spans(StyledSpanKind::Input {
+                base_prefix: base_prefix,
+                buffer: buf.as_str(),
+                hovered: selected,
+                editing: true,
+                with_prefix: false,
+            });
+            spans.extend(input_spans);
+            lines.push(ratatui::text::Line::from(spans));
+        } else {
+            push_field(
+                &mut lines,
+                5,
+                lang().protocol.modbus.global_interval.as_str(),
+                format!("{} ms", form.global_interval_ms),
+                false,
+                form.input_buffer.as_str(),
+            );
+        }
+    }
+
+    // Global timeout (idx 6) — same behavior as interval above
+    {
+        let idx_field = 6usize;
+        let selected = idx_field == form.cursor;
+        if matches!(editing_field, Some(EditingField::GlobalTimeout)) {
+            let base_prefix = "  ";
+            let label = lang().protocol.modbus.global_timeout.as_str();
+            let label_text = format!("{}{}", base_prefix, label);
+            let left_width = 36usize;
+            let label_w = UnicodeWidthStr::width(label_text.as_str());
+            let pad_count = if label_w >= left_width {
+                2usize
+            } else {
+                left_width - label_w
+            };
+            let filler = " ".repeat(pad_count);
+
+            let mut spans = Vec::new();
+            spans.push(styled_title_span(label_text.as_str(), selected, true));
+            spans.push(Span::raw(filler));
+
+            let buf = if form.input_buffer.is_empty() {
+                "_".to_string()
+            } else {
+                form.input_buffer.clone()
+            };
+            let input_spans = styled_spans(StyledSpanKind::Input {
+                base_prefix: base_prefix,
+                buffer: buf.as_str(),
+                hovered: selected,
+                editing: true,
+                with_prefix: false,
+            });
+            spans.extend(input_spans);
+            lines.push(ratatui::text::Line::from(spans));
+        } else {
+            push_field(
+                &mut lines,
+                6,
+                lang().protocol.modbus.global_timeout.as_str(),
+                format!("{} ms", form.global_timeout_ms),
+                false,
+                form.input_buffer.as_str(),
+            );
+        }
+    }
+
+    render_boxed_paragraph(f, area, lines, style);
 }

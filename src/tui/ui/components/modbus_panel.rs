@@ -2,14 +2,14 @@ use std::cmp::min;
 
 use ratatui::{
     prelude::*,
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::Line,
 };
 
 use crate::{
     i18n::lang,
     protocol::status::{EntryRole, MasterEditField, RegisterEntry, Status},
-    tui::ui::components::render_boxed_paragraph,
+    tui::ui::components::{render_boxed_paragraph, styled_spans, StyledSpanKind, TextState},
 };
 
 /// Unified ModBus list panel: each entry has a Role (Master / Slave) + fields previously split.
@@ -138,74 +138,79 @@ fn render_entry_header(
     } else {
         None
     };
-    let browse = Style::default().fg(Color::Green);
-    let chosen_style = Style::default().fg(Color::Yellow);
-    let active = Style::default()
-        .fg(Color::Yellow)
-        .add_modifier(Modifier::BOLD);
-    let normal = Style::default();
-    let base = if selected { browse } else { normal };
+    // removed unused style bindings
     let mut spans: Vec<Span> = Vec::new();
-    // Prefix + index coloring rule:
-    //  - Cursor hover (selected but not chosen / editing): Green
-    //  - Entry has a specific field selected / editing (chosen): Yellow (non-bold)
-    //  - Otherwise: normal
-    let prefix_style = if selected {
-        if chosen {
-            chosen_style
-        } else {
-            browse
-        }
-    } else {
-        normal
-    };
-    if selected {
-        spans.push(Span::styled("> ", prefix_style));
-    }
-    spans.push(Span::styled(format!("#{}", idx + 1), prefix_style));
+    // Use helper to render prefix and index
+    spans.extend(styled_spans(StyledSpanKind::PrefixIndex {
+        idx,
+        selected,
+        chosen,
+    }));
     spans.push(Span::raw(", "));
     // Role field (new first editable)
     let role_active = matches!(cur_field, Some(F::Role)) && editing;
-    let role_style = if role_active {
-        active
-    } else if chosen && matches!(cur_field, Some(F::Role)) {
-        chosen_style
-    } else {
-        base
-    };
+    // role style computed inline where used; removed unused binding
     let role_label = match r.role {
         EntryRole::Master => lang().protocol.modbus.role_master.as_str(),
         EntryRole::Slave => lang().protocol.modbus.role_slave.as_str(),
     };
     if role_active {
-        spans.push(Span::styled(format!("[{role_label}]"), role_style));
+        spans.extend(styled_spans(StyledSpanKind::Selector {
+            base_prefix: "",
+            label: role_label,
+            state: TextState::Editing,
+        }));
     } else if chosen && matches!(cur_field, Some(F::Role)) {
-        // Chosen (non-edit) state: add brackets for non-color terminals
-        spans.push(Span::styled(format!("[{role_label}]"), role_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("[{role_label}]").as_str(),
+            state: TextState::Chosen,
+            bold: false,
+        }));
     } else {
-        spans.push(Span::styled(role_label.to_string(), role_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: role_label.to_string().as_str(),
+            state: if selected && !chosen {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     }
     spans.push(Span::raw(", "));
     // ID
     let id_active = matches!(cur_field, Some(F::Id)) && editing;
-    let id_style = if id_active {
-        active
-    } else if chosen && matches!(cur_field, Some(F::Id)) {
-        chosen_style
-    } else {
-        base
-    };
+    // id style computed inline where used; removed unused binding
     if id_active {
         let content = if form.master_input_buffer.is_empty() {
-            "_"
+            "_".to_string()
         } else {
-            form.master_input_buffer.as_str()
+            form.master_input_buffer.clone()
         };
-        spans.push(Span::styled(format!("ID = [{content}]"), id_style));
+        spans.push(Span::raw("ID = "));
+        spans.extend(styled_spans(StyledSpanKind::Input {
+            base_prefix: "",
+            buffer: content.as_str(),
+            hovered: chosen,
+            editing: true,
+            with_prefix: true,
+        }));
     } else if chosen && matches!(cur_field, Some(F::Id)) {
-        spans.push(Span::styled(format!("ID = [{:02X}]", r.slave_id), id_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("ID = [{:02X}]", r.slave_id).as_str(),
+            state: TextState::Chosen,
+            bold: false,
+        }));
     } else {
-        spans.push(Span::styled(format!("ID = {:02X}", r.slave_id), id_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("ID = {:02X}", r.slave_id).as_str(),
+            state: if selected && !chosen {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     }
     spans.push(Span::raw(", "));
     // Type
@@ -217,82 +222,128 @@ fn render_entry_header(
     ];
     let type_idx = ((r.mode as u8 as usize).saturating_sub(1)).min(3);
     if matches!(cur_field, Some(F::Type)) && editing {
-        spans.push(Span::styled("< ", base));
-        spans.push(Span::styled(format!("[{}]", types[type_idx]), active));
-        spans.push(Span::styled(" >", base));
+        spans.extend(styled_spans(StyledSpanKind::Selector {
+            base_prefix: "",
+            label: types[type_idx],
+            state: TextState::Editing,
+        }));
     } else if chosen && matches!(cur_field, Some(F::Type)) {
-        spans.push(Span::styled(format!("[{}]", types[type_idx]), chosen_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("[{}]", types[type_idx]).as_str(),
+            state: TextState::Chosen,
+            bold: false,
+        }));
     } else {
-        spans.push(Span::styled(types[type_idx].to_string(), base));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: types[type_idx].to_string().as_str(),
+            state: if selected && !chosen {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     }
     spans.push(Span::raw(", "));
     // Address range
     let start = r.address as u32;
     let end_inclusive = start + r.length as u32 - 1;
-    spans.push(Span::styled(
-        format!("{} = ", lang().protocol.modbus.label_address_range),
-        base,
-    ));
+    // Keep the address-range label in default style (no green), per UI spec.
+    spans.extend(styled_spans(StyledSpanKind::Text {
+        text: format!("{} = ", lang().protocol.modbus.label_address_range).as_str(),
+        state: TextState::Normal,
+        bold: false,
+    }));
     let start_active = matches!(cur_field, Some(F::Start)) && editing;
-    let start_style = if start_active {
-        active
-    } else if chosen && matches!(cur_field, Some(F::Start)) {
-        chosen_style
-    } else {
-        base
-    };
+    // start style computed inline where used; removed unused binding
     if start_active {
         let content = if form.master_input_buffer.is_empty() {
-            "_"
+            "_".to_string()
         } else {
-            form.master_input_buffer.as_str()
+            form.master_input_buffer.clone()
         };
-        spans.push(Span::styled(format!("0x[{content}]"), start_style));
+        spans.extend(styled_spans(StyledSpanKind::Input {
+            base_prefix: "",
+            buffer: content.as_str(),
+            hovered: chosen,
+            editing: true,
+            with_prefix: true,
+        }));
     } else if chosen && matches!(cur_field, Some(F::Start)) {
-        spans.push(Span::styled(format!("0x[{start:04X}]"), start_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("0x[{start:04X}]").as_str(),
+            state: TextState::Chosen,
+            bold: false,
+        }));
     } else {
-        spans.push(Span::styled(format!("0x{start:04X}"), start_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("0x{start:04X}").as_str(),
+            state: if selected && !chosen {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     }
     spans.push(Span::raw(" - "));
     let end_active = matches!(cur_field, Some(F::End)) && editing;
-    let end_style = if end_active {
-        active
-    } else if chosen && matches!(cur_field, Some(F::End)) {
-        chosen_style
-    } else {
-        base
-    };
+    // end style computed inline where used; removed unused binding
     if end_active {
         let content = if form.master_input_buffer.is_empty() {
-            "_"
+            "_".to_string()
         } else {
-            form.master_input_buffer.as_str()
+            form.master_input_buffer.clone()
         };
-        spans.push(Span::styled(format!("0x[{content}]"), end_style));
+        spans.extend(styled_spans(StyledSpanKind::Input {
+            base_prefix: "",
+            buffer: content.as_str(),
+            hovered: chosen,
+            editing: true,
+            with_prefix: true,
+        }));
     } else if chosen && matches!(cur_field, Some(F::End)) {
-        spans.push(Span::styled(format!("0x[{end_inclusive:04X}]"), end_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("0x[{end_inclusive:04X}]").as_str(),
+            state: TextState::Chosen,
+            bold: false,
+        }));
     } else {
-        spans.push(Span::styled(format!("0x{end_inclusive:04X}"), end_style));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("0x{end_inclusive:04X}").as_str(),
+            state: if selected && !chosen {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     }
     // Counter (refresh removed; global interval applies)
     spans.push(Span::raw(", "));
     let counter_label = lang().protocol.modbus.label_req_counter.as_str();
     let counter_selected = chosen && matches!(cur_field, Some(F::Counter));
-    let counter_style = if counter_selected {
-        chosen_style
-    } else {
-        Style::default().fg(Color::Green)
-    };
+    // counter style computed inline where used; removed unused binding
     if counter_selected {
-        spans.push(Span::styled(
-            format!("{} = [{} / {}]", counter_label, r.req_success, r.req_total),
-            counter_style,
-        ));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("{} = [{} / {}]", counter_label, r.req_success, r.req_total).as_str(),
+            state: if counter_selected {
+                TextState::Chosen
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     } else {
-        spans.push(Span::styled(
-            format!("{} = {} / {}", counter_label, r.req_success, r.req_total),
-            counter_style,
-        ));
+        spans.extend(styled_spans(StyledSpanKind::Text {
+            text: format!("{} = {} / {}", counter_label, r.req_success, r.req_total).as_str(),
+            state: if counter_selected {
+                TextState::Chosen
+            } else {
+                TextState::Normal
+            },
+            bold: false,
+        }));
     }
     out.push(Line::from(spans));
 }
@@ -316,12 +367,7 @@ fn render_entry_values(
     };
     let start = r.address as usize;
     let end_exclusive = start + r.length as usize;
-    let browse = Style::default().fg(Color::Green);
-    let chosen_style = Style::default().fg(Color::Yellow);
-    let active = Style::default()
-        .fg(Color::Yellow)
-        .add_modifier(Modifier::BOLD);
-    let normal = Style::default();
+    // removed unused style bindings
     let mut addr = start;
     while addr < end_exclusive {
         let line_base = (addr / 8) * 8;
@@ -338,21 +384,7 @@ fn render_entry_values(
             }
             let offset = cur - start;
             let raw_val = r.values.get(offset).cloned().unwrap_or(0u16);
-            let style = if let Some(F::Value(a)) = &cur_field {
-                if *a as usize == cur && editing {
-                    active
-                } else if !editing && *a as usize == cur {
-                    chosen_style
-                } else if chosen {
-                    browse
-                } else {
-                    normal
-                }
-            } else if chosen {
-                browse
-            } else {
-                normal
-            };
+            // style computed inline where used; removed unused binding
             if let Some(F::Value(a)) = &cur_field {
                 if *a as usize == cur && editing {
                     // For Coils and DiscreteInputs show boolean editor; otherwise show numeric editor
@@ -364,14 +396,24 @@ fn render_entry_values(
                         } else {
                             lang().protocol.modbus.value_false.as_str()
                         };
-                        spans.push(Span::styled(format!("[{lbl}]"), style));
+                        spans.extend(styled_spans(StyledSpanKind::Selector {
+                            base_prefix: "",
+                            label: lbl,
+                            state: TextState::Editing,
+                        }));
                     } else {
                         let content = if form.master_input_buffer.is_empty() {
-                            "_"
+                            "_".to_string()
                         } else {
-                            form.master_input_buffer.as_str()
+                            form.master_input_buffer.clone()
                         };
-                        spans.push(Span::styled(format!("[{content}]"), style));
+                        spans.extend(styled_spans(StyledSpanKind::Input {
+                            base_prefix: "",
+                            buffer: content.as_str(),
+                            hovered: chosen,
+                            editing: true,
+                            with_prefix: true,
+                        }));
                     }
                     continue;
                 }
@@ -390,14 +432,46 @@ fn render_entry_values(
                     lang().protocol.modbus.value_false.as_str()
                 };
                 if is_chosen_value {
-                    spans.push(Span::styled(format!("[{lbl}]"), style));
+                    spans.extend(styled_spans(StyledSpanKind::Text {
+                        text: format!("[{lbl}]").as_str(),
+                        state: if is_chosen_value {
+                            TextState::Chosen
+                        } else {
+                            TextState::Normal
+                        },
+                        bold: false,
+                    }));
                 } else {
-                    spans.push(Span::styled(lbl.to_string(), style));
+                    spans.extend(styled_spans(StyledSpanKind::Text {
+                        text: lbl.to_string().as_str(),
+                        state: if chosen {
+                            TextState::Chosen
+                        } else {
+                            TextState::Normal
+                        },
+                        bold: false,
+                    }));
                 }
             } else if is_chosen_value {
-                spans.push(Span::styled(format!("[{raw_val:04X}]"), style));
+                spans.extend(styled_spans(StyledSpanKind::Text {
+                    text: format!("[{raw_val:04X}]").as_str(),
+                    state: if is_chosen_value {
+                        TextState::Chosen
+                    } else {
+                        TextState::Normal
+                    },
+                    bold: false,
+                }));
             } else {
-                spans.push(Span::styled(format!("{raw_val:04X}"), style));
+                spans.extend(styled_spans(StyledSpanKind::Text {
+                    text: format!("{raw_val:04X}").as_str(),
+                    state: if chosen {
+                        TextState::Chosen
+                    } else {
+                        TextState::Normal
+                    },
+                    bold: false,
+                }));
             }
         }
         out.push(Line::from(spans));

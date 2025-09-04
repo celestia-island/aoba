@@ -14,6 +14,10 @@ use crate::i18n::lang;
 use crate::protocol::status::AppMode;
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
+// Number of base (non-register) configurable fields in subpage forms. Keep in sync with
+// the rendering order in `src/tui/ui/components/config_panel.rs`.
+const BASE_FIELD_COUNT: usize = 7;
+
 use crate::{
     protocol::status::{InputMode, LogEntry, Status},
     tui::{
@@ -23,10 +27,6 @@ use crate::{
 };
 use serialport::Parity;
 
-// Helper: detect whether current active subpage view is on its log tab.
-// Modes:
-//  - Master / SlaveStack: 3 tabs [0=config,1=list,2=log] -> log index=2
-//  - Listen: 2 tabs [0=config,1=log] -> log index=1
 fn is_log_tab(app: &Status) -> bool {
     app.subpage_active && app.subpage_tab_index == 2
 }
@@ -166,36 +166,7 @@ fn run_app(
                 }
                 // Main keyboard event handling entry
                 let lock = app.lock();
-                let _is_editing = match &lock {
-                    Ok(g) => g
-                        .subpage_form
-                        .as_ref()
-                        .map(|f| {
-                            if f.editing {
-                                true
-                            } else {
-                                // Allow pre-confirm typing when editing_field is Baud and the current choice is Custom
-                                if let Some(crate::protocol::status::EditingField::Baud) =
-                                    f.editing_field.clone()
-                                {
-                                    let presets: [u32; 8] =
-                                        [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
-                                    let custom_idx = presets.len();
-                                    let cur = f.edit_choice_index.unwrap_or_else(|| {
-                                        presets
-                                            .iter()
-                                            .position(|&p| p == f.baud)
-                                            .unwrap_or(custom_idx)
-                                    });
-                                    cur == custom_idx
-                                } else {
-                                    false
-                                }
-                            }
-                        })
-                        .unwrap_or(false),
-                    Err(_) => false,
-                };
+                // removed unused `_is_editing` binding (no side-effects)
 
                 // Mode overlay handling
                 let overlay_active = lock
@@ -717,7 +688,7 @@ fn run_app(
                                                 adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
-                                            let total = 5usize.saturating_add(form.registers.len());
+                                            let total = BASE_FIELD_COUNT.saturating_add(form.registers.len());
                                             if total > 0 {
                                                 form.cursor = (form.cursor + 1) % total;
                                             }
@@ -748,7 +719,7 @@ fn run_app(
                                                 adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
-                                            let total = 5usize.saturating_add(form.registers.len());
+                                            let total = BASE_FIELD_COUNT.saturating_add(form.registers.len());
                                             if total > 0 {
                                                 if form.cursor == 0 {
                                                     form.cursor = total - 1;
