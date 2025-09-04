@@ -136,6 +136,12 @@ log_recv_match = "Recv match"
 log_recv_unmatched = "Recv unmatched"
 log_reconfigured = "Reconfigured"
 log_req_timeout = "Request timeout"
+label_working = "Working"
+status_running = "Running"
+status_paused = "Paused"
+hint_enter_toggle_work = "Press Enter to start/stop"
+hint_enter_start_work = "Press Enter to start"
+hint_enter_pause_work = "Press Enter to pause"
 
 [protocol.mqtt]
 panel_placeholder = "MQTT mode placeholder panel (not implemented yet)"

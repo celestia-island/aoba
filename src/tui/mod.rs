@@ -199,11 +199,7 @@ fn run_app(
                             KC::Esc => {
                                 guard.mode_overlay_active = false;
                             }
-                            KC::Up | KC::Char('k') => {
-                                guard.mode_overlay_index =
-                                    if guard.mode_overlay_index == 0 { 1 } else { 0 };
-                            }
-                            KC::Down | KC::Char('j') => {
+                            KC::Tab => {
                                 guard.mode_overlay_index = (guard.mode_overlay_index + 1) % 2;
                             }
                             KC::Enter => {
@@ -271,6 +267,11 @@ fn run_app(
                                             _ => 0,
                                         };
                                         match field {
+                                            crate::protocol::status::EditingField::Loop => {
+                                                // Commit toggle immediately
+                                                // Nothing special to validate here.
+                                            }
+                                            
                                             crate::protocol::status::EditingField::Baud => {
                                                 let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                                                 let custom_idx = presets.len();
@@ -682,7 +683,7 @@ fn run_app(
                                                 adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
-                                            let total = 4usize.saturating_add(form.registers.len());
+                                            let total = 5usize.saturating_add(form.registers.len());
                                             if total > 0 {
                                                 form.cursor = (form.cursor + 1) % total;
                                             }
@@ -713,7 +714,7 @@ fn run_app(
                                                 adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
-                                            let total = 4usize.saturating_add(form.registers.len());
+                                            let total = 5usize.saturating_add(form.registers.len());
                                             if total > 0 {
                                                 if form.cursor == 0 {
                                                     form.cursor = total - 1;

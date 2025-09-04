@@ -8,8 +8,9 @@ use crate::{
     i18n::lang,
     protocol::status::{EditingField, Status},
 };
-use serialport::Parity;
 use ratatui::style::Modifier;
+use serialport::Parity;
+use unicode_width::UnicodeWidthStr;
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
@@ -18,7 +19,11 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
 
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
 
-    // Helper to push a possibly highlighted field as two lines: title (bold) and value
+    // Helper to push a possibly highlighted field as a single line composed of multiple Spans:
+    // - title (bold)
+    // - filler spaces
+    // - value (not bold, colored depending on state)
+    // Uses unicode width to correctly align CJK and ASCII text.
     let push_field = |lines: &mut Vec<ratatui::text::Line>,
                       idx: usize,
                       label: &str,
@@ -26,48 +31,86 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                       editing: bool,
                       buffer: &str| {
         let selected = idx == form.cursor;
-        // Always indent title / value by two spaces so items don't jump when navigating.
         let base_prefix = "  ";
+        let label_text = format!("{}{}", base_prefix, label);
+        let left_width = 36usize; // label column width in character cells
 
-        // Title line (bold) — do NOT add extra selection-indent here, only style changes.
-        let title_text = format!("{}{}", base_prefix, label);
-        let title_style = if selected {
+        let right_text = if editing {
+            lang().protocol.modbus.edit_suffix.replace("{}", buffer)
+        } else if selected {
+            format!("> {}", value)
+        } else {
+            value
+        };
+
+        // Measure displayed widths using unicode-width
+        let label_w = UnicodeWidthStr::width(label_text.as_str());
+        let pad_count = if label_w >= left_width {
+            2usize
+        } else {
+            left_width - label_w
+        };
+
+        let filler = " ".repeat(pad_count);
+
+        // Title style: always bold; selected title colored green, editing colored yellow
+        let title_style = if selected && !editing {
             Style::default()
                 .fg(Color::Green)
+                .add_modifier(Modifier::BOLD)
+        } else if selected && editing {
+            Style::default()
+                .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD)
         } else {
             Style::default().add_modifier(Modifier::BOLD)
         };
-        lines.push(ratatui::text::Line::from(Span::styled(
-            title_text,
-            title_style,
-        )));
 
-        // Value line: if editing show edit buffer (yellow), otherwise show value (green if selected)
-        if editing {
-            // In editing state we do not show the selection marker '>' — only show the edit buffer.
-            let rendered = lang().protocol.modbus.edit_suffix.replace("{}", buffer);
-            let val_text = format!("{}{}", base_prefix, rendered);
-            let val_style = Style::default().fg(Color::Yellow);
-            lines.push(ratatui::text::Line::from(Span::styled(val_text, val_style)));
+        let mut value_style = if editing {
+            Style::default().fg(Color::Yellow)
+        } else if selected {
+            Style::default().fg(Color::Green)
         } else {
-            let val_text = if selected {
-                format!("{}> {}", base_prefix, value)
+            Style::default()
+        };
+
+        // Special-case first field (working toggle): show running=green, paused=yellow regardless of selection
+        if idx == 0 {
+            if form.loop_enabled {
+                value_style = Style::default().fg(Color::LightGreen);
             } else {
-                format!("{}{}", base_prefix, value)
-            };
-            let val_style = if selected {
-                Style::default().fg(Color::Green)
-            } else {
-                Style::default()
-            };
-            lines.push(ratatui::text::Line::from(Span::styled(val_text, val_style)));
+                value_style = Style::default().fg(Color::Yellow);
+            }
         }
+
+        let spans = vec![
+            Span::styled(label_text, title_style),
+            Span::raw(filler),
+            Span::styled(right_text, value_style),
+        ];
+        lines.push(ratatui::text::Line::from(spans));
     };
 
     let editing_field = form.editing_field.clone();
 
-    // Baud (idx 0)
+    // Loop enabled toggle (idx 0)
+    let loop_label = lang().protocol.modbus.label_working.as_str();
+    let loop_val = if form.loop_enabled {
+        lang().protocol.modbus.status_running.clone()
+    } else {
+        lang().protocol.modbus.status_paused.clone()
+    };
+    // Display the working status as a non-editable toggle row; Enter will toggle directly in key handler.
+    push_field(
+        &mut lines,
+        0,
+        loop_label,
+        loop_val,
+        false,
+        form.input_buffer.as_str(),
+    );
+
+    // Baud (idx 1)
     if matches!(editing_field, Some(EditingField::Baud)) {
         // Presets stop at 115200; append a 'Custom' slot so user can select and type a custom baud
         let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
@@ -94,7 +137,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         parts.push("->".to_string());
 
         // Render title + selector / edit line
-        let idx_field = 0usize;
+        let idx_field = 1usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -146,7 +189,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            0,
+            1,
             lang().protocol.common.label_baud.as_str(),
             form.baud.to_string(),
             matches!(editing_field, Some(EditingField::Baud)),
@@ -154,7 +197,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Parity (idx 1)
+    // Parity (idx 2)
     let parity_text = match form.parity {
         Parity::None => lang().protocol.common.parity_none.clone(),
         Parity::Even => lang().protocol.common.parity_even.clone(),
@@ -182,7 +225,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        let idx_field = 1usize;
+        let idx_field = 2usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -210,7 +253,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            1,
+            2,
             lang().protocol.common.label_parity.as_str(),
             parity_text,
             matches!(editing_field, Some(EditingField::Parity)),
@@ -218,7 +261,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Data bits (idx 2)
+    // Data bits (idx 3)
     let data_bits_text = format!("{}", form.data_bits);
     if matches!(editing_field, Some(EditingField::DataBits)) {
         let options = vec![5u8, 6u8, 7u8, 8u8];
@@ -237,7 +280,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        let idx_field = 2usize;
+        let idx_field = 3usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -265,7 +308,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            2,
+            3,
             lang().protocol.common.label_data_bits.as_str(),
             data_bits_text,
             matches!(editing_field, Some(EditingField::DataBits)),
@@ -273,7 +316,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Stop bits (idx 3)
+    // Stop bits (idx 4)
     if matches!(editing_field, Some(EditingField::StopBits)) {
         let opts_vals = vec![1, 2];
         let cur_idx = opts_vals
@@ -292,7 +335,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        let idx_field = 3usize;
+        let idx_field = 4usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -320,7 +363,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            3,
+            4,
             lang().protocol.common.label_stop_bits.as_str(),
             form.stop_bits.to_string(),
             matches!(editing_field, Some(EditingField::StopBits)),
