@@ -7,7 +7,7 @@ fn main() {
     if let Err(e) = aoba::start_gui() {
         let _ = std::fs::write(
             std::env::temp_dir().join("aoba_gui_error.log"),
-            format!("GUI start error: {:#?}", e),
+            format!("GUI start error: {e:#?}"),
         );
         println!(
             "AOBA GUI failed to start, details written to {:?}",

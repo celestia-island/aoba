@@ -35,7 +35,7 @@ pub fn parse_pull_get_discrete_inputs(
         values.len() == count as usize,
         "Invalid number of discrete inputs in response"
     );
-    log::debug!("Received discrete inputs: {:?}", values);
+    log::debug!("Received discrete inputs: {values:?}");
 
     Ok(values)
 }

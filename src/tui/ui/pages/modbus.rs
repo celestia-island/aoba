@@ -28,7 +28,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
         AppMode::Modbus => lang().protocol.modbus.label_modbus_settings.as_str(),
         AppMode::Mqtt => "MQTT",
     };
-    let tabs = vec![
+    let tabs = [
         lang().tabs.tab_config.as_str(),
         mid_label,
         lang().tabs.tab_log.as_str(),
@@ -41,7 +41,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     .areas(area);
 
     let mode_text = app.app_mode.label();
-    let right_label = format!("{} - {}", port_name, mode_text);
+    let right_label = format!("{port_name} - {mode_text}");
     let right_width = UnicodeWidthStr::width(right_label.as_str());
     let h_chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Horizontal)
@@ -52,10 +52,10 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
         .split(header_area);
     let titles = tabs
         .iter()
-        .map(|t| Line::from(Span::raw(format!("  {}  ", t))));
+        .map(|t| Line::from(Span::raw(format!("  {t}  "))));
     let tabs_widget = Tabs::new(titles).select(tab_index);
     f.render_widget(tabs_widget, h_chunks[0]);
-    let right_para = Paragraph::new(format!(" {}", right_label))
+    let right_para = Paragraph::new(format!(" {right_label}"))
         .alignment(Alignment::Left)
         .style(
             Style::default()
@@ -131,20 +131,19 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                         if let Some(MasterEditField::Value(addr)) = form.master_edit_field.clone() {
                             if let Some(idx) = form.master_edit_index {
                                 if let Some(entry) = form.registers.get_mut(idx) {
-                                    if entry.mode == RegisterMode::Coils
-                                        || entry.mode == RegisterMode::DiscreteInputs
-                                    {
-                                        if matches!(
+                                    if (entry.mode == RegisterMode::Coils
+                                        || entry.mode == RegisterMode::DiscreteInputs)
+                                        && matches!(
                                             key.code,
                                             KC::Left | KC::Right | KC::Char('h') | KC::Char('l')
-                                        ) {
-                                            let off = (addr - entry.address) as usize;
-                                            if off < entry.values.len() {
-                                                entry.values[off] =
-                                                    if entry.values[off] == 0 { 1 } else { 0 };
-                                            }
-                                            return true;
+                                        )
+                                    {
+                                        let off = (addr - entry.address) as usize;
+                                        if off < entry.values.len() {
+                                            entry.values[off] =
+                                                if entry.values[off] == 0 { 1 } else { 0 };
                                         }
+                                        return true;
                                     }
                                 }
                             }
@@ -600,13 +599,14 @@ pub(crate) fn move_master_field_dir(form: &mut SubpageForm, dir: Dir, enable_val
     if let Some(idx) = form.master_edit_index {
         if let Some(entry) = form.registers.get(idx) {
             // Build coordinate map
-            let mut coords: Vec<(usize, usize, F)> = Vec::new();
-            coords.push((0, 0, F::Role));
-            coords.push((0, 1, F::Id));
-            coords.push((0, 2, F::Type));
-            coords.push((0, 3, F::Start));
-            coords.push((0, 4, F::End));
-            coords.push((0, 5, F::Counter));
+            let mut coords: Vec<(usize, usize, F)> = vec![
+                (0, 0, F::Role),
+                (0, 1, F::Id),
+                (0, 2, F::Type),
+                (0, 3, F::Start),
+                (0, 4, F::End),
+                (0, 5, F::Counter),
+            ];
             if enable_values {
                 for off in 0..entry.length {
                     let addr = entry.address + off;

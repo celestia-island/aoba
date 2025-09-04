@@ -282,6 +282,12 @@ pub struct Status {
     pub port_toggle_min_interval_ms: u64,
 }
 
+impl Default for Status {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Status {
     pub fn new() -> Self {
         Self {
@@ -337,10 +343,8 @@ impl Status {
         let mut pending_error: Option<String> = None;
         for (idx, rt_opt) in self.port_runtimes.iter_mut().enumerate() {
             if let Some(rt) = rt_opt.as_mut() {
-                loop {
-                    match rt.evt_rx.try_recv() {
-                        Ok(evt) => {
-                            match evt {
+                while let Ok(evt) = rt.evt_rx.try_recv() {
+                    match evt {
                                 RuntimeEvent::FrameReceived(bytes) => {
                                     if idx != selected {
                                         // only show received frames for selected port
@@ -348,7 +352,7 @@ impl Status {
                                     }
                                     let raw_hex = bytes
                                         .iter()
-                                        .map(|b| format!("{:02x}", b))
+                                        .map(|b| format!("{b:02x}"))
                                         .collect::<Vec<_>>()
                                         .join(" ");
                                     let mut consumed = false;
@@ -386,7 +390,7 @@ impl Status {
                                                         {
                                                             RegisterMode::Coils => {
                                                                 match parse_pull_get_coils(
-                                                                    &mut *saved_req,
+                                                                    &mut saved_req,
                                                                     frame_vec.clone(),
                                                                     pending.count,
                                                                 ) {
@@ -402,7 +406,7 @@ impl Status {
                                                                             .collect(),
                                                                     ),
                                                                     Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (coils): {} raw={}", e, raw_hex), parsed: None });
+                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (coils): {e} raw={raw_hex}"), parsed: None });
                                                                         remove_indices.push(pi);
                                                                         consumed = true;
                                                                         None
@@ -411,7 +415,7 @@ impl Status {
                                                             }
                                                             RegisterMode::DiscreteInputs => {
                                                                 match parse_pull_get_discrete_inputs(
-                                                                    &mut *saved_req,
+                                                                    &mut saved_req,
                                                                     frame_vec.clone(),
                                                                     pending.count,
                                                                 ) {
@@ -427,7 +431,7 @@ impl Status {
                                                                             .collect(),
                                                                     ),
                                                                     Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (discrete): {} raw={}", e, raw_hex), parsed: None });
+                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (discrete): {e} raw={raw_hex}"), parsed: None });
                                                                         remove_indices.push(pi);
                                                                         consumed = true;
                                                                         None
@@ -436,7 +440,7 @@ impl Status {
                                                             }
                                                             RegisterMode::Holding => {
                                                                 match parse_pull_get_holdings(
-                                                                    &mut *saved_req,
+                                                                    &mut saved_req,
                                                                     frame_vec.clone(),
                                                                 ) {
                                                                     Ok(v) => Some(
@@ -447,7 +451,7 @@ impl Status {
                                                                             .collect(),
                                                                     ),
                                                                     Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (holding): {} raw={}", e, raw_hex), parsed: None });
+                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (holding): {e} raw={raw_hex}"), parsed: None });
                                                                         remove_indices.push(pi);
                                                                         consumed = true;
                                                                         None
@@ -456,7 +460,7 @@ impl Status {
                                                             }
                                                             RegisterMode::Input => {
                                                                 match parse_pull_get_inputs(
-                                                                    &mut *saved_req,
+                                                                    &mut saved_req,
                                                                     frame_vec.clone(),
                                                                 ) {
                                                                     Ok(v) => Some(
@@ -467,7 +471,7 @@ impl Status {
                                                                             .collect(),
                                                                     ),
                                                                     Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (input): {} raw={}", e, raw_hex), parsed: None });
+                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (input): {e} raw={raw_hex}"), parsed: None });
                                                                         remove_indices.push(pi);
                                                                         consumed = true;
                                                                         None
@@ -538,7 +542,7 @@ impl Status {
                                                             consumed = true;
                                                             pending_logs.push(LogEntry { when: Local::now(), raw: format!("{} sid={} func=0x{:02X} len={} raw={}", lang().protocol.modbus.log_recv_match, reg.slave_id, pending.func, bytes.len(), raw_hex), parsed: Some(ParsedRequest { origin: "master".to_string(), rw: "R".to_string(), command: format!("func_{:02X}", pending.func), slave_id: reg.slave_id, address: pending.address, length: pending.count }) });
                                                             let interval_ms =
-                                                                form.global_interval_ms as u64;
+                                                                form.global_interval_ms;
                                                             reg.next_poll_at = nowi
                                                                 + std::time::Duration::from_millis(
                                                                     interval_ms,
@@ -572,7 +576,7 @@ impl Status {
                                         }
                                     }
                                     if !consumed {
-                                        let sid = bytes.get(0).copied().unwrap_or(0);
+                                        let sid = bytes.first().copied().unwrap_or(0);
                                         let func = bytes.get(1).copied().unwrap_or(0);
                                         pending_logs.push(LogEntry {
                                             when: Local::now(),
@@ -583,7 +587,7 @@ impl Status {
                                             parsed: Some(ParsedRequest {
                                                 origin: "master".to_string(),
                                                 rw: "R".to_string(),
-                                                command: format!("func_{:02X}", func),
+                                                command: format!("func_{func:02X}"),
                                                 slave_id: sid,
                                                 address: 0,
                                                 length: 0,
@@ -596,10 +600,10 @@ impl Status {
                                     if idx == selected {
                                         let hex = bytes
                                             .iter()
-                                            .map(|b| format!("{:02x}", b))
+                                            .map(|b| format!("{b:02x}"))
                                             .collect::<Vec<_>>()
                                             .join(" ");
-                                        let sid = bytes.get(0).copied().unwrap_or(0);
+                                        let sid = bytes.first().copied().unwrap_or(0);
                                         let func = bytes.get(1).copied().unwrap_or(0);
                                         let addr = if bytes.len() >= 4 {
                                             u16::from_be_bytes([bytes[2], bytes[3]])
@@ -661,13 +665,10 @@ impl Status {
                                     }
                                 }
                                 RuntimeEvent::Stopped => {}
-                            }
-                        }
-                        Err(_) => break,
-                    }
-                }
-            }
-        }
+                            } // match evt
+                        } // while let Ok(evt)
+                    } // if let Some(rt)
+                } // for port_runtimes
         for l in pending_logs {
             self.append_log(l);
         }
@@ -695,11 +696,7 @@ impl Status {
         } else {
             min(self.log_view_offset, self.logs.len().saturating_sub(1))
         };
-        let top = if bottom + 1 >= groups_per_screen {
-            bottom + 1 - groups_per_screen
-        } else {
-            0
-        };
+        let top = (bottom + 1).saturating_sub(groups_per_screen);
         if self.log_selected < top {
             self.log_auto_scroll = false;
             let half = groups_per_screen / 2;
@@ -733,11 +730,7 @@ impl Status {
         let new_bottom = (self.log_view_offset).saturating_add(page);
         self.log_view_offset = std::cmp::min(max_bottom, new_bottom);
         // If we've reached the end, re‑enable auto scroll, else freeze.
-        if self.log_view_offset >= max_bottom {
-            self.log_auto_scroll = true;
-        } else {
-            self.log_auto_scroll = false;
-        }
+        self.log_auto_scroll = self.log_view_offset >= max_bottom;
     }
 
     /// Append a log entry to the internal buffer (caps at 1000 entries)
@@ -993,16 +986,12 @@ impl Status {
 
     fn is_port_free(port_name: &str) -> bool {
         // Try to open the port briefly; if succeed it's free (we immediately drop it)
-        match sp_new(port_name, 9600)
+        sp_new(port_name, 9600)
             .timeout(Duration::from_millis(50))
-            .open()
-        {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+            .open().is_ok()
     }
 
-    fn detect_port_states(ports: &Vec<SerialPortInfo>) -> Vec<PortState> {
+    fn detect_port_states(ports: &[SerialPortInfo]) -> Vec<PortState> {
         ports
             .iter()
             .map(|p| {
@@ -1077,7 +1066,7 @@ impl Status {
                         Err(e) => {
                             // Cannot open -> likely occupied by other
                             *state = PortState::OccupiedByOther;
-                            self.set_error(format!("failed to open {}: {}", port_name, e));
+                            self.set_error(format!("failed to open {port_name}: {e}"));
                         }
                     }
                 }
@@ -1260,7 +1249,7 @@ impl Status {
                                     parsed: Some(ParsedRequest {
                                         origin: "master".into(),
                                         rw: "R".into(),
-                                        command: format!("func_{:02X}", func),
+                                        command: format!("func_{func:02X}"),
                                         slave_id: sid,
                                         address: addr,
                                         length: cnt,
@@ -1295,9 +1284,9 @@ impl Status {
                 let mut idx = form.poll_round_index % total;
                 while attempts < total {
                     if let Some(reg) = form.registers.get_mut(idx) {
-                        if reg.role == EntryRole::Slave {
-                            if now >= reg.next_poll_at {
-                                if reg.pending_requests.is_empty() {
+                        if reg.role == EntryRole::Slave
+                            && now >= reg.next_poll_at
+                                && reg.pending_requests.is_empty() {
                                     // 构造请求
                                     let qty = reg.length.min(125);
                                     let gen = match reg.mode {
@@ -1359,8 +1348,6 @@ impl Status {
                                     }
                                     break; // Request dispatched -> exit loop
                                 }
-                            }
-                        }
                     }
                     attempts += 1;
                     idx = (idx + 1) % total;
@@ -1413,7 +1400,7 @@ impl Status {
         if !found_master {
             self.append_log(LogEntry {
                 when: Local::now(),
-                raw: format!("{}", "no master entries configured — nothing to poll"),
+                raw: "no master entries configured — nothing to poll".to_string(),
                 parsed: None,
             });
         }

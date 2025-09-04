@@ -12,7 +12,7 @@
   <a href="./README.md">EN</a> | ZH
 </p>
 
-本项目为多协议调试与模拟 CLI 工具，支持 Modbus RTU、MQTT、TTY、TCP/UDP 等协议。
+本项目为多协议调试与模拟 CLI 工具，支持 Modbus RTU、MQTT、TCP 等协议。
 
 > 正在开发中
 

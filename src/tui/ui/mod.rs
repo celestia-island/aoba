@@ -1,7 +1,7 @@
-pub(self) mod bottom;
-pub(self) mod components;
+ mod bottom;
+ mod components;
 pub mod pages;
-pub(self) mod title;
+ mod title;
 
 use ratatui::prelude::*;
 

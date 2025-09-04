@@ -41,8 +41,8 @@ impl SerialConfig {
             2 => StopBits::Two,
             _ => StopBits::One,
         });
-        let b = b.parity(self.parity);
-        b
+        
+        b.parity(self.parity)
     }
 }
 

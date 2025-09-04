@@ -32,13 +32,13 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                       buffer: &str| {
         let selected = idx == form.cursor;
         let base_prefix = "  ";
-        let label_text = format!("{}{}", base_prefix, label);
+        let label_text = format!("{base_prefix}{label}");
         let left_width = 36usize; // label column width in character cells
 
         let right_text = if editing {
             lang().protocol.modbus.edit_suffix.replace("{}", buffer)
         } else if selected {
-            format!("> {}", value)
+            format!("> {value}")
         } else {
             value
         };
@@ -129,9 +129,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         parts.push("<-".to_string());
         for (i, opt) in options.iter().enumerate() {
             if i == current_idx {
-                parts.push(format!("[{}]", opt));
+                parts.push(format!("[{opt}]"));
             } else {
-                parts.push(format!(" {} ", opt));
+                parts.push(format!(" {opt} "));
             }
         }
         parts.push("->".to_string());
@@ -166,7 +166,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                 .edit_suffix
                 .replace("{}", form.input_buffer.as_str());
             // Editing confirmed: do not show '>' marker; show edit buffer only.
-            let val_text = format!("{}{}", base_prefix, rendered);
+            let val_text = format!("{base_prefix}{rendered}");
             lines.push(ratatui::text::Line::from(Span::styled(
                 val_text,
                 Style::default().fg(Color::Yellow),
@@ -204,11 +204,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         Parity::Odd => lang().protocol.common.parity_odd.clone(),
     };
     if matches!(editing_field, Some(EditingField::Parity)) {
-        let options = vec![
-            lang().protocol.common.parity_none.clone(),
+        let options = [lang().protocol.common.parity_none.clone(),
             lang().protocol.common.parity_even.clone(),
-            lang().protocol.common.parity_odd.clone(),
-        ];
+            lang().protocol.common.parity_odd.clone()];
         let cur_idx = match form.parity {
             Parity::None => 0usize,
             Parity::Even => 1usize,
@@ -218,9 +216,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         parts.push("<-".to_string());
         for (i, opt) in options.iter().enumerate() {
             if i == cur_idx {
-                parts.push(format!("[{}]", opt));
+                parts.push(format!("[{opt}]"));
             } else {
-                parts.push(format!(" {} ", opt));
+                parts.push(format!(" {opt} "));
             }
         }
         parts.push("->".to_string());
@@ -264,7 +262,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     // Data bits (idx 3)
     let data_bits_text = format!("{}", form.data_bits);
     if matches!(editing_field, Some(EditingField::DataBits)) {
-        let options = vec![5u8, 6u8, 7u8, 8u8];
+        let options = [5u8, 6u8, 7u8, 8u8];
         let cur_idx = options
             .iter()
             .position(|&d| d == form.data_bits)
@@ -273,9 +271,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         parts.push("<-".to_string());
         for (i, opt) in options.iter().enumerate() {
             if i == cur_idx {
-                parts.push(format!("[{}]", opt));
+                parts.push(format!("[{opt}]"));
             } else {
-                parts.push(format!(" {} ", opt));
+                parts.push(format!(" {opt} "));
             }
         }
         parts.push("->".to_string());
@@ -318,19 +316,19 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
 
     // Stop bits (idx 4)
     if matches!(editing_field, Some(EditingField::StopBits)) {
-        let opts_vals = vec![1, 2];
+        let opts_vals = [1, 2];
         let cur_idx = opts_vals
             .iter()
             .position(|&s| s == form.stop_bits)
             .unwrap_or(0);
-        let opts_labels = vec!["1", "2"];
+        let opts_labels = ["1", "2"];
         let mut parts: Vec<String> = Vec::new();
         parts.push("<-".to_string());
         for (i, lbl) in opts_labels.iter().enumerate() {
             if i == cur_idx {
-                parts.push(format!("[{}]", lbl));
+                parts.push(format!("[{lbl}]"));
             } else {
-                parts.push(format!(" {} ", lbl));
+                parts.push(format!(" {lbl} "));
             }
         }
         parts.push("->".to_string());

@@ -58,7 +58,7 @@ impl eframe::App for GuiApp {
                     guard.ports.clone(),
                     guard.selected,
                     guard.auto_refresh,
-                    guard.last_refresh.clone(),
+                    guard.last_refresh,
                     guard.error.clone(),
                 )
             } else {

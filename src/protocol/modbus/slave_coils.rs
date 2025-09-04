@@ -6,7 +6,7 @@ pub fn build_slave_coils_response(
     request: &mut ModbusFrame<Vec<u8>>,
     context: &mut ModbusStorageSmall,
 ) -> Result<Option<Vec<u8>>> {
-    log::info!("Parsed Modbus frame: {:02x?}", request);
+    log::info!("Parsed Modbus frame: {request:02x?}");
     log::info!("Is readonly: {}", request.readonly);
     if request.processing_required {
         let result = if request.readonly {

@@ -117,7 +117,9 @@ derive_struct! {
                 label_parity: String = "label_parity".to_string(),
                 label_stop_bits: String = "label_stop_bits".to_string(),
                 label_guid: String = "label_guid".to_string(),
+                label_mapping_code: String = "label_mapping_code".to_string(),
                 label_usb: String = "label_usb".to_string(),
+                mapping_none: String = "mapping_none".to_string(),
                 label_serial: String = "label_serial".to_string(),
                 label_manufacturer: String = "label_manufacturer".to_string(),
                 label_product: String = "label_product".to_string(),
@@ -198,15 +200,16 @@ fn parse_toml_to_lang(content: &str) -> Lang {
 /// Callers can access fields directly, e.g. `i18n::lang().index.title`.
 pub fn lang() -> &'static Lang {
     // If LANGUAGE hasn't been initialized, use the default Lang.
-    LANG_SELECTED.get_or_init(|| Lang::default())
+    LANG_SELECTED.get_or_init(Lang::default)
 }
 
 pub fn init_i18n() {
     // Available locales in priority order
-    let mut avail: Vec<(&str, Lang)> = Vec::new();
-    avail.push(("en_us", parse_toml_to_lang(EN_US_TOML)));
-    avail.push(("zh_chs", parse_toml_to_lang(ZH_CHS_TOML)));
-    avail.push(("zh_cht", parse_toml_to_lang(ZH_CHT_TOML)));
+    let avail: Vec<(&str, Lang)> = vec![
+        ("en_us", parse_toml_to_lang(EN_US_TOML)),
+        ("zh_chs", parse_toml_to_lang(ZH_CHS_TOML)),
+        ("zh_cht", parse_toml_to_lang(ZH_CHT_TOML)),
+    ];
 
     // Detect preferred languages from env vars
     let mut prefs: Vec<String> = Vec::new();
@@ -233,11 +236,9 @@ pub fn init_i18n() {
                     chosen = Some(("zh_cht", l.clone()));
                     break;
                 }
-            } else {
-                if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh_chs") {
-                    chosen = Some(("zh_chs", l.clone()));
-                    break;
-                }
+            } else if let Some((_k, l)) = avail.iter().find(|(k, _)| *k == "zh_chs") {
+                chosen = Some(("zh_chs", l.clone()));
+                break;
             }
         }
         if p.contains("en") {

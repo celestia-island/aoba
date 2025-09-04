@@ -19,13 +19,13 @@ fn spawn_gui_next_to_current_exe() -> bool {
                     thread::sleep(Duration::from_millis(100));
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            eprintln!("GUI process exited early with status={}", status);
+                            eprintln!("GUI process exited early with status={status}");
                             failed_early = true;
                             break;
                         }
                         Ok(_) => continue,
                         Err(err) => {
-                            eprintln!("Failed to query GUI process status: {}", err);
+                            eprintln!("Failed to query GUI process status: {err}");
                             failed_early = true;
                             break;
                         }
