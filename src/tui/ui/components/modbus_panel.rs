@@ -279,38 +279,7 @@ fn render_entry_header(
     } else {
         spans.push(Span::styled(format!("0x{:04X}", end_inclusive), end_style));
     }
-    // Refresh + counter
-    spans.push(Span::raw(", "));
-    let refresh_active = matches!(cur_field, Some(F::Refresh)) && editing;
-    let refresh_style = if refresh_active {
-        active
-    } else if chosen && matches!(cur_field, Some(F::Refresh)) {
-        chosen_style
-    } else {
-        base
-    };
-    let refresh_label = lang().protocol.modbus.refresh_rate.as_str();
-    if refresh_active {
-        let content = if form.master_input_buffer.is_empty() {
-            "_"
-        } else {
-            form.master_input_buffer.as_str()
-        };
-        spans.push(Span::styled(
-            format!("{} = [{}] ms", refresh_label, content),
-            refresh_style,
-        ));
-    } else if chosen && matches!(cur_field, Some(F::Refresh)) {
-        spans.push(Span::styled(
-            format!("{} = [{}] ms", refresh_label, r.refresh_ms),
-            refresh_style,
-        ));
-    } else {
-        spans.push(Span::styled(
-            format!("{} = {} ms", refresh_label, r.refresh_ms),
-            refresh_style,
-        ));
-    }
+    // Counter (refresh removed; global interval applies)
     spans.push(Span::raw(", "));
     let counter_label = lang().protocol.modbus.label_req_counter.as_str();
     let counter_selected = chosen && matches!(cur_field, Some(F::Counter));

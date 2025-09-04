@@ -371,5 +371,27 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
+    // Global interval (idx 5)
+    let interval_display = format!("{} ms", form.global_interval_ms);
+    push_field(
+        &mut lines,
+        5,
+        lang().protocol.modbus.global_interval.as_str(),
+        interval_display,
+        matches!(editing_field, Some(EditingField::GlobalInterval)),
+        form.input_buffer.as_str(),
+    );
+
+    // Global timeout (idx 6)
+    let timeout_display = format!("{} ms", form.global_timeout_ms);
+    push_field(
+        &mut lines,
+        6,
+        lang().protocol.modbus.global_timeout.as_str(),
+        timeout_display,
+        matches!(editing_field, Some(EditingField::GlobalTimeout)),
+        form.input_buffer.as_str(),
+    );
+
     crate::tui::ui::components::render_boxed_paragraph(f, area, lines, style);
 }

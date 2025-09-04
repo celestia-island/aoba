@@ -155,6 +155,8 @@ derive_struct! {
                 reg_type_input: String = "reg_type_input".to_string(),
                 label_req_counter: String = "label_req_counter".to_string(),
                 refresh_rate: String = "refresh_rate".to_string(),
+                global_interval: String = "global_interval".to_string(),
+                global_timeout: String = "global_timeout".to_string(),
                 value_true: String = "value_true".to_string(),
                 value_false: String = "value_false".to_string(),
                 role_master: String = "role_master".to_string(),
