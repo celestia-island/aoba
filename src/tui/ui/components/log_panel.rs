@@ -18,14 +18,12 @@ use crate::tui::ui::components::log_input::render_log_input;
 ///    Navigation selects a whole group. Selected group is prefixed with "> " on the left
 ///    And rendered with a highlighted background; unselected groups get 2 spaces prefix.
 pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
-    // Split area into top (logs) and bottom (input)
     let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Min(3),
         ratatui::layout::Constraint::Length(3),
     ])
     .areas(area);
 
-    // Top: logs area
     let logs_area = chunks[0];
     // We'll render a windowed view of log groups. Each group is 3 lines.
     let total_groups = app.logs.len();

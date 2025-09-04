@@ -345,330 +345,311 @@ impl Status {
             if let Some(rt) = rt_opt.as_mut() {
                 while let Ok(evt) = rt.evt_rx.try_recv() {
                     match evt {
-                                RuntimeEvent::FrameReceived(bytes) => {
-                                    if idx != selected {
-                                        // only show received frames for selected port
+                        RuntimeEvent::FrameReceived(bytes) => {
+                            if idx != selected {
+                                // only show received frames for selected port
+                                continue;
+                            }
+                            let raw_hex = bytes
+                                .iter()
+                                .map(|b| format!("{b:02x}"))
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            let mut consumed = false;
+                            let nowi = std::time::Instant::now();
+                            // try to match this frame against pending requests per register
+                            if let Some(form) = self.subpage_form.as_mut() {
+                                // Need index to advance pointer after successful response
+                                // Defer pointer advance until after loop to avoid borrow conflicts
+                                let mut advance_after: Option<usize> = None;
+                                let registers_len_cache = form.registers.len();
+                                for (reg_index, reg) in form.registers.iter_mut().enumerate() {
+                                    if reg.role != EntryRole::Slave {
                                         continue;
                                     }
-                                    let raw_hex = bytes
-                                        .iter()
-                                        .map(|b| format!("{b:02x}"))
-                                        .collect::<Vec<_>>()
-                                        .join(" ");
-                                    let mut consumed = false;
-                                    let nowi = std::time::Instant::now();
-                                    // try to match this frame against pending requests per register
-                                    if let Some(form) = self.subpage_form.as_mut() {
-                                        // Need index to advance pointer after successful response
-                                        // Defer pointer advance until after loop to avoid borrow conflicts
-                                        let mut advance_after: Option<usize> = None;
-                                        let registers_len_cache = form.registers.len();
-                                        for (reg_index, reg) in
-                                            form.registers.iter_mut().enumerate()
-                                        {
-                                            if reg.role != EntryRole::Slave {
+                                    let mut remove_indices: Vec<usize> = Vec::new();
+                                    let pending_len = reg.pending_requests.len();
+                                    for pi in 0..pending_len {
+                                        // quick check: slave id must match
+                                        if bytes.first().copied() != Some(reg.slave_id) {
+                                            break;
+                                        }
+                                        if let Some(pending) = reg.pending_requests.get(pi) {
+                                            if bytes.get(1).copied() != Some(pending.func) {
                                                 continue;
                                             }
-                                            let mut remove_indices: Vec<usize> = Vec::new();
-                                            let pending_len = reg.pending_requests.len();
-                                            for pi in 0..pending_len {
-                                                // quick check: slave id must match
-                                                if bytes.first().copied() != Some(reg.slave_id) {
-                                                    break;
-                                                }
-                                                if let Some(pending) = reg.pending_requests.get(pi)
-                                                {
-                                                    if bytes.get(1).copied() != Some(pending.func) {
-                                                        continue;
-                                                    }
-                                                    let frame_vec = bytes.to_vec();
-                                                    if let Ok(mut saved_req) =
-                                                        pending.request.lock()
-                                                    {
-                                                        let parse_ok: Option<Vec<u8>> = match reg
-                                                            .mode
-                                                        {
-                                                            RegisterMode::Coils => {
-                                                                match parse_pull_get_coils(
-                                                                    &mut saved_req,
-                                                                    frame_vec.clone(),
-                                                                    pending.count,
-                                                                ) {
-                                                                    Ok(vb) => Some(
-                                                                        vb.into_iter()
-                                                                            .map(|b| {
-                                                                                if b {
-                                                                                    1
-                                                                                } else {
-                                                                                    0
-                                                                                }
-                                                                            })
-                                                                            .collect(),
-                                                                    ),
-                                                                    Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (coils): {e} raw={raw_hex}"), parsed: None });
-                                                                        remove_indices.push(pi);
-                                                                        consumed = true;
-                                                                        None
-                                                                    }
-                                                                }
+                                            let frame_vec = bytes.to_vec();
+                                            if let Ok(mut saved_req) = pending.request.lock() {
+                                                let parse_ok: Option<Vec<u8>> = match reg.mode {
+                                                    RegisterMode::Coils => {
+                                                        match parse_pull_get_coils(
+                                                            &mut saved_req,
+                                                            frame_vec.clone(),
+                                                            pending.count,
+                                                        ) {
+                                                            Ok(vb) => Some(
+                                                                vb.into_iter()
+                                                                    .map(|b| if b { 1 } else { 0 })
+                                                                    .collect(),
+                                                            ),
+                                                            Err(e) => {
+                                                                pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (coils): {e} raw={raw_hex}"), parsed: None });
+                                                                remove_indices.push(pi);
+                                                                consumed = true;
+                                                                None
                                                             }
-                                                            RegisterMode::DiscreteInputs => {
-                                                                match parse_pull_get_discrete_inputs(
-                                                                    &mut saved_req,
-                                                                    frame_vec.clone(),
-                                                                    pending.count,
-                                                                ) {
-                                                                    Ok(vb) => Some(
-                                                                        vb.into_iter()
-                                                                            .map(|b| {
-                                                                                if b {
-                                                                                    1
-                                                                                } else {
-                                                                                    0
-                                                                                }
-                                                                            })
-                                                                            .collect(),
-                                                                    ),
-                                                                    Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (discrete): {e} raw={raw_hex}"), parsed: None });
-                                                                        remove_indices.push(pi);
-                                                                        consumed = true;
-                                                                        None
-                                                                    }
-                                                                }
-                                                            }
-                                                            RegisterMode::Holding => {
-                                                                match parse_pull_get_holdings(
-                                                                    &mut saved_req,
-                                                                    frame_vec.clone(),
-                                                                ) {
-                                                                    Ok(v) => Some(
-                                                                        v.into_iter()
-                                                                            .flat_map(|w| {
-                                                                                w.to_be_bytes()
-                                                                            })
-                                                                            .collect(),
-                                                                    ),
-                                                                    Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (holding): {e} raw={raw_hex}"), parsed: None });
-                                                                        remove_indices.push(pi);
-                                                                        consumed = true;
-                                                                        None
-                                                                    }
-                                                                }
-                                                            }
-                                                            RegisterMode::Input => {
-                                                                match parse_pull_get_inputs(
-                                                                    &mut saved_req,
-                                                                    frame_vec.clone(),
-                                                                ) {
-                                                                    Ok(v) => Some(
-                                                                        v.into_iter()
-                                                                            .flat_map(|w| {
-                                                                                w.to_be_bytes()
-                                                                            })
-                                                                            .collect(),
-                                                                    ),
-                                                                    Err(e) => {
-                                                                        pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (input): {e} raw={raw_hex}"), parsed: None });
-                                                                        remove_indices.push(pi);
-                                                                        consumed = true;
-                                                                        None
-                                                                    }
-                                                                }
-                                                            }
-                                                        };
-                                                        if let Some(mut bts) = parse_ok {
-                                                            // store values: for Holding/Input convert BE pairs into u16; for Coils/Discrete keep 0/1 per address
-                                                            match reg.mode {
-                                                                RegisterMode::Holding
-                                                                | RegisterMode::Input => {
-                                                                    if bts.len() % 2 != 0 {
-                                                                        bts.push(0);
-                                                                    }
-                                                                    let regs: Vec<u16> = bts
-                                                                        .chunks_exact(2)
-                                                                        .map(|c| {
-                                                                            u16::from_be_bytes([
-                                                                                c[0], c[1],
-                                                                            ])
-                                                                        })
-                                                                        .collect();
-                                                                    let mut vals = regs;
-                                                                    if vals.len()
-                                                                        < reg.length as usize
-                                                                    {
-                                                                        vals.resize(
-                                                                            reg.length as usize,
-                                                                            0u16,
-                                                                        );
-                                                                    }
-                                                                    if vals.len()
-                                                                        > reg.length as usize
-                                                                    {
-                                                                        vals.truncate(
-                                                                            reg.length as usize,
-                                                                        );
-                                                                    }
-                                                                    reg.values = vals;
-                                                                }
-                                                                _ => {
-                                                                    let mut vals: Vec<u16> = bts
-                                                                        .into_iter()
-                                                                        .map(|v| v as u16)
-                                                                        .collect();
-                                                                    if vals.len()
-                                                                        < reg.length as usize
-                                                                    {
-                                                                        vals.resize(
-                                                                            reg.length as usize,
-                                                                            0u16,
-                                                                        );
-                                                                    }
-                                                                    if vals.len()
-                                                                        > reg.length as usize
-                                                                    {
-                                                                        vals.truncate(
-                                                                            reg.length as usize,
-                                                                        );
-                                                                    }
-                                                                    reg.values = vals;
-                                                                }
-                                                            }
-                                                            reg.req_success =
-                                                                reg.req_success.saturating_add(1);
-                                                            remove_indices.push(pi);
-                                                            consumed = true;
-                                                            pending_logs.push(LogEntry { when: Local::now(), raw: format!("{} sid={} func=0x{:02X} len={} raw={}", lang().protocol.modbus.log_recv_match, reg.slave_id, pending.func, bytes.len(), raw_hex), parsed: Some(ParsedRequest { origin: "master".to_string(), rw: "R".to_string(), command: format!("func_{:02X}", pending.func), slave_id: reg.slave_id, address: pending.address, length: pending.count }) });
-                                                            let interval_ms =
-                                                                form.global_interval_ms;
-                                                            reg.next_poll_at = nowi
-                                                                + std::time::Duration::from_millis(
-                                                                    interval_ms,
-                                                                );
-                                                            // Response matched the in-flight register -> advance round-robin
-                                                            if form.in_flight_reg_index
-                                                                == Some(reg_index)
-                                                            {
-                                                                form.in_flight_reg_index = None;
-                                                                advance_after = Some(reg_index);
-                                                            }
-                                                            break;
                                                         }
                                                     }
+                                                    RegisterMode::DiscreteInputs => {
+                                                        match parse_pull_get_discrete_inputs(
+                                                            &mut saved_req,
+                                                            frame_vec.clone(),
+                                                            pending.count,
+                                                        ) {
+                                                            Ok(vb) => Some(
+                                                                vb.into_iter()
+                                                                    .map(|b| if b { 1 } else { 0 })
+                                                                    .collect(),
+                                                            ),
+                                                            Err(e) => {
+                                                                pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (discrete): {e} raw={raw_hex}"), parsed: None });
+                                                                remove_indices.push(pi);
+                                                                consumed = true;
+                                                                None
+                                                            }
+                                                        }
+                                                    }
+                                                    RegisterMode::Holding => {
+                                                        match parse_pull_get_holdings(
+                                                            &mut saved_req,
+                                                            frame_vec.clone(),
+                                                        ) {
+                                                            Ok(v) => Some(
+                                                                v.into_iter()
+                                                                    .flat_map(|w| w.to_be_bytes())
+                                                                    .collect(),
+                                                            ),
+                                                            Err(e) => {
+                                                                pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (holding): {e} raw={raw_hex}"), parsed: None });
+                                                                remove_indices.push(pi);
+                                                                consumed = true;
+                                                                None
+                                                            }
+                                                        }
+                                                    }
+                                                    RegisterMode::Input => {
+                                                        match parse_pull_get_inputs(
+                                                            &mut saved_req,
+                                                            frame_vec.clone(),
+                                                        ) {
+                                                            Ok(v) => Some(
+                                                                v.into_iter()
+                                                                    .flat_map(|w| w.to_be_bytes())
+                                                                    .collect(),
+                                                            ),
+                                                            Err(e) => {
+                                                                pending_logs.push(LogEntry { when: Local::now(), raw: format!("parse error (input): {e} raw={raw_hex}"), parsed: None });
+                                                                remove_indices.push(pi);
+                                                                consumed = true;
+                                                                None
+                                                            }
+                                                        }
+                                                    }
+                                                };
+                                                if let Some(mut bts) = parse_ok {
+                                                    // store values: for Holding/Input convert BE pairs into u16; for Coils/Discrete keep 0/1 per address
+                                                    match reg.mode {
+                                                        RegisterMode::Holding
+                                                        | RegisterMode::Input => {
+                                                            if bts.len() % 2 != 0 {
+                                                                bts.push(0);
+                                                            }
+                                                            let regs: Vec<u16> = bts
+                                                                .chunks_exact(2)
+                                                                .map(|c| {
+                                                                    u16::from_be_bytes([c[0], c[1]])
+                                                                })
+                                                                .collect();
+                                                            let mut vals = regs;
+                                                            if vals.len() < reg.length as usize {
+                                                                vals.resize(
+                                                                    reg.length as usize,
+                                                                    0u16,
+                                                                );
+                                                            }
+                                                            if vals.len() > reg.length as usize {
+                                                                vals.truncate(reg.length as usize);
+                                                            }
+                                                            reg.values = vals;
+                                                        }
+                                                        _ => {
+                                                            let mut vals: Vec<u16> = bts
+                                                                .into_iter()
+                                                                .map(|v| v as u16)
+                                                                .collect();
+                                                            if vals.len() < reg.length as usize {
+                                                                vals.resize(
+                                                                    reg.length as usize,
+                                                                    0u16,
+                                                                );
+                                                            }
+                                                            if vals.len() > reg.length as usize {
+                                                                vals.truncate(reg.length as usize);
+                                                            }
+                                                            reg.values = vals;
+                                                        }
+                                                    }
+                                                    reg.req_success =
+                                                        reg.req_success.saturating_add(1);
+                                                    remove_indices.push(pi);
+                                                    consumed = true;
+                                                    pending_logs.push(LogEntry {
+                                                        when: Local::now(),
+                                                        raw: format!(
+                                                            "{} sid={} func=0x{:02X} len={} raw={}",
+                                                            lang().protocol.modbus.log_recv_match,
+                                                            reg.slave_id,
+                                                            pending.func,
+                                                            bytes.len(),
+                                                            raw_hex
+                                                        ),
+                                                        parsed: Some(ParsedRequest {
+                                                            origin: "master".to_string(),
+                                                            rw: "R".to_string(),
+                                                            command: format!(
+                                                                "func_{:02X}",
+                                                                pending.func
+                                                            ),
+                                                            slave_id: reg.slave_id,
+                                                            address: pending.address,
+                                                            length: pending.count,
+                                                        }),
+                                                    });
+                                                    let interval_ms = form.global_interval_ms;
+                                                    reg.next_poll_at = nowi
+                                                        + std::time::Duration::from_millis(
+                                                            interval_ms,
+                                                        );
+                                                    // Response matched the in-flight register -> advance round-robin
+                                                    if form.in_flight_reg_index == Some(reg_index) {
+                                                        form.in_flight_reg_index = None;
+                                                        advance_after = Some(reg_index);
+                                                    }
+                                                    break;
                                                 }
-                                            }
-                                            // Advance pointer after loop
-                                            if let Some(done_idx) = advance_after {
-                                                if registers_len_cache > 0 {
-                                                    form.poll_round_index =
-                                                        (done_idx + 1) % registers_len_cache;
-                                                }
-                                            }
-                                            // remove any marked pending requests (reverse order)
-                                            for &ri in remove_indices.iter().rev() {
-                                                reg.pending_requests.remove(ri);
-                                            }
-                                            if consumed {
-                                                break;
                                             }
                                         }
                                     }
-                                    if !consumed {
-                                        let sid = bytes.first().copied().unwrap_or(0);
-                                        let func = bytes.get(1).copied().unwrap_or(0);
-                                        pending_logs.push(LogEntry {
-                                            when: Local::now(),
-                                            raw: format!(
-                                                "{}: {raw_hex}",
-                                                lang().protocol.modbus.log_recv_unmatched
-                                            ),
-                                            parsed: Some(ParsedRequest {
-                                                origin: "master".to_string(),
-                                                rw: "R".to_string(),
-                                                command: format!("func_{func:02X}"),
-                                                slave_id: sid,
-                                                address: 0,
-                                                length: 0,
-                                            }),
-                                        });
-                                        // Timeout cleanup now handled centrally in drive_slave_polling
+                                    // Advance pointer after loop
+                                    if let Some(done_idx) = advance_after {
+                                        if registers_len_cache > 0 {
+                                            form.poll_round_index =
+                                                (done_idx + 1) % registers_len_cache;
+                                        }
+                                    }
+                                    // remove any marked pending requests (reverse order)
+                                    for &ri in remove_indices.iter().rev() {
+                                        reg.pending_requests.remove(ri);
+                                    }
+                                    if consumed {
+                                        break;
                                     }
                                 }
-                                RuntimeEvent::FrameSent(bytes) => {
-                                    if idx == selected {
-                                        let hex = bytes
-                                            .iter()
-                                            .map(|b| format!("{b:02x}"))
-                                            .collect::<Vec<_>>()
-                                            .join(" ");
-                                        let sid = bytes.first().copied().unwrap_or(0);
-                                        let func = bytes.get(1).copied().unwrap_or(0);
-                                        let addr = if bytes.len() >= 4 {
-                                            u16::from_be_bytes([bytes[2], bytes[3]])
-                                        } else {
-                                            0
-                                        };
-                                        let len_or_cnt = if bytes.len() >= 6 {
-                                            u16::from_be_bytes([bytes[4], bytes[5]])
-                                        } else {
-                                            0
-                                        };
-                                        let cmd = match func {
-                                            0x01 => "rd_coils",
-                                            0x02 => "rd_discrete",
-                                            0x03 => "rd_holdings",
-                                            0x04 => "rd_inputs",
-                                            0x05 => "wr_coil",
-                                            0x06 => "wr_holding",
-                                            0x0F => "wr_coils",
-                                            0x10 => "wr_holdings",
-                                            _ => "func",
-                                        };
-                                        pending_logs.push(LogEntry {
-                                            when: Local::now(),
-                                            raw: format!(
-                                                "{}: {hex}",
-                                                lang().protocol.modbus.log_sent_frame
-                                            ),
-                                            parsed: Some(ParsedRequest {
-                                                origin: "master".to_string(),
-                                                rw: "W".to_string(),
-                                                command: cmd.to_string(),
-                                                slave_id: sid,
-                                                address: addr,
-                                                length: len_or_cnt,
-                                            }),
-                                        });
-                                    }
-                                }
-                                RuntimeEvent::Reconfigured(cfg) => {
-                                    if idx == selected {
-                                        pending_logs.push(LogEntry {
-                                            when: Local::now(),
-                                            raw: format!(
-                                                "{}: baud={} data_bits={} stop_bits={} parity={:?}",
-                                                lang().protocol.modbus.log_reconfigured,
-                                                cfg.baud,
-                                                cfg.data_bits,
-                                                cfg.stop_bits,
-                                                cfg.parity
-                                            ),
-                                            parsed: None,
-                                        });
-                                    }
-                                }
-                                RuntimeEvent::Error(e) => {
-                                    if idx == selected {
-                                        pending_error = Some(e);
-                                    }
-                                }
-                                RuntimeEvent::Stopped => {}
-                            } // match evt
-                        } // while let Ok(evt)
-                    } // if let Some(rt)
-                } // for port_runtimes
+                            }
+                            if !consumed {
+                                let sid = bytes.first().copied().unwrap_or(0);
+                                let func = bytes.get(1).copied().unwrap_or(0);
+                                pending_logs.push(LogEntry {
+                                    when: Local::now(),
+                                    raw: format!(
+                                        "{}: {raw_hex}",
+                                        lang().protocol.modbus.log_recv_unmatched
+                                    ),
+                                    parsed: Some(ParsedRequest {
+                                        origin: "master".to_string(),
+                                        rw: "R".to_string(),
+                                        command: format!("func_{func:02X}"),
+                                        slave_id: sid,
+                                        address: 0,
+                                        length: 0,
+                                    }),
+                                });
+                                // Timeout cleanup now handled centrally in drive_slave_polling
+                            }
+                        }
+                        RuntimeEvent::FrameSent(bytes) => {
+                            if idx == selected {
+                                let hex = bytes
+                                    .iter()
+                                    .map(|b| format!("{b:02x}"))
+                                    .collect::<Vec<_>>()
+                                    .join(" ");
+                                let sid = bytes.first().copied().unwrap_or(0);
+                                let func = bytes.get(1).copied().unwrap_or(0);
+                                let addr = if bytes.len() >= 4 {
+                                    u16::from_be_bytes([bytes[2], bytes[3]])
+                                } else {
+                                    0
+                                };
+                                let len_or_cnt = if bytes.len() >= 6 {
+                                    u16::from_be_bytes([bytes[4], bytes[5]])
+                                } else {
+                                    0
+                                };
+                                let cmd = match func {
+                                    0x01 => "rd_coils",
+                                    0x02 => "rd_discrete",
+                                    0x03 => "rd_holdings",
+                                    0x04 => "rd_inputs",
+                                    0x05 => "wr_coil",
+                                    0x06 => "wr_holding",
+                                    0x0F => "wr_coils",
+                                    0x10 => "wr_holdings",
+                                    _ => "func",
+                                };
+                                pending_logs.push(LogEntry {
+                                    when: Local::now(),
+                                    raw: format!(
+                                        "{}: {hex}",
+                                        lang().protocol.modbus.log_sent_frame
+                                    ),
+                                    parsed: Some(ParsedRequest {
+                                        origin: "master".to_string(),
+                                        rw: "W".to_string(),
+                                        command: cmd.to_string(),
+                                        slave_id: sid,
+                                        address: addr,
+                                        length: len_or_cnt,
+                                    }),
+                                });
+                            }
+                        }
+                        RuntimeEvent::Reconfigured(cfg) => {
+                            if idx == selected {
+                                pending_logs.push(LogEntry {
+                                    when: Local::now(),
+                                    raw: format!(
+                                        "{}: baud={} data_bits={} stop_bits={} parity={:?}",
+                                        lang().protocol.modbus.log_reconfigured,
+                                        cfg.baud,
+                                        cfg.data_bits,
+                                        cfg.stop_bits,
+                                        cfg.parity
+                                    ),
+                                    parsed: None,
+                                });
+                            }
+                        }
+                        RuntimeEvent::Error(e) => {
+                            if idx == selected {
+                                pending_error = Some(e);
+                            }
+                        }
+                        RuntimeEvent::Stopped => {}
+                    } // match evt
+                } // while let Ok(evt)
+            } // if let Some(rt)
+        } // for port_runtimes
         for l in pending_logs {
             self.append_log(l);
         }
@@ -988,7 +969,8 @@ impl Status {
         // Try to open the port briefly; if succeed it's free (we immediately drop it)
         sp_new(port_name, 9600)
             .timeout(Duration::from_millis(50))
-            .open().is_ok()
+            .open()
+            .is_ok()
     }
 
     fn detect_port_states(ports: &[SerialPortInfo]) -> Vec<PortState> {
@@ -1286,68 +1268,57 @@ impl Status {
                     if let Some(reg) = form.registers.get_mut(idx) {
                         if reg.role == EntryRole::Slave
                             && now >= reg.next_poll_at
-                                && reg.pending_requests.is_empty() {
-                                    // 构造请求
-                                    let qty = reg.length.min(125);
-                                    let gen = match reg.mode {
-                                        RegisterMode::Coils => generate_pull_get_coils_request(
-                                            reg.slave_id,
-                                            reg.address,
-                                            qty,
-                                        ),
-                                        RegisterMode::DiscreteInputs => {
-                                            generate_pull_get_discrete_inputs_request(
-                                                reg.slave_id,
+                            && reg.pending_requests.is_empty()
+                        {
+                            // Construct request
+                            let qty = reg.length.min(125);
+                            let gen = match reg.mode {
+                                RegisterMode::Coils => {
+                                    generate_pull_get_coils_request(reg.slave_id, reg.address, qty)
+                                }
+                                RegisterMode::DiscreteInputs => {
+                                    generate_pull_get_discrete_inputs_request(
+                                        reg.slave_id,
+                                        reg.address,
+                                        qty,
+                                    )
+                                }
+                                RegisterMode::Holding => generate_pull_get_holdings_request(
+                                    reg.slave_id,
+                                    reg.address,
+                                    qty,
+                                ),
+                                RegisterMode::Input => {
+                                    generate_pull_get_inputs_request(reg.slave_id, reg.address, qty)
+                                }
+                            };
+                            if let Ok((req_obj, raw)) = gen {
+                                if self.selected < self.port_runtimes.len() {
+                                    if let Some(Some(rt)) = self.port_runtimes.get(self.selected) {
+                                        if rt.cmd_tx.send(RuntimeCommand::Write(raw)).is_ok() {
+                                            reg.req_total = reg.req_total.saturating_add(1);
+                                            let func = match reg.mode {
+                                                RegisterMode::Coils => 0x01,
+                                                RegisterMode::DiscreteInputs => 0x02,
+                                                RegisterMode::Holding => 0x03,
+                                                RegisterMode::Input => 0x04,
+                                            };
+                                            reg.pending_requests.push(PendingRequest::new(
+                                                func,
                                                 reg.address,
                                                 qty,
-                                            )
-                                        }
-                                        RegisterMode::Holding => {
-                                            generate_pull_get_holdings_request(
-                                                reg.slave_id,
-                                                reg.address,
-                                                qty,
-                                            )
-                                        }
-                                        RegisterMode::Input => generate_pull_get_inputs_request(
-                                            reg.slave_id,
-                                            reg.address,
-                                            qty,
-                                        ),
-                                    };
-                                    if let Ok((req_obj, raw)) = gen {
-                                        if self.selected < self.port_runtimes.len() {
-                                            if let Some(Some(rt)) =
-                                                self.port_runtimes.get(self.selected)
-                                            {
-                                                if rt
-                                                    .cmd_tx
-                                                    .send(RuntimeCommand::Write(raw))
-                                                    .is_ok()
-                                                {
-                                                    reg.req_total = reg.req_total.saturating_add(1);
-                                                    let func = match reg.mode {
-                                                        RegisterMode::Coils => 0x01,
-                                                        RegisterMode::DiscreteInputs => 0x02,
-                                                        RegisterMode::Holding => 0x03,
-                                                        RegisterMode::Input => 0x04,
-                                                    };
-                                                    reg.pending_requests.push(PendingRequest::new(
-                                                        func,
-                                                        reg.address,
-                                                        qty,
-                                                        now,
-                                                        req_obj,
-                                                    ));
-                                                    reg.next_poll_at = now
-                                                        + std::time::Duration::from_millis(1000u64); // Pre-schedule next poll time
-                                                    form.in_flight_reg_index = Some(idx);
-                                                }
-                                            }
+                                                now,
+                                                req_obj,
+                                            ));
+                                            reg.next_poll_at =
+                                                now + std::time::Duration::from_millis(1000u64); // Pre-schedule next poll time
+                                            form.in_flight_reg_index = Some(idx);
                                         }
                                     }
-                                    break; // Request dispatched -> exit loop
                                 }
+                            }
+                            break; // Request dispatched -> exit loop
+                        }
                     }
                     attempts += 1;
                     idx = (idx + 1) % total;
