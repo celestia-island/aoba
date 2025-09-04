@@ -10,10 +10,10 @@ mod tty_unix;
 #[cfg(unix)]
 pub use tty_unix::{available_ports_sorted, available_ports_enriched, try_extract_vid_pid_serial};
 
-/// 统一的端口附加元数据结构
+/// Unified per-port extra metadata structure
 #[derive(Debug, Clone, Default)]
 pub struct PortExtra {
-    pub guid: Option<String>,          // Windows 设备接口 GUID
+    pub guid: Option<String>,          // Windows device interface GUID
     pub vid: Option<u16>,
     pub pid: Option<u16>,
     pub serial: Option<String>,

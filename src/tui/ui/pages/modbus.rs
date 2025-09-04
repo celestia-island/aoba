@@ -237,7 +237,6 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                                 address: 0,
                                 length: 1,
                                 values: vec![0u16; 1],
-                                refresh_ms: 1000,
                                 req_success: 0,
                                 req_total: 0,
                                 next_poll_at: std::time::Instant::now(),
@@ -390,7 +389,6 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                         MasterEditField::Id
                         | MasterEditField::Start
                         | MasterEditField::End
-                        | MasterEditField::Refresh
                         | MasterEditField::Counter
                         | MasterEditField::Value(_) => {
                             if !matches!(field, MasterEditField::Counter) {
@@ -502,10 +500,6 @@ fn commit_master_field(form: &mut SubpageForm) {
                                 }
                             }
                         }
-                        Refresh => {
-                            entry.refresh_ms = 1000;
-                            entry.next_poll_at = std::time::Instant::now();
-                        }
                         Counter => {}
                     }
                 } else {
@@ -551,16 +545,6 @@ fn commit_master_field(form: &mut SubpageForm) {
                                 let off = (*a as usize).saturating_sub(entry.address as usize);
                                 if off < entry.values.len() {
                                     entry.values[off] = v as u16;
-                                }
-                            }
-                        }
-                        Refresh => {
-                            if let Ok(v) = buf.parse::<u32>() {
-                                let new_v = v.max(10);
-                                if new_v != entry.refresh_ms {
-                                    entry.refresh_ms = new_v;
-                                    // Force reschedule so shorter intervals take effect immediately
-                                    entry.next_poll_at = std::time::Instant::now();
                                 }
                             }
                         }
@@ -622,8 +606,7 @@ pub(crate) fn move_master_field_dir(form: &mut SubpageForm, dir: Dir, enable_val
             coords.push((0, 2, F::Type));
             coords.push((0, 3, F::Start));
             coords.push((0, 4, F::End));
-            coords.push((0, 5, F::Refresh));
-            coords.push((0, 6, F::Counter));
+            coords.push((0, 5, F::Counter));
             if enable_values {
                 for off in 0..entry.length {
                     let addr = entry.address + off;

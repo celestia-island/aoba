@@ -10,8 +10,10 @@ pub fn select_field_by_cursor(form: &mut SubpageForm) {
         2 => EditingField::Parity,
         3 => EditingField::DataBits,
         4 => EditingField::StopBits,
+        5 => EditingField::GlobalInterval,
+        6 => EditingField::GlobalTimeout,
         n => {
-            let ridx = n.saturating_sub(5);
+            let ridx = n.saturating_sub(7);
             EditingField::RegisterField {
                 idx: ridx,
                 field: crate::protocol::status::RegisterField::SlaveId,

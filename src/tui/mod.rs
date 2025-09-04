@@ -283,6 +283,18 @@ fn run_app(
                                                 // Commit toggle immediately
                                                 // Nothing special to validate here.
                                             }
+                                            crate::protocol::status::EditingField::GlobalInterval => {
+                                                let step: i64 = if dir > 0 { 100 } else { -100 };
+                                                let mut next = form.global_interval_ms as i64 + step;
+                                                if next < 100 { next = 100; }
+                                                form.global_interval_ms = next as u64;
+                                            }
+                                            crate::protocol::status::EditingField::GlobalTimeout => {
+                                                let step: i64 = if dir > 0 { 100 } else { -100 };
+                                                let mut next = form.global_timeout_ms as i64 + step;
+                                                if next < 100 { next = 100; }
+                                                form.global_timeout_ms = next as u64;
+                                            }
                                             
                                             crate::protocol::status::EditingField::Baud => {
                                                 let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
@@ -456,7 +468,17 @@ fn run_app(
                                                     }
                                                 }
                                             }
-                                            _ => {}
+                                            crate::protocol::status::EditingField::GlobalInterval => {
+                                                if !form.input_buffer.is_empty() {
+                                                    if let Ok(v) = form.input_buffer.parse::<u64>() { form.global_interval_ms = v.max(100); } else { commit_success = false; }
+                                                }
+                                            }
+                                            crate::protocol::status::EditingField::GlobalTimeout => {
+                                                if !form.input_buffer.is_empty() {
+                                                    if let Ok(v) = form.input_buffer.parse::<u64>() { form.global_timeout_ms = v.max(100); } else { commit_success = false; }
+                                                }
+                                            }
+                                            crate::protocol::status::EditingField::Loop | crate::protocol::status::EditingField::Parity | crate::protocol::status::EditingField::StopBits | crate::protocol::status::EditingField::DataBits | crate::protocol::status::EditingField::RegisterField { .. } => {}
                                         }
                                     }
                                     // Exit editing only when commit succeeded
@@ -831,7 +853,6 @@ fn run_app(
                                                     address: 0,
                                                     length: 1,
                                                     values: vec![0u16; 1],
-                                                    refresh_ms: 1000,
                                                     req_success: 0,
                                                     req_total: 0,
                                                     next_poll_at: std::time::Instant::now(),
@@ -857,22 +878,15 @@ fn run_app(
                                         form.editing = !form.editing;
                                         if form.editing {
                                             match form.cursor {
-                                                0 => {
-                                                    form.editing_field = Some(
-                                                        crate::protocol::status::EditingField::Baud,
-                                                    )
-                                                }
-                                                1 => form.editing_field = Some(
-                                                    crate::protocol::status::EditingField::Parity,
-                                                ),
-                                                2 => form.editing_field = Some(
-                                                    crate::protocol::status::EditingField::DataBits,
-                                                ),
-                                                3 => form.editing_field = Some(
-                                                    crate::protocol::status::EditingField::StopBits,
-                                                ),
+                                                0 => form.editing_field = Some(crate::protocol::status::EditingField::Loop),
+                                                1 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
+                                                2 => form.editing_field = Some(crate::protocol::status::EditingField::Parity),
+                                                3 => form.editing_field = Some(crate::protocol::status::EditingField::DataBits),
+                                                4 => form.editing_field = Some(crate::protocol::status::EditingField::StopBits),
+                                                5 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalInterval),
+                                                6 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalTimeout),
                                                 n => {
-                                                    let ridx = n.saturating_sub(4);
+                                                    let ridx = n.saturating_sub(7);
                                                     form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
                                                 }
                                             }
