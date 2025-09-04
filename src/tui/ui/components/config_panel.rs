@@ -8,6 +8,7 @@ use crate::{
     i18n::lang,
     protocol::status::{EditingField, Status},
 };
+use serialport::Parity;
 use ratatui::style::Modifier;
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
@@ -155,9 +156,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
 
     // Parity (idx 1)
     let parity_text = match form.parity {
-        crate::protocol::status::Parity::None => lang().protocol.common.parity_none.clone(),
-        crate::protocol::status::Parity::Even => lang().protocol.common.parity_even.clone(),
-        crate::protocol::status::Parity::Odd => lang().protocol.common.parity_odd.clone(),
+        Parity::None => lang().protocol.common.parity_none.clone(),
+        Parity::Even => lang().protocol.common.parity_even.clone(),
+        Parity::Odd => lang().protocol.common.parity_odd.clone(),
     };
     if matches!(editing_field, Some(EditingField::Parity)) {
         let options = vec![
@@ -166,9 +167,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             lang().protocol.common.parity_odd.clone(),
         ];
         let cur_idx = match form.parity {
-            crate::protocol::status::Parity::None => 0usize,
-            crate::protocol::status::Parity::Even => 1usize,
-            crate::protocol::status::Parity::Odd => 2usize,
+            Parity::None => 0usize,
+            Parity::Even => 1usize,
+            Parity::Odd => 2usize,
         };
         let mut parts: Vec<String> = Vec::new();
         parts.push("<-".to_string());

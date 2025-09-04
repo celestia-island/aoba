@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Result};
+
 use rmodbus::server::{storage::ModbusStorageSmall, ModbusFrame};
 
-/// Parse and process a Modbus Read Input Registers (0x04) frame.
-pub fn parse_slave_inputs(
+pub fn build_slave_inputs_response(
     request: &mut ModbusFrame<Vec<u8>>,
     context: &mut ModbusStorageSmall,
 ) -> Result<Option<Vec<u8>>> {

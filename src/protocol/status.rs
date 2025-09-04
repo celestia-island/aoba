@@ -1,13 +1,107 @@
 //! Runtime status & ModBus unified data structures.
-use crate::protocol::runtime::{PortRuntimeHandle, RuntimeCommand, RuntimeEvent, SerialConfig};
 use chrono::{DateTime, Local};
-use serialport::{SerialPort, SerialPortInfo};
 use std::{
     cmp::{max, min},
     collections::HashMap,
-    collections::HashSet,
     time::Duration,
+    vec::Vec,
 };
+
+use serialport::{SerialPort, SerialPortInfo};
+
+use crate::protocol::runtime::{PortRuntimeHandle, RuntimeCommand, RuntimeEvent, SerialConfig};
+use crate::{
+    i18n::lang,
+    protocol::modbus::{
+        generate_pull_get_coils_request, generate_pull_get_discrete_inputs_request,
+        generate_pull_get_holdings_request, generate_pull_get_inputs_request, parse_pull_get_coils,
+        parse_pull_get_discrete_inputs, parse_pull_get_holdings, parse_pull_get_inputs,
+    },
+};
+
+// --- Reintroduced data structures lost during previous merge/conflict operations ---
+// NOTE: Keep these aligned with usages in TUI modules (pages/modbus.rs, utils/edit.rs, tui/mod.rs)
+
+#[derive(Debug, Clone)]
+pub struct ParsedRequest {
+    pub origin: String,
+    pub rw: String,      // "R" or "W"
+    pub command: String, // function name or descriptor
+    pub slave_id: u8,
+    pub address: u16,
+    pub length: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    pub when: DateTime<Local>,
+    pub raw: String,
+    pub parsed: Option<ParsedRequest>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SubpageForm {
+    // Serial config editing (original config panel expectations)
+    pub editing: bool,
+    pub baud: u32,
+    pub data_bits: u8,
+    pub stop_bits: u8,
+    pub parity: serialport::Parity,
+    pub cursor: usize, // which config/register line currently highlighted
+    pub editing_field: Option<EditingField>,
+    pub input_buffer: String,             // generic edit buffer
+    pub edit_choice_index: Option<usize>, // selector index when cycling preset options
+    pub edit_confirmed: bool,             // custom value entered confirmed stage
+
+    // Unified master/slave register list
+    pub registers: Vec<RegisterEntry>,
+    pub master_cursor: usize,
+    pub master_field_selected: bool,
+    pub master_field_editing: bool,
+    pub master_edit_field: Option<MasterEditField>,
+    pub master_edit_index: Option<usize>,
+    pub master_input_buffer: String,
+}
+
+impl Default for SubpageForm {
+    fn default() -> Self {
+        Self {
+            editing: false,
+            baud: 9600,
+            data_bits: 8,
+            stop_bits: 1,
+            parity: serialport::Parity::None,
+            cursor: 0,
+            editing_field: None,
+            input_buffer: String::new(),
+            edit_choice_index: None,
+            edit_confirmed: false,
+            registers: Vec::new(),
+            master_cursor: 0,
+            master_field_selected: false,
+            master_field_editing: false,
+            master_edit_field: None,
+            master_edit_index: None,
+            master_input_buffer: String::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct PerPortState {
+    pub subpage_active: bool,
+    pub subpage_form: Option<SubpageForm>,
+    pub subpage_tab_index: usize,
+    pub logs: Vec<LogEntry>,
+    pub log_selected: usize,
+    pub log_view_offset: usize,
+    pub log_auto_scroll: bool,
+    pub input_mode: InputMode,
+    pub input_editing: bool,
+    pub input_buffer: String,
+    pub app_mode: AppMode,
+}
+
 // If LOG_GROUP_HEIGHT was defined previously in tui module, re‑import; else define fallback.
 #[allow(dead_code)]
 const LOG_GROUP_HEIGHT: usize = 3; // fallback; adjust if original constant differs
@@ -17,7 +111,6 @@ pub enum EntryRole {
     Master,
     Slave,
 }
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterMode {
     Coils = 1,
@@ -57,6 +150,8 @@ pub struct RegisterEntry {
     pub next_poll_at: std::time::Instant,
     pub req_success: u32,
     pub req_total: u32,
+    // Pending Modbus read requests waiting for a matching response
+    pub pending_requests: Vec<PendingRequest>,
 }
 
 impl Default for RegisterEntry {
@@ -72,8 +167,17 @@ impl Default for RegisterEntry {
             next_poll_at: std::time::Instant::now(),
             req_success: 0,
             req_total: 0,
+            pending_requests: Vec::new(),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct PendingRequest {
+    func: u8,
+    address: u16,
+    count: u16,
+    sent_at: std::time::Instant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -102,85 +206,10 @@ impl AppMode {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct ParsedRequest {
-    pub origin: String,
-    pub rw: String,
-    pub command: String,
-    pub slave_id: u8,
-    pub address: u16,
-    pub length: u16,
-}
-#[derive(Clone, Debug)]
-pub struct LogEntry {
-    pub when: DateTime<Local>,
-    pub raw: String,
-    pub parsed: Option<ParsedRequest>,
-}
-
-#[derive(Debug, Clone)]
-pub struct SubpageForm {
-    pub baud: u32,
-    pub data_bits: u8,
-    pub stop_bits: u8,
-    pub parity: Parity,
-    pub registers: Vec<RegisterEntry>,
-    pub editing: bool,
-    pub editing_field: Option<EditingField>,
-    pub edit_choice_index: Option<usize>,
-    pub edit_confirmed: bool,
-    pub input_buffer: String,
-    pub master_edit_index: Option<usize>,
-    pub master_edit_field: Option<MasterEditField>,
-    pub master_input_buffer: String,
-    pub cursor: usize,
-    // Fields used by unified ModBus panel (ported from legacy master page)
-    pub master_cursor: usize, // current selected entry (or new-entry line) in modbus panel
-    pub master_field_selected: bool, // row is selected (field selection layer)
-    pub master_field_editing: bool, // currently editing a field
-}
-impl Default for SubpageForm {
-    fn default() -> Self {
-        Self {
-            baud: 9600,
-            data_bits: 8,
-            stop_bits: 1,
-            parity: Parity::None,
-            registers: vec![RegisterEntry::default()],
-            editing: false,
-            editing_field: None,
-            edit_choice_index: None,
-            edit_confirmed: false,
-            input_buffer: String::new(),
-            master_edit_index: None,
-            master_edit_field: None,
-            master_input_buffer: String::new(),
-            cursor: 0,
-            master_cursor: 0,
-            master_field_selected: false,
-            master_field_editing: false,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct PerPortState {
-    subpage_active: bool,
-    subpage_form: Option<SubpageForm>,
-    subpage_tab_index: usize,
-    logs: Vec<LogEntry>,
-    log_selected: usize,
-    log_view_offset: usize,
-    log_auto_scroll: bool,
-    input_mode: InputMode,
-    input_editing: bool,
-    input_buffer: String,
-    app_mode: AppMode,
-}
-
 #[derive(Debug)]
 pub struct Status {
     pub ports: Vec<SerialPortInfo>,
+    pub port_extras: Vec<crate::protocol::tty::PortExtra>,
     pub port_states: Vec<PortState>,
     pub port_handles: Vec<Option<Box<dyn SerialPort>>>,
     pub port_runtimes: Vec<Option<PortRuntimeHandle>>,
@@ -188,7 +217,7 @@ pub struct Status {
 
     pub auto_refresh: bool,
     pub last_refresh: Option<DateTime<Local>>,
-    // GUI requires timestamp to show when the error occurred; TUI only uses message. Store unified as (msg, ts).
+
     pub error: Option<(String, DateTime<Local>)>,
 
     pub subpage_active: bool,
@@ -223,6 +252,7 @@ impl Status {
     pub fn new() -> Self {
         Self {
             ports: Vec::new(),
+            port_extras: Vec::new(),
             port_states: Vec::new(),
             port_handles: Vec::new(),
             port_runtimes: Vec::new(),
@@ -278,53 +308,174 @@ impl Status {
                         Ok(evt) => match evt {
                             RuntimeEvent::FrameReceived(bytes) => {
                                 if idx == selected {
-                                    let mut handled = false;
-                                    if let Some((sid, func, data)) = parse_modbus_response(&bytes) {
-                                        handled = true;
-                                        pending_logs.push(LogEntry {
-                                            when: Local::now(),
-                                            raw: format!(
-                                                "resp sid={sid} func=0x{func:02X} bytes={}",
-                                                data.len()
-                                            ),
-                                            parsed: None,
-                                        });
-                                        if let Some(form) = self.subpage_form.as_mut() {
-                                            for reg in form.registers.iter_mut() {
-                                                if reg.role == EntryRole::Master
-                                                    && reg.slave_id == sid
-                                                {
-                                                    let expect = match reg.mode {
-                                                        RegisterMode::Coils => 0x01,
-                                                        RegisterMode::DiscreteInputs => 0x02,
-                                                        RegisterMode::Holding => 0x03,
-                                                        RegisterMode::Input => 0x04,
-                                                    };
-                                                    if expect == func {
-                                                        reg.req_total =
-                                                            reg.req_total.saturating_add(1);
-                                                        reg.req_success =
-                                                            reg.req_success.saturating_add(1);
-                                                        reg.values.clear();
-                                                        reg.values.extend(
-                                                            data.iter().take(reg.length as usize),
-                                                        );
-                                                    }
+                                    let raw_hex = bytes
+                                        .iter()
+                                        .map(|b| format!("{:02x}", b))
+                                        .collect::<Vec<_>>()
+                                        .join(" ");
+                                    let mut consumed = false;
+                                    if let Some(form) = self.subpage_form.as_mut() {
+                                        for reg in form.registers.iter_mut() {
+                                            if reg.role != EntryRole::Master {
+                                                continue;
+                                            }
+                                            let mut remove_indices: Vec<usize> = Vec::new();
+                                            for (pi, pending) in
+                                                reg.pending_requests.iter().enumerate()
+                                            {
+                                                if bytes.first().copied() != Some(reg.slave_id) {
+                                                    continue;
                                                 }
+                                                if bytes.get(1).copied() != Some(pending.func) {
+                                                    continue;
+                                                }
+                                                let frame_vec = bytes.to_vec();
+                                                let mut tmp_req =
+                                                    rmodbus::client::ModbusRequest::new(
+                                                        reg.slave_id,
+                                                        rmodbus::ModbusProto::Rtu,
+                                                    );
+                                                let parse_ok: Option<Vec<u8>> = match reg.mode {
+                                                    RegisterMode::Coils => parse_pull_get_coils(
+                                                        &mut tmp_req,
+                                                        frame_vec.clone(),
+                                                        pending.count,
+                                                    )
+                                                    .ok()
+                                                    .map(|vb| {
+                                                        vb.into_iter()
+                                                            .map(|b| if b { 1 } else { 0 })
+                                                            .collect()
+                                                    }),
+                                                    RegisterMode::DiscreteInputs => {
+                                                        parse_pull_get_discrete_inputs(
+                                                            &mut tmp_req,
+                                                            frame_vec.clone(),
+                                                            pending.count,
+                                                        )
+                                                        .ok()
+                                                        .map(|vb| {
+                                                            vb.into_iter()
+                                                                .map(|b| if b { 1 } else { 0 })
+                                                                .collect()
+                                                        })
+                                                    }
+                                                    RegisterMode::Holding => {
+                                                        parse_pull_get_holdings(
+                                                            &mut tmp_req,
+                                                            frame_vec.clone(),
+                                                        )
+                                                        .ok()
+                                                        .map(|v| {
+                                                            v.into_iter()
+                                                                .flat_map(|w| w.to_be_bytes())
+                                                                .collect()
+                                                        })
+                                                    }
+                                                    RegisterMode::Input => parse_pull_get_inputs(
+                                                        &mut tmp_req,
+                                                        frame_vec.clone(),
+                                                    )
+                                                    .ok()
+                                                    .map(|v| {
+                                                        v.into_iter()
+                                                            .flat_map(|w| w.to_be_bytes())
+                                                            .collect()
+                                                    }),
+                                                };
+                                                if let Some(values_any) = parse_ok {
+                                                    reg.req_success =
+                                                        reg.req_success.saturating_add(1);
+                                                    reg.values.clear();
+                                                    reg.values.extend(
+                                                        values_any
+                                                            .into_iter()
+                                                            .take(reg.length as usize),
+                                                    );
+                                                    remove_indices.push(pi);
+                                                    consumed = true;
+                                                    pending_logs.push(LogEntry {
+                                                        when: Local::now(),
+                                                        raw: format!(
+                                                            "{} sid={} func=0x{:02X} len={} raw={}",
+                                                            lang().protocol.modbus.log_recv_match,
+                                                            reg.slave_id,
+                                                            pending.func,
+                                                            bytes.len(),
+                                                            raw_hex
+                                                        ),
+                                                        parsed: Some(ParsedRequest {
+                                                            origin: "master".to_string(),
+                                                            rw: "R".to_string(),
+                                                            command: format!(
+                                                                "func_{:02X}",
+                                                                pending.func
+                                                            ),
+                                                            slave_id: reg.slave_id,
+                                                            address: pending.address,
+                                                            length: pending.count,
+                                                        }),
+                                                    });
+                                                    break;
+                                                }
+                                            }
+                                            if !remove_indices.is_empty() {
+                                                for &ri in remove_indices.iter().rev() {
+                                                    reg.pending_requests.remove(ri);
+                                                }
+                                            }
+                                            if consumed {
+                                                break;
                                             }
                                         }
                                     }
-                                    if !handled {
-                                        let hex = bytes
-                                            .iter()
-                                            .map(|b| format!("{:02x}", b))
-                                            .collect::<Vec<_>>()
-                                            .join(" ");
+                                    if !consumed {
+                                        let sid = bytes.get(0).copied().unwrap_or(0);
+                                        let func = bytes.get(1).copied().unwrap_or(0);
                                         pending_logs.push(LogEntry {
                                             when: Local::now(),
-                                            raw: hex,
-                                            parsed: None,
+                                            raw: format!(
+                                                "{}: {raw_hex}",
+                                                lang().protocol.modbus.log_recv_unmatched
+                                            ),
+                                            parsed: Some(ParsedRequest {
+                                                origin: "master".to_string(),
+                                                rw: "R".to_string(),
+                                                command: format!("func_{:02X}", func),
+                                                slave_id: sid,
+                                                address: 0,
+                                                length: 0,
+                                            }),
                                         });
+                                        // Also check for any aged-out pending requests (no matching response)
+                                        if let Some(form) = self.subpage_form.as_mut() {
+                                            let nowi = std::time::Instant::now();
+                                            let timeout_ms = 1500u64;
+                                            for reg in form.registers.iter_mut() {
+                                                if reg.role != EntryRole::Master {
+                                                    continue;
+                                                }
+                                                let mut to_remove: Vec<usize> = Vec::new();
+                                                for (pi, p) in
+                                                    reg.pending_requests.iter().enumerate()
+                                                {
+                                                    if nowi.duration_since(p.sent_at).as_millis()
+                                                        as u64
+                                                        > timeout_ms
+                                                    {
+                                                        pending_logs.push(LogEntry {
+                                                            when: Local::now(),
+                                                            raw: format!("{} func=0x{:02X} sid={} addr={} cnt={}", lang().protocol.modbus.log_req_timeout, p.func, reg.slave_id, p.address, p.count),
+                                                            parsed: Some(ParsedRequest { origin: "master".into(), rw: "R".into(), command: format!("func_{:02X}", p.func), slave_id: reg.slave_id, address: p.address, length: p.count }),
+                                                        });
+                                                        to_remove.push(pi);
+                                                    }
+                                                }
+                                                for &ri in to_remove.iter().rev() {
+                                                    reg.pending_requests.remove(ri);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -335,16 +486,60 @@ impl Status {
                                         .map(|b| format!("{:02x}", b))
                                         .collect::<Vec<_>>()
                                         .join(" ");
+                                    let sid = bytes.get(0).copied().unwrap_or(0);
+                                    let func = bytes.get(1).copied().unwrap_or(0);
+                                    let addr = if bytes.len() >= 4 {
+                                        u16::from_be_bytes([bytes[2], bytes[3]])
+                                    } else {
+                                        0
+                                    };
+                                    let len_or_cnt = if bytes.len() >= 6 {
+                                        u16::from_be_bytes([bytes[4], bytes[5]])
+                                    } else {
+                                        0
+                                    };
+                                    let cmd = match func {
+                                        0x01 => "rd_coils",
+                                        0x02 => "rd_discrete",
+                                        0x03 => "rd_holdings",
+                                        0x04 => "rd_inputs",
+                                        0x05 => "wr_coil",
+                                        0x06 => "wr_holding",
+                                        0x0F => "wr_coils",
+                                        0x10 => "wr_holdings",
+                                        _ => "func",
+                                    };
                                     pending_logs.push(LogEntry {
                                         when: Local::now(),
-                                        raw: format!("sent: {hex}"),
-                                        parsed: None,
+                                        raw: format!(
+                                            "{}: {hex}",
+                                            lang().protocol.modbus.log_sent_frame
+                                        ),
+                                        parsed: Some(ParsedRequest {
+                                            origin: "master".to_string(),
+                                            rw: "W".to_string(),
+                                            command: cmd.to_string(),
+                                            slave_id: sid,
+                                            address: addr,
+                                            length: len_or_cnt,
+                                        }),
                                     });
                                 }
                             }
                             RuntimeEvent::Reconfigured(cfg) => {
                                 if idx == selected {
-                                    pending_logs.push(LogEntry { when: Local::now(), raw: format!("reconfigured: baud={} data_bits={} stop_bits={} parity={:?}", cfg.baud, cfg.data_bits, cfg.stop_bits, cfg.parity), parsed: None });
+                                    pending_logs.push(LogEntry {
+                                        when: Local::now(),
+                                        raw: format!(
+                                            "{}: baud={} data_bits={} stop_bits={} parity={:?}",
+                                            lang().protocol.modbus.log_reconfigured,
+                                            cfg.baud,
+                                            cfg.data_bits,
+                                            cfg.stop_bits,
+                                            cfg.parity
+                                        ),
+                                        parsed: None,
+                                    });
                                 }
                             }
                             RuntimeEvent::Error(e) => {
@@ -460,7 +655,10 @@ impl Status {
         self.busy = true;
         self.save_current_port_state();
         self.perform_device_scan();
-        let new_ports = available_ports_sorted();
+        // Use platform-dispatched enumeration (tty module) instead of local duplicate
+        let enriched = crate::protocol::tty::available_ports_enriched();
+        let new_ports: Vec<_> = enriched.iter().map(|(p, _)| p.clone()).collect();
+        let new_extras: Vec<_> = enriched.into_iter().map(|(_, e)| e).collect();
         // Remember previously selected port name (if any real port selected)
         let prev_selected_name = if !self.ports.is_empty() && self.selected < self.ports.len() {
             Some(self.ports[self.selected].port_name.clone())
@@ -487,6 +685,7 @@ impl Status {
             }
         }
         self.ports = new_ports;
+        self.port_extras = new_extras;
         // Rebuild port_states and port_handles preserving by name
         let mut new_states: Vec<PortState> = Vec::with_capacity(self.ports.len());
         let mut new_handles: Vec<Option<Box<dyn SerialPort>>> =
@@ -545,7 +744,9 @@ impl Status {
     pub fn refresh_ports_only(&mut self) {
         self.busy = true;
         self.save_current_port_state();
-        let new_ports = available_ports_sorted();
+        let enriched = crate::protocol::tty::available_ports_enriched();
+        let new_ports: Vec<_> = enriched.iter().map(|(p, _)| p.clone()).collect();
+        let new_extras: Vec<_> = enriched.into_iter().map(|(_, e)| e).collect();
         let prev_selected_name = if !self.ports.is_empty() && self.selected < self.ports.len() {
             Some(self.ports[self.selected].port_name.clone())
         } else {
@@ -568,6 +769,7 @@ impl Status {
             }
         }
         self.ports = new_ports;
+        self.port_extras = new_extras;
         let mut new_states: Vec<PortState> = Vec::with_capacity(self.ports.len());
         let mut new_handles: Vec<Option<Box<dyn SerialPort>>> =
             Vec::with_capacity(self.ports.len());
@@ -705,7 +907,7 @@ impl Status {
         if let Some(last) = self.last_port_toggle {
             if now.duration_since(last).as_millis() < self.port_toggle_min_interval_ms as u128 {
                 // Provide user feedback (localized)
-                self.set_error(crate::i18n::lang().protocol.common.toggle_too_fast.clone());
+                self.set_error(lang().protocol.common.toggle_too_fast.clone());
                 return; // Ignore rapid toggle
             }
         }
@@ -905,51 +1107,57 @@ impl Status {
         let now = std::time::Instant::now();
         if let Some(form) = self.subpage_form.as_mut() {
             for reg in form.registers.iter_mut() {
-                if now >= reg.next_poll_at {
-                    // Build Modbus RTU read request using rmodbus helpers when possible
-                    let mut raw: Vec<u8> = Vec::new();
-                    let ok_build = (|| {
-                        use rmodbus::{client::ModbusRequest, ModbusProto};
-                        let mut req = ModbusRequest::new(reg.slave_id, ModbusProto::Rtu);
-                        let qty = reg.length.min(125); // adhere to Modbus limits
-                        match reg.mode {
-                            RegisterMode::Coils => req
-                                .generate_get_coils(reg.address, qty, &mut raw)
-                                .map(|_| true)
-                                .map_err(|_| ()),
-                            RegisterMode::Holding => req
-                                .generate_get_holdings(reg.address, qty, &mut raw)
-                                .map(|_| true)
-                                .map_err(|_| ()),
-                            // Fallback for unsupported helper usage
-                            RegisterMode::DiscreteInputs | RegisterMode::Input => Err(()),
-                        }
-                    })();
-                    if ok_build.is_err() {
-                        // Manual build (legacy path) for modes we didn't generate above
-                        let func = match reg.mode {
-                            RegisterMode::Coils => 0x01,
-                            RegisterMode::DiscreteInputs => 0x02,
-                            RegisterMode::Holding => 0x03,
-                            RegisterMode::Input => 0x04,
-                        };
-                        let qty = reg.length.min(125);
-                        raw.push(reg.slave_id);
-                        raw.push(func);
-                        raw.push((reg.address >> 8) as u8);
-                        raw.push((reg.address & 0xFF) as u8);
-                        raw.push((qty >> 8) as u8);
-                        raw.push((qty & 0xFF) as u8);
-                        let crc = modbus_crc16(&raw);
-                        raw.push((crc & 0xFF) as u8); // low byte first
-                        raw.push((crc >> 8) as u8);
+                // Only poll master role entries
+                if reg.role != EntryRole::Master {
+                    continue;
+                }
+                // Remove timed-out pending requests so new poll can proceed
+                let timeout_ms = 1500u64;
+                let mut to_remove: Vec<usize> = Vec::new();
+                for (i, p) in reg.pending_requests.iter().enumerate() {
+                    if now.duration_since(p.sent_at).as_millis() as u64 > timeout_ms {
+                        to_remove.push(i);
                     }
-                    if !raw.is_empty() && self.selected < self.port_runtimes.len() {
-                        if let Some(Some(rt)) = self.port_runtimes.get(self.selected) {
-                            let _ = rt
-                                .cmd_tx
-                                .send(crate::protocol::runtime::RuntimeCommand::Write(raw));
-                            reg.req_total = reg.req_total.saturating_add(1);
+                }
+                for &ri in to_remove.iter().rev() {
+                    reg.pending_requests.remove(ri);
+                }
+                if now >= reg.next_poll_at && reg.pending_requests.is_empty() {
+                    let qty = reg.length.min(125);
+                    let gen = match reg.mode {
+                        RegisterMode::Coils => {
+                            generate_pull_get_coils_request(reg.slave_id, reg.address, qty)
+                        }
+                        RegisterMode::DiscreteInputs => generate_pull_get_discrete_inputs_request(
+                            reg.slave_id,
+                            reg.address,
+                            qty,
+                        ),
+                        RegisterMode::Holding => {
+                            generate_pull_get_holdings_request(reg.slave_id, reg.address, qty)
+                        }
+                        RegisterMode::Input => {
+                            generate_pull_get_inputs_request(reg.slave_id, reg.address, qty)
+                        }
+                    };
+                    if let Ok((_, raw)) = gen {
+                        if self.selected < self.port_runtimes.len() {
+                            if let Some(Some(rt)) = self.port_runtimes.get(self.selected) {
+                                if rt.cmd_tx.send(RuntimeCommand::Write(raw)).is_ok() {
+                                    reg.req_total = reg.req_total.saturating_add(1);
+                                    reg.pending_requests.push(PendingRequest {
+                                        func: match reg.mode {
+                                            RegisterMode::Coils => 0x01,
+                                            RegisterMode::DiscreteInputs => 0x02,
+                                            RegisterMode::Holding => 0x03,
+                                            RegisterMode::Input => 0x04,
+                                        },
+                                        address: reg.address,
+                                        count: qty,
+                                        sent_at: now,
+                                    });
+                                }
+                            }
                         }
                     }
                     reg.next_poll_at =
@@ -1018,49 +1226,11 @@ pub enum PortState {
 
 const PORT_TOGGLE_MIN_INTERVAL_MS: u64 = 300; // throttle rapid toggles
 
-fn available_ports_sorted() -> Vec<SerialPortInfo> {
-    let mut ports = match serialport::available_ports() {
-        Ok(v) => v,
-        Err(_) => Vec::new(),
-    };
-    // Filtering strategy:
-    // 1. Exclude names containing or starting with "NULL_" (Windows some virtual / placeholder) or "_NULL" / pure NULL_COMx
-    // 2. Exclude empty strings
-    // 3. Optionally de-duplicate names (keep the first occurrence)
-    let mut seen: HashSet<String> = HashSet::new();
-    ports.retain(|p| {
-        let name = p.port_name.trim();
-        if name.is_empty() {
-            return false;
-        }
-        let upper = name.to_ascii_uppercase();
-        if upper.contains("NULL_")
-            || upper.starts_with("NULL_")
-            || upper.starts_with("NULLCOM")
-            || upper.contains("_NULL")
-        {
-            return false;
-        }
-        if !seen.insert(upper) {
-            return false;
-        }
-        true
-    });
-    ports.sort_by(|a, b| a.port_name.cmp(&b.port_name));
-    ports
-}
+// (Removed duplicate available_ports_sorted: now using crate::protocol::tty::available_ports_sorted())
 
 // Re-export a helper for opening serial ports (previously sp_new wrapper)
 fn sp_new(name: &str, baud: u32) -> serialport::SerialPortBuilder {
     serialport::new(name, baud)
-}
-
-// Provide a simple public parity enum shim if original Parity wasn't public
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Parity {
-    None,
-    Even,
-    Odd,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1097,145 +1267,7 @@ pub enum Dir {
     Right,
 }
 
-/// Compute Modbus RTU CRC16 (little-endian in frame: low byte then high byte)
-fn modbus_crc16(data: &[u8]) -> u16 {
-    let mut crc: u16 = 0xFFFF;
-    for &b in data {
-        crc ^= b as u16;
-        for _ in 0..8 {
-            if crc & 0x0001 != 0 {
-                crc >>= 1;
-                crc ^= 0xA001;
-            } else {
-                crc >>= 1;
-            }
-        }
-    }
-    crc
-}
-
-/// Minimal Modbus RTU request parser (function subset) returning (slave_id, function, start_addr, quantity).
-/// Expects at least 8 bytes (id func addr_hi addr_lo qty_hi qty_lo crc_lo crc_hi).
-/// Returns None if frame is too short or CRC check fails (CRC not verified here yet) or function unsupported for counting.
-fn parse_modbus_request(frame: &[u8]) -> Option<(u8, u8, u16, u16)> {
-    if frame.len() < 8 {
-        return None;
-    }
-    let slave_id = frame[0];
-    let func = frame[1];
-    match func {
-        0x01 | 0x02 | 0x03 | 0x04 => {
-            if frame.len() < 8 {
-                return None;
-            }
-            let addr = u16::from_be_bytes([frame[2], frame[3]]);
-            let qty = u16::from_be_bytes([frame[4], frame[5]]);
-            Some((slave_id, func, addr, qty.max(1)))
-        }
-        0x05 | 0x06 => {
-            // single coil / register write
-            if frame.len() < 8 {
-                return None;
-            }
-            let addr = u16::from_be_bytes([frame[2], frame[3]]);
-            Some((slave_id, func, addr, 1))
-        }
-        0x0F | 0x10 => {
-            // multiple write; quantity at bytes 4..6
-            if frame.len() < 9 {
-                return None;
-            }
-            let addr = u16::from_be_bytes([frame[2], frame[3]]);
-            let qty = u16::from_be_bytes([frame[4], frame[5]]);
-            Some((slave_id, func, addr, qty.max(1)))
-        }
-        _ => None,
-    }
-}
-
-/// Attempt to parse a Modbus RTU response (read functions 0x01-0x04) and return (id, func, data_bytes)
-fn parse_modbus_response(frame: &[u8]) -> Option<(u8, u8, Vec<u8>)> {
-    if frame.len() < 5 {
-        // id func byte_count ... crc
-        return None;
-    }
-    let slave_id = frame[0];
-    let func = frame[1];
-    if !(1..=4).contains(&func) {
-        return None;
-    }
-    // Requests are always 8 bytes; filter them out early to reduce ambiguity
-    if frame.len() == 8 {
-        return None;
-    }
-    // CRC check
-    if frame.len() < 5 {
-        return None;
-    }
-    let crc_frame = ((frame[frame.len() - 1] as u16) << 8) | frame[frame.len() - 2] as u16; // low, high
-    let calc = modbus_crc16(&frame[..frame.len() - 2]);
-    if crc_frame != calc {
-        return None;
-    }
-    let byte_count = frame[2] as usize;
-    if frame.len() != byte_count + 5 {
-        return None;
-    } // id func byte_count data... crc_lo crc_hi
-    if byte_count == 0 {
-        return None;
-    }
-    let data = frame[3..3 + byte_count].to_vec();
-    Some((slave_id, func, data))
-}
-
-/// High-level decoded Modbus response for logging.
-#[derive(Clone)]
-struct ModbusResponse {
-    slave_id: u8,
-    function: u8,
-    /// Raw data payload bytes (already CRC‑stripped)
-    data: Vec<u8>,
-}
-
-impl std::fmt::Debug for ModbusResponse {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let func_name = match self.function {
-            0x01 => "Read Coils",
-            0x02 => "Read Discrete Inputs",
-            0x03 => "Read Holding Registers",
-            0x04 => "Read Input Registers",
-            _ => "Unknown",
-        };
-        writeln!(
-            f,
-            "ModbusResponse {{ id: {}, func: 0x{:02X} ({func_name}), bytes: {} }}",
-            self.slave_id,
-            self.function,
-            self.data.len()
-        )?;
-        match self.function {
-            0x01 | 0x02 => {
-                let mut bits: Vec<bool> = Vec::new();
-                for b in &self.data {
-                    for i in (0..8).rev() {
-                        bits.push((b & (1 << i)) != 0);
-                    }
-                }
-                writeln!(f, "  coils/discretes(bits={}): {:?}", bits.len(), bits)?;
-            }
-            0x03 | 0x04 => {
-                let regs = self
-                    .data
-                    .chunks_exact(2)
-                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
-                    .collect::<Vec<_>>();
-                writeln!(f, "  registers(count={}): {:?}", regs.len(), regs)?;
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-}
+// (Removed local CRC/parser/logging structs; centralized in protocol::modbus::util)
 
 // (methods moved into main impl earlier)
 

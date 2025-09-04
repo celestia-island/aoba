@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use rmodbus::server::{storage::ModbusStorageSmall, ModbusFrame};
 
-pub fn parse_slave_coils(
+pub fn build_slave_coils_response(
     request: &mut ModbusFrame<Vec<u8>>,
     context: &mut ModbusStorageSmall,
 ) -> Result<Option<Vec<u8>>> {

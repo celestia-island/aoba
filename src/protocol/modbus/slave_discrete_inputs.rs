@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
+
 use rmodbus::server::{storage::ModbusStorageSmall, ModbusFrame};
 
-/// Parse and process a Modbus Read Discrete Inputs (0x02) frame using rmodbus server helpers.
-/// Mirrors structure of existing coil / holding handlers for consistency.
-pub fn parse_slave_discrete_inputs(
+pub fn build_slave_discrete_inputs_response(
     request: &mut ModbusFrame<Vec<u8>>,
     context: &mut ModbusStorageSmall,
 ) -> Result<Option<Vec<u8>>> {

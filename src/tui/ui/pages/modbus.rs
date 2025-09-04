@@ -237,6 +237,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                                 req_success: 0,
                                 req_total: 0,
                                 next_poll_at: std::time::Instant::now(),
+                                pending_requests: Vec::new(),
                             });
                             form.master_cursor = form.registers.len() - 1;
                         }
@@ -450,7 +451,10 @@ fn commit_master_field(form: &mut SubpageForm) {
                                 }
                             }
                         }
-                        Refresh => entry.refresh_ms = 1000,
+                        Refresh => {
+                            entry.refresh_ms = 1000;
+                            entry.next_poll_at = std::time::Instant::now();
+                        }
                         Counter => {}
                     }
                 } else {
@@ -501,7 +505,12 @@ fn commit_master_field(form: &mut SubpageForm) {
                         }
                         Refresh => {
                             if let Ok(v) = buf.parse::<u32>() {
-                                entry.refresh_ms = v.max(10);
+                                let new_v = v.max(10);
+                                if new_v != entry.refresh_ms {
+                                    entry.refresh_ms = new_v;
+                                    // Force reschedule so shorter intervals take effect immediately
+                                    entry.next_poll_at = std::time::Instant::now();
+                                }
                             }
                         }
                         Counter => {}
