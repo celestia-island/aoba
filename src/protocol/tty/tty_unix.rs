@@ -1,11 +1,35 @@
 use std::collections::{HashMap, HashSet};
 
 use serialport::{SerialPortInfo, SerialPortType};
+use super::PortExtra;
 
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     let raw_ports = serialport::available_ports().unwrap_or_default();
     sort_and_dedup_ports(raw_ports)
+}
+
+pub fn available_ports_enriched() -> Vec<(SerialPortInfo, PortExtra)> {
+    available_ports_sorted()
+        .into_iter()
+        .map(|p| {
+            let meta = try_extract_vid_pid_serial(&p.port_type);
+            let (vid, pid, serial, manufacturer, product) = meta
+                .map(|(v, p2, s, m, pr)| (Some(v), Some(p2), s, m, pr))
+                .unwrap_or((None, None, None, None, None));
+            (
+                p,
+                PortExtra {
+                    guid: None,
+                    vid,
+                    pid,
+                    serial,
+                    manufacturer,
+                    product,
+                },
+            )
+        })
+        .collect()
 }
 
 pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<SerialPortInfo> {

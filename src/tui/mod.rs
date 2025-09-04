@@ -21,6 +21,7 @@ use crate::{
         utils::constants::LOG_PAGE_JUMP,
     },
 };
+use serialport::Parity;
 
 // Helper: detect whether current active subpage view is on its log tab.
 // Modes:
@@ -311,7 +312,7 @@ fn run_app(
                                             }
                                             crate::protocol::status::EditingField::Parity => {
                                                 // Cycle parity options
-                                                let options = [crate::protocol::status::Parity::None, crate::protocol::status::Parity::Even, crate::protocol::status::Parity::Odd];
+                                                let options = [Parity::None, Parity::Even, Parity::Odd];
                                                 let idx = options.iter().position(|&p| p == form.parity).unwrap_or(0);
                                                 let next = if dir > 0 { (idx + 1) % options.len() } else { (idx + options.len() - 1) % options.len() };
                                                 form.parity = options[next].clone();
@@ -821,6 +822,7 @@ fn run_app(
                                                     req_success: 0,
                                                     req_total: 0,
                                                     next_poll_at: std::time::Instant::now(),
+                                                    pending_requests: Vec::new(),
                                                 }
                                             );
                                         }
