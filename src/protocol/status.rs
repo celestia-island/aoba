@@ -62,6 +62,12 @@ pub struct SubpageForm {
     pub master_edit_field: Option<MasterEditField>,
     pub master_edit_index: Option<usize>,
     pub master_input_buffer: String,
+    // Strict round-robin additions: track current slot pointer & the register currently awaiting response
+    pub poll_round_index: usize, // Next register index candidate (global round-robin pointer)
+    pub in_flight_reg_index: Option<usize>, // Index of register with an outstanding request (awaiting response / timeout)
+    // Semi-global (per-port) polling config; overrides per-register refresh/timeout when Some
+    pub global_interval_ms: u64, // always set (ms)
+    pub global_timeout_ms: u64,  // always set (ms)
 }
 
 impl Default for SubpageForm {
@@ -85,6 +91,10 @@ impl Default for SubpageForm {
             master_edit_field: None,
             master_edit_index: None,
             master_input_buffer: String::new(),
+            poll_round_index: 0,
+            in_flight_reg_index: None,
+            global_interval_ms: 1000, // default 1s
+            global_timeout_ms: 3000,  // default 3s
         }
     }
 }
@@ -148,7 +158,6 @@ pub struct RegisterEntry {
     pub address: u16,     // start address
     pub length: u16,      // number of points / registers
     pub values: Vec<u16>, // value items per address: coils/discrete store 0/1, holding/input store full 16-bit register
-    pub refresh_ms: u32,  // polling interval
     pub next_poll_at: std::time::Instant,
     pub req_success: u32,
     pub req_total: u32,
@@ -165,7 +174,6 @@ impl Default for RegisterEntry {
             address: 0,
             length: 1,
             values: vec![0u16],
-            refresh_ms: 1000,
             next_poll_at: std::time::Instant::now(),
             req_success: 0,
             req_total: 0,
@@ -347,7 +355,13 @@ impl Status {
                                     let nowi = std::time::Instant::now();
                                     // try to match this frame against pending requests per register
                                     if let Some(form) = self.subpage_form.as_mut() {
-                                        for reg in form.registers.iter_mut() {
+                                        // Need index to advance pointer after successful response
+                                        // Defer pointer advance until after loop to avoid borrow conflicts
+                                        let mut advance_after: Option<usize> = None;
+                                        let registers_len_cache = form.registers.len();
+                                        for (reg_index, reg) in
+                                            form.registers.iter_mut().enumerate()
+                                        {
                                             if reg.role != EntryRole::Slave {
                                                 continue;
                                             }
@@ -523,13 +537,29 @@ impl Status {
                                                             remove_indices.push(pi);
                                                             consumed = true;
                                                             pending_logs.push(LogEntry { when: Local::now(), raw: format!("{} sid={} func=0x{:02X} len={} raw={}", lang().protocol.modbus.log_recv_match, reg.slave_id, pending.func, bytes.len(), raw_hex), parsed: Some(ParsedRequest { origin: "master".to_string(), rw: "R".to_string(), command: format!("func_{:02X}", pending.func), slave_id: reg.slave_id, address: pending.address, length: pending.count }) });
+                                                            let interval_ms =
+                                                                form.global_interval_ms as u64;
                                                             reg.next_poll_at = nowi
                                                                 + std::time::Duration::from_millis(
-                                                                    reg.refresh_ms as u64,
+                                                                    interval_ms,
                                                                 );
+                                                            // Response matched the in-flight register -> advance round-robin
+                                                            if form.in_flight_reg_index
+                                                                == Some(reg_index)
+                                                            {
+                                                                form.in_flight_reg_index = None;
+                                                                advance_after = Some(reg_index);
+                                                            }
                                                             break;
                                                         }
                                                     }
+                                                }
+                                            }
+                                            // Advance pointer after loop
+                                            if let Some(done_idx) = advance_after {
+                                                if registers_len_cache > 0 {
+                                                    form.poll_round_index =
+                                                        (done_idx + 1) % registers_len_cache;
                                                 }
                                             }
                                             // remove any marked pending requests (reverse order)
@@ -559,41 +589,7 @@ impl Status {
                                                 length: 0,
                                             }),
                                         });
-                                        // check for aged-out pending requests and remove them
-                                        if let Some(form) = self.subpage_form.as_mut() {
-                                            let nowi = std::time::Instant::now();
-                                            let timeout_ms = 2000u64;
-                                            for reg in form.registers.iter_mut() {
-                                                if reg.role != EntryRole::Slave {
-                                                    continue;
-                                                }
-                                                let mut to_remove: Vec<usize> = Vec::new();
-                                                for (pi, p) in
-                                                    reg.pending_requests.iter().enumerate()
-                                                {
-                                                    if nowi.duration_since(p.sent_at).as_millis()
-                                                        as u64
-                                                        > timeout_ms
-                                                    {
-                                                        pending_logs.push(LogEntry {
-                                                            when: Local::now(),
-                                                            raw: format!("{} func=0x{:02X} sid={} addr={} cnt={}", lang().protocol.modbus.log_req_timeout, p.func, reg.slave_id, p.address, p.count),
-                                                            parsed: Some(ParsedRequest { origin: "master".into(), rw: "R".into(), command: format!("func_{:02X}", p.func), slave_id: reg.slave_id, address: p.address, length: p.count }),
-                                                        });
-                                                        to_remove.push(pi);
-                                                    }
-                                                }
-                                                if !to_remove.is_empty() {
-                                                    reg.next_poll_at = nowi
-                                                        + std::time::Duration::from_millis(
-                                                            reg.refresh_ms as u64,
-                                                        );
-                                                    for &ri in to_remove.iter().rev() {
-                                                        reg.pending_requests.remove(ri);
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        // Timeout cleanup now handled centrally in drive_slave_polling
                                     }
                                 }
                                 RuntimeEvent::FrameSent(bytes) => {
@@ -679,6 +675,7 @@ impl Status {
             self.set_error(e);
         }
     }
+
     /// Adjust the log view window according to the current terminal height so the selected entry stays visible.
     pub fn adjust_log_view(&mut self, term_height: u16) {
         if self.logs.is_empty() {
@@ -1215,83 +1212,167 @@ impl Status {
     /// Drive periodic polling for slave listen entries (actively send Modbus queries for read‑type entries when in Master mode).
     /// For now, only generates synthetic increments (placeholder) if no active writer exists.
     pub fn drive_slave_polling(&mut self) {
-        // Unified mode: poll whenever subpage active and not paused
-        if !self.subpage_active {
+        // Strict round-robin: do not send next request until current finishes (response or timeout)
+        if !self.subpage_active || self.polling_paused {
             return;
         }
-        if self.polling_paused {
-            return;
-        }
-        // Respect UI toggle: if user disabled the loop in the subpage form, skip polling
-        if self
+        let loop_enabled = self
             .subpage_form
             .as_ref()
-            .map(|f| !f.loop_enabled)
-            .unwrap_or(true)
-        {
+            .map(|f| f.loop_enabled)
+            .unwrap_or(false);
+        if !loop_enabled {
             return;
         }
+
         let now = std::time::Instant::now();
+        let timeout_ms = self
+            .subpage_form
+            .as_ref()
+            .map(|f| f.global_timeout_ms)
+            .unwrap_or(2000u64); // Default 2000ms
+        let mut deferred_logs: Vec<LogEntry> = Vec::new();
         if let Some(form) = self.subpage_form.as_mut() {
-            for reg in form.registers.iter_mut() {
-                // Only poll entries that represent a remote Slave device (UI shows 'Slave' for remote)
-                if reg.role != EntryRole::Slave {
-                    continue;
-                }
-                // Remove timed-out pending requests so new poll can proceed
-                let timeout_ms = 1500u64;
-                let mut to_remove: Vec<usize> = Vec::new();
-                for (i, p) in reg.pending_requests.iter().enumerate() {
-                    if now.duration_since(p.sent_at).as_millis() as u64 > timeout_ms {
-                        to_remove.push(i);
+            // Check if current in-flight request timed out
+            if let Some(in_idx) = form.in_flight_reg_index {
+                if in_idx < form.registers.len() {
+                    // Extract log info first to avoid simultaneous mutable borrows of form & self
+                    let mut timeout_log: Option<LogEntry> = None;
+                    let mut need_advance = false;
+                    {
+                        let reg = &mut form.registers[in_idx];
+                        if let Some(p) = reg.pending_requests.first() {
+                            if now.duration_since(p.sent_at).as_millis() as u64 > timeout_ms {
+                                let func = p.func;
+                                let addr = p.address;
+                                let cnt = p.count;
+                                let sid = reg.slave_id;
+                                timeout_log = Some(LogEntry {
+                                    when: Local::now(),
+                                    raw: format!(
+                                        "{} func=0x{:02X} sid={} addr={} cnt={}",
+                                        lang().protocol.modbus.log_req_timeout,
+                                        func,
+                                        sid,
+                                        addr,
+                                        cnt
+                                    ),
+                                    parsed: Some(ParsedRequest {
+                                        origin: "master".into(),
+                                        rw: "R".into(),
+                                        command: format!("func_{:02X}", func),
+                                        slave_id: sid,
+                                        address: addr,
+                                        length: cnt,
+                                    }),
+                                });
+                                reg.pending_requests.clear();
+                                reg.next_poll_at = now + std::time::Duration::from_millis(1000);
+                                need_advance = true;
+                            }
+                        } else {
+                            // No pending object but still marked in-flight -> treat as stale
+                            need_advance = true;
+                        }
                     }
+                    if let Some(le) = timeout_log {
+                        deferred_logs.push(le);
+                    }
+                    if need_advance {
+                        form.in_flight_reg_index = None;
+                        if !form.registers.is_empty() {
+                            form.poll_round_index = (in_idx + 1) % form.registers.len();
+                        }
+                    }
+                } else {
+                    form.in_flight_reg_index = None;
                 }
-                for &ri in to_remove.iter().rev() {
-                    reg.pending_requests.remove(ri);
-                }
-                if now >= reg.next_poll_at && reg.pending_requests.is_empty() {
-                    let qty = reg.length.min(125);
-                    let gen = match reg.mode {
-                        RegisterMode::Coils => {
-                            generate_pull_get_coils_request(reg.slave_id, reg.address, qty)
-                        }
-                        RegisterMode::DiscreteInputs => generate_pull_get_discrete_inputs_request(
-                            reg.slave_id,
-                            reg.address,
-                            qty,
-                        ),
-                        RegisterMode::Holding => {
-                            generate_pull_get_holdings_request(reg.slave_id, reg.address, qty)
-                        }
-                        RegisterMode::Input => {
-                            generate_pull_get_inputs_request(reg.slave_id, reg.address, qty)
-                        }
-                    };
-                    if let Ok((req_obj, raw)) = gen {
-                        if self.selected < self.port_runtimes.len() {
-                            if let Some(Some(rt)) = self.port_runtimes.get(self.selected) {
-                                if rt.cmd_tx.send(RuntimeCommand::Write(raw)).is_ok() {
-                                    reg.req_total = reg.req_total.saturating_add(1);
-                                    reg.pending_requests.push(PendingRequest::new(
-                                        match reg.mode {
-                                            RegisterMode::Coils => 0x01,
-                                            RegisterMode::DiscreteInputs => 0x02,
-                                            RegisterMode::Holding => 0x03,
-                                            RegisterMode::Input => 0x04,
-                                        },
-                                        reg.address,
-                                        qty,
-                                        now,
-                                        req_obj,
-                                    ));
+            }
+            // If no in-flight request, attempt to dispatch next one
+            if form.in_flight_reg_index.is_none() && !form.registers.is_empty() {
+                let total = form.registers.len();
+                let mut attempts = 0;
+                let mut idx = form.poll_round_index % total;
+                while attempts < total {
+                    if let Some(reg) = form.registers.get_mut(idx) {
+                        if reg.role == EntryRole::Slave {
+                            if now >= reg.next_poll_at {
+                                if reg.pending_requests.is_empty() {
+                                    // 构造请求
+                                    let qty = reg.length.min(125);
+                                    let gen = match reg.mode {
+                                        RegisterMode::Coils => generate_pull_get_coils_request(
+                                            reg.slave_id,
+                                            reg.address,
+                                            qty,
+                                        ),
+                                        RegisterMode::DiscreteInputs => {
+                                            generate_pull_get_discrete_inputs_request(
+                                                reg.slave_id,
+                                                reg.address,
+                                                qty,
+                                            )
+                                        }
+                                        RegisterMode::Holding => {
+                                            generate_pull_get_holdings_request(
+                                                reg.slave_id,
+                                                reg.address,
+                                                qty,
+                                            )
+                                        }
+                                        RegisterMode::Input => generate_pull_get_inputs_request(
+                                            reg.slave_id,
+                                            reg.address,
+                                            qty,
+                                        ),
+                                    };
+                                    if let Ok((req_obj, raw)) = gen {
+                                        if self.selected < self.port_runtimes.len() {
+                                            if let Some(Some(rt)) =
+                                                self.port_runtimes.get(self.selected)
+                                            {
+                                                if rt
+                                                    .cmd_tx
+                                                    .send(RuntimeCommand::Write(raw))
+                                                    .is_ok()
+                                                {
+                                                    reg.req_total = reg.req_total.saturating_add(1);
+                                                    let func = match reg.mode {
+                                                        RegisterMode::Coils => 0x01,
+                                                        RegisterMode::DiscreteInputs => 0x02,
+                                                        RegisterMode::Holding => 0x03,
+                                                        RegisterMode::Input => 0x04,
+                                                    };
+                                                    reg.pending_requests.push(PendingRequest::new(
+                                                        func,
+                                                        reg.address,
+                                                        qty,
+                                                        now,
+                                                        req_obj,
+                                                    ));
+                                                    reg.next_poll_at = now
+                                                        + std::time::Duration::from_millis(1000u64); // Pre-schedule next poll time
+                                                    form.in_flight_reg_index = Some(idx);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    break; // Request dispatched -> exit loop
                                 }
                             }
                         }
                     }
-                    reg.next_poll_at =
-                        now + std::time::Duration::from_millis(reg.refresh_ms as u64);
+                    attempts += 1;
+                    idx = (idx + 1) % total;
+                    if attempts == total {
+                        break;
+                    }
                 }
             }
+        }
+        // Flush deferred logs after mutable borrow ends
+        for l in deferred_logs {
+            self.append_log(l);
         }
     }
 
@@ -1390,6 +1471,8 @@ pub enum EditingField {
     Parity,
     StopBits,
     DataBits,
+    GlobalInterval,
+    GlobalTimeout,
     RegisterField { idx: usize, field: RegisterField },
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1399,7 +1482,6 @@ pub enum MasterEditField {
     Type,
     Start,
     End,
-    Refresh,
     Counter,
     Value(u16),
 }
