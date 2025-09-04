@@ -222,6 +222,11 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             }
         } else {
             let p = &app.ports[app.selected];
+            let extra = app
+                .port_extras
+                .get(app.selected)
+                .cloned()
+                .unwrap_or_default();
 
             // Prefer runtime's current_cfg (live synchronized config). If not occupied we hide these fields.
             let runtime_cfg = if let Some(Some(rt)) = app.port_runtimes.get(app.selected) {
@@ -266,6 +271,46 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 format!("{:?}", p.port_type),
                 None,
             ));
+            if let Some(g) = extra.guid.as_ref() {
+                pairs.push((
+                    lang().protocol.common.label_guid.as_str().into(),
+                    g.clone(),
+                    None,
+                ));
+            }
+            if extra.vid.is_some() || extra.pid.is_some() {
+                let vid_pid = format!(
+                    "vid:{:04x} pid:{:04x}",
+                    extra.vid.unwrap_or(0),
+                    extra.pid.unwrap_or(0)
+                );
+                pairs.push((
+                    lang().protocol.common.label_usb.as_str().into(),
+                    vid_pid,
+                    None,
+                ));
+            }
+            if let Some(sn) = extra.serial.as_ref() {
+                pairs.push((
+                    lang().protocol.common.label_serial.as_str().into(),
+                    sn.clone(),
+                    None,
+                ));
+            }
+            if let Some(m) = extra.manufacturer.as_ref() {
+                pairs.push((
+                    lang().protocol.common.label_manufacturer.as_str().into(),
+                    m.clone(),
+                    None,
+                ));
+            }
+            if let Some(prod) = extra.product.as_ref() {
+                pairs.push((
+                    lang().protocol.common.label_product.as_str().into(),
+                    prod.clone(),
+                    None,
+                ));
+            }
             pairs.push((
                 lang().protocol.common.label_status.as_str().to_string(),
                 format!("{}", status_text),
@@ -295,15 +340,9 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     let baud = cfg.baud.to_string();
                     let data_bits = cfg.data_bits.to_string();
                     let parity = match cfg.parity {
-                        crate::protocol::status::Parity::None => {
-                            lang().protocol.common.parity_none.clone()
-                        }
-                        crate::protocol::status::Parity::Even => {
-                            lang().protocol.common.parity_even.clone()
-                        }
-                        crate::protocol::status::Parity::Odd => {
-                            lang().protocol.common.parity_odd.clone()
-                        }
+                        serialport::Parity::None => lang().protocol.common.parity_none.clone(),
+                        serialport::Parity::Even => lang().protocol.common.parity_even.clone(),
+                        serialport::Parity::Odd => lang().protocol.common.parity_odd.clone(),
                     };
                     let stop = cfg.stop_bits.to_string();
                     pairs.push((

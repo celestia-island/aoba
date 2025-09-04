@@ -116,6 +116,11 @@ derive_struct! {
                 label_data_bits: String = "label_data_bits".to_string(),
                 label_parity: String = "label_parity".to_string(),
                 label_stop_bits: String = "label_stop_bits".to_string(),
+                label_guid: String = "label_guid".to_string(),
+                label_usb: String = "label_usb".to_string(),
+                label_serial: String = "label_serial".to_string(),
+                label_manufacturer: String = "label_manufacturer".to_string(),
+                label_product: String = "label_product".to_string(),
                 custom: String = "custom".to_string(),
                 parity_none: String = "parity_none".to_string(),
                 parity_even: String = "parity_even".to_string(),
@@ -148,6 +153,11 @@ derive_struct! {
                 value_false: String = "value_false".to_string(),
                 role_master: String = "role_master".to_string(),
                 role_slave: String = "role_slave".to_string(),
+                log_sent_frame: String = "log_sent_frame".to_string(),
+                log_recv_match: String = "log_recv_match".to_string(),
+                log_recv_unmatched: String = "log_recv_unmatched".to_string(),
+                log_reconfigured: String = "log_reconfigured".to_string(),
+                log_req_timeout: String = "log_req_timeout".to_string(),
             },
             mqtt: {
                 // Placeholder texts for MQTT panel (new)

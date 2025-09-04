@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 use flume::{Receiver, Sender};
-use serialport::{DataBits, Parity, SerialPort, StopBits};
+use serialport::{DataBits, SerialPort, StopBits};
 
 use crate::protocol::modbus::read_modbus_frame;
 
@@ -15,7 +15,7 @@ pub struct SerialConfig {
     pub baud: u32,
     pub data_bits: u8,
     pub stop_bits: u8,
-    pub parity: crate::protocol::status::Parity,
+    pub parity: serialport::Parity,
 }
 
 impl Default for SerialConfig {
@@ -24,7 +24,7 @@ impl Default for SerialConfig {
             baud: 9600,
             data_bits: 8,
             stop_bits: 1,
-            parity: crate::protocol::status::Parity::None,
+            parity: serialport::Parity::None,
         }
     }
 }
@@ -41,11 +41,7 @@ impl SerialConfig {
             2 => StopBits::Two,
             _ => StopBits::One,
         });
-        let b = b.parity(match self.parity {
-            crate::protocol::status::Parity::None => Parity::None,
-            crate::protocol::status::Parity::Even => Parity::Even,
-            crate::protocol::status::Parity::Odd => Parity::Odd,
-        });
+        let b = b.parity(self.parity);
         b
     }
 }
