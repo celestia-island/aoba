@@ -4,6 +4,7 @@ pub mod modbus;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
 
+use crate::tui::utils::bus::Bus;
 use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
 /// Return page-provided bottom hints for the current app state.
@@ -48,7 +49,7 @@ pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
 
 /// Route a KeyEvent to the active subpage.
 /// Returns true if the subpage consumed the event and no further handling should occur.
-pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status) -> bool {
+pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
     use crossterm::event::KeyCode as KC;
 
     // Always let 'q' bubble up to the top-level quit handler (don't consume it here).
@@ -57,7 +58,7 @@ pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status) -> bool {
     }
 
     if app.subpage_active {
-        return modbus::handle_subpage_key(key, app);
+        return modbus::handle_subpage_key(key, app, bus);
     }
     false
 }

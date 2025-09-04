@@ -7,6 +7,10 @@ pub enum UiToCore {
     Refresh,
     /// Graceful shutdown request.
     Quit,
+    /// Pause polling / stop master polling loop.
+    PausePolling,
+    /// Resume polling / start master polling loop.
+    ResumePolling,
 }
 
 /// Messages sent from core worker thread back to UI thread.

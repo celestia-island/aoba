@@ -373,7 +373,7 @@ fn render_entry_values(
                 continue;
             }
             let offset = cur - start;
-            let raw_val = r.values.get(offset).cloned().unwrap_or(0);
+            let raw_val = r.values.get(offset).cloned().unwrap_or(0u16);
             let style = if let Some(F::Value(a)) = &cur_field {
                 if *a as usize == cur && editing {
                     active
@@ -391,7 +391,10 @@ fn render_entry_values(
             };
             if let Some(F::Value(a)) = &cur_field {
                 if *a as usize == cur && editing {
-                    if r.mode == crate::protocol::status::RegisterMode::Coils {
+                    // For Coils and DiscreteInputs show boolean editor; otherwise show numeric editor
+                    if r.mode == crate::protocol::status::RegisterMode::Coils
+                        || r.mode == crate::protocol::status::RegisterMode::DiscreteInputs
+                    {
                         let lbl = if raw_val != 0 {
                             lang().protocol.modbus.value_true.as_str()
                         } else {
@@ -414,7 +417,9 @@ fn render_entry_values(
             } else {
                 false
             };
-            if r.mode == crate::protocol::status::RegisterMode::Coils {
+            if r.mode == crate::protocol::status::RegisterMode::Coils
+                || r.mode == crate::protocol::status::RegisterMode::DiscreteInputs
+            {
                 let lbl = if raw_val != 0 {
                     lang().protocol.modbus.value_true.as_str()
                 } else {
@@ -427,9 +432,9 @@ fn render_entry_values(
                 }
             } else {
                 if is_chosen_value {
-                    spans.push(Span::styled(format!("[{:02X}]", raw_val), style));
+                    spans.push(Span::styled(format!("[{:04X}]", raw_val), style));
                 } else {
-                    spans.push(Span::styled(format!("{:02X}", raw_val), style));
+                    spans.push(Span::styled(format!("{:04X}", raw_val), style));
                 }
             }
         }

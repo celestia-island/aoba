@@ -22,15 +22,15 @@ pub fn parse_pull_get_discrete_inputs(
 ) -> Result<Vec<bool>> {
     request.parse_ok(&response)?;
 
-    let values = response[3..response.len() - 2]
+    // Modbus pack: first discrete/coils correspond to LSB (bit0) of first data byte.
+    // Iterate bits LSB->MSB per byte and then take the first `count` bits.
+    let mut values = response[3..response.len() - 2]
         .iter()
-        .flat_map(|byte| (0..8).rev().map(move |i| (byte & (1 << i)) != 0))
+        .flat_map(|byte| (0..8).map(move |i| (byte & (1 << i)) != 0))
         .collect::<Vec<bool>>();
-    let values = values
-        .iter()
-        .skip(values.len() - count as usize)
-        .cloned()
-        .collect::<Vec<bool>>();
+    if values.len() > count as usize {
+        values.truncate(count as usize);
+    }
     ensure!(
         values.len() == count as usize,
         "Invalid number of discrete inputs in response"

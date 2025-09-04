@@ -89,6 +89,18 @@ pub fn start() -> Result<()> {
                         UiToCore::Quit => {
                             return;
                         }
+                        UiToCore::PausePolling => {
+                            if let Ok(mut guard) = app_clone.lock() {
+                                guard.pause_and_reset_slave_listen();
+                            }
+                            let _ = core_tx.send(CoreToUi::Refreshed);
+                        }
+                        UiToCore::ResumePolling => {
+                            if let Ok(mut guard) = app_clone.lock() {
+                                guard.resume_slave_listen();
+                            }
+                            let _ = core_tx.send(CoreToUi::Refreshed);
+                        }
                     }
                 }
 
@@ -602,7 +614,7 @@ fn run_app(
 
                 // Subpage first chance
                 if let Ok(mut guard) = app.lock() {
-                    if crate::tui::ui::pages::handle_key_in_subpage(key, &mut *guard) {
+                    if crate::tui::ui::pages::handle_key_in_subpage(key, &mut *guard, &bus) {
                         guard.clear_error();
                         continue; // Consumed by subpage
                     }
@@ -818,7 +830,7 @@ fn run_app(
                                                     mode: crate::protocol::status::RegisterMode::Coils,
                                                     address: 0,
                                                     length: 1,
-                                                    values: vec![0u8; 1],
+                                                    values: vec![0u16; 1],
                                                     refresh_ms: 1000,
                                                     req_success: 0,
                                                     req_total: 0,
