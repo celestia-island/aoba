@@ -34,18 +34,13 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
             app.input_buffer.clone()
         };
         // Style editing content in yellow (match config page editing color)
-        let mut spans: Vec<ratatui::text::Span> = Vec::new();
-        // Prefix editing line with single space (log list uses 2 incl. selector; here we keep compact)
-        spans.push(Span::raw(" "));
-        spans.push(Span::styled(
-            content.clone(),
-            Style::default().fg(Color::Yellow),
-        ));
-        // Visual cursor block (green background)
-        spans.push(Span::styled(
-            " ",
-            Style::default().bg(Color::Green).fg(Color::Black),
-        ));
+        // Build spans in-place
+        let spans = vec![
+            Span::raw(" "), // Prefix editing line with single space (log list uses 2 incl. selector; here we keep compact)
+            Span::styled(content.clone(), Style::default().fg(Color::Yellow)),
+            // Visual cursor block (green background)
+            Span::styled(" ", Style::default().bg(Color::Green).fg(Color::Black)),
+        ];
         lines.push(ratatui::text::Line::from(spans));
         // Keep a spare empty middle line so layout remains 3 lines
         // Spare empty middle line should also keep two spaces for alignment
@@ -119,7 +114,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
         )));
     } else {
         // Raw content line also prefixed with two spaces for consistent alignment
-        lines.push(Line::from(Span::raw(format!("  {}", content))));
+        lines.push(Line::from(Span::raw(format!("  {content}"))));
     }
 
     // Hint (short)
@@ -128,7 +123,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
         "[Enter / i] {}",
         lang().input.hint_input_edit_short.as_str()
     );
-    lines.push(Line::from(Span::raw(format!(" {}", edit_hint))));
+    lines.push(Line::from(Span::raw(format!(" {edit_hint}"))));
 
     let block = Block::default()
         .borders(Borders::ALL)

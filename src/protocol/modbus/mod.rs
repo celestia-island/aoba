@@ -69,7 +69,7 @@ pub fn boot_modbus_pull_service(id: u8, request_sender: Sender<Bytes>) -> Result
     loop {
         let now = chrono::Utc::now();
         if request_tx.is_empty() && now - last_sent_timestamp > current_task.wait_next_duration() {
-            log::info!("Sending Modbus pull request for {:?}", current_task);
+            log::info!("Sending Modbus pull request for {current_task:?}");
             // Periodically send data pull requests
             let mut request = ModbusRequest::new(id, ModbusProto::Rtu);
             let mut raw = Vec::new();
@@ -118,7 +118,7 @@ pub fn boot_modbus_slave_service(
             return false;
         }
         match func {
-            0x01 | 0x02 | 0x03 | 0x04 => {}
+            0x01..=0x04 => {}
             _ => return false,
         }
         let original = frame.clone();
@@ -172,7 +172,7 @@ pub fn boot_modbus_slave_service(
             "Received Modbus request: {}",
             request
                 .iter()
-                .map(|b| format!("{:02x}", b))
+                .map(|b| format!("{b:02x}"))
                 .collect::<Vec<_>>()
                 .join(" ")
         );
@@ -187,7 +187,7 @@ pub fn boot_modbus_slave_service(
                     log::info!(
                         "Parsed slave coils: {}",
                         ret.iter()
-                            .map(|b| format!("{:02x}", b))
+                            .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     );
@@ -212,7 +212,7 @@ pub fn boot_modbus_slave_service(
                     log::info!(
                         "Parsed slave discrete inputs: {}",
                         ret.iter()
-                            .map(|b| format!("{:02x}", b))
+                            .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     );
@@ -235,7 +235,7 @@ pub fn boot_modbus_slave_service(
                     log::info!(
                         "Parsed slave holdings: {}",
                         ret.iter()
-                            .map(|b| format!("{:02x}", b))
+                            .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     );
@@ -258,7 +258,7 @@ pub fn boot_modbus_slave_service(
                     log::info!(
                         "Parsed slave input registers: {}",
                         ret.iter()
-                            .map(|b| format!("{:02x}", b))
+                            .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ")
                     );

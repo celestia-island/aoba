@@ -263,22 +263,44 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             let mut pairs: Vec<(String, String, Option<Style>)> = Vec::new();
             pairs.push((
                 lang().protocol.common.label_port.as_str().to_string(),
-                format!("{}", p.port_name),
+                p.port_name.to_string(),
                 None,
             ));
+            // Render type on its own line
+            let type_val = format!("{:?}", p.port_type);
             pairs.push((
                 lang().protocol.common.label_type.as_str().to_string(),
-                format!("{:?}", p.port_type),
+                type_val,
                 None,
             ));
-            if let Some(g) = extra.guid.as_ref() {
-                pairs.push((
-                    lang().protocol.common.label_guid.as_str().into(),
-                    g.clone(),
-                    None,
-                ));
-            }
-            if extra.vid.is_some() || extra.pid.is_some() {
+            // Mapping code: platform-neutral label. On Windows render GUID; on Unix-like render vid/pid.
+            // Use localized label `label_mapping_code` and localized placeholder `mapping_none`.
+            let mapping_none = lang().protocol.common.mapping_none.as_str().to_string();
+            let mapping_value = if cfg!(windows) {
+                extra.guid.clone().unwrap_or_else(|| mapping_none.clone())
+            } else if extra.vid.is_some() || extra.pid.is_some() {
+                format!(
+                    "vid:{:04x} pid:{:04x}",
+                    extra.vid.unwrap_or(0),
+                    extra.pid.unwrap_or(0)
+                )
+            } else {
+                mapping_none.clone()
+            };
+            pairs.push((
+                lang()
+                    .protocol
+                    .common
+                    .label_mapping_code
+                    .as_str()
+                    .to_string(),
+                mapping_value,
+                None,
+            ));
+            // Avoid adding a separate USB row when mapping already displays vid/pid on non-Windows.
+            let mapping_consumes_usb =
+                !cfg!(windows) && (extra.vid.is_some() || extra.pid.is_some());
+            if !mapping_consumes_usb && (extra.vid.is_some() || extra.pid.is_some()) {
                 let vid_pid = format!(
                     "vid:{:04x} pid:{:04x}",
                     extra.vid.unwrap_or(0),
@@ -313,7 +335,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             }
             pairs.push((
                 lang().protocol.common.label_status.as_str().to_string(),
-                format!("{}", status_text),
+                status_text.to_string(),
                 Some(status_style),
             ));
             // Current per-port application mode (ModBus / MQTT)
@@ -378,27 +400,23 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
 
             for (lbl, val, maybe_style) in pairs.into_iter() {
                 let lbl_w = UnicodeWidthStr::width(lbl.as_str());
-                // Add 4 extra spaces to increase distance between label and value
-                let pad = if max_label_w >= lbl_w {
-                    max_label_w - lbl_w + 5
-                } else {
-                    5
-                };
-                let spacer = " ".repeat(pad);
-                let label_span = Span::styled(
-                    format!("{}{}", indent, lbl),
-                    Style::default().add_modifier(Modifier::BOLD),
-                );
+                // Pad the label itself to the max label width so the value column always lines up.
+                let fill = max_label_w.saturating_sub(lbl_w);
+                let padded_label = format!("{indent}{}{}", lbl, " ".repeat(fill));
+                // Fixed small gap between label area and value
+                let spacer = " ".repeat(5);
+                let label_span =
+                    Span::styled(padded_label, Style::default().add_modifier(Modifier::BOLD));
                 match maybe_style {
                     Some(s) => info_lines.push(Line::from(vec![
                         label_span,
                         Span::raw(spacer),
-                        Span::styled(format!("{}", val), s),
+                        Span::styled(val.to_string(), s),
                     ])),
                     None => info_lines.push(Line::from(vec![
                         label_span,
                         Span::raw(spacer),
-                        Span::raw(format!("{}", val)),
+                        Span::raw(val.to_string()),
                     ])),
                 }
             }

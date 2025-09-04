@@ -61,12 +61,12 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                             try_extract_vid_pid_serial(&port.port_type)
                         {
                             if let Some(sn) = sn {
-                                format!("{}:vid={:04x}:pid={:04x}:sn={}", base, vid, pid, sn)
+                                format!("{base}:vid={vid:04x}:pid={pid:04x}:sn={sn}")
                             } else {
-                                format!("{}:vid={:04x}:pid={:04x}", base, vid, pid)
+                                format!("{base}:vid={vid:04x}:pid={pid:04x}")
                             }
                         } else {
-                            format!("{}:usb", base)
+                            format!("{base}:usb")
                         }
                     }
                     _ => base,
@@ -80,12 +80,12 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
                             try_extract_vid_pid_serial(&port.port_type)
                         {
                             if let Some(sn) = sn {
-                                format!("{}:vid={:04x}:pid={:04x}:sn={}", base, vid, pid, sn)
+                                format!("{base}:vid={vid:04x}:pid={pid:04x}:sn={sn}")
                             } else {
-                                format!("{}:vid={:04x}:pid={:04x}", base, vid, pid)
+                                format!("{base}:vid={vid:04x}:pid={pid:04x}")
                             }
                         } else {
-                            format!("{}:usb", base)
+                            format!("{base}:usb")
                         }
                     }
                     _ => base,
@@ -106,7 +106,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
         for (i, p) in ports.iter().enumerate() {
             let up = p.port_name.to_uppercase();
-            let base = extract_com_base(&up).unwrap_or_else(|| up);
+            let base = extract_com_base(&up).unwrap_or(up);
             groups.entry(base).or_default().push(i);
         }
 
@@ -142,8 +142,8 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     ports.sort_by(|a, b| {
         fn com_index(name: &str) -> Option<u32> {
             let up = name.to_uppercase();
-            if up.starts_with("COM") {
-                up[3..].parse::<u32>().ok()
+            if let Some(stripped) = up.strip_prefix("COM") {
+                stripped.parse::<u32>().ok()
             } else {
                 None
             }
@@ -166,11 +166,10 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 // By inspecting its Debug representation. This is best-effort and should
 // Not be relied on strictly, but helps annotate ports when metadata is
 // Available across different serialport crate versions.
-pub fn try_extract_vid_pid_serial(
-    pt: &SerialPortType,
-) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
-    let dbg = format!("{:?}", pt).to_lowercase();
-    // Try common keys
+pub type VidPidSerial = (u16, u16, Option<String>, Option<String>, Option<String>);
+
+pub fn try_extract_vid_pid_serial(pt: &SerialPortType) -> Option<VidPidSerial> {
+    let dbg = format!("{pt:?}").to_lowercase();
     let vid = parse_hex_after(&dbg, "vid");
     let pid = parse_hex_after(&dbg, "pid");
     let sn = parse_serial_after(&dbg, "serial")
@@ -188,7 +187,7 @@ pub fn try_extract_vid_pid_serial(
 // The serialport crate doesn't expose GUID directly; Windows device paths often contain patterns like
 // "{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}". We scan the Debug representation to pull the first GUID.
 pub fn try_extract_device_guid(pt: &SerialPortType) -> Option<String> {
-    let dbg = format!("{:?}", pt);
+    let dbg = format!("{pt:?}");
     // Simple state machine to find first '{' then collect until '}' including hyphens.
     let mut chars = dbg.chars().peekable();
     while let Some(c) = chars.next() {
@@ -221,35 +220,59 @@ pub fn try_extract_device_guid(pt: &SerialPortType) -> Option<String> {
 }
 
 fn parse_string_after(s: &str, key: &str) -> Option<String> {
-    if let Some(pos) = s.find(key) {
-        let tail = &s[pos + key.len()..];
-        if let Some(eq) = tail.find('=') {
-            let after = &tail[eq + 1..];
-            let mut out = String::new();
-            for c in after.chars().skip_while(|c| c.is_whitespace()) {
-                if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == ':' || c == '.' {
-                    out.push(c);
-                } else {
-                    break;
-                }
+    // Look for key and then accept an '=' separated value; stop at first non-accepted char
+    let tail = s.split_once(key)?.1;
+    // prefer explicit '=' value first
+    if let Some((_, after)) = tail.split_once('=') {
+        let after_trim = after.trim_start();
+        let mut out = String::new();
+        for c in after_trim.chars() {
+            if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == ':' || c == '.' {
+                out.push(c);
+            } else {
+                break;
             }
-            if !out.is_empty() {
-                return Some(out);
-            }
+        }
+        if !out.is_empty() {
+            return Some(out);
         }
     }
     None
 }
 
 fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
-    if let Some(pos) = s.find(key) {
-        let tail = &s[pos + key.len()..];
-        // Look for 0xhhhh
-        if let Some(xpos) = tail.find("0x") {
-            let mut num = String::new();
-            for c in tail[xpos + 2..].chars() {
+    let tail = s.split_once(key)?.1;
+    // check for 0x... first
+    if let Some((_, after)) = tail.split_once("0x") {
+        let num: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_hexdigit())
+            .collect();
+        if !num.is_empty() {
+            if let Ok(v) = u16::from_str_radix(&num, 16) {
+                return Some(v);
+            }
+        }
+    }
+    // check for = followed by number (hex or dec)
+    if let Some((_, after)) = tail.split_once('=') {
+        let mut iter = after.trim_start().chars().peekable();
+        let mut num = String::new();
+        // collect optional 0x prefix
+        // check for leading '0x'
+        if let (Some('0'), Some('x')) = (iter.peek().copied(), {
+            // second peek: create a small iterator clone to peek second char
+            let mut it2 = iter.clone();
+            it2.next();
+            it2.peek().copied()
+        }) {
+            // consume '0' 'x'
+            iter.next();
+            iter.next();
+            while let Some(&c) = iter.peek() {
                 if c.is_ascii_hexdigit() {
                     num.push(c);
+                    iter.next();
                 } else {
                     break;
                 }
@@ -259,25 +282,20 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
                     return Some(v);
                 }
             }
-        }
-        // Look for =hhhh or =0xhhhh or =dddd
-        if let Some(eq) = tail.find('=') {
-            let after = &tail[eq + 1..];
-            let mut num = String::new();
-            for c in after.chars().skip_while(|c| c.is_whitespace()) {
-                if c.is_ascii_hexdigit() {
+        } else {
+            // decimal or bare hex digits
+            while let Some(&c) = iter.peek() {
+                if c.is_ascii_digit() || c.is_ascii_hexdigit() {
                     num.push(c);
-                } else if c.is_ascii_digit() && num.is_empty() {
-                    num.push(c);
+                    iter.next();
                 } else if num.is_empty() {
-                    // Skip non-numeric until numeric starts
-                    continue;
+                    iter.next(); // skip leading non-numeric
                 } else {
                     break;
                 }
             }
             if !num.is_empty() {
-                // Try hex then decimal
+                // try hex first then decimal
                 if let Ok(v) = u16::from_str_radix(&num, 16) {
                     return Some(v);
                 }
@@ -291,35 +309,33 @@ fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
 }
 
 fn parse_serial_after(s: &str, key: &str) -> Option<String> {
-    if let Some(pos) = s.find(key) {
-        let tail = &s[pos + key.len()..];
-        if let Some(eq) = tail.find('=') {
-            let after = &tail[eq + 1..];
-            let mut out = String::new();
-            for c in after.chars().skip_while(|c| c.is_whitespace()) {
-                if c.is_alphanumeric() || c == '-' || c == '_' || c == ':' || c == '.' {
-                    out.push(c);
-                } else {
-                    break;
-                }
-            }
-            if !out.is_empty() {
-                return Some(out);
+    let tail = s.split_once(key)?.1;
+    if let Some((_, after)) = tail.split_once('=') {
+        let after_trim = after.trim_start();
+        let mut out = String::new();
+        for c in after_trim.chars() {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                out.push(c);
+            } else {
+                break;
             }
         }
-        if let Some(col) = tail.find(':') {
-            let after = &tail[col + 1..];
-            let mut out = String::new();
-            for c in after.chars().skip_while(|c| c.is_whitespace()) {
-                if c.is_alphanumeric() || c == '-' || c == '_' || c == ':' || c == '.' {
-                    out.push(c);
-                } else {
-                    break;
-                }
+        if !out.is_empty() {
+            return Some(out);
+        }
+    }
+    if let Some((_, after)) = tail.split_once(':') {
+        let after_trim = after.trim_start();
+        let mut out = String::new();
+        for c in after_trim.chars() {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                out.push(c);
+            } else {
+                break;
             }
-            if !out.is_empty() {
-                return Some(out);
-            }
+        }
+        if !out.is_empty() {
+            return Some(out);
         }
     }
     None
@@ -345,7 +361,7 @@ fn extract_com_base(s: &str) -> Option<String> {
                 }
             }
             if !num.is_empty() {
-                return Some(format!("COM{}", num));
+                return Some(format!("COM{num}"));
             }
         }
     }
@@ -456,6 +472,21 @@ mod tests {
         assert_eq!(
             manual,
             Some("{12345678-9abc-4def-8012-001122334455}".into())
+        );
+    }
+
+    #[test]
+    fn parse_hex_and_vid_pid_examples() {
+        let s1 =
+            "UsbPort(vid=0x1a86 pid=0x7523 serial=ABC123 manufacturer=ACME product=USB-Serial)";
+        // try_extract_vid_pid_serial expects a Debug string; exercise parse_hex_after directly
+        assert_eq!(parse_hex_after(s1, "vid"), Some(0x1a86));
+        assert_eq!(parse_hex_after(s1, "pid"), Some(0x7523));
+
+        let s2 = "SomePort name serial=SN-9876: extra";
+        assert_eq!(
+            parse_serial_after(s2, "serial"),
+            Some("SN-9876".to_string())
         );
     }
 }

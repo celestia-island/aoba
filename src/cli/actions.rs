@@ -60,7 +60,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
                 });
             }
             if let Ok(s) = serde_json::to_string_pretty(&out) {
-                println!("{}", s);
+                println!("{s}");
             } else {
                 // Fallback to plain listing
                 for p in ports.iter() {
@@ -92,7 +92,7 @@ fn compute_canonical(name: &str) -> Option<String> {
             }
         }
         if !num.is_empty() {
-            return Some(format!("COM{}", num));
+            return Some(format!("COM{num}"));
         }
     }
     // Fallback: take basename after last '/'

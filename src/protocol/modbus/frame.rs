@@ -61,7 +61,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
         }
     };
     // Modbus RTU maximum 256 bytes
-    if guessed_len < 4 || guessed_len > 256 {
+    if !(4..=256).contains(&guessed_len) {
         log::warn!("Guessed invalid frame length: {guessed_len}");
         return Ok(None);
     }

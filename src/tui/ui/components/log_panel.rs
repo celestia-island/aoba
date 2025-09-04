@@ -15,8 +15,8 @@ use crate::tui::ui::components::log_input::render_log_input;
 /// 1) timestamp
 /// 2) raw payload (single line, truncated)
 /// 3) parsed summary (origin, R / W, command, slave id, range)
-/// Navigation selects a whole group. Selected group is prefixed with "> " on the left
-/// And rendered with a highlighted background; unselected groups get 2 spaces prefix.
+///    Navigation selects a whole group. Selected group is prefixed with "> " on the left
+///    And rendered with a highlighted background; unselected groups get 2 spaces prefix.
 pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Split area into top (logs) and bottom (input)
     let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
@@ -45,11 +45,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
-    let top_group = if bottom + 1 >= groups_per_screen {
-        bottom + 1 - groups_per_screen
-    } else {
-        0usize
-    };
+    let top_group = (bottom + 1).saturating_sub(groups_per_screen);
 
     // Calculate available width for truncation (account for borders and scrollbar)
     let width = if logs_area.width > 4 {
