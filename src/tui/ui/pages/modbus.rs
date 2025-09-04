@@ -299,6 +299,11 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
         KC::Enter => {
             if app.subpage_tab_index == 0 {
                 if let Some(form) = app.subpage_form.as_mut() {
+                    // If cursor on first item, toggle immediately and consume
+                    if form.cursor == 0 {
+                        form.loop_enabled = !form.loop_enabled;
+                        return true;
+                    }
                     if !form.editing {
                         edit::begin_edit(form);
                     } else {
@@ -319,6 +324,34 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     if app.subpage_tab_index == 0 {
+        // If cursor is on the first field (working toggle), show Enter-to-toggle hint and current state
+        if let Some(form) = &app.subpage_form {
+            if form.cursor == 0 {
+                // Show the localized Enter hint and a status kv showing current running/paused
+                if form.loop_enabled {
+                    hints.push(
+                        lang()
+                            .protocol
+                            .modbus
+                            .hint_enter_pause_work
+                            .as_str()
+                            .to_string(),
+                    );
+                } else {
+                    hints.push(
+                        lang()
+                            .protocol
+                            .modbus
+                            .hint_enter_start_work
+                            .as_str()
+                            .to_string(),
+                    );
+                }
+                // Also show movement hint
+                hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
+                return hints;
+            }
+        }
         hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
         hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;

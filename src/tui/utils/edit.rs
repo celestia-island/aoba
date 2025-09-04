@@ -5,12 +5,13 @@ use crate::protocol::status::{EditingField, SubpageForm};
 /// Initialize the preset index and input buffer for the Baud field.
 pub fn select_field_by_cursor(form: &mut SubpageForm) {
     form.editing_field = Some(match form.cursor {
-        0 => EditingField::Baud,
-        1 => EditingField::Parity,
-        2 => EditingField::DataBits,
-        3 => EditingField::StopBits,
+        0 => EditingField::Loop,
+        1 => EditingField::Baud,
+        2 => EditingField::Parity,
+        3 => EditingField::DataBits,
+        4 => EditingField::StopBits,
         n => {
-            let ridx = n.saturating_sub(4);
+            let ridx = n.saturating_sub(5);
             EditingField::RegisterField {
                 idx: ridx,
                 field: crate::protocol::status::RegisterField::SlaveId,
