@@ -20,25 +20,15 @@ pub fn parse_pull_get_coils(
 ) -> Result<Vec<bool>> {
     request.parse_ok(&response)?;
 
-    // Parse coils bit order: high bit to low bit within each byte
-    let values = response[3..response.len() - 2]
+    // Modbus pack: first coil corresponds to LSB (bit0) of first data byte.
+    // Iterate bits LSB->MSB per byte and then take the first `count` bits.
+    let mut values = response[3..response.len() - 2]
         .iter()
-        .map(|chunk| {
-            let byte = chunk;
-            (0..8)
-                .rev() // Iterate bits from high to low
-                .map(|i| (byte & (1 << i)) != 0)
-                .collect::<Vec<bool>>()
-        })
-        .flatten()
+        .flat_map(|byte| (0..8).map(move |i| ((*byte) & (1 << i)) != 0))
         .collect::<Vec<bool>>();
-
-    // Skip leading zeros that were used as padding
-    let values = values
-        .iter()
-        .skip(values.len() - count as usize)
-        .cloned()
-        .collect::<Vec<bool>>();
+    if values.len() > count as usize {
+        values.truncate(count as usize);
+    }
     ensure!(
         values.len() == count as usize,
         "Invalid number of coils in response"

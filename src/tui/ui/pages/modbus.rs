@@ -77,7 +77,9 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     }
 }
 
-pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
+use crate::tui::utils::bus::Bus;
+
+pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
     // Ensure form exists when interacting with modbus settings tab
     if app.subpage_tab_index == 1 && app.subpage_form.is_none() {
         app.init_subpage_form();
@@ -129,7 +131,9 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                         if let Some(MasterEditField::Value(addr)) = form.master_edit_field.clone() {
                             if let Some(idx) = form.master_edit_index {
                                 if let Some(entry) = form.registers.get_mut(idx) {
-                                    if entry.mode == RegisterMode::Coils {
+                                    if entry.mode == RegisterMode::Coils
+                                        || entry.mode == RegisterMode::DiscreteInputs
+                                    {
                                         if matches!(
                                             key.code,
                                             KC::Left | KC::Right | KC::Char('h') | KC::Char('l')
@@ -232,7 +236,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                                 mode: RegisterMode::Coils,
                                 address: 0,
                                 length: 1,
-                                values: vec![0u8; 1],
+                                values: vec![0u16; 1],
                                 refresh_ms: 1000,
                                 req_success: 0,
                                 req_total: 0,
@@ -302,6 +306,16 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status) -> bool {
                     // If cursor on first item, toggle immediately and consume
                     if form.cursor == 0 {
                         form.loop_enabled = !form.loop_enabled;
+                        // Thread-safe: inform core worker to pause/resume via bus message
+                        if form.loop_enabled {
+                            let _ = bus
+                                .ui_tx
+                                .send(crate::tui::utils::bus::UiToCore::ResumePolling);
+                        } else {
+                            let _ = bus
+                                .ui_tx
+                                .send(crate::tui::utils::bus::UiToCore::PausePolling);
+                        }
                         return true;
                     }
                     if !form.editing {
@@ -477,7 +491,11 @@ fn commit_master_field(form: &mut SubpageForm) {
                             entry.values.resize(entry.length as usize, 0);
                         }
                         Value(a) => {
-                            if entry.mode != RegisterMode::Coils {
+                            // If editing value and buffer empty: for Coils/DiscreteInputs keep previous/toggle behaviour;
+                            // for other register types treat empty as zero.
+                            if entry.mode != RegisterMode::Coils
+                                && entry.mode != RegisterMode::DiscreteInputs
+                            {
                                 let off = (*a as usize).saturating_sub(entry.address as usize);
                                 if off < entry.values.len() {
                                     entry.values[off] = 0;
@@ -524,7 +542,7 @@ fn commit_master_field(form: &mut SubpageForm) {
                                 if v >= entry.address {
                                     let new_len = v - entry.address + 1;
                                     entry.length = new_len;
-                                    entry.values.resize(new_len as usize, 0);
+                                    entry.values.resize(new_len as usize, 0u16);
                                 }
                             }
                         }
@@ -532,7 +550,7 @@ fn commit_master_field(form: &mut SubpageForm) {
                             if let Some(v) = parse_u8() {
                                 let off = (*a as usize).saturating_sub(entry.address as usize);
                                 if off < entry.values.len() {
-                                    entry.values[off] = v;
+                                    entry.values[off] = v as u16;
                                 }
                             }
                         }
