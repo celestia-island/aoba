@@ -12,7 +12,7 @@
   EN | <a href="./README_zh.md">ZH</a>
 </p>
 
-Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, TTY, TCP/UDP, etc.
+Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, TCP, etc.
 
 > Still developing
 

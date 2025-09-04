@@ -66,7 +66,7 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             let val_lines = if r.length == 0 {
                 0
             } else {
-                (r.length as usize + 7) / 8
+                (r.length as usize).div_ceil(8)
             };
             accum += 1 + val_lines + 1;
         }
@@ -76,32 +76,30 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         if form.master_field_selected {
             if let Some(idx) = form.master_edit_index {
                 if idx < form.registers.len() {
-                    if let Some(field) = &form.master_edit_field {
-                        if let MasterEditField::Value(a) = field {
-                            let r_cur = &form.registers[idx];
-                            if *a >= r_cur.address && *a < r_cur.address + r_cur.length {
-                                let mut line_no = 0usize;
-                                for (i2, r2) in form.registers.iter().enumerate() {
-                                    let lines2 = if r2.length == 0 {
-                                        0
-                                    } else {
-                                        (r2.length as usize + 7) / 8
-                                    };
-                                    if i2 == idx {
-                                        line_no += 1;
-                                        if r2.length > 0 {
-                                            let off = *a as usize - r2.address as usize;
-                                            line_no += off / 8;
-                                        }
-                                        if line_no < first_visible {
-                                            first_visible = line_no;
-                                        } else if line_no >= first_visible + inner_height {
-                                            first_visible = line_no + 1 - inner_height;
-                                        }
-                                        break;
-                                    } else {
-                                        line_no += 1 + lines2 + 1;
+                    if let Some(MasterEditField::Value(a)) = form.master_edit_field.as_ref() {
+                        let r_cur = &form.registers[idx];
+                        if *a >= r_cur.address && *a < r_cur.address + r_cur.length {
+                            let mut line_no = 0usize;
+                            for (i2, r2) in form.registers.iter().enumerate() {
+                                let lines2 = if r2.length == 0 {
+                                    0
+                                } else {
+                                    (r2.length as usize).div_ceil(8)
+                                };
+                                if i2 == idx {
+                                    line_no += 1;
+                                    if r2.length > 0 {
+                                        let off = *a as usize - r2.address as usize;
+                                        line_no += off / 8;
                                     }
+                                    if line_no < first_visible {
+                                        first_visible = line_no;
+                                    } else if line_no >= first_visible + inner_height {
+                                        first_visible = line_no + 1 - inner_height;
+                                    }
+                                    break;
+                                } else {
+                                    line_no += 1 + lines2 + 1;
                                 }
                             }
                         }
@@ -180,10 +178,10 @@ fn render_entry_header(
         EntryRole::Slave => lang().protocol.modbus.role_slave.as_str(),
     };
     if role_active {
-        spans.push(Span::styled(format!("[{}]", role_label), role_style));
+        spans.push(Span::styled(format!("[{role_label}]"), role_style));
     } else if chosen && matches!(cur_field, Some(F::Role)) {
         // Chosen (non-edit) state: add brackets for non-color terminals
-        spans.push(Span::styled(format!("[{}]", role_label), role_style));
+        spans.push(Span::styled(format!("[{role_label}]"), role_style));
     } else {
         spans.push(Span::styled(role_label.to_string(), role_style));
     }
@@ -203,7 +201,7 @@ fn render_entry_header(
         } else {
             form.master_input_buffer.as_str()
         };
-        spans.push(Span::styled(format!("ID = [{}]", content), id_style));
+        spans.push(Span::styled(format!("ID = [{content}]"), id_style));
     } else if chosen && matches!(cur_field, Some(F::Id)) {
         spans.push(Span::styled(format!("ID = [{:02X}]", r.slave_id), id_style));
     } else {
@@ -249,11 +247,11 @@ fn render_entry_header(
         } else {
             form.master_input_buffer.as_str()
         };
-        spans.push(Span::styled(format!("0x[{}]", content), start_style));
+        spans.push(Span::styled(format!("0x[{content}]"), start_style));
     } else if chosen && matches!(cur_field, Some(F::Start)) {
-        spans.push(Span::styled(format!("0x[{:04X}]", start), start_style));
+        spans.push(Span::styled(format!("0x[{start:04X}]"), start_style));
     } else {
-        spans.push(Span::styled(format!("0x{:04X}", start), start_style));
+        spans.push(Span::styled(format!("0x{start:04X}"), start_style));
     }
     spans.push(Span::raw(" - "));
     let end_active = matches!(cur_field, Some(F::End)) && editing;
@@ -270,14 +268,11 @@ fn render_entry_header(
         } else {
             form.master_input_buffer.as_str()
         };
-        spans.push(Span::styled(format!("0x[{}]", content), end_style));
+        spans.push(Span::styled(format!("0x[{content}]"), end_style));
     } else if chosen && matches!(cur_field, Some(F::End)) {
-        spans.push(Span::styled(
-            format!("0x[{:04X}]", end_inclusive),
-            end_style,
-        ));
+        spans.push(Span::styled(format!("0x[{end_inclusive:04X}]"), end_style));
     } else {
-        spans.push(Span::styled(format!("0x{:04X}", end_inclusive), end_style));
+        spans.push(Span::styled(format!("0x{end_inclusive:04X}"), end_style));
     }
     // Counter (refresh removed; global interval applies)
     spans.push(Span::raw(", "));
@@ -331,7 +326,7 @@ fn render_entry_values(
     while addr < end_exclusive {
         let line_base = (addr / 8) * 8;
         let mut spans: Vec<Span> = Vec::new();
-        spans.push(Span::raw(format!("      0x{:04X}: ", line_base)));
+        spans.push(Span::raw(format!("      0x{line_base:04X}: ")));
         for col in 0..8 {
             if col > 0 {
                 spans.push(Span::raw(" "));
@@ -369,14 +364,14 @@ fn render_entry_values(
                         } else {
                             lang().protocol.modbus.value_false.as_str()
                         };
-                        spans.push(Span::styled(format!("[{}]", lbl), style));
+                        spans.push(Span::styled(format!("[{lbl}]"), style));
                     } else {
                         let content = if form.master_input_buffer.is_empty() {
                             "_"
                         } else {
                             form.master_input_buffer.as_str()
                         };
-                        spans.push(Span::styled(format!("[{}]", content), style));
+                        spans.push(Span::styled(format!("[{content}]"), style));
                     }
                     continue;
                 }
@@ -395,16 +390,14 @@ fn render_entry_values(
                     lang().protocol.modbus.value_false.as_str()
                 };
                 if is_chosen_value {
-                    spans.push(Span::styled(format!("[{}]", lbl), style));
+                    spans.push(Span::styled(format!("[{lbl}]"), style));
                 } else {
                     spans.push(Span::styled(lbl.to_string(), style));
                 }
+            } else if is_chosen_value {
+                spans.push(Span::styled(format!("[{raw_val:04X}]"), style));
             } else {
-                if is_chosen_value {
-                    spans.push(Span::styled(format!("[{:04X}]", raw_val), style));
-                } else {
-                    spans.push(Span::styled(format!("{:04X}", raw_val), style));
-                }
+                spans.push(Span::styled(format!("{raw_val:04X}"), style));
             }
         }
         out.push(Line::from(spans));

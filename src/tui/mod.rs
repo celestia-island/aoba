@@ -40,7 +40,7 @@ fn adjust_log_view(app: &mut Status, term_height: u16) {
 fn redraw(terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>, app: &Arc<Mutex<Status>>) {
     let _ = terminal.draw(|f| {
         if let Ok(mut g) = app.lock() {
-            crate::tui::ui::render_ui(f, &mut *g);
+            crate::tui::ui::render_ui(f, &mut g);
         }
     });
 }
@@ -155,7 +155,7 @@ fn run_app(
         let _ = bus.core_rx.recv_timeout(Duration::from_millis(50));
         // Rendering only (read state)
         if let Ok(mut guard) = app.lock() {
-            terminal.draw(|f| crate::tui::ui::render_ui(f, &mut *guard))?;
+            terminal.draw(|f| crate::tui::ui::render_ui(f, &mut guard))?;
         }
 
         // Poll for input
@@ -230,7 +230,7 @@ fn run_app(
                         }
                         guard.clear_error();
                         // Redraw immediately
-                        terminal.draw(|f| crate::tui::ui::render_ui(f, &mut *guard))?;
+                        terminal.draw(|f| crate::tui::ui::render_ui(f, &mut guard))?;
                     }
                     continue;
                 } else {
@@ -310,14 +310,14 @@ fn run_app(
                                                         if idx >= custom_idx {
                                                             idx = 0;
                                                         } else {
-                                                            idx = idx + 1;
+                                                            idx += 1;
                                                         }
                                                     } else {
                                                         // Move left
                                                         if idx == 0 {
                                                             idx = custom_idx;
                                                         } else {
-                                                            idx = idx - 1;
+                                                            idx -= 1;
                                                         }
                                                     }
                                                     form.edit_choice_index = Some(idx);
@@ -340,7 +340,7 @@ fn run_app(
                                                 let options = [Parity::None, Parity::Even, Parity::Odd];
                                                 let idx = options.iter().position(|&p| p == form.parity).unwrap_or(0);
                                                 let next = if dir > 0 { (idx + 1) % options.len() } else { (idx + options.len() - 1) % options.len() };
-                                                form.parity = options[next].clone();
+                                                form.parity = options[next];
                                             }
                                             crate::protocol::status::EditingField::DataBits => {
                                                 let options = [5u8, 6u8, 7u8, 8u8];
@@ -423,7 +423,7 @@ fn run_app(
                                                             if let Ok(v) =
                                                                 form.input_buffer.parse::<u32>()
                                                             {
-                                                                if v >= 1200 && v <= 2_000_000 {
+                                                                if (1200..=2_000_000).contains(&v) {
                                                                     form.baud = v;
                                                                 } else {
                                                                     pending_error = Some(
@@ -448,7 +448,7 @@ fn run_app(
                                                         if let Ok(v) =
                                                             form.input_buffer.parse::<u32>()
                                                         {
-                                                            if v >= 1200 && v <= 2_000_000 {
+                                                            if (1200..=2_000_000).contains(&v) {
                                                                 form.baud = v;
                                                             } else {
                                                                 pending_error = Some(
@@ -636,7 +636,7 @@ fn run_app(
 
                 // Subpage first chance
                 if let Ok(mut guard) = app.lock() {
-                    if crate::tui::ui::pages::handle_key_in_subpage(key, &mut *guard, &bus) {
+                    if crate::tui::ui::pages::handle_key_in_subpage(key, &mut guard, &bus) {
                         guard.clear_error();
                         continue; // Consumed by subpage
                     }
@@ -646,7 +646,7 @@ fn run_app(
                     // Try page-level mapping first (inner pages can override), fall back to global mapping
                     let mut action_opt: Option<Action> = None;
                     if let Ok(guard) = app.lock() {
-                        action_opt = crate::tui::ui::pages::map_key_in_page(key, &*guard);
+                        action_opt = crate::tui::ui::pages::map_key_in_page(key, &guard);
                     }
                     if action_opt.is_none() {
                         match map_key(key.code) {
