@@ -43,6 +43,7 @@ pub struct LogEntry {
 pub struct SubpageForm {
     // Serial config editing (original config panel expectations)
     pub editing: bool,
+    pub loop_enabled: bool,
     pub baud: u32,
     pub data_bits: u8,
     pub stop_bits: u8,
@@ -67,6 +68,7 @@ impl Default for SubpageForm {
     fn default() -> Self {
         Self {
             editing: false,
+            loop_enabled: false,
             baud: 9600,
             data_bits: 8,
             stop_bits: 1,
@@ -1242,6 +1244,7 @@ pub enum RegisterField {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditingField {
+    Loop,
     Baud,
     Parity,
     StopBits,
