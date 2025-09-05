@@ -39,8 +39,10 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     );
 
     // Options (each line centered horizontally, and vertically centered in inner area)
-    let options = [lang().protocol.common.mode_modbus.as_str(),
-        lang().protocol.common.mode_mqtt.as_str()];
+    let options = [
+        lang().protocol.common.mode_modbus.as_str(),
+        lang().protocol.common.mode_mqtt.as_str(),
+    ];
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
     for (i, o) in options.iter().enumerate() {
         let span = if i == index {
