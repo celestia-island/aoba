@@ -266,7 +266,6 @@ fn run_app(
                                                 if next < 100 { next = 100; }
                                                 form.global_timeout_ms = next as u64;
                                             }
-                                            
                                             crate::protocol::status::EditingField::Baud => {
                                                 let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                                                 let custom_idx = presets.len();
@@ -688,7 +687,8 @@ fn run_app(
                                                 adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
-                                            let total = BASE_FIELD_COUNT.saturating_add(form.registers.len());
+                                            let total = BASE_FIELD_COUNT
+                                                .saturating_add(form.registers.len());
                                             if total > 0 {
                                                 form.cursor = (form.cursor + 1) % total;
                                             }
@@ -719,7 +719,8 @@ fn run_app(
                                                 adjust_log_view(&mut guard, term_h);
                                             }
                                         } else if let Some(form) = guard.subpage_form.as_mut() {
-                                            let total = BASE_FIELD_COUNT.saturating_add(form.registers.len());
+                                            let total = BASE_FIELD_COUNT
+                                                .saturating_add(form.registers.len());
                                             if total > 0 {
                                                 if form.cursor == 0 {
                                                     form.cursor = total - 1;

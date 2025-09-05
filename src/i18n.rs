@@ -164,6 +164,7 @@ derive_struct! {
                 role_master: String = "role_master".to_string(),
                 role_slave: String = "role_slave".to_string(),
                 log_sent_frame: String = "log_sent_frame".to_string(),
+                    log_unparsed_master: String = "log_unparsed_master".to_string(),
                 log_recv_match: String = "log_recv_match".to_string(),
                 log_recv_unmatched: String = "log_recv_unmatched".to_string(),
                 log_reconfigured: String = "log_reconfigured".to_string(),

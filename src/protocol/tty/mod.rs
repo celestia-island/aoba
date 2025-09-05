@@ -3,17 +3,19 @@
 #[cfg(windows)]
 mod tty_windows;
 #[cfg(windows)]
-pub use tty_windows::{available_ports_sorted, available_ports_enriched, try_extract_vid_pid_serial};
+pub use tty_windows::{
+    available_ports_enriched, available_ports_sorted, try_extract_vid_pid_serial,
+};
 
 #[cfg(unix)]
 mod tty_unix;
 #[cfg(unix)]
-pub use tty_unix::{available_ports_sorted, available_ports_enriched, try_extract_vid_pid_serial};
+pub use tty_unix::{available_ports_enriched, available_ports_sorted, try_extract_vid_pid_serial};
 
 /// Unified per-port extra metadata structure
 #[derive(Debug, Clone, Default)]
 pub struct PortExtra {
-    pub guid: Option<String>,          // Windows device interface GUID
+    pub guid: Option<String>, // Windows device interface GUID
     pub vid: Option<u16>,
     pub pid: Option<u16>,
     pub serial: Option<String>,

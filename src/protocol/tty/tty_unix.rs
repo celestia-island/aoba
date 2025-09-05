@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use serialport::{SerialPortInfo, SerialPortType};
 use super::PortExtra;
+use serialport::{SerialPortInfo, SerialPortType};
 
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {

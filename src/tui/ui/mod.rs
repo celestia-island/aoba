@@ -1,7 +1,7 @@
- mod bottom;
- mod components;
+mod bottom;
+mod components;
 pub mod pages;
- mod title;
+mod title;
 
 use ratatui::prelude::*;
 

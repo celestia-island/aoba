@@ -147,6 +147,7 @@ log_recv_match = "接收匹配"
 log_recv_unmatched = "接收未匹配"
 log_reconfigured = "已重新配置"
 log_req_timeout = "請求逾時"
+log_unparsed_master = "未解析的主站請求"
 
 [protocol.mqtt]
 panel_placeholder = "MQTT 模式佔位面板 (尚未實作)"
