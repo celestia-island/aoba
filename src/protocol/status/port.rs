@@ -42,6 +42,9 @@ impl Status {
             polling_paused: false,
             last_port_toggle: None,
             port_toggle_min_interval_ms: PORT_TOGGLE_MIN_INTERVAL_MS,
+            recent_auto_sent: std::collections::VecDeque::new(),
+            recent_auto_requests: std::collections::VecDeque::new(),
+            pending_sync_port: None,
         }
     }
     pub fn with_ports(ports: Vec<SerialPortInfo>) -> Self {
@@ -305,6 +308,95 @@ impl Status {
                     self.last_port_toggle = Some(now);
                 }
                 PortState::OccupiedByOther => {}
+            }
+        }
+    }
+    // Copy current subpage_form registers (Slave entries) into per-port ModbusStorageSmall
+    pub fn sync_form_to_slave_context(&mut self, port_name: &str) {
+        // Determine which form to read from: the currently selected (self.subpage_form)
+        // or the saved per-port state's form.
+        let form_opt: Option<&SubpageForm> = if let Some(info) = self.ports.get(self.selected) {
+            if info.port_name == port_name {
+                self.subpage_form.as_ref()
+            } else {
+                self.per_port_states
+                    .get(port_name)
+                    .and_then(|ps| ps.subpage_form.as_ref())
+            }
+        } else {
+            self.per_port_states
+                .get(port_name)
+                .and_then(|ps| ps.subpage_form.as_ref())
+        };
+        let form = match form_opt {
+            Some(f) => f,
+            None => return,
+        };
+        let ctx = self
+            .per_port_slave_contexts
+            .entry(port_name.to_string())
+            .or_insert_with(rmodbus::server::storage::ModbusStorageSmall::default);
+        // Clear or keep existing? We'll overwrite affected ranges.
+        // Copy all registers from the form into the per-port storage so the
+        // simulated slave will reply based on the UI values. Previously this
+        // only copied entries marked as Slave which left Master entries out and
+        // caused zeroed responses.
+        for reg in form.registers.iter() {
+            let addr = reg.address as usize;
+            let len = reg.length as usize;
+            match reg.mode {
+                RegisterMode::Holding => {
+                    for i in 0..len {
+                        if addr + i < ctx.holdings.len() && i < reg.values.len() {
+                            ctx.holdings[addr + i] = reg.values[i];
+                            log::debug!(
+                                "sync: port={} holding[{}]={}",
+                                port_name,
+                                addr + i,
+                                reg.values[i]
+                            );
+                        }
+                    }
+                }
+                RegisterMode::Input => {
+                    for i in 0..len {
+                        if addr + i < ctx.inputs.len() && i < reg.values.len() {
+                            ctx.inputs[addr + i] = reg.values[i];
+                            log::debug!(
+                                "sync: port={} input[{}]={}",
+                                port_name,
+                                addr + i,
+                                reg.values[i]
+                            );
+                        }
+                    }
+                }
+                RegisterMode::Coils => {
+                    for i in 0..len {
+                        if addr + i < ctx.coils.len() {
+                            let v = if i < reg.values.len() {
+                                reg.values[i] != 0
+                            } else {
+                                false
+                            };
+                            ctx.coils[addr + i] = v;
+                            log::debug!("sync: port={} coil[{}]={}", port_name, addr + i, v);
+                        }
+                    }
+                }
+                RegisterMode::DiscreteInputs => {
+                    for i in 0..len {
+                        if addr + i < ctx.discretes.len() {
+                            let v = if i < reg.values.len() {
+                                reg.values[i] != 0
+                            } else {
+                                false
+                            };
+                            ctx.discretes[addr + i] = v;
+                            log::debug!("sync: port={} discrete[{}]={}", port_name, addr + i, v);
+                        }
+                    }
+                }
             }
         }
     }

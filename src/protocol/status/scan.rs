@@ -6,6 +6,7 @@ use crate::{
     protocol::runtime::{PortRuntimeHandle, RuntimeCommand},
     protocol::status::*,
 };
+
 impl Status {
     pub fn refresh(&mut self) {
         self.busy = true;

@@ -15,7 +15,7 @@ use crate::protocol::status::AppMode;
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
 // Number of base (non-register) configurable fields in subpage forms. Keep in sync with
-// the rendering order in `src/tui/ui/components/config_panel.rs`.
+// The rendering order in `src/tui/ui/components/config_panel.rs`.
 const BASE_FIELD_COUNT: usize = 7;
 
 use crate::{
@@ -166,7 +166,7 @@ fn run_app(
                 }
                 // Main keyboard event handling entry
                 let lock = app.lock();
-                // removed unused `_is_editing` binding (no side-effects)
+                // Removed unused `_is_editing` binding (no side-effects)
 
                 // Mode overlay handling
                 let overlay_active = lock
@@ -915,7 +915,7 @@ fn run_app(
                             }
                             Action::SwitchNext => {
                                 if let Ok(mut guard) = app.lock() {
-                                    // unified mode: SwitchNext now no-op
+                                    // Unified mode: SwitchNext now no-op
                                     guard.clear_error();
                                 }
                             }

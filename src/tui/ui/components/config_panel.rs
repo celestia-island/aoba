@@ -372,7 +372,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     }
 
     // Global interval (idx 5) — render value in right column like other fields. When editing,
-    // show input-style spans but keep them on the same line as the title.
+    // Show input-style spans but keep them on the same line as the title.
     {
         let idx_field = 5usize;
         let selected = idx_field == form.cursor;

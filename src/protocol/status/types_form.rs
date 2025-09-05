@@ -48,7 +48,7 @@ impl Default for SubpageForm {
             master_input_buffer: String::new(),
             poll_round_index: 0,
             in_flight_reg_index: None,
-            global_interval_ms: 1000,
+            global_interval_ms: 500,
             global_timeout_ms: 3000,
         }
     }

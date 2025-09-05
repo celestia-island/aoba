@@ -198,7 +198,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 } else {
                     lines.push(Line::from(lang().index.scan_raw_header.as_str()));
                     for l in app.last_scan_info.iter().take(100) {
-                        // cap lines to avoid overflow
+                        // Cap lines to avoid overflow
                         if l.starts_with("ERROR:") {
                             lines.push(Line::from(Span::styled(
                                 l.as_str(),
