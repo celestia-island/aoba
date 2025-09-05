@@ -113,7 +113,44 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         form.input_buffer.as_str(),
     );
 
-    // Baud (idx 1)
+    // Master passive toggle (idx 1) - when true the simulated master will not
+    // proactively send requests on the wire and will only respond to incoming requests.
+    let master_passive_label = lang().protocol.modbus.label_master_passive.as_str();
+    // Determine display: if user hasn't set the option (None), show derived default
+    // Policy: if any Master entries exist -> default = Passive (listen-only).
+    let derived_default_passive = form
+        .registers
+        .iter()
+        .any(|r| r.role == crate::protocol::status::EntryRole::Master);
+    let master_passive_val = match form.master_passive {
+        Some(true) => lang().protocol.modbus.status_master_passive.clone(),
+        Some(false) => lang().protocol.modbus.status_master_active.clone(),
+        None => {
+            if derived_default_passive {
+                format!(
+                    "{} ({})",
+                    lang().protocol.modbus.status_master_passive.clone(),
+                    lang().protocol.modbus.label_default_marker.clone()
+                )
+            } else {
+                format!(
+                    "{} ({})",
+                    lang().protocol.modbus.status_master_active.clone(),
+                    lang().protocol.modbus.label_default_marker.clone()
+                )
+            }
+        }
+    };
+    push_field(
+        &mut lines,
+        1,
+        master_passive_label,
+        master_passive_val,
+        false,
+        form.input_buffer.as_str(),
+    );
+
+    // Baud (idx 2)
     if matches!(editing_field, Some(EditingField::Baud)) {
         // Presets stop at 115200; append a 'Custom' slot so user can select and type a custom baud
         let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
@@ -128,7 +165,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             .unwrap_or(custom_idx);
 
         // Render title + selector / edit line
-        let idx_field = 1usize;
+        let idx_field = 2usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -181,7 +218,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            1,
+            2,
             lang().protocol.common.label_baud.as_str(),
             form.baud.to_string(),
             matches!(editing_field, Some(EditingField::Baud)),
@@ -189,7 +226,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Parity (idx 2)
+    // Parity (idx 3)
     let parity_text = match form.parity {
         Parity::None => lang().protocol.common.parity_none.clone(),
         Parity::Even => lang().protocol.common.parity_even.clone(),
@@ -217,7 +254,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        let idx_field = 2usize;
+        let idx_field = 3usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -245,7 +282,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            2,
+            3,
             lang().protocol.common.label_parity.as_str(),
             parity_text,
             matches!(editing_field, Some(EditingField::Parity)),
@@ -253,7 +290,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Data bits (idx 3)
+    // Data bits (idx 4)
     let data_bits_text = format!("{}", form.data_bits);
     if matches!(editing_field, Some(EditingField::DataBits)) {
         let options = [5u8, 6u8, 7u8, 8u8];
@@ -272,7 +309,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        let idx_field = 3usize;
+        let idx_field = 4usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -303,7 +340,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            3,
+            4,
             lang().protocol.common.label_data_bits.as_str(),
             data_bits_text,
             matches!(editing_field, Some(EditingField::DataBits)),
@@ -311,7 +348,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Stop bits (idx 4)
+    // Stop bits (idx 5)
     if matches!(editing_field, Some(EditingField::StopBits)) {
         let opts_vals = [1, 2];
         let cur_idx = opts_vals
@@ -330,7 +367,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
         parts.push("->".to_string());
 
-        let idx_field = 4usize;
+        let idx_field = 5usize;
         let selected = idx_field == form.cursor;
         let base_prefix = "  ";
         let title_text = format!(
@@ -363,7 +400,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     } else {
         push_field(
             &mut lines,
-            4,
+            5,
             lang().protocol.common.label_stop_bits.as_str(),
             form.stop_bits.to_string(),
             matches!(editing_field, Some(EditingField::StopBits)),
@@ -371,10 +408,10 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         );
     }
 
-    // Global interval (idx 5) — render value in right column like other fields. When editing,
+    // Global interval (idx 6) — render value in right column like other fields. When editing,
     // Show input-style spans but keep them on the same line as the title.
     {
-        let idx_field = 5usize;
+        let idx_field = 6usize;
         let selected = idx_field == form.cursor;
         if matches!(editing_field, Some(EditingField::GlobalInterval)) {
             // Build title + filler then append input spans (skip the input's base_prefix)
@@ -411,7 +448,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         } else {
             push_field(
                 &mut lines,
-                5,
+                6,
                 lang().protocol.modbus.global_interval.as_str(),
                 format!("{} ms", form.global_interval_ms),
                 false,
@@ -420,9 +457,9 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         }
     }
 
-    // Global timeout (idx 6) — same behavior as interval above
+    // Global timeout (idx 7) — same behavior as interval above
     {
-        let idx_field = 6usize;
+        let idx_field = 7usize;
         let selected = idx_field == form.cursor;
         if matches!(editing_field, Some(EditingField::GlobalTimeout)) {
             let base_prefix = "  ";
@@ -458,7 +495,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         } else {
             push_field(
                 &mut lines,
-                6,
+                7,
                 lang().protocol.modbus.global_timeout.as_str(),
                 format!("{} ms", form.global_timeout_ms),
                 false,

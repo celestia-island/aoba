@@ -16,7 +16,7 @@ use ratatui::{backend::CrosstermBackend, prelude::*};
 
 // Number of base (non-register) configurable fields in subpage forms. Keep in sync with
 // The rendering order in `src/tui/ui/components/config_panel.rs`.
-const BASE_FIELD_COUNT: usize = 7;
+const BASE_FIELD_COUNT: usize = 8;
 
 use crate::{
     protocol::status::{InputMode, LogEntry, Status},
@@ -850,17 +850,23 @@ fn run_app(
                                         form.editing = !form.editing;
                                         if form.editing {
                                             match form.cursor {
-                                                0 => form.editing_field = Some(crate::protocol::status::EditingField::Loop),
-                                                1 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
-                                                2 => form.editing_field = Some(crate::protocol::status::EditingField::Parity),
-                                                3 => form.editing_field = Some(crate::protocol::status::EditingField::DataBits),
-                                                4 => form.editing_field = Some(crate::protocol::status::EditingField::StopBits),
-                                                5 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalInterval),
-                                                6 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalTimeout),
-                                                n => {
-                                                    let ridx = n.saturating_sub(7);
-                                                    form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
-                                                }
+                                                    0 => form.editing_field = Some(crate::protocol::status::EditingField::Loop),
+                                                    // idx 1 is the master_passive toggle and should not enter editing mode
+                                                    1 => {
+                                                        // Prevent entering edit mode for this cursor position
+                                                        form.editing = false;
+                                                        form.editing_field = None;
+                                                    }
+                                                    2 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
+                                                    3 => form.editing_field = Some(crate::protocol::status::EditingField::Parity),
+                                                    4 => form.editing_field = Some(crate::protocol::status::EditingField::DataBits),
+                                                    5 => form.editing_field = Some(crate::protocol::status::EditingField::StopBits),
+                                                    6 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalInterval),
+                                                    7 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalTimeout),
+                                                    n => {
+                                                        let ridx = n.saturating_sub(8);
+                                                        form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
+                                                    }
                                             }
                                             form.input_buffer.clear();
                                             if let Some(

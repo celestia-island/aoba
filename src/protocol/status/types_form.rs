@@ -24,6 +24,7 @@ pub struct SubpageForm {
     pub in_flight_reg_index: Option<usize>,
     pub global_interval_ms: u64,
     pub global_timeout_ms: u64,
+    pub master_passive: Option<bool>,
 }
 impl Default for SubpageForm {
     fn default() -> Self {
@@ -50,6 +51,7 @@ impl Default for SubpageForm {
             in_flight_reg_index: None,
             global_interval_ms: 500,
             global_timeout_ms: 3000,
+            master_passive: None,
         }
     }
 }
