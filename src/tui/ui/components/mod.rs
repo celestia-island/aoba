@@ -71,7 +71,7 @@ pub fn selector_spans(base_prefix: &str, label: &str, state: TextState) -> Vec<S
 }
 
 /// Produce spans for an input-style display rendered as: `> [buffer] <` with surrounding base_prefix
-/// included as raw text. `hovered` and `editing` affect colors/weight.
+/// Included as raw text. `hovered` and `editing` affect colors/weight.
 pub fn input_spans(
     base_prefix: &str,
     buffer: &str,
@@ -158,7 +158,7 @@ pub fn styled_text(text: &str, state: TextState, bold: bool) -> Span<'static> {
 }
 
 /// Unified kind for producing Span sequences. This lets callers use one helper instead of
-/// multiple similarly-named helpers. Keep variants small and expressive.
+/// Multiple similarly-named helpers. Keep variants small and expressive.
 pub enum StyledSpanKind<'a> {
     Selector {
         base_prefix: &'a str,

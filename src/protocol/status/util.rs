@@ -1,6 +1,3 @@
-// Small helpers (crc + sp_new)
-use serialport;
-
 pub fn crc16_modbus(data: &[u8]) -> u16 {
     let mut crc: u16 = 0xFFFF;
     for &b in data {

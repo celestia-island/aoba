@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use rmodbus::server::storage::ModbusStorageSmall;
 use serialport::{SerialPort, SerialPortInfo};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::protocol::runtime::PortRuntimeHandle;
 use crate::protocol::status::LogEntry;
@@ -168,6 +168,14 @@ pub struct Status {
     pub polling_paused: bool,
     pub last_port_toggle: Option<std::time::Instant>,
     pub port_toggle_min_interval_ms: u64,
+    // recent auto-generated responses (bytes, timestamp) to avoid double-logging when
+    // the runtime emits a FrameSent for the same bytes.
+    pub(crate) recent_auto_sent: VecDeque<(Vec<u8>, std::time::Instant)>,
+    // recent auto-generated request bytes (incoming requests we auto-responded to)
+    // stored to implement debounce based on form.global_interval_ms
+    pub(crate) recent_auto_requests: VecDeque<(Vec<u8>, std::time::Instant)>,
+    // When set, indicates that we should sync current form into the given port's slave context
+    pub(crate) pending_sync_port: Option<String>,
 }
 impl Default for Status {
     fn default() -> Self {
