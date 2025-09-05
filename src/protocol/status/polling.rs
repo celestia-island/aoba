@@ -37,6 +37,46 @@ impl Status {
             if form_opt_idx.is_none() {
                 continue;
             }
+            // Compute whether we should skip sending to this port because a per-port
+            // subpage form exists or the form is marked passive (avoid sending to self).
+            // Do this before taking any mutable borrows on self to prevent borrow conflicts.
+            // Determine whether to skip sending based on master_passive Option and derived default
+            let skip_self_send_candidate = if let Some(ref pname) = p_name {
+                if let Some(ps) = self.per_port_states.get(pname) {
+                    if let Some(ref f) = ps.subpage_form {
+                        // If user set explicit Some(true/false), use it; otherwise derive default
+                        if let Some(v) = f.master_passive {
+                            v
+                        } else {
+                            // derived default: passive if any Master entries exist
+                            let derived_default_passive = f
+                                .registers
+                                .iter()
+                                .any(|r| r.role == crate::protocol::status::EntryRole::Master);
+                            derived_default_passive
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                if let Some(f) = self.subpage_form.as_ref() {
+                    if let Some(v) = f.master_passive {
+                        v
+                    } else {
+                        let derived_default_passive = f
+                            .registers
+                            .iter()
+                            .any(|r| r.role == crate::protocol::status::EntryRole::Master);
+                        derived_default_passive
+                    }
+                } else {
+                    false
+                }
+            };
+
             let form_opt: Option<&mut SubpageForm> = if form_opt_idx == Some(0) {
                 self.subpage_form.as_mut()
             } else if let Some(ref pname) = p_name {
@@ -150,7 +190,19 @@ impl Status {
                             };
                             if let Ok((req_obj, raw)) = gen_res {
                                 if let Some(rt_some) = rt_opt.as_ref() {
-                                    if rt_some
+                                    // If skip_self_send_candidate was computed true above,
+                                    // avoid sending to the port because the app is also
+                                    // simulating registers for this port.
+                                    if skip_self_send_candidate {
+                                        // Treat as dispatched so polling advances, but do not
+                                        // send on the wire.
+                                        if let Some(reg) = form.registers.get_mut(r_idx) {
+                                            reg.req_total = reg.req_total.saturating_add(1);
+                                            reg.next_poll_at =
+                                                now + std::time::Duration::from_millis(1000);
+                                        }
+                                        dispatched = true;
+                                    } else if rt_some
                                         .cmd_tx
                                         .send(RuntimeCommand::Write(raw.clone()))
                                         .is_ok()
