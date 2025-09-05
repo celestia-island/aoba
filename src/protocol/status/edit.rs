@@ -1,5 +1,6 @@
-use crate::protocol::status::*;
 use chrono::Local;
+
+use crate::protocol::status::*;
 
 impl Status {
     pub fn pause_and_reset_slave_listen(&mut self) {
@@ -27,6 +28,13 @@ impl Status {
                 if reg.role == EntryRole::Master {
                     found_master = true;
                 }
+            }
+        }
+        // Sync current form values to per-port slave contexts so auto-slave uses TUI values
+        if self.subpage_form.is_some() {
+            if let Some(info) = self.ports.get(self.selected) {
+                let pname = info.port_name.clone();
+                self.sync_form_to_slave_context(pname.as_str());
             }
         }
         self.polling_paused = false;

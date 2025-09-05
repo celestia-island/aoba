@@ -138,7 +138,7 @@ fn render_entry_header(
     } else {
         None
     };
-    // removed unused style bindings
+    // Removed unused style bindings
     let mut spans: Vec<Span> = Vec::new();
     // Use helper to render prefix and index
     spans.extend(styled_spans(StyledSpanKind::PrefixIndex {
@@ -149,7 +149,7 @@ fn render_entry_header(
     spans.push(Span::raw(", "));
     // Role field (new first editable)
     let role_active = matches!(cur_field, Some(F::Role)) && editing;
-    // role style computed inline where used; removed unused binding
+    // Role style computed inline where used; removed unused binding
     let role_label = match r.role {
         EntryRole::Master => lang().protocol.modbus.role_master.as_str(),
         EntryRole::Slave => lang().protocol.modbus.role_slave.as_str(),
@@ -180,7 +180,7 @@ fn render_entry_header(
     spans.push(Span::raw(", "));
     // ID
     let id_active = matches!(cur_field, Some(F::Id)) && editing;
-    // id style computed inline where used; removed unused binding
+    // Id style computed inline where used; removed unused binding
     if id_active {
         let content = if form.master_input_buffer.is_empty() {
             "_".to_string()
@@ -255,7 +255,7 @@ fn render_entry_header(
         bold: false,
     }));
     let start_active = matches!(cur_field, Some(F::Start)) && editing;
-    // start style computed inline where used; removed unused binding
+    // Start style computed inline where used; removed unused binding
     if start_active {
         let content = if form.master_input_buffer.is_empty() {
             "_".to_string()
@@ -288,7 +288,7 @@ fn render_entry_header(
     }
     spans.push(Span::raw(" - "));
     let end_active = matches!(cur_field, Some(F::End)) && editing;
-    // end style computed inline where used; removed unused binding
+    // End style computed inline where used; removed unused binding
     if end_active {
         let content = if form.master_input_buffer.is_empty() {
             "_".to_string()
@@ -323,7 +323,7 @@ fn render_entry_header(
     spans.push(Span::raw(", "));
     let counter_label = lang().protocol.modbus.label_req_counter.as_str();
     let counter_selected = chosen && matches!(cur_field, Some(F::Counter));
-    // counter style computed inline where used; removed unused binding
+    // Counter style computed inline where used; removed unused binding
     if counter_selected {
         spans.extend(styled_spans(StyledSpanKind::Text {
             text: format!("{} = [{} / {}]", counter_label, r.req_success, r.req_total).as_str(),
@@ -367,7 +367,7 @@ fn render_entry_values(
     };
     let start = r.address as usize;
     let end_exclusive = start + r.length as usize;
-    // removed unused style bindings
+    // Removed unused style bindings
     let mut addr = start;
     while addr < end_exclusive {
         let line_base = (addr / 8) * 8;
@@ -384,7 +384,7 @@ fn render_entry_values(
             }
             let offset = cur - start;
             let raw_val = r.values.get(offset).cloned().unwrap_or(0u16);
-            // style computed inline where used; removed unused binding
+            // Style computed inline where used; removed unused binding
             if let Some(F::Value(a)) = &cur_field {
                 if *a as usize == cur && editing {
                     // For Coils and DiscreteInputs show boolean editor; otherwise show numeric editor

@@ -1,12 +1,11 @@
 use chrono::Local;
 
-use crate::protocol::modbus::{
-    generate_pull_get_coils_request, generate_pull_get_discrete_inputs_request,
-    generate_pull_get_holdings_request, generate_pull_get_inputs_request,
-};
-
 use crate::{
     i18n::lang,
+    protocol::modbus::{
+        generate_pull_get_coils_request, generate_pull_get_discrete_inputs_request,
+        generate_pull_get_holdings_request, generate_pull_get_inputs_request,
+    },
     protocol::{
         runtime::RuntimeCommand,
         status::{RegisterMode, *},
@@ -123,7 +122,7 @@ impl Status {
                 while attempts < total {
                     let mut dispatched = false;
                     if let Some(reg) = form.registers.get_mut(r_idx) {
-                        if reg.role == EntryRole::Slave
+                        if reg.role == EntryRole::Master
                             && now >= reg.next_poll_at
                             && reg.pending_requests.is_empty()
                         {
@@ -151,7 +150,46 @@ impl Status {
                             };
                             if let Ok((req_obj, raw)) = gen_res {
                                 if let Some(rt_some) = rt_opt.as_ref() {
-                                    if rt_some.cmd_tx.send(RuntimeCommand::Write(raw)).is_ok() {
+                                    if rt_some
+                                        .cmd_tx
+                                        .send(RuntimeCommand::Write(raw.clone()))
+                                        .is_ok()
+                                    {
+                                        // Log the sent frame so UI/status shows the outgoing request
+                                        let hex = raw
+                                            .iter()
+                                            .map(|b| format!("{:02x}", b))
+                                            .collect::<Vec<_>>()
+                                            .join(" ");
+                                        let sid = reg.slave_id;
+                                        let func = match mode_val {
+                                            RegisterMode::Coils => 0x01,
+                                            RegisterMode::DiscreteInputs => 0x02,
+                                            RegisterMode::Holding => 0x03,
+                                            RegisterMode::Input => 0x04,
+                                        };
+                                        let entry = LogEntry {
+                                            when: chrono::Local::now(),
+                                            raw: format!(
+                                                "{}: {hex}",
+                                                lang().protocol.modbus.log_sent_frame
+                                            ),
+                                            parsed: Some(ParsedRequest {
+                                                origin: "master".into(),
+                                                rw: "W".into(),
+                                                command: format!("func_{:02X}", func),
+                                                slave_id: sid,
+                                                address: reg.address,
+                                                length: qty,
+                                            }),
+                                        };
+                                        let target = if idx == self.selected {
+                                            None
+                                        } else {
+                                            p_name.clone()
+                                        };
+                                        deferred_logs.push((target, entry));
+
                                         reg.req_total = reg.req_total.saturating_add(1);
                                         let func = match mode_val {
                                             RegisterMode::Coils => 0x01,

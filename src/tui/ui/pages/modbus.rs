@@ -80,6 +80,10 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
 use crate::tui::utils::bus::Bus;
 
 pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
+    // Perform any pending sync scheduled by UI actions in prior iterations
+    if let Some(pn) = app.pending_sync_port.take() {
+        app.sync_form_to_slave_context(pn.as_str());
+    }
     // Ensure form exists when interacting with modbus settings tab
     if app.subpage_tab_index == 1 && app.subpage_form.is_none() {
         app.init_subpage_form();
@@ -98,7 +102,15 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                         return true;
                     }
                     KC::Enter => {
-                        commit_master_field(form); // Commit current field
+                        // Limit mutable borrow of form to this block
+                        {
+                            commit_master_field(form); // Commit current field
+                        }
+                        // Schedule immediate sync to avoid double borrow of app while form is still borrowed
+                        if app.selected < app.ports.len() {
+                            let pname = app.ports[app.selected].port_name.clone();
+                            app.pending_sync_port = Some(pname);
+                        }
                         form.master_field_editing = false;
                         return true;
                     }
@@ -149,7 +161,14 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                             }
                         }
                         // Commit then move to next field keeping editing mode
-                        commit_master_field(form);
+                        {
+                            commit_master_field(form);
+                        }
+                        // After any commit that changes register values/config, schedule sync
+                        if app.selected < app.ports.len() {
+                            let pname = app.ports[app.selected].port_name.clone();
+                            app.pending_sync_port = Some(pname);
+                        }
                         form.master_field_editing = false;
                         let enable_values = current_entry_is_master(form);
                         let dir = match key.code {
@@ -383,7 +402,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                                     .to_string(),
                             );
                             hints.push(lang().hotkeys.hint_master_type_switch.as_str().to_string());
-                            // reuse
+                            // Reuse
                         }
                         MasterEditField::Id
                         | MasterEditField::Start
@@ -489,7 +508,7 @@ fn commit_master_field(form: &mut SubpageForm) {
                         }
                         Value(a) => {
                             // If editing value and buffer empty: for Coils/DiscreteInputs keep previous/toggle behaviour;
-                            // for other register types treat empty as zero.
+                            // For other register types treat empty as zero.
                             if entry.mode != RegisterMode::Coils
                                 && entry.mode != RegisterMode::DiscreteInputs
                             {
