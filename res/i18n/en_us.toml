@@ -147,6 +147,10 @@ status_paused = "Paused"
 hint_enter_toggle_work = "Press Enter to start/stop"
 hint_enter_start_work = "Press Enter to start"
 hint_enter_pause_work = "Press Enter to pause"
+label_master_passive = "Listen for external requests"
+status_master_passive = "Passive, listen-only"
+status_master_active = "Active, polling"
+label_default_marker = "default"
 
 [protocol.mqtt]
 panel_placeholder = "MQTT mode placeholder panel (not implemented yet)"

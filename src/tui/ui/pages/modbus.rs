@@ -335,6 +335,21 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                         }
                         return true;
                     }
+                    // If cursor on second item, toggle master_passive and schedule sync
+                    if form.cursor == 1 {
+                        // Derived default: if any Master entries exist -> default = Passive
+                        let derived_default_passive = form.registers.iter().any(|r| r.role == crate::protocol::status::EntryRole::Master);
+                        // effective current: None -> default (passive if derived_default_passive), Some(v) -> v
+                        let effective_passive = form.master_passive.unwrap_or(derived_default_passive);
+                        // Toggle and store explicit choice
+                        form.master_passive = Some(!effective_passive);
+                        // schedule sync to avoid mutably borrowing app while still borrowed
+                        if app.selected < app.ports.len() {
+                            let pname = app.ports[app.selected].port_name.clone();
+                            app.pending_sync_port = Some(pname);
+                        }
+                        return true;
+                    }
                     if !form.editing {
                         edit::begin_edit(form);
                     } else {
