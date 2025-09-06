@@ -1,19 +1,19 @@
 use ratatui::{
     prelude::*,
+    style::Modifier,
     style::{Color, Style},
     text::Span,
 };
+use serialport::Parity;
+use unicode_width::UnicodeWidthStr;
 
-use crate::tui::ui::components::{
-    render_boxed_paragraph, styled_spans, styled_title_span, StyledSpanKind, TextState,
-};
 use crate::{
     i18n::lang,
     protocol::status::{EditingField, Status},
+    tui::ui::components::{
+        render_boxed_paragraph, styled_spans, styled_title_span, StyledSpanKind, TextState,
+    },
 };
-use ratatui::style::Modifier;
-use serialport::Parity;
-use unicode_width::UnicodeWidthStr;
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {

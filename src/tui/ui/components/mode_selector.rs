@@ -7,7 +7,6 @@ use ratatui::{
 };
 
 use crate::i18n::lang;
-// Hint line removed per user request: no bottom inline hints inside popup.
 
 /// Render a centered mode selector popup. `index` is the currently selected option index.
 pub fn render_mode_selector(f: &mut Frame, index: usize) {

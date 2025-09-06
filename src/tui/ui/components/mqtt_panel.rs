@@ -1,8 +1,9 @@
+use ratatui::{prelude::*, widgets::Paragraph};
+
 use crate::{
     i18n::lang,
     protocol::status::{AppMode, Status},
 };
-use ratatui::{prelude::*, widgets::Paragraph};
 
 pub fn render_mqtt_panel(f: &mut Frame, area: Rect, app: &Status) {
     let text = match app.app_mode {

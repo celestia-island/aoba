@@ -46,6 +46,7 @@ impl Status {
             recent_auto_sent: std::collections::VecDeque::new(),
             recent_auto_requests: std::collections::VecDeque::new(),
             pending_sync_port: None,
+            about_view_offset: 0,
         }
     }
     pub fn with_ports(ports: Vec<SerialPortInfo>) -> Self {
@@ -141,7 +142,8 @@ impl Status {
         self.load_current_port_state();
     }
     pub fn next_visual(&mut self) {
-        let total = self.ports.len().saturating_add(2);
+        // ports + Refresh + Manual + About = ports + 3 virtual entries
+        let total = self.ports.len().saturating_add(3);
         if total == 0 {
             return;
         }
@@ -155,7 +157,8 @@ impl Status {
         }
     }
     pub fn prev_visual(&mut self) {
-        let total = self.ports.len().saturating_add(2);
+        // ports + Refresh + Manual + About = ports + 3 virtual entries
+        let total = self.ports.len().saturating_add(3);
         if total == 0 {
             return;
         }
@@ -260,12 +263,20 @@ impl Status {
         let special_base = self.ports.len();
         if i >= special_base {
             let rel = i - special_base;
-            if rel == 0 {
-                self.refresh();
-            } else {
-                self.set_error(
-                    "Manual device specify: only supported on Linux and not implemented yet",
-                );
+            match rel {
+                0 => {
+                    self.refresh();
+                }
+                1 => {
+                    self.set_error(
+                        "Manual device specify: only supported on Linux and not implemented yet",
+                    );
+                }
+                2 => {
+                    // About virtual entry: open About full-page subpage.
+                    self.subpage_active = true;
+                }
+                _ => {}
             }
             return;
         }

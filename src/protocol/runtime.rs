@@ -1,11 +1,11 @@
+use anyhow::Result;
+use flume::{Receiver, Sender};
 use std::{
     sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
 
-use anyhow::Result;
-use flume::{Receiver, Sender};
 use serialport::{DataBits, SerialPort, StopBits};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

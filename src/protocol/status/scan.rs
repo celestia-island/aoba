@@ -20,6 +20,13 @@ impl Status {
         } else {
             None
         };
+        // If selection pointed to a virtual entry, remember its relative index so we can restore it after refresh
+        let prev_selected_virtual_rel =
+            if !self.ports.is_empty() && self.selected >= self.ports.len() {
+                Some(self.selected - self.ports.len())
+            } else {
+                None
+            };
         let mut name_to_state: HashMap<String, PortState> = HashMap::new();
         let mut name_to_handle: HashMap<String, Option<Box<dyn SerialPort>>> = HashMap::new();
         let mut name_to_runtime: HashMap<String, Option<PortRuntimeHandle>> = HashMap::new();
@@ -73,8 +80,19 @@ impl Status {
                 if let Some(idx) = self.ports.iter().position(|p| p.port_name == name) {
                     self.selected = idx;
                 }
+            } else if let Some(rel) = prev_selected_virtual_rel {
+                // restore virtual selection (ensure within bounds of new extras)
+                let extras_len = self.port_extras.len();
+                if rel < extras_len {
+                    self.selected = self.ports.len() + rel;
+                } else if extras_len > 0 {
+                    self.selected = self.ports.len() + extras_len - 1;
+                } else {
+                    self.selected = 0;
+                }
             }
-            let total = self.ports.len().saturating_add(2);
+            // ports + Refresh + Manual + About = ports + 3 virtual entries
+            let total = self.ports.len().saturating_add(3);
             if self.selected >= total {
                 self.selected = 0;
             }
@@ -149,7 +167,8 @@ impl Status {
                     self.selected = idx;
                 }
             }
-            let total = self.ports.len().saturating_add(2);
+            // ports + Refresh + Manual + About = ports + 3 virtual entries
+            let total = self.ports.len().saturating_add(3);
             if self.selected >= total {
                 self.selected = 0;
             }

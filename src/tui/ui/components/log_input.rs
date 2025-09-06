@@ -1,10 +1,13 @@
-use crate::i18n::lang;
-use crate::protocol::status::{InputMode, Status};
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
+};
+
+use crate::{
+    i18n::lang,
+    protocol::status::{InputMode, Status},
 };
 
 /// Render a small input area showing current mode and buffer. Height expected to be small (3 lines).

@@ -7,12 +7,11 @@ pub mod mqtt_panel;
 
 use ratatui::{
     prelude::*,
-    style::Style,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
     widgets::{Block, Paragraph},
 };
-
-use ratatui::style::{Color, Modifier};
-use ratatui::text::Span;
+use unicode_width::UnicodeWidthStr;
 
 /// Explicit text state for helper styling to avoid boolean parameter ambiguity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -224,4 +223,41 @@ pub fn render_boxed_paragraph(
         para = para.style(s);
     }
     f.render_widget(para, area);
+}
+
+/// Convert label/value pairs into aligned `Line`s. Each pair is (label, value, optional style)
+/// `indent` is prefixed before each label (for example two spaces). `gap` is the number of
+/// spaces between the label column and the value column.
+pub fn kv_pairs_to_lines(
+    pairs: &[(String, String, Option<Style>)],
+    indent: &str,
+    gap: usize,
+) -> Vec<Line<'static>> {
+    // compute max label width
+    let max_label_w = pairs
+        .iter()
+        .map(|(lbl, _, _)| UnicodeWidthStr::width(lbl.as_str()))
+        .max()
+        .unwrap_or(0usize);
+    let mut out: Vec<Line> = Vec::new();
+    for (lbl, val, maybe_style) in pairs.iter() {
+        let lbl_w = UnicodeWidthStr::width(lbl.as_str());
+        let fill = max_label_w.saturating_sub(lbl_w);
+        let padded_label = format!("{}{}{}", indent, lbl, " ".repeat(fill));
+        let spacer = " ".repeat(gap);
+        let label_span = Span::styled(padded_label, Style::default().add_modifier(Modifier::BOLD));
+        match maybe_style {
+            Some(s) => out.push(Line::from(vec![
+                label_span,
+                Span::raw(spacer),
+                Span::styled(val.clone(), *s),
+            ])),
+            None => out.push(Line::from(vec![
+                label_span,
+                Span::raw(spacer),
+                Span::raw(val.clone()),
+            ])),
+        }
+    }
+    out
 }

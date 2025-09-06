@@ -3,8 +3,9 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use super::PortExtra;
 use serialport::{SerialPortInfo, SerialPortType};
+
+use super::PortExtra;
 
 /// Return the list of available serial ports sorted / deduped for Windows.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
