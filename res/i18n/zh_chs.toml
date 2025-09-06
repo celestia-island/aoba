@@ -28,7 +28,8 @@ scan_quick_hint = "按 r 快速扫描"
 
 [hotkeys]
 hint_kv_template = "按 {key} {label}"
-press_c_clear = "按 c 清除警告"
+press_c_clear = "清空日志"
+press_c_confirm = "再按一次 c 确认清空日志"
 press_m_switch_protocol = "按 m 切换协议"
 press_enter_toggle = "按 Enter 选中/启用端口"
 press_enter_select = "按 Enter 选中"

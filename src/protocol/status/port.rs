@@ -27,6 +27,7 @@ impl Status {
             log_selected: 0,
             log_view_offset: 0,
             log_auto_scroll: true,
+            log_clear_pending: false,
             input_mode: InputMode::Ascii,
             input_editing: false,
             input_buffer: String::new(),
@@ -182,6 +183,7 @@ impl Status {
                     log_selected: self.log_selected,
                     log_view_offset: self.log_view_offset,
                     log_auto_scroll: self.log_auto_scroll,
+                    log_clear_pending: self.log_clear_pending,
                     input_mode: self.input_mode,
                     input_editing: self.input_editing,
                     input_buffer: self.input_buffer.clone(),
@@ -202,6 +204,7 @@ impl Status {
                     self.log_selected = snap.log_selected;
                     self.log_view_offset = snap.log_view_offset;
                     self.log_auto_scroll = snap.log_auto_scroll;
+                    self.log_clear_pending = snap.log_clear_pending;
                     self.input_mode = snap.input_mode;
                     self.input_editing = snap.input_editing;
                     self.input_buffer = snap.input_buffer;
