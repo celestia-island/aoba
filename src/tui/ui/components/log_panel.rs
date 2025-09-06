@@ -8,9 +8,10 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{
+    i18n::lang, protocol::status::Status, tui::ui::components::log_input::render_log_input,
+};
 
-use crate::tui::ui::components::log_input::render_log_input;
 /// Render a log panel. Each log entry is presented as a 3-line grouped item:
 /// 1) timestamp
 /// 2) raw payload (single line, truncated)

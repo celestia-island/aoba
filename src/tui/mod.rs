@@ -681,10 +681,18 @@ fn run_app(
                                         .get(guard.selected)
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
+                                    // If selected is a real port occupied by this app, open subpage form.
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
                                         guard.subpage_active = true;
                                         guard.subpage_tab_index = 0;
                                         guard.init_subpage_form();
+                                    } else {
+                                        // Allow entering About full-page when About virtual entry is selected.
+                                        let about_idx = guard.ports.len().saturating_add(2);
+                                        if guard.selected == about_idx {
+                                            guard.subpage_active = true;
+                                            // no form to init; about page reads its own cache
+                                        }
                                     }
                                     guard.clear_error();
                                 } else {
@@ -709,6 +717,14 @@ fn run_app(
                                                 .saturating_add(form.registers.len());
                                             if total > 0 {
                                                 form.cursor = (form.cursor + 1) % total;
+                                            }
+                                        } else {
+                                            // If About full-page is active, move view down
+                                            let about_idx = guard.ports.len().saturating_add(2);
+                                            // If About full-page is active, move view down one line
+                                            if guard.selected == about_idx {
+                                                guard.about_view_offset =
+                                                    guard.about_view_offset.saturating_add(1);
                                             }
                                         }
                                     } else {
@@ -746,6 +762,13 @@ fn run_app(
                                                     form.cursor -= 1;
                                                 }
                                             }
+                                        } else {
+                                            // If About full-page is active, move view up
+                                            let about_idx = guard.ports.len().saturating_add(2);
+                                            if guard.selected == about_idx {
+                                                guard.about_view_offset =
+                                                    guard.about_view_offset.saturating_sub(1);
+                                            }
                                         }
                                     } else {
                                         guard.prev_visual();
@@ -759,6 +782,15 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
                                         guard.page_up(LOG_PAGE_JUMP);
+                                    } else {
+                                        // If About subpage is active, page up
+                                        let about_idx = guard.ports.len().saturating_add(2);
+                                        if guard.subpage_active && guard.selected == about_idx {
+                                            // move up by a page (use LOG_PAGE_JUMP as a reasonable page size)
+                                            guard.about_view_offset = guard
+                                                .about_view_offset
+                                                .saturating_sub(LOG_PAGE_JUMP);
+                                        }
                                     }
                                     guard.clear_error();
                                 }
@@ -767,6 +799,13 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
                                         guard.page_down(LOG_PAGE_JUMP);
+                                    } else {
+                                        let about_idx = guard.ports.len().saturating_add(2);
+                                        if guard.subpage_active && guard.selected == about_idx {
+                                            guard.about_view_offset = guard
+                                                .about_view_offset
+                                                .saturating_add(LOG_PAGE_JUMP);
+                                        }
                                     }
                                     guard.clear_error();
                                 }
@@ -777,6 +816,11 @@ fn run_app(
                                         // Jump to top: bottom index becomes the last index of the first page
                                         guard.log_view_offset = 0;
                                         guard.log_auto_scroll = false;
+                                    } else {
+                                        let about_idx = guard.ports.len().saturating_add(2);
+                                        if guard.subpage_active && guard.selected == about_idx {
+                                            guard.about_view_offset = 0;
+                                        }
                                     }
                                     guard.clear_error();
                                 }
@@ -791,6 +835,12 @@ fn run_app(
                                             guard.log_view_offset = 0;
                                         }
                                         guard.log_auto_scroll = true;
+                                    } else {
+                                        let about_idx = guard.ports.len().saturating_add(2);
+                                        if guard.subpage_active && guard.selected == about_idx {
+                                            // For about, bottom resets to top to show start
+                                            guard.about_view_offset = 0;
+                                        }
                                     }
                                     guard.clear_error();
                                 }

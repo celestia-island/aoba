@@ -2,7 +2,7 @@
 name = "aoba"
 authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debug & simulation CLI tool (Modbus, MQTT, TTY, TCP/UDP, etc.)"
-repository = "https://github.com/langyo/aoba"
+repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
 
 version = "0.0.1"
@@ -63,5 +63,9 @@ ratatui = "^0.29"
 unicode-width = "^0.2"
 
 rmodbus = { version = "^0.10", features = ["with_serde"] }
-libc = "0.2"
+libc = "^0.2"
 serialport = "^4"
+
+[build-dependencies]
+serde_json = "^1"
+toml = "^0.9"
