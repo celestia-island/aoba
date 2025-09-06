@@ -35,6 +35,7 @@ impl Status {
                             log_selected: 0,
                             log_view_offset: 0,
                             log_auto_scroll: true,
+                            log_clear_pending: false,
                             input_mode: InputMode::Ascii,
                             input_editing: false,
                             input_buffer: String::new(),

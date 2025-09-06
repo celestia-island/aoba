@@ -43,22 +43,57 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
 
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
     if _app.subpage_active {
-        let rows = ratatui::layout::Layout::default()
-            .direction(ratatui::layout::Direction::Vertical)
-            .margin(0)
-            .constraints([
-                ratatui::layout::Constraint::Length(1),
-                ratatui::layout::Constraint::Length(1),
-            ])
-            .split(area);
+        // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
+        // [confirmation row - yellow bg] [page hints] [global hints]
+        if _app.log_clear_pending {
+            let rows = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .margin(0)
+                .constraints([
+                    ratatui::layout::Constraint::Length(1),
+                    ratatui::layout::Constraint::Length(1),
+                    ratatui::layout::Constraint::Length(1),
+                ])
+                .split(area);
 
-        // Page-specific hints (above)
-        let page_hints = pages::bottom_hints_for_app(_app);
-        render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
+            // Confirmation row (yellow background)
+            let confirm_block = Block::default().style(
+                Style::default()
+                    .bg(Color::Yellow)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD),
+            );
+            let confirm_text = lang().hotkeys.press_c_confirm.as_str();
+            let confirm_para = Paragraph::new(confirm_text)
+                .block(confirm_block)
+                .alignment(Alignment::Center);
+            f.render_widget(confirm_para, rows[0]);
 
-        // Global hints (bottom-most)
-        let global_hints = pages::global_hints_for_app(_app);
-        render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
+            // Page-specific hints (middle)
+            let page_hints = pages::bottom_hints_for_app(_app);
+            render_hints(f, rows[1], page_hints.iter().map(|s| s.as_str()));
+
+            // Global hints (bottom-most)
+            let global_hints = pages::global_hints_for_app(_app);
+            render_hints(f, rows[2], global_hints.iter().map(|s| s.as_str()));
+        } else {
+            let rows = ratatui::layout::Layout::default()
+                .direction(ratatui::layout::Direction::Vertical)
+                .margin(0)
+                .constraints([
+                    ratatui::layout::Constraint::Length(1),
+                    ratatui::layout::Constraint::Length(1),
+                ])
+                .split(area);
+
+            // Page-specific hints (above)
+            let page_hints = pages::bottom_hints_for_app(_app);
+            render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
+
+            // Global hints (bottom-most)
+            let global_hints = pages::global_hints_for_app(_app);
+            render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
+        }
     } else {
         // Single-line bottom hints when not in a subpage
         let hints = pages::bottom_hints_for_app(_app);
