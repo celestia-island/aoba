@@ -338,9 +338,13 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                     // If cursor on second item, toggle master_passive and schedule sync
                     if form.cursor == 1 {
                         // Derived default: if any Master entries exist -> default = Passive
-                        let derived_default_passive = form.registers.iter().any(|r| r.role == crate::protocol::status::EntryRole::Master);
+                        let derived_default_passive = form
+                            .registers
+                            .iter()
+                            .any(|r| r.role == crate::protocol::status::EntryRole::Master);
                         // effective current: None -> default (passive if derived_default_passive), Some(v) -> v
-                        let effective_passive = form.master_passive.unwrap_or(derived_default_passive);
+                        let effective_passive =
+                            form.master_passive.unwrap_or(derived_default_passive);
                         // Toggle and store explicit choice
                         form.master_passive = Some(!effective_passive);
                         // schedule sync to avoid mutably borrowing app while still borrowed
@@ -484,6 +488,11 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                 lang().tabs.log.hint_follow_on.as_str()
             };
             hints.push(crate::tui::ui::bottom::format_kv_hint("p", action_label));
+            // Clear logs shortcut hint
+            hints.push(crate::tui::ui::bottom::format_kv_hint(
+                "c",
+                lang().hotkeys.press_c_clear.as_str(),
+            ));
         }
         return hints;
     }

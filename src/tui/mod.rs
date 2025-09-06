@@ -569,6 +569,24 @@ fn run_app(
                                     redraw(terminal, &app);
                                     continue;
                                 }
+                                KC::Char('c') => {
+                                    // Require double-press to clear logs: first press sets a pending flag
+                                    if !guard.log_clear_pending {
+                                        guard.log_clear_pending = true;
+                                    } else {
+                                        // Second press: perform clear
+                                        guard.logs.clear();
+                                        guard.log_selected = 0;
+                                        guard.log_view_offset = 0;
+                                        guard.log_auto_scroll = true;
+                                        guard.log_clear_pending = false;
+                                        guard.save_current_port_state();
+                                    }
+                                    guard.clear_error();
+                                    drop(guard);
+                                    redraw(terminal, &app);
+                                    continue;
+                                }
                                 KC::Down | KC::Char('j') => {
                                     let total = guard.logs.len();
                                     if total > 0 {
