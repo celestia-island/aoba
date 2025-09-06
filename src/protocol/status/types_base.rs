@@ -178,7 +178,10 @@ pub struct Status {
     pub(crate) recent_auto_requests: VecDeque<(Vec<u8>, std::time::Instant)>,
     // When set, indicates that we should sync current form into the given port's slave context
     pub(crate) pending_sync_port: Option<String>,
+    // Offset for the About page vertical view
+    pub about_view_offset: usize,
 }
+
 impl Default for Status {
     fn default() -> Self {
         Self::new()

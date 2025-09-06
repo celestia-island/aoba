@@ -1,15 +1,20 @@
+pub mod about;
 pub mod entry;
 pub mod modbus;
 
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
 
-use crate::tui::utils::bus::Bus;
-use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action, tui::utils::bus::Bus};
 
 /// Return page-provided bottom hints for the current app state.
 pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
     if app.subpage_active {
+        // If About full-page is active, let About provide page-specific hints
+        let about_idx = app.ports.len().saturating_add(2);
+        if app.selected == about_idx {
+            return crate::tui::ui::pages::about::page_bottom_hints(app);
+        }
         return crate::tui::ui::pages::modbus::page_bottom_hints(app);
     }
     // Default to entry hints when no subpage
@@ -58,6 +63,43 @@ pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool
     }
 
     if app.subpage_active {
+        // If About full-page is active, consume navigation keys here.
+        let about_idx = app.ports.len().saturating_add(2);
+        if app.selected == about_idx {
+            match key.code {
+                KC::Up | KC::Char('k') => {
+                    app.about_view_offset = app.about_view_offset.saturating_sub(1);
+                    return true;
+                }
+                KC::Down | KC::Char('j') => {
+                    app.about_view_offset = app.about_view_offset.saturating_add(1);
+                    return true;
+                }
+                KC::PageUp => {
+                    app.about_view_offset = app
+                        .about_view_offset
+                        .saturating_sub(crate::tui::utils::constants::LOG_PAGE_JUMP);
+                    return true;
+                }
+                KC::PageDown => {
+                    app.about_view_offset = app
+                        .about_view_offset
+                        .saturating_add(crate::tui::utils::constants::LOG_PAGE_JUMP);
+                    return true;
+                }
+                KC::Home => {
+                    app.about_view_offset = 0;
+                    return true;
+                }
+                KC::End => {
+                    app.about_view_offset = 0;
+                    return true;
+                }
+                _ => {}
+            }
+            // For other keys, do not consume so top-level can handle them (e.g., ESC to leave)
+            return false;
+        }
         return modbus::handle_subpage_key(key, app, bus);
     }
     false
@@ -66,6 +108,12 @@ pub fn handle_key_in_subpage(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool
 pub fn render_panels(f: &mut Frame, area: Rect, app: &mut Status) {
     // If a subpage is active, render it full-screen; otherwise render the normal entry view
     if app.subpage_active {
+        // If the current selection is the About virtual entry, render About full-screen
+        let about_idx = app.ports.len().saturating_add(2);
+        if app.selected == about_idx {
+            crate::tui::ui::pages::about::render_about(f, area, app);
+            return;
+        }
         modbus::render_modbus(f, area, app);
     } else {
         entry::render_entry(f, area, app);

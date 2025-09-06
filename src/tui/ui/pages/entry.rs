@@ -113,6 +113,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     let extras = vec![
         lang().index.refresh_action.clone(),
         lang().index.manual_specify_label.clone(),
+        lang().index.about_label.clone(),
     ];
     // Compute inner vertical space (accounting for borders)
     let inner_h = left.height.saturating_sub(2) as usize;
@@ -217,6 +218,13 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     }
                 }
                 Paragraph::new(lines).block(content_block)
+            } else if rel == 1 {
+                Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
+            } else if rel == 2 {
+                // About page selected; show a compact preview that reuses about rendering logic
+                // Build an AboutCache snapshot if available by peeking the internal cache (best-effort)
+                crate::tui::ui::pages::about::render_about(f, right, app);
+                return;
             } else {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
             }

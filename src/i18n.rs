@@ -30,6 +30,7 @@ derive_struct! {
             port_state_other: String = "port_state_other".to_string(),
             refresh_action: String = "refresh_action".to_string(),
             manual_specify_label: String = "manual_specify_label".to_string(),
+            about_label: String = "about_label".to_string(),
             manual_specify_linux_note: String = "manual_specify_linux_note".to_string(),
             manual_specify_unsupported: String = "manual_specify_unsupported".to_string(),
             scan_last_header: String = "scan_last_header".to_string(),
@@ -37,6 +38,17 @@ derive_struct! {
             scan_raw_header: String = "scan_raw_header".to_string(),
             scan_truncated_suffix: String = "scan_truncated_suffix".to_string(),
             scan_quick_hint: String = "scan_quick_hint".to_string(),
+        },
+
+        about: {
+            welcome: String = "welcome".to_string(),
+            name: String = "name".to_string(),
+            version: String = "version".to_string(),
+            authors: String = "authors".to_string(),
+            repository: String = "repository".to_string(),
+            license: String = "license".to_string(),
+            dependencies: String = "dependencies".to_string(),
+            dependencies_license_list: String = "dependencies_license_list".to_string(),
         },
 
         hotkeys: {
