@@ -232,6 +232,7 @@ impl Status {
         }
         self.ui.log_auto_scroll = false;
     }
+
     pub fn page_down(&mut self, page: usize) {
         if self.ui.logs.is_empty() {
             return;

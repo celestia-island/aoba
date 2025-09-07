@@ -381,11 +381,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             selected,
             false,
         )));
-        let cur_label = opts_labels
-            .get(cur_idx)
-            .cloned()
-            .unwrap_or("1")
-            .to_string();
+        let cur_label = opts_labels.get(cur_idx).cloned().unwrap_or("1").to_string();
         lines.push(ratatui::text::Line::from(styled_spans(
             StyledSpanKind::Selector {
                 base_prefix,
