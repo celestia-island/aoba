@@ -16,7 +16,7 @@ use crate::{
 /// Added first editable field: Role, allowing switching between Master and Slave behaviors.
 pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut lines: Vec<Line> = Vec::new();
-    if let Some(form) = app.subpage_form.as_ref() {
+    if let Some(form) = app.ui.subpage_form.as_ref() {
         if form.registers.is_empty() {
             let sel = form.master_cursor == 0;
             let prefix = if sel { "> " } else { "  " };
@@ -55,7 +55,7 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Scroll logic copied from master / pull panels
     let inner_height = area.height.saturating_sub(2) as usize;
     let mut first_visible = 0usize;
-    if let Some(form) = app.subpage_form.as_ref() {
+    if let Some(form) = app.ui.subpage_form.as_ref() {
         let mut cursor_line = 0usize;
         let mut accum = 0usize;
         for (i, r) in form.registers.iter().enumerate() {

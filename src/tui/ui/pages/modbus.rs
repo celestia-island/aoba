@@ -19,12 +19,12 @@ use crate::{
 
 /// Unified ModBus page (merges previous master / slave pages).
 pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
-    let port_name = if !app.ports.is_empty() && app.selected < app.ports.len() {
-        app.ports[app.selected].port_name.clone()
+    let port_name = if !app.ports.list.is_empty() && app.ui.selected < app.ports.list.len() {
+        app.ports.list[app.ui.selected].port_name.clone()
     } else {
         "-".to_string()
     };
-    let mid_label = match app.app_mode {
+    let mid_label = match app.ui.app_mode {
         AppMode::Modbus => lang().protocol.modbus.label_modbus_settings.as_str(),
         AppMode::Mqtt => "MQTT",
     };
@@ -33,14 +33,14 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
         mid_label,
         lang().tabs.tab_log.as_str(),
     ];
-    let tab_index = app.subpage_tab_index.min(tabs.len().saturating_sub(1));
+    let tab_index = app.ui.subpage_tab_index.min(tabs.len().saturating_sub(1));
     let [header_area, content_area] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Length(1),
         ratatui::layout::Constraint::Min(0),
     ])
     .areas(area);
 
-    let mode_text = app.app_mode.label();
+    let mode_text = app.ui.app_mode.label();
     let right_label = format!("{port_name} - {mode_text}");
     let right_width = UnicodeWidthStr::width(right_label.as_str());
     let h_chunks = ratatui::layout::Layout::default()
@@ -66,7 +66,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     match tab_index {
         0 => render_config_panel(f, content_area, app, None),
         1 => {
-            if matches!(app.app_mode, AppMode::Modbus) {
+            if matches!(app.ui.app_mode, AppMode::Modbus) {
                 render_modbus_panel(f, content_area, app)
             } else {
                 render_mqtt_panel(f, content_area, app)
@@ -81,16 +81,16 @@ use crate::tui::utils::bus::Bus;
 
 pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
     // Perform any pending sync scheduled by UI actions in prior iterations
-    if let Some(pn) = app.pending_sync_port.take() {
+    if let Some(pn) = app.per_port.pending_sync_port.take() {
         app.sync_form_to_slave_context(pn.as_str());
     }
     // Ensure form exists when interacting with modbus settings tab
-    if app.subpage_tab_index == 1 && app.subpage_form.is_none() {
+    if app.ui.subpage_tab_index == 1 && app.ui.subpage_form.is_none() {
         app.init_subpage_form();
     }
 
-    if app.subpage_tab_index == 1 {
-        if let Some(form) = app.subpage_form.as_mut() {
+    if app.ui.subpage_tab_index == 1 {
+        if let Some(form) = app.ui.subpage_form.as_mut() {
             if form.master_field_editing {
                 // Editing layer
                 let is_type = matches!(form.master_edit_field, Some(MasterEditField::Type));
@@ -107,9 +107,9 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                             commit_master_field(form); // Commit current field
                         }
                         // Schedule immediate sync to avoid double borrow of app while form is still borrowed
-                        if app.selected < app.ports.len() {
-                            let pname = app.ports[app.selected].port_name.clone();
-                            app.pending_sync_port = Some(pname);
+                        if app.ui.selected < app.ports.list.len() {
+                            let pname = app.ports.list[app.ui.selected].port_name.clone();
+                            app.per_port.pending_sync_port = Some(pname);
                         }
                         form.master_field_editing = false;
                         return true;
@@ -165,9 +165,9 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                             commit_master_field(form);
                         }
                         // After any commit that changes register values/config, schedule sync
-                        if app.selected < app.ports.len() {
-                            let pname = app.ports[app.selected].port_name.clone();
-                            app.pending_sync_port = Some(pname);
+                        if app.ui.selected < app.ports.list.len() {
+                            let pname = app.ports.list[app.ui.selected].port_name.clone();
+                            app.per_port.pending_sync_port = Some(pname);
                         }
                         form.master_field_editing = false;
                         let enable_values = current_entry_is_master(form);
@@ -306,20 +306,20 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
     // Tab switching (shared across tabs)
     match key.code {
         KC::Tab => {
-            app.subpage_tab_index = (app.subpage_tab_index + 1) % 3;
+            app.ui.subpage_tab_index = (app.ui.subpage_tab_index + 1) % 3;
             true
         }
         KC::BackTab => {
-            if app.subpage_tab_index == 0 {
-                app.subpage_tab_index = 2;
+            if app.ui.subpage_tab_index == 0 {
+                app.ui.subpage_tab_index = 2;
             } else {
-                app.subpage_tab_index -= 1;
+                app.ui.subpage_tab_index -= 1;
             }
             true
         }
         KC::Enter => {
-            if app.subpage_tab_index == 0 {
-                if let Some(form) = app.subpage_form.as_mut() {
+            if app.ui.subpage_tab_index == 0 {
+                if let Some(form) = app.ui.subpage_form.as_mut() {
                     // If cursor on first item, toggle immediately and consume
                     if form.cursor == 0 {
                         form.loop_enabled = !form.loop_enabled;
@@ -348,9 +348,9 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                         // Toggle and store explicit choice
                         form.master_passive = Some(!effective_passive);
                         // schedule sync to avoid mutably borrowing app while still borrowed
-                        if app.selected < app.ports.len() {
-                            let pname = app.ports[app.selected].port_name.clone();
-                            app.pending_sync_port = Some(pname);
+                        if app.ui.selected < app.ports.list.len() {
+                            let pname = app.ports.list[app.ui.selected].port_name.clone();
+                            app.per_port.pending_sync_port = Some(pname);
                         }
                         return true;
                     }
@@ -361,7 +361,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                     }
                 }
                 return true;
-            } else if app.subpage_tab_index == 2 {
+            } else if app.ui.subpage_tab_index == 2 {
                 // Let global mapping handle input editing
                 return false;
             }
@@ -373,9 +373,9 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
 
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
-    if app.subpage_tab_index == 0 {
+    if app.ui.subpage_tab_index == 0 {
         // If cursor is on the first field (working toggle), show Enter-to-toggle hint and current state
-        if let Some(form) = &app.subpage_form {
+        if let Some(form) = &app.ui.subpage_form {
             if form.cursor == 0 {
                 // Show the localized Enter hint and a status kv showing current running/paused
                 if form.loop_enabled {
@@ -406,8 +406,8 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;
     }
-    if app.subpage_tab_index == 1 {
-        if let Some(form) = &app.subpage_form {
+    if app.ui.subpage_tab_index == 1 {
+        if let Some(form) = &app.ui.subpage_form {
             if form.master_field_editing {
                 if let Some(field) = &form.master_edit_field {
                     match field {
@@ -469,8 +469,8 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         }
         return hints;
     }
-    if app.subpage_tab_index == 2 {
-        if app.input_editing {
+    if app.ui.subpage_tab_index == 2 {
+        if app.ui.input_editing {
             hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
             hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
         } else {
@@ -482,7 +482,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                 "m",
                 lang().input.hint_input_mode_short.as_str(),
             ));
-            let action_label = if app.log_auto_scroll {
+            let action_label = if app.ui.log_auto_scroll {
                 lang().tabs.log.hint_follow_off.as_str()
             } else {
                 lang().tabs.log.hint_follow_on.as_str()

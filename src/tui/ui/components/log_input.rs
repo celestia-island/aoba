@@ -14,11 +14,12 @@ use crate::{
 pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut lines: Vec<Line> = Vec::new();
 
-    if app.input_editing {
+    if app.ui.input_editing {
         // Show buffer on the first content line (right under the title)
-        let content = if app.input_mode == InputMode::Hex {
+        let content = if app.ui.input_mode == InputMode::Hex {
             let mut s = String::new();
             let mut chars = app
+                .ui
                 .input_buffer
                 .chars()
                 .filter(|c| !c.is_whitespace())
@@ -34,7 +35,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
             }
             s
         } else {
-            app.input_buffer.clone()
+            app.ui.input_buffer.clone()
         };
         // Style editing content in yellow (match config page editing color)
         // Build spans in-place
@@ -76,9 +77,10 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
     // Not editing: buffer preview and short hint (mode shown in title on right)
 
     // Buffer preview (or placeholder when empty)
-    let content = if app.input_mode == InputMode::Hex {
+    let content = if app.ui.input_mode == InputMode::Hex {
         let mut s = String::new();
         let mut chars = app
+            .ui
             .input_buffer
             .chars()
             .filter(|c| !c.is_whitespace())
@@ -94,12 +96,12 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
         }
         s
     } else {
-        app.input_buffer.clone()
+        app.ui.input_buffer.clone()
     };
     // If buffer empty and not editing, show faint gray italic placeholder indicating current input mode
     if content.is_empty() {
         // Show as: " {input_mode_current} {mode_text}" with a leading space to align with title
-        let mode_text = match app.input_mode {
+        let mode_text = match app.ui.input_mode {
             InputMode::Ascii => lang().input.input_mode_ascii.as_str(),
             InputMode::Hex => lang().input.input_mode_hex.as_str(),
         };

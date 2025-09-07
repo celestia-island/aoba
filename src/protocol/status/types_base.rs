@@ -1,10 +1,14 @@
 use chrono::{DateTime, Local};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex},
+};
+use yuuka::derive_struct;
+
 use rmodbus::server::storage::ModbusStorageSmall;
 use serialport::{SerialPort, SerialPortInfo};
-use std::collections::{HashMap, VecDeque};
 
-use crate::protocol::runtime::PortRuntimeHandle;
-use crate::protocol::status::LogEntry;
+use crate::protocol::{runtime::PortRuntimeHandle, status::LogEntry, tty::PortExtra};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryRole {
@@ -136,54 +140,67 @@ pub struct PerPortState {
     pub app_mode: AppMode,
 }
 
-#[derive(Debug)]
-pub struct Status {
-    pub ports: Vec<SerialPortInfo>,
-    pub port_extras: Vec<crate::protocol::tty::PortExtra>,
-    pub port_states: Vec<PortState>,
-    pub port_handles: Vec<Option<Box<dyn SerialPort>>>,
-    pub port_runtimes: Vec<Option<PortRuntimeHandle>>,
-    pub selected: usize,
-    pub auto_refresh: bool,
-    pub last_refresh: Option<DateTime<Local>>,
-    pub error: Option<(String, DateTime<Local>)>,
-    pub subpage_active: bool,
-    pub subpage_form: Option<crate::protocol::status::SubpageForm>,
-    pub subpage_tab_index: usize,
-    pub logs: Vec<LogEntry>,
-    pub log_selected: usize,
-    pub log_view_offset: usize,
-    pub log_auto_scroll: bool,
-    pub log_clear_pending: bool,
-    pub input_mode: InputMode,
-    pub input_editing: bool,
-    pub input_buffer: String,
-    pub app_mode: AppMode,
-    pub mode_overlay_active: bool,
-    pub mode_overlay_index: usize,
-    pub(crate) per_port_states: HashMap<String, PerPortState>,
-    pub(crate) per_port_slave_contexts: HashMap<String, ModbusStorageSmall>,
-    pub last_scan_info: Vec<String>,
-    pub last_scan_time: Option<DateTime<Local>>,
-    pub busy: bool,
-    pub spinner_frame: u8,
-    pub polling_paused: bool,
-    pub last_port_toggle: Option<std::time::Instant>,
-    pub port_toggle_min_interval_ms: u64,
-    // recent auto-generated responses (bytes, timestamp) to avoid double-logging when
-    // the runtime emits a FrameSent for the same bytes.
-    pub(crate) recent_auto_sent: VecDeque<(Vec<u8>, std::time::Instant)>,
-    // recent auto-generated request bytes (incoming requests we auto-responded to)
-    // stored to implement debounce based on form.global_interval_ms
-    pub(crate) recent_auto_requests: VecDeque<(Vec<u8>, std::time::Instant)>,
-    // When set, indicates that we should sync current form into the given port's slave context
-    pub(crate) pending_sync_port: Option<String>,
-    // Offset for the About page vertical view
-    pub about_view_offset: usize,
+#[derive(Clone)]
+#[allow(dead_code)]
+pub struct SerialPortWrapper(Arc<Mutex<Box<dyn SerialPort + Send>>>);
+
+impl std::fmt::Debug for SerialPortWrapper {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SerialPortWrapper").finish()
+    }
 }
 
-impl Default for Status {
-    fn default() -> Self {
-        Self::new()
+derive_struct! {
+    pub Status {
+        ports: {
+            list: Vec<SerialPortInfo>,
+            extras: Vec<PortExtra>,
+            states: Vec<PortState>,
+            handles: Vec<Option<SerialPortWrapper>>,
+            runtimes: Vec<Option<PortRuntimeHandle>>,
+            about_view_offset: usize,
+        },
+        ui: {
+            selected: usize,
+            auto_refresh: bool,
+            last_refresh: Option<DateTime<Local>>,
+            error: Option<(String, DateTime<Local>)>,
+            subpage_active: bool,
+            subpage_form: Option<crate::protocol::status::SubpageForm>,
+            subpage_tab_index: usize,
+            logs: Vec<LogEntry>,
+            log_selected: usize,
+            log_view_offset: usize,
+            log_auto_scroll: bool,
+            log_clear_pending: bool,
+            input_mode: InputMode = InputMode::Ascii,
+            input_editing: bool,
+            input_buffer: String,
+            app_mode: AppMode = AppMode::Modbus,
+            mode_overlay_active: bool,
+            mode_overlay_index: usize,
+        },
+        per_port: {
+            states: HashMap<String, PerPortState>,
+            slave_contexts: HashMap<String, Arc<Mutex<ModbusStorageSmall>>>,
+            pending_sync_port: Option<String>,
+        },
+        scan: {
+            last_scan_info: Vec<String>,
+            last_scan_time: Option<DateTime<Local>>,
+        },
+        busy: {
+            busy: bool = false,
+            spinner_frame: u8 = 0,
+            polling_paused: bool = false,
+        },
+        toggles: {
+            last_port_toggle: Option<std::time::Instant>,
+            port_toggle_min_interval_ms: u64 = PORT_TOGGLE_MIN_INTERVAL_MS,
+        },
+        recent: {
+            auto_sent: VecDeque<(Vec<u8>, std::time::Instant)>,
+            auto_requests: VecDeque<(Vec<u8>, std::time::Instant)>,
+        },
     }
 }
