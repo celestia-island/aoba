@@ -14,21 +14,21 @@ use crate::{
 
 impl Status {
     pub fn drive_slave_polling(&mut self) {
-        if self.polling_paused {
+        if self.busy.polling_paused {
             return;
         }
         let now = std::time::Instant::now();
         let mut deferred_logs: Vec<(Option<String>, LogEntry)> = Vec::new();
-        for (idx, rt_opt) in self.port_runtimes.iter_mut().enumerate() {
+        for (idx, rt_opt) in self.ports.runtimes.iter_mut().enumerate() {
             let mut form_opt_idx = None; // 0 global, 1 per-port
             let mut p_name: Option<String> = None;
-            if idx == self.selected {
-                if self.subpage_active && self.subpage_form.is_some() {
+            if idx == self.ui.selected {
+                if self.ui.subpage_active && self.ui.subpage_form.is_some() {
                     form_opt_idx = Some(0);
                 }
-            } else if let Some(p) = self.ports.get(idx) {
+            } else if let Some(p) = self.ports.list.get(idx) {
                 p_name = Some(p.port_name.clone());
-                if let Some(ps) = self.per_port_states.get_mut(&p.port_name) {
+                if let Some(ps) = self.per_port.states.get_mut(&p.port_name) {
                     if ps.subpage_form.is_some() && ps.subpage_active {
                         form_opt_idx = Some(1);
                     }
@@ -42,7 +42,7 @@ impl Status {
             // Do this before taking any mutable borrows on self to prevent borrow conflicts.
             // Determine whether to skip sending based on master_passive Option and derived default
             let skip_self_send_candidate = if let Some(ref pname) = p_name {
-                if let Some(ps) = self.per_port_states.get(pname) {
+                if let Some(ps) = self.per_port.states.get(pname) {
                     if let Some(ref f) = ps.subpage_form {
                         // If user set explicit Some(true/false), use it; otherwise derive default
                         if let Some(v) = f.master_passive {
@@ -62,7 +62,7 @@ impl Status {
                     false
                 }
             } else {
-                if let Some(f) = self.subpage_form.as_ref() {
+                if let Some(f) = self.ui.subpage_form.as_ref() {
                     if let Some(v) = f.master_passive {
                         v
                     } else {
@@ -78,9 +78,10 @@ impl Status {
             };
 
             let form_opt: Option<&mut SubpageForm> = if form_opt_idx == Some(0) {
-                self.subpage_form.as_mut()
+                self.ui.subpage_form.as_mut()
             } else if let Some(ref pname) = p_name {
-                self.per_port_states
+                self.per_port
+                    .states
                     .get_mut(pname)
                     .and_then(|ps| ps.subpage_form.as_mut())
             } else {
@@ -90,8 +91,8 @@ impl Status {
                 Some(f) => f,
                 None => continue,
             };
-            if idx == self.selected {
-                if !form.loop_enabled || !self.subpage_active {
+            if idx == self.ui.selected {
+                if !form.loop_enabled || !self.ui.subpage_active {
                     continue;
                 }
             } else if !form.loop_enabled {
@@ -138,7 +139,7 @@ impl Status {
                         }
                     }
                     if let Some(le) = timeout_log {
-                        let target = if idx == self.selected {
+                        let target = if idx == self.ui.selected {
                             None
                         } else {
                             p_name.clone()
@@ -235,7 +236,7 @@ impl Status {
                                                 length: qty,
                                             }),
                                         };
-                                        let target = if idx == self.selected {
+                                        let target = if idx == self.ui.selected {
                                             None
                                         } else {
                                             p_name.clone()
@@ -275,7 +276,7 @@ impl Status {
         }
         for (target, le) in deferred_logs {
             if let Some(pn) = target {
-                if let Some(ps) = self.per_port_states.get_mut(&pn) {
+                if let Some(ps) = self.per_port.states.get_mut(&pn) {
                     ps.logs.push(le);
                 }
             } else {

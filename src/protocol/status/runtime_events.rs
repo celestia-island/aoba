@@ -7,10 +7,10 @@ use crate::{
 
 impl Status {
     pub fn drain_runtime_events(&mut self) {
-        if self.ports.is_empty() {
+        if self.ports.list.is_empty() {
             return;
         }
-        let selected = self.selected;
+        let selected = self.ui.selected;
         let mut pending_logs: Vec<LogEntry> = Vec::new();
         let mut pending_error: Option<String> = None;
         // First: collect all events from runtimes without holding other mutable borrows on self
@@ -20,12 +20,13 @@ impl Status {
             flume::Sender<crate::protocol::runtime::RuntimeCommand>,
             RuntimeEvent,
         )> = Vec::new();
-        for (idx, rt_opt) in self.port_runtimes.iter_mut().enumerate() {
+        for (idx, rt_opt) in self.ports.runtimes.iter_mut().enumerate() {
             if let Some(rt) = rt_opt.as_mut() {
-                let port_name = self.ports.get(idx).map(|p| p.port_name.clone());
+                let port_name = self.ports.list.get(idx).map(|p| p.port_name.clone());
                 // ensure a per-port state exists
                 if let Some(ref pname) = port_name {
-                    self.per_port_states
+                    self.per_port
+                        .states
                         .entry(pname.clone())
                         .or_insert(PerPortState {
                             subpage_active: false,
@@ -69,7 +70,7 @@ impl Status {
                             if idx == selected {
                                 pending_logs.push(recv_le);
                                 pending_logs.push(sent_le);
-                            } else if let Some(ps) = self.per_port_states.get_mut(pname.as_str()) {
+                            } else if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
                                 ps.logs.push(recv_le);
                                 ps.logs.push(sent_le);
                             }
@@ -83,9 +84,10 @@ impl Status {
                     }
                     // Then try matching against any form (master pending requests)
                     let form_opt: Option<&mut SubpageForm> = if idx == selected {
-                        self.subpage_form.as_mut()
+                        self.ui.subpage_form.as_mut()
                     } else if let Some(ref pname) = port_name {
-                        self.per_port_states
+                        self.per_port
+                            .states
                             .get_mut(pname.as_str())
                             .and_then(|ps| ps.subpage_form.as_mut())
                     } else {
@@ -150,8 +152,9 @@ impl Status {
                                                     // sync updated form values into per-port slave storage
                                                     if let Some(ref pname) = port_name {
                                                         need_sync_ports.insert(pname.clone());
-                                                    } else if idx < self.ports.len() {
-                                                        if let Some(info) = self.ports.get(idx) {
+                                                    } else if idx < self.ports.list.len() {
+                                                        if let Some(info) = self.ports.list.get(idx)
+                                                        {
                                                             need_sync_ports
                                                                 .insert(info.port_name.clone());
                                                         }
@@ -170,8 +173,9 @@ impl Status {
                                                     // sync updated form values into per-port slave storage
                                                     if let Some(ref pname) = port_name {
                                                         need_sync_ports.insert(pname.clone());
-                                                    } else if idx < self.ports.len() {
-                                                        if let Some(info) = self.ports.get(idx) {
+                                                    } else if idx < self.ports.list.len() {
+                                                        if let Some(info) = self.ports.list.get(idx)
+                                                        {
                                                             need_sync_ports
                                                                 .insert(info.port_name.clone());
                                                         }
@@ -260,7 +264,7 @@ impl Status {
                         if idx == selected {
                             pending_logs.push(unmatched_entry);
                         } else if let Some(ref pname) = port_name {
-                            if let Some(ps) = self.per_port_states.get_mut(pname.as_str()) {
+                            if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
                                 ps.logs.push(unmatched_entry);
                             }
                         }
@@ -271,19 +275,19 @@ impl Status {
                     // clean up old entries (>2s)
                     let now = std::time::Instant::now();
                     if let Some(ref pname) = port_name {
-                        if let Some(_ctx) = self.per_port_slave_contexts.get(pname.as_str()) {
+                        if let Some(_ctx) = self.per_port.slave_contexts.get(pname.as_str()) {
                             // noop: just to satisfy borrow rules
                         }
                     }
-                    while let Some((_, t)) = self.recent_auto_sent.front() {
+                    while let Some((_, t)) = self.recent.auto_sent.front() {
                         if now.duration_since(*t).as_secs() > 2 {
-                            self.recent_auto_sent.pop_front();
+                            self.recent.auto_sent.pop_front();
                         } else {
                             break;
                         }
                     }
                     // treat as auto if any recent auto-sent entry has same sid/func and same length
-                    let is_auto = self.recent_auto_sent.iter().any(|(bts, _)| {
+                    let is_auto = self.recent.auto_sent.iter().any(|(bts, _)| {
                         if bts.len() != bytes.len() {
                             return false;
                         }
@@ -339,7 +343,7 @@ impl Status {
                     if idx == selected {
                         pending_logs.push(entry);
                     } else if let Some(ref pname) = port_name {
-                        if let Some(ps) = self.per_port_states.get_mut(pname.as_str()) {
+                        if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
                             ps.logs.push(entry);
                         }
                     }
@@ -360,7 +364,7 @@ impl Status {
                     if idx == selected {
                         pending_logs.push(entry);
                     } else if let Some(ref pname) = port_name {
-                        if let Some(ps) = self.per_port_states.get_mut(pname.as_str()) {
+                        if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
                             ps.logs.push(entry);
                         }
                     }
@@ -369,7 +373,7 @@ impl Status {
                     if idx == selected {
                         pending_error = Some(e);
                     } else if let Some(ref pname) = port_name {
-                        if let Some(ps) = self.per_port_states.get_mut(pname.as_str()) {
+                        if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
                             ps.logs.push(LogEntry {
                                 when: Local::now(),
                                 raw: format!("Runtime error: {e}"),

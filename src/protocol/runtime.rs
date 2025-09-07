@@ -59,6 +59,7 @@ pub enum RuntimeEvent {
     Stopped,
 }
 
+#[derive(Clone)]
 pub struct PortRuntimeHandle {
     pub cmd_tx: Sender<RuntimeCommand>,
     pub evt_rx: Receiver<RuntimeEvent>,

@@ -28,7 +28,7 @@ use crate::{
 use serialport::Parity;
 
 fn is_log_tab(app: &Status) -> bool {
-    app.subpage_active && app.subpage_tab_index == 2
+    app.ui.subpage_active && app.ui.subpage_tab_index == 2
 }
 
 /// Recompute log viewport (bottom anchored) after `log_selected` potentially changed.
@@ -171,7 +171,7 @@ fn run_app(
                 // Mode overlay handling
                 let overlay_active = lock
                     .as_ref()
-                    .map(|g| g.mode_overlay_active)
+                    .map(|g| g.ui.mode_overlay_active)
                     .unwrap_or(false);
                 if overlay_active {
                     use crossterm::event::KeyCode as KC;
@@ -180,22 +180,22 @@ fn run_app(
                     if let Ok(mut guard) = app.lock() {
                         match key.code {
                             KC::Esc => {
-                                guard.mode_overlay_active = false;
+                                guard.ui.mode_overlay_active = false;
                             }
                             KC::Tab => {
-                                guard.mode_overlay_index = (guard.mode_overlay_index + 1) % 2;
+                                guard.ui.mode_overlay_index = (guard.ui.mode_overlay_index + 1) % 2;
                             }
                             KC::Enter => {
-                                let sel = if guard.mode_overlay_index % 2 == 0 {
+                                let sel = if guard.ui.mode_overlay_index % 2 == 0 {
                                     AppMode::Modbus
                                 } else {
                                     AppMode::Mqtt
                                 };
-                                if guard.app_mode != sel {
-                                    guard.app_mode = sel;
+                                if guard.ui.app_mode != sel {
+                                    guard.ui.app_mode = sel;
                                     guard.save_current_port_state();
                                 }
-                                guard.mode_overlay_active = false;
+                                guard.ui.mode_overlay_active = false;
                             }
                             _ => {}
                         }
@@ -210,7 +210,12 @@ fn run_app(
 
                 // Re-evaluate editing after potential selector handling
                 let is_editing = match app.lock() {
-                    Ok(g) => g.subpage_form.as_ref().map(|f| f.editing).unwrap_or(false),
+                    Ok(g) => {
+                        g.ui.subpage_form
+                            .as_ref()
+                            .map(|f| f.editing)
+                            .unwrap_or(false)
+                    }
                     Err(_) => false,
                 };
 
@@ -218,7 +223,7 @@ fn run_app(
                     use crossterm::event::KeyCode as KC;
                     if let Ok(mut guard) = app.lock() {
                         let mut pending_error: Option<String> = None;
-                        if let Some(form) = guard.subpage_form.as_mut() {
+                        if let Some(form) = guard.ui.subpage_form.as_mut() {
                             match key.code {
                                 KC::Char(c) => {
                                     // For Baud field only accept digits; other fields accept any char
@@ -487,20 +492,20 @@ fn run_app(
                         // Communication log subpage: allow Enter OR 'i' to begin editing the input box.
                         use crossterm::event::KeyCode as KC;
                         // If currently in input editing mode, consume characters / backspace / enter / esc here
-                        if guard.input_editing {
+                        if guard.ui.input_editing {
                             match key.code {
                                 KC::Char(c) => {
-                                    if guard.input_mode == InputMode::Ascii {
-                                        guard.input_buffer.push(c);
+                                    if guard.ui.input_mode == InputMode::Ascii {
+                                        guard.ui.input_buffer.push(c);
                                     } else {
                                         // Hex mode: accept hex digits only (ignore other chars)
                                         if c.is_ascii_hexdigit() || c.is_whitespace() {
-                                            guard.input_buffer.push(c);
+                                            guard.ui.input_buffer.push(c);
                                         }
                                     }
                                 }
                                 KC::Backspace => {
-                                    guard.input_buffer.pop();
+                                    guard.ui.input_buffer.pop();
                                 }
                                 KC::Enter => {
                                     // Send: append as raw log entry; mark as parsed with rw = "W" so the UI shows the send label.
@@ -514,16 +519,16 @@ fn run_app(
                                     };
                                     let entry = LogEntry {
                                         when: chrono::Local::now(),
-                                        raw: guard.input_buffer.clone(),
+                                        raw: guard.ui.input_buffer.clone(),
                                         parsed: Some(parsed),
                                     };
                                     guard.append_log(entry);
-                                    guard.input_buffer.clear();
-                                    guard.input_editing = false;
+                                    guard.ui.input_buffer.clear();
+                                    guard.ui.input_editing = false;
                                 }
                                 KC::Esc => {
-                                    guard.input_buffer.clear();
-                                    guard.input_editing = false;
+                                    guard.ui.input_buffer.clear();
+                                    guard.ui.input_editing = false;
                                 }
                                 _ => {}
                             }
@@ -536,14 +541,14 @@ fn run_app(
                             // Not editing: allow quick toggles for edit / mode
                             match key.code {
                                 KC::Enter | KC::Char('i') => {
-                                    guard.input_editing = true;
+                                    guard.ui.input_editing = true;
                                     guard.clear_error();
                                     drop(guard);
                                     redraw(terminal, &app);
                                     continue;
                                 }
                                 KC::Char('m') => {
-                                    guard.input_mode = match guard.input_mode {
+                                    guard.ui.input_mode = match guard.ui.input_mode {
                                         InputMode::Ascii => InputMode::Hex,
                                         InputMode::Hex => InputMode::Ascii,
                                     };
@@ -553,12 +558,12 @@ fn run_app(
                                     continue;
                                 }
                                 KC::Up | KC::Char('k') => {
-                                    let total = guard.logs.len();
+                                    let total = guard.ui.logs.len();
                                     if total > 0 {
-                                        if guard.log_selected == 0 {
-                                            guard.log_selected = total - 1;
+                                        if guard.ui.log_selected == 0 {
+                                            guard.ui.log_selected = total - 1;
                                         } else {
-                                            guard.log_selected -= 1;
+                                            guard.ui.log_selected -= 1;
                                         }
                                         let term_h =
                                             terminal.size().map(|r| r.height).unwrap_or(24);
@@ -571,15 +576,15 @@ fn run_app(
                                 }
                                 KC::Char('c') => {
                                     // Require double-press to clear logs: first press sets a pending flag
-                                    if !guard.log_clear_pending {
-                                        guard.log_clear_pending = true;
+                                    if !guard.ui.log_clear_pending {
+                                        guard.ui.log_clear_pending = true;
                                     } else {
                                         // Second press: perform clear
-                                        guard.logs.clear();
-                                        guard.log_selected = 0;
-                                        guard.log_view_offset = 0;
-                                        guard.log_auto_scroll = true;
-                                        guard.log_clear_pending = false;
+                                        guard.ui.logs.clear();
+                                        guard.ui.log_selected = 0;
+                                        guard.ui.log_view_offset = 0;
+                                        guard.ui.log_auto_scroll = true;
+                                        guard.ui.log_clear_pending = false;
                                         guard.save_current_port_state();
                                     }
                                     guard.clear_error();
@@ -588,9 +593,9 @@ fn run_app(
                                     continue;
                                 }
                                 KC::Down | KC::Char('j') => {
-                                    let total = guard.logs.len();
+                                    let total = guard.ui.logs.len();
                                     if total > 0 {
-                                        guard.log_selected = (guard.log_selected + 1) % total;
+                                        guard.ui.log_selected = (guard.ui.log_selected + 1) % total;
                                         let term_h =
                                             terminal.size().map(|r| r.height).unwrap_or(24);
                                         adjust_log_view(&mut guard, term_h);
@@ -608,9 +613,9 @@ fn run_app(
                         use crossterm::event::KeyCode as KC;
                         if key.code == KC::Char('m') {
                             // Open overlay instead of immediate cycle
-                            guard.mode_overlay_active = true;
+                            guard.ui.mode_overlay_active = true;
                             // Sync overlay index to current mode
-                            guard.mode_overlay_index = match guard.app_mode {
+                            guard.ui.mode_overlay_index = match guard.ui.app_mode {
                                 AppMode::Modbus => 0,
                                 AppMode::Mqtt => 1,
                             };
@@ -648,11 +653,12 @@ fn run_app(
                             Action::Quit => {
                                 if let Ok(guard) = app.lock() {
                                     let in_editing = guard
+                                        .ui
                                         .subpage_form
                                         .as_ref()
                                         .map(|f| f.editing)
                                         .unwrap_or(false);
-                                    let allowed = !guard.subpage_active && !in_editing;
+                                    let allowed = !guard.ui.subpage_active && !in_editing;
                                     if allowed {
                                         let _ =
                                             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Quit);
@@ -666,8 +672,8 @@ fn run_app(
                             }
                             Action::LeavePage => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.subpage_active {
-                                        guard.subpage_active = false;
+                                    if guard.ui.subpage_active {
+                                        guard.ui.subpage_active = false;
                                     }
                                     guard.clear_error();
                                 } else {
@@ -677,20 +683,21 @@ fn run_app(
                             Action::EnterPage => {
                                 if let Ok(mut guard) = app.lock() {
                                     let state = guard
-                                        .port_states
-                                        .get(guard.selected)
+                                        .ports
+                                        .states
+                                        .get(guard.ui.selected)
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     // If selected is a real port occupied by this app, open subpage form.
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.subpage_active = true;
-                                        guard.subpage_tab_index = 0;
+                                        guard.ui.subpage_active = true;
+                                        guard.ui.subpage_tab_index = 0;
                                         guard.init_subpage_form();
                                     } else {
                                         // Allow entering About full-page when About virtual entry is selected.
-                                        let about_idx = guard.ports.len().saturating_add(2);
-                                        if guard.selected == about_idx {
-                                            guard.subpage_active = true;
+                                        let about_idx = guard.ports.list.len().saturating_add(2);
+                                        if guard.ui.selected == about_idx {
+                                            guard.ui.subpage_active = true;
                                             // no form to init; about page reads its own cache
                                         }
                                     }
@@ -701,18 +708,18 @@ fn run_app(
                             }
                             Action::MoveNext => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.subpage_active {
+                                    if guard.ui.subpage_active {
                                         // Log tab navigation else form cursor
                                         if is_log_tab(&guard) {
-                                            let total = guard.logs.len();
+                                            let total = guard.ui.logs.len();
                                             if total > 0 {
-                                                guard.log_selected =
-                                                    (guard.log_selected + 1) % total;
+                                                guard.ui.log_selected =
+                                                    (guard.ui.log_selected + 1) % total;
                                                 let term_h =
                                                     terminal.size().map(|r| r.height).unwrap_or(24);
                                                 adjust_log_view(&mut guard, term_h);
                                             }
-                                        } else if let Some(form) = guard.subpage_form.as_mut() {
+                                        } else if let Some(form) = guard.ui.subpage_form.as_mut() {
                                             let total = BASE_FIELD_COUNT
                                                 .saturating_add(form.registers.len());
                                             if total > 0 {
@@ -720,11 +727,12 @@ fn run_app(
                                             }
                                         } else {
                                             // If About full-page is active, move view down
-                                            let about_idx = guard.ports.len().saturating_add(2);
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
                                             // If About full-page is active, move view down one line
-                                            if guard.selected == about_idx {
-                                                guard.about_view_offset =
-                                                    guard.about_view_offset.saturating_add(1);
+                                            if guard.ui.selected == about_idx {
+                                                guard.ports.about_view_offset =
+                                                    guard.ports.about_view_offset.saturating_add(1);
                                             }
                                         }
                                     } else {
@@ -739,20 +747,20 @@ fn run_app(
                             }
                             Action::MovePrev => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.subpage_active {
+                                    if guard.ui.subpage_active {
                                         if is_log_tab(&guard) {
-                                            let total = guard.logs.len();
+                                            let total = guard.ui.logs.len();
                                             if total > 0 {
-                                                if guard.log_selected == 0 {
-                                                    guard.log_selected = total - 1;
+                                                if guard.ui.log_selected == 0 {
+                                                    guard.ui.log_selected = total - 1;
                                                 } else {
-                                                    guard.log_selected -= 1;
+                                                    guard.ui.log_selected -= 1;
                                                 }
                                                 let term_h =
                                                     terminal.size().map(|r| r.height).unwrap_or(24);
                                                 adjust_log_view(&mut guard, term_h);
                                             }
-                                        } else if let Some(form) = guard.subpage_form.as_mut() {
+                                        } else if let Some(form) = guard.ui.subpage_form.as_mut() {
                                             let total = BASE_FIELD_COUNT
                                                 .saturating_add(form.registers.len());
                                             if total > 0 {
@@ -764,10 +772,11 @@ fn run_app(
                                             }
                                         } else {
                                             // If About full-page is active, move view up
-                                            let about_idx = guard.ports.len().saturating_add(2);
-                                            if guard.selected == about_idx {
-                                                guard.about_view_offset =
-                                                    guard.about_view_offset.saturating_sub(1);
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
+                                            if guard.ui.selected == about_idx {
+                                                guard.ports.about_view_offset =
+                                                    guard.ports.about_view_offset.saturating_sub(1);
                                             }
                                         }
                                     } else {
@@ -784,10 +793,12 @@ fn run_app(
                                         guard.page_up(LOG_PAGE_JUMP);
                                     } else {
                                         // If About subpage is active, page up
-                                        let about_idx = guard.ports.len().saturating_add(2);
-                                        if guard.subpage_active && guard.selected == about_idx {
+                                        let about_idx = guard.ports.list.len().saturating_add(2);
+                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
+                                        {
                                             // move up by a page (use LOG_PAGE_JUMP as a reasonable page size)
-                                            guard.about_view_offset = guard
+                                            guard.ports.about_view_offset = guard
+                                                .ports
                                                 .about_view_offset
                                                 .saturating_sub(LOG_PAGE_JUMP);
                                         }
@@ -800,9 +811,11 @@ fn run_app(
                                     if is_log_tab(&guard) {
                                         guard.page_down(LOG_PAGE_JUMP);
                                     } else {
-                                        let about_idx = guard.ports.len().saturating_add(2);
-                                        if guard.subpage_active && guard.selected == about_idx {
-                                            guard.about_view_offset = guard
+                                        let about_idx = guard.ports.list.len().saturating_add(2);
+                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
+                                        {
+                                            guard.ports.about_view_offset = guard
+                                                .ports
                                                 .about_view_offset
                                                 .saturating_add(LOG_PAGE_JUMP);
                                         }
@@ -814,12 +827,13 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
                                         // Jump to top: bottom index becomes the last index of the first page
-                                        guard.log_view_offset = 0;
-                                        guard.log_auto_scroll = false;
+                                        guard.ui.log_view_offset = 0;
+                                        guard.ui.log_auto_scroll = false;
                                     } else {
-                                        let about_idx = guard.ports.len().saturating_add(2);
-                                        if guard.subpage_active && guard.selected == about_idx {
-                                            guard.about_view_offset = 0;
+                                        let about_idx = guard.ports.list.len().saturating_add(2);
+                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
+                                        {
+                                            guard.ports.about_view_offset = 0;
                                         }
                                     }
                                     guard.clear_error();
@@ -828,18 +842,19 @@ fn run_app(
                             Action::JumpBottom => {
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
-                                        let total = guard.logs.len();
+                                        let total = guard.ui.logs.len();
                                         if total > 0 {
-                                            guard.log_view_offset = total - 1;
+                                            guard.ui.log_view_offset = total - 1;
                                         } else {
-                                            guard.log_view_offset = 0;
+                                            guard.ui.log_view_offset = 0;
                                         }
-                                        guard.log_auto_scroll = true;
+                                        guard.ui.log_auto_scroll = true;
                                     } else {
-                                        let about_idx = guard.ports.len().saturating_add(2);
-                                        if guard.subpage_active && guard.selected == about_idx {
+                                        let about_idx = guard.ports.list.len().saturating_add(2);
+                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
+                                        {
                                             // For about, bottom resets to top to show start
-                                            guard.about_view_offset = 0;
+                                            guard.ports.about_view_offset = 0;
                                         }
                                     }
                                     guard.clear_error();
@@ -849,14 +864,14 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     if is_log_tab(&guard) {
                                         // Toggle following newest logs
-                                        guard.log_auto_scroll = !guard.log_auto_scroll;
-                                        if guard.log_auto_scroll {
+                                        guard.ui.log_auto_scroll = !guard.ui.log_auto_scroll;
+                                        if guard.ui.log_auto_scroll {
                                             // Move view to bottom (latest)
-                                            let total = guard.logs.len();
+                                            let total = guard.ui.logs.len();
                                             if total > 0 {
-                                                guard.log_view_offset = total - 1;
+                                                guard.ui.log_view_offset = total - 1;
                                             } else {
-                                                guard.log_view_offset = 0;
+                                                guard.ui.log_view_offset = 0;
                                             }
                                         }
                                     }
@@ -867,12 +882,13 @@ fn run_app(
                             Action::EnterSubpage(_) => {
                                 if let Ok(mut guard) = app.lock() {
                                     let state = guard
-                                        .port_states
-                                        .get(guard.selected)
+                                        .ports
+                                        .states
+                                        .get(guard.ui.selected)
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.subpage_active = true;
+                                        guard.ui.subpage_active = true;
                                         guard.init_subpage_form();
                                     }
                                     guard.clear_error();
@@ -880,11 +896,11 @@ fn run_app(
                             }
                             Action::AddRegister => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if guard.subpage_active {
-                                        if guard.subpage_form.is_none() {
+                                    if guard.ui.subpage_active {
+                                        if guard.ui.subpage_form.is_none() {
                                             guard.init_subpage_form();
                                         }
-                                        if let Some(form) = guard.subpage_form.as_mut() {
+                                        if let Some(form) = guard.ui.subpage_form.as_mut() {
                                             form.registers.push(
                                                 crate::protocol::status::RegisterEntry {
                                                     slave_id: 1,
@@ -906,7 +922,7 @@ fn run_app(
                             }
                             Action::DeleteRegister => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if let Some(form) = guard.subpage_form.as_mut() {
+                                    if let Some(form) = guard.ui.subpage_form.as_mut() {
                                         form.registers.pop();
                                     }
                                     guard.clear_error();
@@ -914,7 +930,7 @@ fn run_app(
                             }
                             Action::EditToggle => {
                                 if let Ok(mut guard) = app.lock() {
-                                    if let Some(form) = guard.subpage_form.as_mut() {
+                                    if let Some(form) = guard.ui.subpage_form.as_mut() {
                                         form.editing = !form.editing;
                                         if form.editing {
                                             match form.cursor {
@@ -968,7 +984,7 @@ fn run_app(
                             }
                             Action::ExitSubpage => {
                                 if let Ok(mut guard) = app.lock() {
-                                    guard.subpage_active = false;
+                                    guard.ui.subpage_active = false;
                                     guard.clear_error();
                                 }
                             }
@@ -976,8 +992,9 @@ fn run_app(
                                 if let Ok(mut guard) = app.lock() {
                                     guard.toggle_selected_port();
                                     let state = guard
-                                        .port_states
-                                        .get(guard.selected)
+                                        .ports
+                                        .states
+                                        .get(guard.ui.selected)
                                         .cloned()
                                         .unwrap_or(crate::protocol::status::PortState::Free);
                                     if state != crate::protocol::status::PortState::OccupiedByThis {
@@ -1007,8 +1024,8 @@ fn run_app(
                             Action::QuickScan => {
                                 if let Ok(mut guard) = app.lock() {
                                     // Only meaningful when Refresh action item is selected
-                                    if guard.selected >= guard.ports.len()
-                                        && guard.selected == guard.ports.len()
+                                    if guard.ui.selected >= guard.ports.list.len()
+                                        && guard.ui.selected == guard.ports.list.len()
                                     {
                                         // refresh item
                                         guard.quick_scan();

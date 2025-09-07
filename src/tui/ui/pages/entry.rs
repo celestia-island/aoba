@@ -21,11 +21,12 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
 
     // Append quit hint only when allowed (mirror global rule)
     let in_subpage_editing = app
+        .ui
         .subpage_form
         .as_ref()
         .map(|f| f.editing)
         .unwrap_or(false);
-    let can_quit = !app.subpage_active && !in_subpage_editing;
+    let can_quit = !app.ui.subpage_active && !in_subpage_editing;
     if can_quit {
         hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
@@ -55,10 +56,11 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     // LEFT: ports list
     let width = left.width as usize;
     let mut lines: Vec<Line> = Vec::new();
-    for (i, p) in app.ports.iter().enumerate() {
+    for (i, p) in app.ports.list.iter().enumerate() {
         let name = p.port_name.clone();
         let state = app
-            .port_states
+            .ports
+            .states
             .get(i)
             .cloned()
             .unwrap_or(crate::protocol::status::PortState::Free);
@@ -79,7 +81,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         };
 
         // Prefix: two chars to avoid shifting when navigating. Selected shows '> ', else two spaces.
-        let prefix = if i == app.selected { "> " } else { "  " };
+        let prefix = if i == app.ui.selected { "> " } else { "  " };
         let inner = width.saturating_sub(2);
         // Account for prefix width in name column
         let name_w = UnicodeWidthStr::width(name.as_str()) + UnicodeWidthStr::width(prefix);
@@ -97,7 +99,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             Span::raw(spacer),
             Span::styled(state_text, state_style),
         ];
-        if i == app.selected {
+        if i == app.ui.selected {
             // Highlight entire row including prefix
             let styled = spans
                 .into_iter()
@@ -131,10 +133,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     }
 
     for (j, lbl) in extras.into_iter().enumerate() {
-        let idx = app.ports.len() + j;
-        let prefix = if idx == app.selected { "> " } else { "  " };
+        let idx = app.ports.list.len() + j;
+        let prefix = if idx == app.ui.selected { "> " } else { "  " };
         let spans = vec![Span::raw(prefix), Span::raw(lbl)];
-        if idx == app.selected {
+        if idx == app.ui.selected {
             let styled = spans
                 .into_iter()
                 .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
@@ -154,13 +156,14 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     // RIGHT: content (no tabs). When selected port is OccupiedByThis and not in a subpage,
     // Details should occupy the full right area and include serial parameters.
     let selected_state = app
-        .port_states
-        .get(app.selected)
+        .ports
+        .states
+        .get(app.ui.selected)
         .cloned()
         .unwrap_or(crate::protocol::status::PortState::Free);
 
     // If a subpage is active, delegate the entire right area to it.
-    if app.subpage_active {
+    if app.ui.subpage_active {
         // Unified ModBus page now handled elsewhere; entry no longer renders legacy subpages.
         return;
     }
@@ -170,12 +173,12 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         .title(Span::raw(format!(" {}", lang().index.details.as_str())));
 
     // Build the content taking full height of the right area.
-    let content = if app.ports.is_empty() {
+    let content = if app.ports.list.is_empty() {
         Paragraph::new(lang().index.no_com_ports.as_str()).block(content_block)
     } else {
-        let special_base = app.ports.len();
-        if app.selected >= special_base {
-            let rel = app.selected - special_base;
+        let special_base = app.ports.list.len();
+        if app.ui.selected >= special_base {
+            let rel = app.ui.selected - special_base;
             if rel == 0 {
                 // Refresh action item: show last scan summary
                 let mut lines: Vec<Line> = Vec::new();
@@ -185,7 +188,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     lang().index.scan_quick_hint.as_str(),
                     Style::default().fg(Color::LightBlue),
                 )));
-                if let Some(ts) = app.last_scan_time {
+                if let Some(ts) = app.scan.last_scan_time {
                     lines.push(Line::from(format!(
                         "{} {}",
                         lang().index.scan_last_header.as_str(),
@@ -194,11 +197,11 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 } else {
                     lines.push(Line::from(lang().index.scan_none.as_str()));
                 }
-                if app.last_scan_info.is_empty() {
+                if app.scan.last_scan_info.is_empty() {
                     lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
                 } else {
                     lines.push(Line::from(lang().index.scan_raw_header.as_str()));
-                    for l in app.last_scan_info.iter().take(100) {
+                    for l in app.scan.last_scan_info.iter().take(100) {
                         // Cap lines to avoid overflow
                         if l.starts_with("ERROR:") {
                             lines.push(Line::from(Span::styled(
@@ -209,10 +212,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                             lines.push(Line::from(l.as_str()));
                         }
                     }
-                    if app.last_scan_info.len() > 100 {
+                    if app.scan.last_scan_info.len() > 100 {
                         lines.push(Line::from(format!(
                             "... ({} {})",
-                            app.last_scan_info.len() - 100,
+                            app.scan.last_scan_info.len() - 100,
                             lang().index.scan_truncated_suffix.as_str()
                         )));
                     }
@@ -229,15 +232,16 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
             }
         } else {
-            let p = &app.ports[app.selected];
+            let p = &app.ports.list[app.ui.selected];
             let extra = app
-                .port_extras
-                .get(app.selected)
+                .ports
+                .extras
+                .get(app.ui.selected)
                 .cloned()
                 .unwrap_or_default();
 
             // Prefer runtime's current_cfg (live synchronized config). If not occupied we hide these fields.
-            let runtime_cfg = if let Some(Some(rt)) = app.port_runtimes.get(app.selected) {
+            let runtime_cfg = if let Some(Some(rt)) = app.ports.runtimes.get(app.ui.selected) {
                 Some(rt.current_cfg.clone())
             } else {
                 None
@@ -348,7 +352,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             ));
             // Current per-port application mode (ModBus / MQTT)
             if selected_state == crate::protocol::status::PortState::OccupiedByThis {
-                let mode_label = match app.app_mode {
+                let mode_label = match app.ui.app_mode {
                     crate::protocol::status::AppMode::Modbus => {
                         lang().protocol.common.mode_modbus.as_str()
                     }
