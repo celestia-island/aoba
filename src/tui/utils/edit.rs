@@ -6,14 +6,14 @@ use crate::protocol::status::{EditingField, SubpageForm};
 pub fn select_field_by_cursor(form: &mut SubpageForm) {
     form.editing_field = Some(match form.cursor {
         0 => EditingField::Loop,
-    // 1 is master_passive toggle and is not editable via the editing_field; skip it
-    1 => return,
-    2 => EditingField::Baud,
-    3 => EditingField::Parity,
-    4 => EditingField::DataBits,
-    5 => EditingField::StopBits,
-    6 => EditingField::GlobalInterval,
-    7 => EditingField::GlobalTimeout,
+        // 1 is master_passive toggle and is not editable via the editing_field; skip it
+        1 => return,
+        2 => EditingField::Baud,
+        3 => EditingField::Parity,
+        4 => EditingField::DataBits,
+        5 => EditingField::StopBits,
+        6 => EditingField::GlobalInterval,
+        7 => EditingField::GlobalTimeout,
         n => {
             let ridx = n.saturating_sub(8);
             EditingField::RegisterField {

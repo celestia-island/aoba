@@ -19,9 +19,9 @@ pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
     f.render_widget(bg_block, area);
 
     // Spinner (top-left)
-    if app.busy {
+    if app.busy.busy {
         let frames = ["●○○", "○●○", "○○●"];
-        let ch = frames[(app.spinner_frame as usize) % frames.len()];
+        let ch = frames[(app.busy.spinner_frame as usize) % frames.len()];
         let spin = Paragraph::new(ch).style(
             Style::default()
                 .fg(Color::Yellow)
@@ -31,9 +31,9 @@ pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
     }
 
     // Title text (center area)
-    let title_text = if app.subpage_active {
-        if !app.ports.is_empty() && app.selected < app.ports.len() {
-            let p = &app.ports[app.selected];
+    let title_text = if app.ui.subpage_active {
+        if !app.ports.list.is_empty() && app.ui.selected < app.ports.list.len() {
+            let p = &app.ports.list[app.ui.selected];
             format!("{} - {}", p.port_name, lang().index.title.as_str())
         } else {
             lang().index.title.as_str().to_string()

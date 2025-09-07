@@ -279,7 +279,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
         });
     }
 
-    // Build lines from cache snapshot into a full list, then perform windowing using app.about_view_offset
+    // Build lines from cache snapshot into a full list, then perform windowing using app.ports.about_view_offset
     let mut full_lines: Vec<Line> = Vec::new();
     if let Some(h) = ABOUT_CACHE.get() {
         if let Ok(g) = h.lock() {
@@ -318,8 +318,8 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
         return;
     }
 
-    // read current offset from global app state (use app.about_view_offset)
-    let first_visible = std::cmp::min(max_start, app.about_view_offset);
+    // read current offset from global app state
+    let first_visible = std::cmp::min(max_start, app.ports.about_view_offset);
     let end = std::cmp::min(total, first_visible + inner_height);
     let windowed: Vec<Line> = full_lines[first_visible..end].to_vec();
 

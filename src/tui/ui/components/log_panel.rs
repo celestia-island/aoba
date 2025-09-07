@@ -27,7 +27,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     let logs_area = chunks[0];
     // We'll render a windowed view of log groups. Each group is 3 lines.
-    let total_groups = app.logs.len();
+    let total_groups = app.ui.logs.len();
     let group_height = 3usize;
 
     // Inner height inside the block (account for borders)
@@ -37,10 +37,10 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Determine bottom index based on auto-scroll or explicit offset
     let bottom = if total_groups == 0 {
         0usize
-    } else if app.log_auto_scroll {
+    } else if app.ui.log_auto_scroll {
         total_groups.saturating_sub(1)
     } else {
-        min(app.log_view_offset, total_groups.saturating_sub(1))
+        min(app.ui.log_view_offset, total_groups.saturating_sub(1))
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
@@ -55,8 +55,9 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     let mut styled_lines: Vec<Line> = Vec::new();
     for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
-        if let Some(entry) = app.logs.get(g) {
+        if let Some(entry) = app.ui.logs.get(g) {
             let selected = app
+                .ui
                 .log_selected
                 .checked_sub(top_group)
                 .map(|s| s == idx)
@@ -133,10 +134,10 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let sel_display = if total_groups == 0 {
         0
     } else {
-        app.log_selected + 1
+        app.ui.log_selected + 1
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
-    let follow_label = if app.log_auto_scroll {
+    let follow_label = if app.ui.log_auto_scroll {
         lang().tabs.log.hint_follow_on.as_str()
     } else {
         lang().tabs.log.hint_follow_off.as_str()
@@ -150,7 +151,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         title_text,
         Style::default()
             .add_modifier(Modifier::BOLD)
-            .fg(if app.log_auto_scroll {
+            .fg(if app.ui.log_auto_scroll {
                 Color::Green
             } else {
                 Color::Yellow

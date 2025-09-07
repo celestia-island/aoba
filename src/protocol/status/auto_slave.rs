@@ -61,7 +61,7 @@ impl Status {
         // global `self.subpage_form` when the provided port is the currently
         // selected port in the UI. This avoids matching against unrelated
         // forms from other ports which can cause accidental auto-responses.
-        if let Some(ps) = self.per_port_states.get(&port_name) {
+        if let Some(ps) = self.per_port.states.get(&port_name) {
             if let Some(form) = ps.subpage_form.as_ref() {
                 if form.loop_enabled {
                     forms_iter.push(form);
@@ -70,9 +70,9 @@ impl Status {
         }
         // If the port_name corresponds to the currently selected port, allow
         // using the live `self.subpage_form` as well.
-        if let Some(selected_info) = self.ports.get(self.selected) {
+        if let Some(selected_info) = self.ports.list.get(self.ui.selected) {
             if selected_info.port_name == port_name {
-                if let Some(form) = self.subpage_form.as_ref() {
+                if let Some(form) = self.ui.subpage_form.as_ref() {
                     if form.loop_enabled {
                         forms_iter.push(form);
                     }
@@ -202,9 +202,9 @@ impl Status {
         if let Some(interval_ms) = matched_interval_ms {
             let now = std::time::Instant::now();
             // Clean expired entries
-            while let Some((_, t)) = self.recent_auto_requests.front() {
+            while let Some((_, t)) = self.recent.auto_requests.front() {
                 if now.duration_since(*t).as_millis() as u64 > interval_ms {
-                    self.recent_auto_requests.pop_front();
+                    self.recent.auto_requests.pop_front();
                 } else {
                     break;
                 }
@@ -213,7 +213,7 @@ impl Status {
             // Compare only sid/func/address/count for debounce (ignore CRC/extra bytes)
             let req_addr = req_addr;
             let req_count = req_count;
-            let seen_recent = self.recent_auto_requests.iter().any(|(bts, _)| {
+            let seen_recent = self.recent.auto_requests.iter().any(|(bts, _)| {
                 if bts.len() < 6 {
                     return false;
                 }
@@ -233,11 +233,13 @@ impl Status {
 
         // Record that we recently auto-sent these bytes so the runtime's
         // FrameSent handler can dedupe the emitted FrameSent event.
-        self.recent_auto_sent
+        self.recent
+            .auto_sent
             .push_back((ret.clone(), std::time::Instant::now()));
 
         // Also remember the incoming request signature for debounce purposes
-        self.recent_auto_requests
+        self.recent
+            .auto_requests
             .push_back((bytes.to_vec(), std::time::Instant::now()));
 
         // Build the sent log entry but do NOT push it into logs here; return

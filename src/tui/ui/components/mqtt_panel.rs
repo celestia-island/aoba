@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub fn render_mqtt_panel(f: &mut Frame, area: Rect, app: &Status) {
-    let text = match app.app_mode {
+    let text = match app.ui.app_mode {
         AppMode::Mqtt => lang().protocol.mqtt.panel_placeholder.as_str(),
         AppMode::Modbus => lang().protocol.mqtt.panel_not_current.as_str(),
     };

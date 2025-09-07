@@ -7,7 +7,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
 
     // If app has an error message, display it on the first line (red),
     // And on the second line show instructions on how to clear it.
-    if let Some(err) = &_app.error {
+    if let Some(err) = &_app.ui.error {
         // Split the provided area into two rows
         let rows = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
@@ -42,10 +42,10 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
-    if _app.subpage_active {
+    if _app.ui.subpage_active {
         // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
         // [confirmation row - yellow bg] [page hints] [global hints]
-        if _app.log_clear_pending {
+        if _app.ui.log_clear_pending {
             let rows = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .margin(0)

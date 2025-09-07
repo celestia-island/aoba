@@ -56,13 +56,19 @@ impl eframe::App for GuiApp {
             if let Ok(guard) = self.status.lock() {
                 (
                     guard.ports.clone(),
-                    guard.selected,
-                    guard.auto_refresh,
-                    guard.last_refresh,
-                    guard.error.clone(),
+                    guard.ui.selected,
+                    guard.ui.auto_refresh,
+                    guard.ui.last_refresh,
+                    guard.ui.error.clone(),
                 )
             } else {
-                (Vec::new(), 0usize, false, None, None)
+                (
+                    crate::protocol::status::Status::default().ports,
+                    0usize,
+                    false,
+                    None,
+                    None,
+                )
             }
         };
 
@@ -72,7 +78,7 @@ impl eframe::App for GuiApp {
         // Wrap internal state error into GUI-friendly (message, timestamp) format
         let err_ts: Option<(String, chrono::DateTime<chrono::Local>)> =
             if let Ok(g) = self.status.lock() {
-                g.error.clone()
+                g.ui.error.clone()
             } else {
                 None
             };

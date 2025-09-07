@@ -18,7 +18,7 @@ use crate::{
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
     // Use transient form if present
-    let form = app.subpage_form.as_ref().cloned().unwrap_or_default();
+    let form = app.ui.subpage_form.as_ref().cloned().unwrap_or_default();
 
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
 

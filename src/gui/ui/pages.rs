@@ -6,9 +6,17 @@ use crate::{i18n::lang, protocol::status::Status};
 pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mutex<Status>>) {
     // Snapshot state
     let (ports, selected, auto_refresh) = if let Ok(guard) = inner.lock() {
-        (guard.ports.clone(), guard.selected, guard.auto_refresh)
+        (
+            guard.ports.clone(),
+            guard.ui.selected,
+            guard.ui.auto_refresh,
+        )
     } else {
-        (Vec::new(), 0usize, false)
+        (
+            crate::protocol::status::Status::default().ports,
+            0usize,
+            false,
+        )
     };
 
     // Left side panel: list of COM ports and controls
@@ -25,7 +33,7 @@ pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mute
                 let mut checkbox = auto_refresh;
                 if ui.add(Checkbox::new(&mut checkbox, "Auto")).changed() {
                     if let Ok(mut guard) = inner.lock() {
-                        guard.auto_refresh = checkbox;
+                        guard.ui.auto_refresh = checkbox;
                     }
                 }
             });
@@ -33,12 +41,12 @@ pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mute
             ui.separator();
 
             ScrollArea::vertical().show(ui, |ui| {
-                for (i, p) in ports.iter().enumerate() {
+                for (i, p) in ports.list.iter().enumerate() {
                     let label = format!("{} - {:?}", p.port_name, p.port_type);
                     let selected_bool = i == selected;
                     if ui.selectable_label(selected_bool, label).clicked() {
                         if let Ok(mut guard) = inner.lock() {
-                            guard.selected = i;
+                            guard.ui.selected = i;
                             guard.clear_error();
                         }
                     }
@@ -51,12 +59,16 @@ pub fn render_panels(ctx: &egui::Context, inner: &std::sync::Arc<std::sync::Mute
         ui.group(|ui| {
             ui.heading(lang().index.details.as_str());
             ui.separator();
-            if ports.is_empty() {
+            if ports.list.is_empty() {
                 ui.label(lang().index.no_com_ports.as_str());
             } else {
                 // Guard against out-of-bounds if selected is stale
-                let idx = if selected >= ports.len() { 0 } else { selected };
-                let p = &ports[idx];
+                let idx = if selected >= ports.list.len() {
+                    0
+                } else {
+                    selected
+                };
+                let p = &ports.list[idx];
                 ui.label(format!("{} {}", lang().index.name_label, p.port_name));
                 ui.label(format!("{} {:?}", lang().index.type_label, p.port_type));
                 ui.separator();
