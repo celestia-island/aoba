@@ -39,8 +39,8 @@ impl SerialConfig {
             2 => StopBits::Two,
             _ => StopBits::One,
         });
-        let b = b.parity(self.parity);
-        b
+        
+        b.parity(self.parity)
     }
 }
 
@@ -210,12 +210,12 @@ fn candidate_lengths(b: &[u8]) -> Vec<usize> {
         return v;
     }
     match f {
-        0x01 | 0x02 | 0x03 | 0x04 => {
+        0x01..=0x04 => {
             v.push(8);
             if b.len() >= 3 {
                 let bc = b[2] as usize;
                 let rl = 3 + bc + 2;
-                if rl >= 5 && rl <= 256 {
+                if (5..=256).contains(&rl) {
                     v.push(rl);
                 }
             }
@@ -316,7 +316,7 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) {
         if log::log_enabled!(log::Level::Debug) {
             let hex = buf
                 .iter()
-                .map(|b| format!("{:02x}", b))
+                .map(|b| format!("{b:02x}"))
                 .collect::<Vec<_>>()
                 .join(" ");
             log::debug!("finalize: no frame len={} hex={}", buf.len(), hex);

@@ -111,7 +111,7 @@ pub(crate) fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static
             let name_span = Span::raw(padded_name);
             let spacer = Span::raw("  ");
             let license_span = Span::styled(
-                format!("{} ({})", decl, license),
+                format!("{decl} ({license})"),
                 Style::default().fg(Color::DarkGray),
             );
             out.push(Line::from(vec![name_span, spacer, license_span]));
@@ -186,7 +186,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
                         cache.err = Some("Failed to parse Cargo.toml".to_string());
                     }
                 }
-                Err(e) => cache.err = Some(format!("Could not read Cargo.toml: {}", e)),
+                Err(e) => cache.err = Some(format!("Could not read Cargo.toml: {e}")),
             }
             // try to read precomputed cache from res/about_cache.toml generated at build time
             if let Ok(s) = std::fs::read_to_string("res/about_cache.toml") {
@@ -234,7 +234,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
             } else {
                 // cargo metadata for license map as fallback (non-blocking fallback will fill later)
                 match Command::new("cargo")
-                    .args(&["metadata", "--format-version", "1"])
+                    .args(["metadata", "--format-version", "1"])
                     .output()
                 {
                     Ok(out) => {
@@ -254,7 +254,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
                                                 .unwrap_or("");
                                             cache
                                                 .license_map
-                                                .insert(format!("{}:{}", n, ver), lic.to_string());
+                                                .insert(format!("{n}:{ver}"), lic.to_string());
                                             cache
                                                 .license_map
                                                 .insert(n.to_string(), lic.to_string());
@@ -266,7 +266,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
                             cache.err = Some("cargo metadata returned non-zero".to_string());
                         }
                     }
-                    Err(e) => cache.err = Some(format!("Failed to execute cargo metadata: {}", e)),
+                    Err(e) => cache.err = Some(format!("Failed to execute cargo metadata: {e}")),
                 }
             }
 
@@ -286,7 +286,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
             // Use helper to build details lines from an owned snapshot to avoid holding the lock
             full_lines = render_about_details(g.clone());
             if let Some(e) = &g.err {
-                full_lines.push(Line::from(format!("Note: {}", e)));
+                full_lines.push(Line::from(format!("Note: {e}")));
             }
         } else {
             full_lines.push(Line::from("Failed to lock about cache"));

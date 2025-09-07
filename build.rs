@@ -64,32 +64,28 @@ fn main() {
     }
 
     // Try cargo metadata for license map (metadata is JSON)
-    match Command::new("cargo")
-        .args(&["metadata", "--format-version", "1"])
-        .output()
-    {
-        Ok(o) => {
-            if o.status.success() {
-                if let Ok(jv) = serde_json::from_slice::<JsonValue>(&o.stdout) {
-                    if let Some(pkgs) = jv.get("packages").and_then(|p| p.as_array()) {
-                        let mut map_tbl = Table::new();
-                        for p in pkgs.iter() {
-                            if let Some(n) = p.get("name").and_then(|x| x.as_str()) {
-                                let lic = p.get("license").and_then(|x| x.as_str()).unwrap_or("");
-                                let ver = p.get("version").and_then(|x| x.as_str()).unwrap_or("");
-                                map_tbl.insert(
-                                    format!("{}:{}", n, ver),
-                                    TomlValue::String(lic.to_string()),
-                                );
-                                map_tbl.insert(n.to_string(), TomlValue::String(lic.to_string()));
-                            }
+    if let Ok(o) = Command::new("cargo")
+        .args(["metadata", "--format-version", "1"])
+        .output() {
+        if o.status.success() {
+            if let Ok(jv) = serde_json::from_slice::<JsonValue>(&o.stdout) {
+                if let Some(pkgs) = jv.get("packages").and_then(|p| p.as_array()) {
+                    let mut map_tbl = Table::new();
+                    for p in pkgs.iter() {
+                        if let Some(n) = p.get("name").and_then(|x| x.as_str()) {
+                            let lic = p.get("license").and_then(|x| x.as_str()).unwrap_or("");
+                            let ver = p.get("version").and_then(|x| x.as_str()).unwrap_or("");
+                            map_tbl.insert(
+                                format!("{n}:{ver}"),
+                                TomlValue::String(lic.to_string()),
+                            );
+                            map_tbl.insert(n.to_string(), TomlValue::String(lic.to_string()));
                         }
-                        out_tbl.insert("license_map".to_string(), TomlValue::Table(map_tbl));
                     }
+                    out_tbl.insert("license_map".to_string(), TomlValue::Table(map_tbl));
                 }
             }
         }
-        Err(_) => {}
     }
 
     // write to res/about_cache.toml

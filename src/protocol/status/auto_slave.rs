@@ -104,9 +104,7 @@ impl Status {
             }
         }
 
-        if matched.is_none() {
-            return None;
-        }
+        matched.as_ref()?;
 
         // Build a temporary slave context populated only with the matched
         // register entry's values for the requested range and mode. This
@@ -211,8 +209,7 @@ impl Status {
             }
             // Check if an identical request was recently auto-responded
             // Compare only sid/func/address/count for debounce (ignore CRC/extra bytes)
-            let req_addr = req_addr;
-            let req_count = req_count;
+            // use existing `req_addr` and `req_count` from outer scope
             let seen_recent = self.recent.auto_requests.iter().any(|(bts, _)| {
                 if bts.len() < 6 {
                     return false;
@@ -282,7 +279,7 @@ impl Status {
             parsed: Some(ParsedRequest {
                 origin: "master".into(),
                 rw: "R".into(),
-                command: format!("func_{:02X}", func),
+                command: format!("func_{func:02X}"),
                 slave_id: sid,
                 address: if bytes.len() >= 4 {
                     u16::from_be_bytes([bytes[2], bytes[3]])

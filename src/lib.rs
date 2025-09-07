@@ -12,12 +12,12 @@ pub fn init_common() {
     env_logger::init();
     crate::i18n::init_i18n();
 }
- 
+
 pub fn start_gui() -> Result<()> {
     crate::gui::start()?;
     Ok(())
 }
- 
+
 pub fn start_tui() -> Result<()> {
     crate::tui::start()?;
     Ok(())
