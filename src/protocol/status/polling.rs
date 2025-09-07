@@ -61,20 +61,18 @@ impl Status {
                 } else {
                     false
                 }
-            } else {
-                if let Some(f) = self.ui.subpage_form.as_ref() {
-                    if let Some(v) = f.master_passive {
-                        v
-                    } else {
-                        let derived_default_passive = f
-                            .registers
-                            .iter()
-                            .any(|r| r.role == crate::protocol::status::EntryRole::Master);
-                        derived_default_passive
-                    }
+            } else if let Some(f) = self.ui.subpage_form.as_ref() {
+                if let Some(v) = f.master_passive {
+                    v
                 } else {
-                    false
+                    let derived_default_passive = f
+                        .registers
+                        .iter()
+                        .any(|r| r.role == crate::protocol::status::EntryRole::Master);
+                    derived_default_passive
                 }
+            } else {
+                false
             };
 
             let form_opt: Option<&mut SubpageForm> = if form_opt_idx == Some(0) {
@@ -211,7 +209,7 @@ impl Status {
                                         // Log the sent frame so UI/status shows the outgoing request
                                         let hex = raw
                                             .iter()
-                                            .map(|b| format!("{:02x}", b))
+                                            .map(|b| format!("{b:02x}"))
                                             .collect::<Vec<_>>()
                                             .join(" ");
                                         let sid = reg.slave_id;
@@ -230,7 +228,7 @@ impl Status {
                                             parsed: Some(ParsedRequest {
                                                 origin: "master".into(),
                                                 rw: "W".into(),
-                                                command: format!("func_{:02X}", func),
+                                                command: format!("func_{func:02X}"),
                                                 slave_id: sid,
                                                 address: reg.address,
                                                 length: qty,

@@ -28,15 +28,15 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                     if log::log_enabled!(log::Level::Debug) {
                         let chunk_hex = buf[..n]
                             .iter()
-                            .map(|b| format!("{:02x}", b))
+                            .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ");
                         let so_far = target
                             .iter()
-                            .map(|b| format!("{:02x}", b))
+                            .map(|b| format!("{b:02x}"))
                             .collect::<Vec<_>>()
                             .join(" ");
-                        log::debug!("serial read chunk={} collected={}", chunk_hex, so_far);
+                        log::debug!("serial read chunk={chunk_hex} collected={so_far}");
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::TimedOut => break,
@@ -95,9 +95,9 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
             return Some(5);
         }
         match func {
-            0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x06 => {
+            0x01..=0x06 => {
                 // These are fixed-size requests: id+func+addr(2)+qty/val(2)+crc(2) = 8
-                return Some(8);
+                Some(8)
             }
             0x0F | 0x10 => {
                 // Write Multiple (coils/registers) requests include a byte count at offset 6
@@ -106,7 +106,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                 }
                 let bytecount = col[6] as usize;
                 // total = id(1)+func(1)+addr2+qty2+bytecount(1)+data+crc2 = 9 + bytecount
-                return Some(9 + bytecount);
+                Some(9 + bytecount)
             }
             _ => None,
         }
@@ -135,7 +135,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
     }
     let guessed_len = guessed_len_opt.unwrap();
     // Modbus RTU maximum 256 bytes
-    if guessed_len < 4 || guessed_len > 256 {
+    if !(4..=256).contains(&guessed_len) {
         log::warn!("Guessed invalid frame length: {guessed_len}");
         if collected.is_empty() {
             return Ok(None);

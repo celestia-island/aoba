@@ -384,7 +384,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         let cur_label = opts_labels
             .get(cur_idx)
             .cloned()
-            .unwrap_or(&"1")
+            .unwrap_or("1")
             .to_string();
         lines.push(ratatui::text::Line::from(styled_spans(
             StyledSpanKind::Selector {
@@ -417,7 +417,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             // Build title + filler then append input spans (skip the input's base_prefix)
             let base_prefix = "  ";
             let label = lang().protocol.modbus.global_interval.as_str();
-            let label_text = format!("{}{}", base_prefix, label);
+            let label_text = format!("{base_prefix}{label}");
             let left_width = 36usize;
             let label_w = UnicodeWidthStr::width(label_text.as_str());
             let pad_count = if label_w >= left_width {
@@ -437,7 +437,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                 form.input_buffer.clone()
             };
             let input_spans = styled_spans(StyledSpanKind::Input {
-                base_prefix: base_prefix,
+                base_prefix,
                 buffer: buf.as_str(),
                 hovered: selected,
                 editing: true,
@@ -464,7 +464,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         if matches!(editing_field, Some(EditingField::GlobalTimeout)) {
             let base_prefix = "  ";
             let label = lang().protocol.modbus.global_timeout.as_str();
-            let label_text = format!("{}{}", base_prefix, label);
+            let label_text = format!("{base_prefix}{label}");
             let left_width = 36usize;
             let label_w = UnicodeWidthStr::width(label_text.as_str());
             let pad_count = if label_w >= left_width {
@@ -484,7 +484,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                 form.input_buffer.clone()
             };
             let input_spans = styled_spans(StyledSpanKind::Input {
-                base_prefix: base_prefix,
+                base_prefix,
                 buffer: buf.as_str(),
                 hovered: selected,
                 editing: true,
