@@ -69,3 +69,4 @@ serialport = "^4"
 [build-dependencies]
 serde_json = "^1"
 toml = "^0.9"
+semver = "^1"

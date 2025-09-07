@@ -213,6 +213,7 @@ impl Status {
             .open()
             .is_ok()
     }
+
     fn detect_port_states(ports: &[SerialPortInfo]) -> Vec<PortState> {
         ports
             .iter()
@@ -225,6 +226,7 @@ impl Status {
             })
             .collect()
     }
+
     pub fn toggle_selected_port(&mut self) {
         let now = std::time::Instant::now();
         if let Some(last) = self.toggles.last_port_toggle {

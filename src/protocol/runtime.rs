@@ -39,7 +39,7 @@ impl SerialConfig {
             2 => StopBits::Two,
             _ => StopBits::One,
         });
-        
+
         b.parity(self.parity)
     }
 }
@@ -94,6 +94,7 @@ impl PortRuntimeHandle {
             shared_serial: serial,
         })
     }
+
     pub fn from_existing(
         handle: Box<dyn SerialPort + Send + 'static>,
         initial: SerialConfig,

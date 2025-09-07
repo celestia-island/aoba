@@ -47,6 +47,7 @@ impl Status {
             });
         }
     }
+
     pub fn init_subpage_form(&mut self) {
         if self.ui.subpage_form.is_none() {
             self.ui.subpage_form = Some(SubpageForm::default());

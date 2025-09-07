@@ -32,6 +32,7 @@ impl RegisterMode {
             Self::Input,
         ]
     }
+
     pub fn from_u8(v: u8) -> Self {
         match v {
             1 => Self::Coils,
@@ -59,6 +60,7 @@ impl AppMode {
             Self::Mqtt => Self::Modbus,
         }
     }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Modbus => "ModBus RTU",
