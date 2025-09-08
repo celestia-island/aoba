@@ -8,6 +8,9 @@ use eframe::{self, egui};
 use egui::{vec2, IconData};
 
 use crate::protocol::status::Status;
+use crate::tui::utils::bus::{Bus, CoreToUi, UiToCore};
+use flume;
+use std::{thread, time::Duration};
 
 pub fn start() -> Result<()> {
     log::info!("[GUI] aoba GUI starting...");
@@ -37,6 +40,7 @@ pub fn start() -> Result<()> {
 
 pub struct GuiApp {
     status: Arc<Mutex<Status>>,
+    bus: Bus,
 }
 
 impl GuiApp {
@@ -45,14 +49,43 @@ impl GuiApp {
 
         let status = Arc::new(Mutex::new(Status::new()));
 
-        Self { status }
+        // Create channels and a simple core-like thread for demo handling of Refresh/Quit.
+        let (core_tx, core_rx) = flume::unbounded::<CoreToUi>();
+        let (ui_tx, ui_rx) = flume::unbounded::<UiToCore>();
+        let bus = Bus::new(core_rx, ui_tx.clone());
+
+        // Spawn a demo core thread that listens for UI commands and replies.
+        thread::spawn(move || loop {
+            if let Ok(msg) = ui_rx.recv() {
+                match msg {
+                    UiToCore::Refresh => {
+                        log::info!("[GUI-core-demo] received Refresh");
+                        let _ = core_tx.send(CoreToUi::Refreshed);
+                    }
+                    UiToCore::Quit => {
+                        log::info!("[GUI-core-demo] received Quit, exiting demo core");
+                        let _ = core_tx.send(CoreToUi::Refreshed);
+                        break;
+                    }
+                    UiToCore::PausePolling => {
+                        let _ = core_tx.send(CoreToUi::Refreshed);
+                    }
+                    UiToCore::ResumePolling => {
+                        let _ = core_tx.send(CoreToUi::Refreshed);
+                    }
+                }
+            }
+            thread::sleep(Duration::from_millis(50));
+        });
+
+        Self { status, bus }
     }
 }
 
 impl eframe::App for GuiApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // Snapshot state quickly to avoid holding lock while drawing
-        let (_ports, _selected, auto_refresh, last_refresh, _error) = {
+        let (_ports, _selected, _auto_refresh, _last_refresh, _error) = {
             if let Ok(guard) = self.status.lock() {
                 (
                     guard.ports.clone(),
@@ -72,16 +105,7 @@ impl eframe::App for GuiApp {
             }
         };
 
-        // Use modular renderers
-        ui::title::render_title(ctx);
-        ui::pages::render_panels(ctx, &self.status);
-        // Wrap internal state error into GUI-friendly (message, timestamp) format
-        let err_ts: Option<(String, chrono::DateTime<chrono::Local>)> =
-            if let Ok(g) = self.status.lock() {
-                g.ui.error.clone()
-            } else {
-                None
-            };
-        ui::status::render_status(ctx, &last_refresh, auto_refresh, &err_ts, &self.status);
+        // Delegate to centralized UI renderer (title + breadcrumb + pages + status)
+        crate::gui::ui::render_ui(ctx, frame, &self.status, &self.bus);
     }
 }
