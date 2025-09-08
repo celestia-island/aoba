@@ -1036,10 +1036,9 @@ fn run_app(
                         }
                     }
                 }
-            } // end key event match
-        } // end poll
-          // No automatic error clearing; errors are cleared manually via the UI
-    } // end loop
+            }
+        }
+    }
 
     terminal.clear()?;
     Ok(())

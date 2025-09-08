@@ -11,6 +11,7 @@ derive_struct! {
     pub Lang {
         index: {
             title: String = "title".to_string(),
+            home: String = "home".to_string(),
             com_ports: String = "com_ports".to_string(),
             details: String = "details".to_string(),
             no_com_ports: String = "no_com_ports".to_string(),

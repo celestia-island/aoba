@@ -1,7 +1,8 @@
 [index]
-title = "AOBA（青叶）"
+title = "AOBA 青叶"
 com_ports = "COM 端口"
 details = "详情"
+home = "主页"
 no_com_ports = "未检测到 COM 端口"
 help_short = "按 h 或 l 切换面板，按 j 或 k 移动，按 r 刷新，按 a 切换自动，按 q 退出"
 auto_on = "自动：开"

@@ -1,5 +1,6 @@
 [index]
-title = "AOBA（青葉）"
+title = "AOBA 青葉"
+home = "主頁"
 com_ports = "COM 端口"
 details = "詳細"
 no_com_ports = "未檢測到 COM 端口"

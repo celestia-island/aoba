@@ -2,6 +2,7 @@
 title = "AOBA"
 com_ports = "COM Ports"
 details = "Details"
+home = "Home"
 no_com_ports = "No COM ports detected"
 help_short = "Press h or l to switch panels, press j or k to move, press r to refresh, press a to toggle auto, press q to quit"
 auto_on = "Auto: ON"
