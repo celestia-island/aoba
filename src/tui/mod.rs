@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::i18n::lang;
-use crate::protocol::status::AppMode;
+use crate::protocol::status::{AppMode, ModeOverlayIndex, SubpageTab};
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
 // Number of base (non-register) configurable fields in subpage forms. Keep in sync with
@@ -28,7 +28,7 @@ use crate::{
 use serialport::Parity;
 
 fn is_log_tab(app: &Status) -> bool {
-    app.ui.subpage_active && app.ui.subpage_tab_index == 2
+    app.ui.subpage_active && app.ui.subpage_tab_index == SubpageTab::Log
 }
 
 /// Recompute log viewport (bottom anchored) after `log_selected` potentially changed.
@@ -183,13 +183,19 @@ fn run_app(
                                 guard.ui.mode_overlay_active = false;
                             }
                             KC::Tab => {
-                                guard.ui.mode_overlay_index = (guard.ui.mode_overlay_index + 1) % 2;
+                                // cycle overlay selection (2 items)
+                                let cur = guard.ui.mode_overlay_index.as_usize();
+                                let new = (cur + 1) % 2;
+                                guard.ui.mode_overlay_index = match new {
+                                    0 => ModeOverlayIndex::Modbus,
+                                    1 => ModeOverlayIndex::Mqtt,
+                                    _ => ModeOverlayIndex::Modbus,
+                                };
                             }
                             KC::Enter => {
-                                let sel = if guard.ui.mode_overlay_index % 2 == 0 {
-                                    AppMode::Modbus
-                                } else {
-                                    AppMode::Mqtt
+                                let sel = match guard.ui.mode_overlay_index {
+                                    ModeOverlayIndex::Modbus => AppMode::Modbus,
+                                    ModeOverlayIndex::Mqtt => AppMode::Mqtt,
                                 };
                                 if guard.ui.app_mode != sel {
                                     guard.ui.app_mode = sel;
@@ -616,8 +622,8 @@ fn run_app(
                             guard.ui.mode_overlay_active = true;
                             // Sync overlay index to current mode
                             guard.ui.mode_overlay_index = match guard.ui.app_mode {
-                                AppMode::Modbus => 0,
-                                AppMode::Mqtt => 1,
+                                AppMode::Modbus => ModeOverlayIndex::Modbus,
+                                AppMode::Mqtt => ModeOverlayIndex::Mqtt,
                             };
                             guard.clear_error();
                             drop(guard);
@@ -691,7 +697,7 @@ fn run_app(
                                     // If selected is a real port occupied by this app, open subpage form.
                                     if state == crate::protocol::status::PortState::OccupiedByThis {
                                         guard.ui.subpage_active = true;
-                                        guard.ui.subpage_tab_index = 0;
+                                        guard.ui.subpage_tab_index = SubpageTab::Config;
                                         guard.init_subpage_form();
                                     } else {
                                         // Allow entering About full-page when About virtual entry is selected.

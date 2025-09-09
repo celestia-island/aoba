@@ -31,16 +31,16 @@ pub fn render_panels(
         let tab = if let Ok(g) = inner.lock() {
             g.ui.subpage_tab_index
         } else {
-            0
+            crate::protocol::status::SubpageTab::Config
         };
         match tab {
-            2 => {
+            crate::protocol::status::SubpageTab::Log => {
                 // logs: render in a central area using simplified component API
                 CentralPanel::default().show(ctx, |ui| {
                     crate::gui::ui::components::render_logs(ui);
                 });
             }
-            1 => {
+            crate::protocol::status::SubpageTab::Body => {
                 CentralPanel::default().show(ctx, |ui| {
                     crate::gui::ui::components::render_subpage(ui, inner);
                 });
