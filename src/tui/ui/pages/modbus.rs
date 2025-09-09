@@ -9,7 +9,9 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{AppMode, EntryRole, MasterEditField, RegisterMode, Status, SubpageForm},
+    protocol::status::{
+        AppMode, EntryRole, MasterEditField, RegisterMode, Status, SubpageForm, SubpageTab,
+    },
     tui::ui::components::{
         config_panel::render_config_panel, log_panel::render_log_panel,
         modbus_panel::render_modbus_panel, mqtt_panel::render_mqtt_panel,
@@ -33,14 +35,21 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
         mid_label,
         lang().tabs.tab_log.as_str(),
     ];
-    let tab_index = app.ui.subpage_tab_index.min(tabs.len().saturating_sub(1));
+    let tab_index = app
+        .ui
+        .subpage_tab_index
+        .as_usize()
+        .min(tabs.len().saturating_sub(1));
     let [header_area, content_area] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Length(1),
         ratatui::layout::Constraint::Min(0),
     ])
     .areas(area);
 
-    let mode_text = app.ui.app_mode.label();
+    let mode_text = match app.ui.app_mode {
+        AppMode::Modbus => lang().protocol.modbus.label_modbus_settings.as_str(),
+        AppMode::Mqtt => "MQTT",
+    };
     let right_label = format!("{port_name} - {mode_text}");
     let right_width = UnicodeWidthStr::width(right_label.as_str());
     let h_chunks = ratatui::layout::Layout::default()
@@ -63,17 +72,23 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
                 .add_modifier(Modifier::BOLD),
         );
     f.render_widget(right_para, h_chunks[1]);
-    match tab_index {
-        0 => render_config_panel(f, content_area, app, None),
-        1 => {
+    let tab_enum = match tab_index {
+        0 => SubpageTab::Config,
+        1 => SubpageTab::Body,
+        2 => SubpageTab::Log,
+        _ => SubpageTab::Config,
+    };
+
+    match tab_enum {
+        SubpageTab::Config => render_config_panel(f, content_area, app, None),
+        SubpageTab::Body => {
             if matches!(app.ui.app_mode, AppMode::Modbus) {
                 render_modbus_panel(f, content_area, app)
             } else {
                 render_mqtt_panel(f, content_area, app)
             }
         }
-        2 => render_log_panel(f, content_area, app),
-        _ => render_config_panel(f, content_area, app, None),
+        SubpageTab::Log => render_log_panel(f, content_area, app),
     }
 }
 
@@ -85,11 +100,11 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
         app.sync_form_to_slave_context(pn.as_str());
     }
     // Ensure form exists when interacting with modbus settings tab
-    if app.ui.subpage_tab_index == 1 && app.ui.subpage_form.is_none() {
+    if app.ui.subpage_tab_index == SubpageTab::Body && app.ui.subpage_form.is_none() {
         app.init_subpage_form();
     }
 
-    if app.ui.subpage_tab_index == 1 {
+    if app.ui.subpage_tab_index == SubpageTab::Body {
         if let Some(form) = app.ui.subpage_form.as_mut() {
             if form.master_field_editing {
                 // Editing layer
@@ -306,19 +321,29 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
     // Tab switching (shared across tabs)
     match key.code {
         KC::Tab => {
-            app.ui.subpage_tab_index = (app.ui.subpage_tab_index + 1) % 3;
+            // cycle forward: compute new usize, wrap by 3 and map back to enum
+            let new_idx = (app.ui.subpage_tab_index.as_usize() + 1) % 3;
+            app.ui.subpage_tab_index = match new_idx {
+                0 => SubpageTab::Config,
+                1 => SubpageTab::Body,
+                2 => SubpageTab::Log,
+                _ => SubpageTab::Config,
+            };
             true
         }
         KC::BackTab => {
-            if app.ui.subpage_tab_index == 0 {
-                app.ui.subpage_tab_index = 2;
-            } else {
-                app.ui.subpage_tab_index -= 1;
-            }
+            let cur = app.ui.subpage_tab_index.as_usize();
+            let new_idx = if cur == 0 { 2 } else { cur - 1 };
+            app.ui.subpage_tab_index = match new_idx {
+                0 => SubpageTab::Config,
+                1 => SubpageTab::Body,
+                2 => SubpageTab::Log,
+                _ => SubpageTab::Config,
+            };
             true
         }
         KC::Enter => {
-            if app.ui.subpage_tab_index == 0 {
+            if app.ui.subpage_tab_index == SubpageTab::Config {
                 if let Some(form) = app.ui.subpage_form.as_mut() {
                     // If cursor on first item, toggle immediately and consume
                     if form.cursor == 0 {
@@ -361,7 +386,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                     }
                 }
                 return true;
-            } else if app.ui.subpage_tab_index == 2 {
+            } else if app.ui.subpage_tab_index == SubpageTab::Log {
                 // Let global mapping handle input editing
                 return false;
             }
@@ -373,7 +398,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
 
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
-    if app.ui.subpage_tab_index == 0 {
+    if app.ui.subpage_tab_index == SubpageTab::Config {
         // If cursor is on the first field (working toggle), show Enter-to-toggle hint and current state
         if let Some(form) = &app.ui.subpage_form {
             if form.cursor == 0 {
@@ -406,7 +431,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;
     }
-    if app.ui.subpage_tab_index == 1 {
+    if app.ui.subpage_tab_index == SubpageTab::Body {
         if let Some(form) = &app.ui.subpage_form {
             if form.master_field_editing {
                 if let Some(field) = &form.master_edit_field {
@@ -469,7 +494,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         }
         return hints;
     }
-    if app.ui.subpage_tab_index == 2 {
+    if app.ui.subpage_tab_index == SubpageTab::Log {
         if app.ui.input_editing {
             hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
             hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
