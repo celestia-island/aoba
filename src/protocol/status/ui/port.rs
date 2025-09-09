@@ -168,6 +168,7 @@ impl Status {
                     input_editing: self.ui.input_editing,
                     input_buffer: self.ui.input_buffer.clone(),
                     app_mode: self.ui.app_mode,
+                    page: self.ui.pages.last().cloned(),
                 };
                 self.per_port.states.insert(info.port_name.clone(), snap);
             }
@@ -178,22 +179,38 @@ impl Status {
         if self.ui.selected < self.ports.list.len() {
             if let Some(info) = self.ports.list.get(self.ui.selected) {
                 if let Some(snap) = self.per_port.states.get(&info.port_name).cloned() {
-                    self.ui.subpage_active = snap.subpage_active;
-                    self.ui.subpage_form = snap.subpage_form;
-                    self.ui.subpage_tab_index = snap.subpage_tab_index;
-                    self.ui.logs = snap.logs;
-                    self.ui.log_selected = snap.log_selected;
-                    self.ui.log_view_offset = snap.log_view_offset;
-                    self.ui.log_auto_scroll = snap.log_auto_scroll;
-                    self.ui.log_clear_pending = snap.log_clear_pending;
-                    self.ui.input_mode = snap.input_mode;
-                    self.ui.input_editing = snap.input_editing;
-                    self.ui.input_buffer = snap.input_buffer;
-                    self.ui.app_mode = snap.app_mode;
+                    // If we have a full page snapshot, restore it to the page
+                    // stack so page-specific UI is preserved. Otherwise fall
+                    // back to restoring the flat ui fields.
+                    if let Some(page) = snap.page {
+                        // replace current top page with the saved one
+                        if self.ui.pages.is_empty() {
+                            self.ui.pages.push(page);
+                        } else {
+                            *self.ui.pages.last_mut().unwrap() = page;
+                        }
+                        // ensure flat fields reflect the restored page
+                        self.sync_ui_from_page();
+                    } else {
+                        self.ui.subpage_active = snap.subpage_active;
+                        self.ui.subpage_form = snap.subpage_form;
+                        self.ui.subpage_tab_index = snap.subpage_tab_index;
+                        self.ui.logs = snap.logs;
+                        self.ui.log_selected = snap.log_selected;
+                        self.ui.log_view_offset = snap.log_view_offset;
+                        self.ui.log_auto_scroll = snap.log_auto_scroll;
+                        self.ui.log_clear_pending = snap.log_clear_pending;
+                        self.ui.input_mode = snap.input_mode;
+                        self.ui.input_editing = snap.input_editing;
+                        self.ui.input_buffer = snap.input_buffer;
+                        self.ui.app_mode = snap.app_mode;
+                        // also ensure page reflects these flat fields
+                        self.sync_page_from_ui();
+                    }
                 } else {
                     self.ui.subpage_active = false;
                     self.ui.subpage_form = None;
-                    self.ui.subpage_tab_index = 0;
+                    self.ui.subpage_tab_index = SubpageTab::Config;
                     self.ui.logs.clear();
                     self.ui.log_selected = 0;
                     self.ui.log_view_offset = 0;

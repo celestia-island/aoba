@@ -5,7 +5,7 @@ description = "Multi-protocol debug & simulation CLI tool (Modbus, MQTT, TTY, TC
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
 
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 
 [profile.release]

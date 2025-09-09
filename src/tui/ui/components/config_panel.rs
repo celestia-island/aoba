@@ -173,13 +173,6 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_baud.as_str()
         );
-        lines.push(ratatui::text::Line::from(styled_title_span(
-            title_text.as_str(),
-            selected,
-            false,
-        )));
-
-        // content style computed inline where needed; removed unused binding
 
         // If custom is selected and we're in the deeper confirmed edit stage, show editable buffer using input-style wrapper > [ ... ] <
         if current_idx == custom_idx && form.edit_confirmed {
@@ -203,17 +196,33 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
                 .get(current_idx)
                 .cloned()
                 .unwrap_or_else(|| lang().protocol.common.custom.clone());
-            lines.push(ratatui::text::Line::from(styled_spans(
-                StyledSpanKind::Selector {
-                    base_prefix,
-                    label: cur_label.as_str(),
-                    state: if selected {
-                        TextState::Selected
-                    } else {
-                        TextState::Normal
-                    },
-                },
-            )));
+            // Render title and selector on the same line so the selector does not wrap to a new line.
+            // Compute filler same as other in-line fields (36 char left column).
+            let left_width = 36usize;
+            let label_w = UnicodeWidthStr::width(title_text.as_str());
+            let pad_count = if label_w >= left_width {
+                2usize
+            } else {
+                left_width - label_w
+            };
+            let filler = " ".repeat(pad_count);
+
+            let mut spans = Vec::new();
+            // Mark title as editing when this field is the active editing field so styles align with other inputs.
+            spans.push(styled_title_span(title_text.as_str(), selected, true));
+            spans.push(Span::raw(filler));
+            // Use Editing state for the selector when selected+editing, otherwise Normal/Selected mapping
+            let sel_state = if selected {
+                TextState::Editing
+            } else {
+                TextState::Normal
+            };
+            spans.extend(styled_spans(StyledSpanKind::Selector {
+                base_prefix: "",
+                label: cur_label.as_str(),
+                state: sel_state,
+            }));
+            lines.push(ratatui::text::Line::from(spans));
         }
     } else {
         push_field(
@@ -262,23 +271,31 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_parity.as_str()
         );
-        lines.push(ratatui::text::Line::from(styled_title_span(
-            title_text.as_str(),
-            selected,
-            false,
-        )));
         let cur_label = options.get(cur_idx).cloned().unwrap_or_default();
-        lines.push(ratatui::text::Line::from(styled_spans(
-            StyledSpanKind::Selector {
-                base_prefix,
-                label: cur_label.as_str(),
-                state: if selected {
-                    TextState::Selected
-                } else {
-                    TextState::Normal
-                },
-            },
-        )));
+
+        // Render title and selector on the same line while editing so the selector stays in-place.
+        let left_width = 36usize;
+        let label_w = UnicodeWidthStr::width(title_text.as_str());
+        let pad_count = if label_w >= left_width {
+            2usize
+        } else {
+            left_width - label_w
+        };
+        let filler = " ".repeat(pad_count);
+        let mut spans = Vec::new();
+        spans.push(styled_title_span(title_text.as_str(), selected, true));
+        spans.push(Span::raw(filler));
+        let sel_state = if selected {
+            TextState::Editing
+        } else {
+            TextState::Normal
+        };
+        spans.extend(styled_spans(StyledSpanKind::Selector {
+            base_prefix: "",
+            label: cur_label.as_str(),
+            state: sel_state,
+        }));
+        lines.push(ratatui::text::Line::from(spans));
     } else {
         push_field(
             &mut lines,
@@ -317,26 +334,33 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             base_prefix,
             lang().protocol.common.label_data_bits.as_str()
         );
-        lines.push(ratatui::text::Line::from(styled_title_span(
-            title_text.as_str(),
-            selected,
-            false,
-        )));
         let cur_label = options
             .get(cur_idx)
             .map(|d| d.to_string())
             .unwrap_or_else(|| "8".to_string());
-        lines.push(ratatui::text::Line::from(styled_spans(
-            StyledSpanKind::Selector {
-                base_prefix,
-                label: cur_label.as_str(),
-                state: if selected {
-                    TextState::Selected
-                } else {
-                    TextState::Normal
-                },
-            },
-        )));
+
+        let left_width = 36usize;
+        let label_w = UnicodeWidthStr::width(title_text.as_str());
+        let pad_count = if label_w >= left_width {
+            2usize
+        } else {
+            left_width - label_w
+        };
+        let filler = " ".repeat(pad_count);
+        let mut spans = Vec::new();
+        spans.push(styled_title_span(title_text.as_str(), selected, true));
+        spans.push(Span::raw(filler));
+        let sel_state = if selected {
+            TextState::Editing
+        } else {
+            TextState::Normal
+        };
+        spans.extend(styled_spans(StyledSpanKind::Selector {
+            base_prefix: "",
+            label: cur_label.as_str(),
+            state: sel_state,
+        }));
+        lines.push(ratatui::text::Line::from(spans));
     } else {
         push_field(
             &mut lines,
@@ -376,23 +400,30 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
             lang().protocol.common.label_stop_bits.as_str()
         );
         // title style computed inline via helper; removed unused binding
-        lines.push(ratatui::text::Line::from(styled_title_span(
-            title_text.as_str(),
-            selected,
-            false,
-        )));
         let cur_label = opts_labels.get(cur_idx).cloned().unwrap_or("1").to_string();
-        lines.push(ratatui::text::Line::from(styled_spans(
-            StyledSpanKind::Selector {
-                base_prefix,
-                label: cur_label.as_str(),
-                state: if selected {
-                    TextState::Selected
-                } else {
-                    TextState::Normal
-                },
-            },
-        )));
+
+        let left_width = 36usize;
+        let label_w = UnicodeWidthStr::width(title_text.as_str());
+        let pad_count = if label_w >= left_width {
+            2usize
+        } else {
+            left_width - label_w
+        };
+        let filler = " ".repeat(pad_count);
+        let mut spans = Vec::new();
+        spans.push(styled_title_span(title_text.as_str(), selected, true));
+        spans.push(Span::raw(filler));
+        let sel_state = if selected {
+            TextState::Editing
+        } else {
+            TextState::Normal
+        };
+        spans.extend(styled_spans(StyledSpanKind::Selector {
+            base_prefix: "",
+            label: cur_label.as_str(),
+            state: sel_state,
+        }));
+        lines.push(ratatui::text::Line::from(spans));
     } else {
         push_field(
             &mut lines,

@@ -61,7 +61,7 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
             {
                 if let Ok(mut g) = inner.lock() {
                     g.ui.subpage_active = false;
-                    g.ui.subpage_tab_index = 0;
+                    g.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
                 }
             }
 
@@ -82,8 +82,10 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
             if let Ok(g) = inner.lock() {
                 let label = if g.ui.subpage_active {
                     match g.ui.subpage_tab_index {
-                        1 => lang().protocol.modbus.label_modbus_settings.as_str(),
-                        2 => lang().tabs.tab_log.as_str(),
+                        crate::protocol::status::SubpageTab::Body => {
+                            lang().protocol.modbus.label_modbus_settings.as_str()
+                        }
+                        crate::protocol::status::SubpageTab::Log => lang().tabs.tab_log.as_str(),
                         _ => lang().index.details.as_str(),
                     }
                 } else {

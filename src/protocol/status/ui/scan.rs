@@ -1,5 +1,4 @@
 use chrono::Local;
-use std::collections::HashMap;
 
 use crate::{
     protocol::runtime::{PortRuntimeHandle, RuntimeCommand},
@@ -9,6 +8,10 @@ use crate::{
 impl Status {
     pub fn refresh(&mut self) {
         self.busy.busy = true;
+        // remember the selected index at function entry; we'll only restore
+        // the per-port snapshot if the selection actually changed by the
+        // refresh operation.
+        let old_selected = self.ui.selected;
         self.save_current_port_state();
         self.perform_device_scan();
         let enriched = crate::protocol::tty::available_ports_enriched();
@@ -27,9 +30,12 @@ impl Status {
             } else {
                 None
             };
-        let mut name_to_state: HashMap<String, PortState> = HashMap::new();
-        let mut name_to_handle: HashMap<String, Option<SerialPortWrapper>> = HashMap::new();
-        let mut name_to_runtime: HashMap<String, Option<PortRuntimeHandle>> = HashMap::new();
+        let mut name_to_state: std::collections::HashMap<String, PortState> =
+            std::collections::HashMap::new();
+        let mut name_to_handle: std::collections::HashMap<String, Option<SerialPortWrapper>> =
+            std::collections::HashMap::new();
+        let mut name_to_runtime: std::collections::HashMap<String, Option<PortRuntimeHandle>> =
+            std::collections::HashMap::new();
         for (i, p) in self.ports.list.iter().enumerate() {
             if let Some(s) = self.ports.states.get(i) {
                 name_to_state.insert(p.port_name.clone(), *s);
@@ -99,12 +105,16 @@ impl Status {
             }
         }
         self.ui.last_refresh = Some(Local::now());
-        self.load_current_port_state();
+        // Only restore per-port snapshot if the selected index changed.
+        if self.ui.selected != old_selected {
+            self.load_current_port_state();
+        }
         self.busy.busy = false;
     }
 
     pub fn refresh_ports_only(&mut self) {
         self.busy.busy = true;
+        let old_selected = self.ui.selected;
         self.save_current_port_state();
         let enriched = crate::protocol::tty::available_ports_enriched();
         let new_ports: Vec<_> = enriched.iter().map(|(p, _)| p.clone()).collect();
@@ -115,9 +125,12 @@ impl Status {
             } else {
                 None
             };
-        let mut name_to_state: HashMap<String, PortState> = HashMap::new();
-        let mut name_to_handle: HashMap<String, Option<SerialPortWrapper>> = HashMap::new();
-        let mut name_to_runtime: HashMap<String, Option<PortRuntimeHandle>> = HashMap::new();
+        let mut name_to_state: std::collections::HashMap<String, PortState> =
+            std::collections::HashMap::new();
+        let mut name_to_handle: std::collections::HashMap<String, Option<SerialPortWrapper>> =
+            std::collections::HashMap::new();
+        let mut name_to_runtime: std::collections::HashMap<String, Option<PortRuntimeHandle>> =
+            std::collections::HashMap::new();
         for (i, p) in self.ports.list.iter().enumerate() {
             if let Some(s) = self.ports.states.get(i) {
                 name_to_state.insert(p.port_name.clone(), *s);
@@ -177,7 +190,9 @@ impl Status {
             }
         }
         self.ui.last_refresh = Some(Local::now());
-        self.load_current_port_state();
+        if self.ui.selected != old_selected {
+            self.load_current_port_state();
+        }
         self.busy.busy = false;
     }
 

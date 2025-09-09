@@ -30,7 +30,7 @@ pub fn render_ui(f: &mut Frame, app: &mut Status) {
     bottom::render_bottom(f, main_chunks[2], app);
 
     if app.ui.mode_overlay_active {
-        let idx = app.ui.mode_overlay_index.min(1);
+        let idx = app.ui.mode_overlay_index.as_usize().min(1);
         render_mode_selector(f, idx);
     }
 }

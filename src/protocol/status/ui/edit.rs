@@ -53,5 +53,31 @@ impl Status {
             self.ui.subpage_form = Some(SubpageForm::default());
         }
         self.ui.subpage_active = true;
+        // Ensure the page stack's top is a Modbus page so that per-port
+        // snapshots capture the correct page variant. Older code sometimes
+        // only updated flat ui fields which left the page stack as Entry;
+        // when that Entry was saved and later restored the UI jumped back
+        // to the homepage. Replace (or push) the top page with a Modbus
+        // page reflecting the current flat fields.
+        let modbus_page = crate::protocol::status::Page::Modbus {
+            selected: self.ui.selected,
+            subpage_active: self.ui.subpage_active,
+            subpage_form: self.ui.subpage_form.clone(),
+            subpage_tab_index: self.ui.subpage_tab_index,
+            logs: self.ui.logs.clone(),
+            log_selected: self.ui.log_selected,
+            log_view_offset: self.ui.log_view_offset,
+            log_auto_scroll: self.ui.log_auto_scroll,
+            log_clear_pending: self.ui.log_clear_pending,
+            input_mode: self.ui.input_mode,
+            input_editing: self.ui.input_editing,
+            input_buffer: self.ui.input_buffer.clone(),
+            app_mode: self.ui.app_mode,
+        };
+        if self.ui.pages.is_empty() {
+            self.ui.pages.push(modbus_page);
+        } else {
+            *self.ui.pages.last_mut().unwrap() = modbus_page;
+        }
     }
 }

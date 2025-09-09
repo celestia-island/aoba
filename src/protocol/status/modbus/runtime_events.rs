@@ -31,7 +31,7 @@ impl Status {
                         .or_insert(PerPortState {
                             subpage_active: false,
                             subpage_form: None,
-                            subpage_tab_index: 0,
+                            subpage_tab_index: SubpageTab::Config,
                             logs: Vec::new(),
                             log_selected: 0,
                             log_view_offset: 0,
@@ -41,6 +41,7 @@ impl Status {
                             input_editing: false,
                             input_buffer: String::new(),
                             app_mode: AppMode::Modbus,
+                            page: None,
                         });
                 }
                 while let Ok(evt) = rt.evt_rx.try_recv() {
