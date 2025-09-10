@@ -26,6 +26,7 @@ pub struct SubpageForm {
     pub global_timeout_ms: u64,
     pub master_passive: Option<bool>,
 }
+
 impl Default for SubpageForm {
     fn default() -> Self {
         Self {

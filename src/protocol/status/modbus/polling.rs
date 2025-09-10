@@ -278,7 +278,24 @@ impl Status {
                     ps.logs.push(le);
                 }
             } else {
-                self.append_log(le);
+                // inline append_log
+                const MAX: usize = 1000;
+                self.ui.logs.push(le);
+                if self.ui.logs.len() > MAX {
+                    let excess = self.ui.logs.len() - MAX;
+                    self.ui.logs.drain(0..excess);
+                    if self.ui.log_selected >= self.ui.logs.len() {
+                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                    }
+                }
+                if self.ui.log_auto_scroll {
+                    if self.ui.logs.is_empty() {
+                        self.ui.log_view_offset = 0;
+                    } else {
+                        self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
+                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                    }
+                }
             }
         }
     }

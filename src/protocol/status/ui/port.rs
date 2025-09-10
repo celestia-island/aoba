@@ -189,8 +189,53 @@ impl Status {
                         } else {
                             *self.ui.pages.last_mut().unwrap() = page;
                         }
-                        // ensure flat fields reflect the restored page
-                        self.sync_ui_from_page();
+                        // ensure flat fields reflect the restored page (inlined sync_ui_from_page)
+                        match self.ui.pages.last().cloned().unwrap_or_default() {
+                            crate::protocol::status::Page::Entry {
+                                selected,
+                                input_mode,
+                                input_editing,
+                                input_buffer,
+                                app_mode,
+                            } => {
+                                self.ui.selected = selected;
+                                self.ui.input_mode = input_mode;
+                                self.ui.input_editing = input_editing;
+                                self.ui.input_buffer = input_buffer;
+                                self.ui.app_mode = app_mode;
+                                self.ui.subpage_active = false;
+                                self.ui.subpage_form = None;
+                            }
+                            crate::protocol::status::Page::Modbus {
+                                selected,
+                                subpage_active,
+                                subpage_form,
+                                subpage_tab_index,
+                                logs,
+                                log_selected,
+                                log_view_offset,
+                                log_auto_scroll,
+                                log_clear_pending,
+                                input_mode,
+                                input_editing,
+                                input_buffer,
+                                app_mode,
+                            } => {
+                                self.ui.selected = selected;
+                                self.ui.subpage_active = subpage_active;
+                                self.ui.subpage_form = subpage_form;
+                                self.ui.subpage_tab_index = subpage_tab_index;
+                                self.ui.logs = logs;
+                                self.ui.log_selected = log_selected;
+                                self.ui.log_view_offset = log_view_offset;
+                                self.ui.log_auto_scroll = log_auto_scroll;
+                                self.ui.log_clear_pending = log_clear_pending;
+                                self.ui.input_mode = input_mode;
+                                self.ui.input_editing = input_editing;
+                                self.ui.input_buffer = input_buffer;
+                                self.ui.app_mode = app_mode;
+                            }
+                        }
                     } else {
                         self.ui.subpage_active = snap.subpage_active;
                         self.ui.subpage_form = snap.subpage_form;
@@ -204,8 +249,54 @@ impl Status {
                         self.ui.input_editing = snap.input_editing;
                         self.ui.input_buffer = snap.input_buffer;
                         self.ui.app_mode = snap.app_mode;
-                        // also ensure page reflects these flat fields
-                        self.sync_page_from_ui();
+                        // also ensure page reflects these flat fields (inlined sync_page_from_ui)
+                        if self.ui.pages.is_empty() {
+                            self.ui.pages.push(crate::protocol::status::Page::default());
+                        }
+                        match self.ui.pages.last_mut().unwrap() {
+                            crate::protocol::status::Page::Entry {
+                                selected,
+                                input_mode,
+                                input_editing,
+                                input_buffer,
+                                app_mode,
+                            } => {
+                                *selected = self.ui.selected;
+                                *input_mode = self.ui.input_mode;
+                                *input_editing = self.ui.input_editing;
+                                *input_buffer = self.ui.input_buffer.clone();
+                                *app_mode = self.ui.app_mode;
+                            }
+                            crate::protocol::status::Page::Modbus {
+                                selected,
+                                subpage_active,
+                                subpage_form,
+                                subpage_tab_index,
+                                logs,
+                                log_selected,
+                                log_view_offset,
+                                log_auto_scroll,
+                                log_clear_pending,
+                                input_mode,
+                                input_editing,
+                                input_buffer,
+                                app_mode,
+                            } => {
+                                *selected = self.ui.selected;
+                                *subpage_active = self.ui.subpage_active;
+                                *subpage_form = self.ui.subpage_form.clone();
+                                *subpage_tab_index = self.ui.subpage_tab_index;
+                                *logs = self.ui.logs.clone();
+                                *log_selected = self.ui.log_selected;
+                                *log_view_offset = self.ui.log_view_offset;
+                                *log_auto_scroll = self.ui.log_auto_scroll;
+                                *log_clear_pending = self.ui.log_clear_pending;
+                                *input_mode = self.ui.input_mode;
+                                *input_editing = self.ui.input_editing;
+                                *input_buffer = self.ui.input_buffer.clone();
+                                *app_mode = self.ui.app_mode;
+                            }
+                        }
                     }
                 } else {
                     self.ui.subpage_active = false;

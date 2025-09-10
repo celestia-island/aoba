@@ -16,13 +16,35 @@ pub fn render_modbus(
         // Top controls: Edit toggle, Add / Delete register
         ui.horizontal(|ui| {
             if ui.button("Edit Toggle").clicked() {
-                if let Ok(mut guard) = inner.lock() {
+                let _ = crate::protocol::status::status_rw::write_status(inner, |guard| {
+                    // inline init_subpage_form
                     if guard.ui.subpage_form.is_none() {
-                        guard.init_subpage_form();
+                        guard.ui.subpage_form =
+                            Some(crate::protocol::status::SubpageForm::default());
+                    }
+                    guard.ui.subpage_active = true;
+                    let modbus_page = crate::protocol::status::Page::Modbus {
+                        selected: guard.ui.selected,
+                        subpage_active: guard.ui.subpage_active,
+                        subpage_form: guard.ui.subpage_form.clone(),
+                        subpage_tab_index: guard.ui.subpage_tab_index,
+                        logs: guard.ui.logs.clone(),
+                        log_selected: guard.ui.log_selected,
+                        log_view_offset: guard.ui.log_view_offset,
+                        log_auto_scroll: guard.ui.log_auto_scroll,
+                        log_clear_pending: guard.ui.log_clear_pending,
+                        input_mode: guard.ui.input_mode,
+                        input_editing: guard.ui.input_editing,
+                        input_buffer: guard.ui.input_buffer.clone(),
+                        app_mode: guard.ui.app_mode,
+                    };
+                    if guard.ui.pages.is_empty() {
+                        guard.ui.pages.push(modbus_page);
+                    } else {
+                        *guard.ui.pages.last_mut().unwrap() = modbus_page;
                     }
                     if let Some(form) = guard.ui.subpage_form.as_mut() {
                         form.editing = !form.editing;
-                        // clear editing helpers when toggled off
                         if !form.editing {
                             form.editing_field = None;
                             form.input_buffer.clear();
@@ -30,31 +52,55 @@ pub fn render_modbus(
                             form.edit_confirmed = false;
                         }
                     }
-                }
+                    Ok(())
+                });
             }
             if ui.button("Add Register").clicked() {
-                if let Ok(mut guard) = inner.lock() {
+                let _ = crate::protocol::status::status_rw::write_status(inner, |guard| {
+                    // inline init_subpage_form
                     if guard.ui.subpage_form.is_none() {
-                        guard.init_subpage_form();
+                        guard.ui.subpage_form =
+                            Some(crate::protocol::status::SubpageForm::default());
+                    }
+                    guard.ui.subpage_active = true;
+                    let modbus_page = crate::protocol::status::Page::Modbus {
+                        selected: guard.ui.selected,
+                        subpage_active: guard.ui.subpage_active,
+                        subpage_form: guard.ui.subpage_form.clone(),
+                        subpage_tab_index: guard.ui.subpage_tab_index,
+                        logs: guard.ui.logs.clone(),
+                        log_selected: guard.ui.log_selected,
+                        log_view_offset: guard.ui.log_view_offset,
+                        log_auto_scroll: guard.ui.log_auto_scroll,
+                        log_clear_pending: guard.ui.log_clear_pending,
+                        input_mode: guard.ui.input_mode,
+                        input_editing: guard.ui.input_editing,
+                        input_buffer: guard.ui.input_buffer.clone(),
+                        app_mode: guard.ui.app_mode,
+                    };
+                    if guard.ui.pages.is_empty() {
+                        guard.ui.pages.push(modbus_page);
+                    } else {
+                        *guard.ui.pages.last_mut().unwrap() = modbus_page;
                     }
                     if let Some(form) = guard.ui.subpage_form.as_mut() {
                         form.registers
                             .push(crate::protocol::status::RegisterEntry::default());
                     }
-                }
+                    Ok(())
+                });
             }
             if ui.button("Delete Register").clicked() {
-                if let Ok(mut guard) = inner.lock() {
+                let _ = crate::protocol::status::status_rw::write_status(inner, |guard| {
                     if let Some(form) = guard.ui.subpage_form.as_mut() {
                         form.registers.pop();
                     }
-                }
+                    Ok(())
+                });
             }
         });
 
-        if let Ok(_guard) = inner.lock() {
-            // reuse components subpage as a simple representation for modbus
-            crate::gui::ui::components::render_subpage(ui, inner);
-        }
+        // reuse components subpage as a simple representation for modbus
+        crate::gui::ui::components::render_subpage(ui, inner);
     });
 }

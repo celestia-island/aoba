@@ -19,19 +19,17 @@ use std::sync::{Arc, Mutex};
 /// Drawer implementation inlined so the adapter file can be removed safely.
 pub fn render_drawer_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>, bus: &Bus) {
     // Snapshot from the Status guard
-    let (ports, selected, auto_refresh) = if let Ok(guard) = inner.lock() {
-        (
-            guard.ports.clone(),
-            guard.ui.selected,
-            guard.ui.auto_refresh,
-        )
-    } else {
-        (
-            crate::protocol::status::Status::default().ports,
-            0usize,
-            false,
-        )
-    };
+    let (ports, selected, auto_refresh) =
+        crate::protocol::status::status_rw::read_status(inner, |g| {
+            Ok((g.ports.clone(), g.ui.selected, g.ui.auto_refresh))
+        })
+        .unwrap_or_else(|_| {
+            (
+                crate::protocol::status::Status::default().ports,
+                0usize,
+                false,
+            )
+        });
 
     ui.horizontal(|ui| {
         if ui
@@ -54,9 +52,12 @@ pub fn render_drawer_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>, bus: &Bus) {
             ))
             .changed()
         {
-            if let Ok(mut guard) = inner.lock() {
-                guard.ui.auto_refresh = checkbox;
-            }
+            let _ = crate::protocol::status::status_rw::write_status(inner, |g| {
+                g.ui.auto_refresh = checkbox;
+                // inline clear_error if needed (keep behaviour consistent)
+                g.ui.error = None;
+                Ok(())
+            });
         }
     });
 
@@ -67,10 +68,11 @@ pub fn render_drawer_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>, bus: &Bus) {
             let label = format!("{} - {:?}", p.port_name, p.port_type);
             let selected_bool = i == selected;
             if ui.selectable_label(selected_bool, label).clicked() {
-                if let Ok(mut guard) = inner.lock() {
-                    guard.ui.selected = i;
-                    guard.clear_error();
-                }
+                let _ = crate::protocol::status::status_rw::write_status(inner, |g| {
+                    g.ui.selected = i;
+                    g.ui.error = None; // inline clear_error
+                    Ok(())
+                });
             }
         }
     });

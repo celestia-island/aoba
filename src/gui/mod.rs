@@ -84,17 +84,18 @@ impl GuiApp {
 
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        // Snapshot state quickly to avoid holding lock while drawing
-        let (_ports, _selected, _auto_refresh, _last_refresh, _error) = {
-            if let Ok(guard) = self.status.lock() {
-                (
+        // Snapshot state quickly using read_status helper to avoid holding lock while drawing
+        let (_ports, _selected, _auto_refresh, _last_refresh, _error) =
+            crate::protocol::status::status_rw::read_status(&self.status, |guard| {
+                Ok((
                     guard.ports.clone(),
                     guard.ui.selected,
                     guard.ui.auto_refresh,
                     guard.ui.last_refresh,
                     guard.ui.error.clone(),
-                )
-            } else {
+                ))
+            })
+            .unwrap_or_else(|_| {
                 (
                     crate::protocol::status::Status::default().ports,
                     0usize,
@@ -102,8 +103,7 @@ impl eframe::App for GuiApp {
                     None,
                     None,
                 )
-            }
-        };
+            });
 
         // Delegate to centralized UI renderer (title + breadcrumb + pages + status)
         crate::gui::ui::render_ui(ctx, frame, &self.status, &self.bus);

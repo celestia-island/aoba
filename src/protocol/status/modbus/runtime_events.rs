@@ -387,10 +387,28 @@ impl Status {
             }
         }
         for l in pending_logs {
-            self.append_log(l);
+            // inline append_log
+            const MAX: usize = 1000;
+            self.ui.logs.push(l);
+            if self.ui.logs.len() > MAX {
+                let excess = self.ui.logs.len() - MAX;
+                self.ui.logs.drain(0..excess);
+                if self.ui.log_selected >= self.ui.logs.len() {
+                    self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                }
+            }
+            if self.ui.log_auto_scroll {
+                if self.ui.logs.is_empty() {
+                    self.ui.log_view_offset = 0;
+                } else {
+                    self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
+                    self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                }
+            }
         }
         if let Some(e) = pending_error {
-            self.set_error(e);
+            // inline set_error
+            self.ui.error = Some((e, Local::now()));
         }
         // Perform deferred syncs from updated form values into per-port slave storage.
         for pn in need_sync_ports {

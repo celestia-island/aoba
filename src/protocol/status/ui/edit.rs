@@ -40,11 +40,30 @@ impl Status {
         }
         self.busy.polling_paused = false;
         if !found_master {
-            self.append_log(LogEntry {
-                when: Local::now(),
-                raw: "no master entries configured — nothing to poll".into(),
-                parsed: None,
-            });
+            // inline Status::append_log
+            {
+                const MAX: usize = 1000;
+                self.ui.logs.push(LogEntry {
+                    when: Local::now(),
+                    raw: "no master entries configured — nothing to poll".into(),
+                    parsed: None,
+                });
+                if self.ui.logs.len() > MAX {
+                    let excess = self.ui.logs.len() - MAX;
+                    self.ui.logs.drain(0..excess);
+                    if self.ui.log_selected >= self.ui.logs.len() {
+                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                    }
+                }
+                if self.ui.log_auto_scroll {
+                    if self.ui.logs.is_empty() {
+                        self.ui.log_view_offset = 0;
+                    } else {
+                        self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
+                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                    }
+                }
+            }
         }
     }
 
