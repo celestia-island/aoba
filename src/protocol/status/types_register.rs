@@ -15,6 +15,7 @@ pub struct RegisterEntry {
     pub req_total: u32,
     pub pending_requests: Vec<PendingRequest>,
 }
+
 impl Default for RegisterEntry {
     fn default() -> Self {
         Self {
@@ -40,6 +41,7 @@ pub struct PendingRequest {
     pub sent_at: std::time::Instant,
     pub request: Arc<Mutex<rmodbus::client::ModbusRequest>>,
 }
+
 impl PendingRequest {
     pub fn new(
         func: u8,

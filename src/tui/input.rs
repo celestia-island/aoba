@@ -1,6 +1,7 @@
 use crossterm::event::KeyCode;
 
 /// High-level user actions
+#[derive(Clone)]
 pub enum Action {
     Quit,
     LeavePage,

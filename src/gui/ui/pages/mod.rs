@@ -2,8 +2,8 @@ pub mod about;
 pub mod entry;
 pub mod modbus;
 
-use crate::tui::utils::bus::{Bus, UiToCore};
-use crate::{i18n::lang, protocol::status::Status};
+use crate::protocol::status::Status;
+use crate::tui::utils::bus::Bus;
 use eframe::egui::CentralPanel;
 use eframe::egui::Context;
 use eframe::Frame;
@@ -22,17 +22,13 @@ pub fn render_panels(
     // they want the drawer to appear.
 
     // Central area: delegate to per-page renderers
-    let subpage_active = if let Ok(g) = inner.lock() {
-        g.ui.subpage_active
-    } else {
-        false
-    };
+    let subpage_active =
+        crate::protocol::status::status_rw::read_status(inner, |g| Ok(g.ui.subpage_active))
+            .unwrap_or(false);
     if subpage_active {
-        let tab = if let Ok(g) = inner.lock() {
-            g.ui.subpage_tab_index
-        } else {
-            crate::protocol::status::SubpageTab::Config
-        };
+        let tab =
+            crate::protocol::status::status_rw::read_status(inner, |g| Ok(g.ui.subpage_tab_index))
+                .unwrap_or(crate::protocol::status::SubpageTab::Config);
         match tab {
             crate::protocol::status::SubpageTab::Log => {
                 // logs: render in a central area using simplified component API

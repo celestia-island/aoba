@@ -59,10 +59,11 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
                 .add_sized(Vec2::new(home_w, 24.0), Button::new(home_label).small())
                 .clicked()
             {
-                if let Ok(mut g) = inner.lock() {
+                let _ = crate::protocol::status::status_rw::write_status(inner, |g| {
                     g.ui.subpage_active = false;
                     g.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
-                }
+                    Ok(())
+                });
             }
 
             // separator (non-selectable)
@@ -79,27 +80,40 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
             ui.add_space(4.0);
 
             // Level 2: Page name (auto-sized)
-            if let Ok(g) = inner.lock() {
-                let label = if g.ui.subpage_active {
-                    match g.ui.subpage_tab_index {
-                        crate::protocol::status::SubpageTab::Body => {
-                            lang().protocol.modbus.label_modbus_settings.as_str()
+            if let Ok((label, maybe_port)) =
+                crate::protocol::status::status_rw::read_status(inner, |g| {
+                    let label = if g.ui.subpage_active {
+                        match g.ui.subpage_tab_index {
+                            crate::protocol::status::SubpageTab::Body => lang()
+                                .protocol
+                                .modbus
+                                .label_modbus_settings
+                                .as_str()
+                                .to_string(),
+                            crate::protocol::status::SubpageTab::Log => {
+                                lang().tabs.tab_log.as_str().to_string()
+                            }
+                            _ => lang().index.details.as_str().to_string(),
                         }
-                        crate::protocol::status::SubpageTab::Log => lang().tabs.tab_log.as_str(),
-                        _ => lang().index.details.as_str(),
-                    }
-                } else {
-                    lang().index.details.as_str()
-                };
+                    } else {
+                        lang().index.details.as_str().to_string()
+                    };
 
+                    let maybe_port = if g.ui.subpage_active
+                        && !g.ports.list.is_empty()
+                        && g.ui.selected < g.ports.list.len()
+                    {
+                        Some(g.ports.list[g.ui.selected].port_name.clone())
+                    } else {
+                        None
+                    };
+                    Ok((label, maybe_port))
+                })
+            {
                 let label_w = (label.chars().count() * 8 + 8) as f32;
                 ui.add_sized(Vec2::new(label_w, 24.0), Button::new(label).small());
 
-                // Level 3: optional port name
-                if g.ui.subpage_active
-                    && !g.ports.list.is_empty()
-                    && g.ui.selected < g.ports.list.len()
-                {
+                if let Some(port_name) = maybe_port {
                     ui.add_space(4.0);
                     let sep_rect = ui
                         .allocate_exact_size(Vec2::new(12.0, 24.0), egui::Sense::hover())
@@ -112,7 +126,6 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
                         ui.visuals().text_color(),
                     );
                     ui.add_space(4.0);
-                    let port_name = g.ports.list[g.ui.selected].port_name.clone();
                     let port_w = (port_name.chars().count() * 8 + 8) as f32;
                     ui.add_sized(Vec2::new(port_w, 24.0), Button::new(port_name).small());
                 }
