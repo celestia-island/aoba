@@ -7,7 +7,7 @@ use crate::protocol::status::Status;
 use crate::tui::utils::bus::Bus;
 use eframe::egui::Context;
 use eframe::Frame;
-use egui::{CentralPanel, TopBottomPanel};
+use egui::TopBottomPanel;
 
 /// Centralized UI renderer: title, breadcrumb navigation, pages and bottom status.
 pub fn render_ui(

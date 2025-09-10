@@ -31,20 +31,6 @@ fn is_log_tab(app: &Status) -> bool {
     app.ui.subpage_active && app.ui.subpage_tab_index == SubpageTab::Log
 }
 
-/// Recompute log viewport (bottom anchored) after `log_selected` potentially changed.
-fn adjust_log_view(app: &mut Status, term_height: u16) {
-    app.adjust_log_view(term_height);
-}
-
-/// Convenience wrapper around terminal draw + locking to reduce repetition.
-fn redraw(terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>, app: &Arc<Mutex<Status>>) {
-    let _ = terminal.draw(|f| {
-        if let Ok(mut g) = app.lock() {
-            crate::tui::ui::render_ui(f, &mut g);
-        }
-    });
-}
-
 pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
@@ -59,9 +45,13 @@ pub fn start() -> Result<()> {
 
     // For manual testing: if AOBA_TUI_FORCE_ERROR is set, pre-populate an error to display
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
-        if let Ok(mut guard) = app.lock() {
-            guard.set_error("demo forced error: AOBA_TUI_FORCE_ERROR");
-        }
+        let _ = crate::protocol::status::status_rw::write_status(&app, |g| {
+            g.ui.error = Some((
+                "demo forced error: AOBA_TUI_FORCE_ERROR".to_string(),
+                chrono::Local::now(),
+            ));
+            Ok(())
+        });
     }
 
     // Unified core worker thread: handles all non-UI periodic logic (port refresh, register polling, draining events) and communicates via the bus.
@@ -81,24 +71,30 @@ pub fn start() -> Result<()> {
                 while let Ok(msg) = ui_rx.try_recv() {
                     match msg {
                         UiToCore::Refresh => {
-                            if let Ok(mut guard) = app_clone.lock() {
-                                guard.refresh();
-                            }
+                            let _ =
+                                crate::protocol::status::status_rw::write_status(&app_clone, |g| {
+                                    g.refresh();
+                                    Ok(())
+                                });
                             let _ = core_tx.send(CoreToUi::Refreshed);
                         }
                         UiToCore::Quit => {
                             return;
                         }
                         UiToCore::PausePolling => {
-                            if let Ok(mut guard) = app_clone.lock() {
-                                guard.pause_and_reset_slave_listen();
-                            }
+                            let _ =
+                                crate::protocol::status::status_rw::write_status(&app_clone, |g| {
+                                    g.pause_and_reset_slave_listen();
+                                    Ok(())
+                                });
                             let _ = core_tx.send(CoreToUi::Refreshed);
                         }
                         UiToCore::ResumePolling => {
-                            if let Ok(mut guard) = app_clone.lock() {
-                                guard.resume_slave_listen();
-                            }
+                            let _ =
+                                crate::protocol::status::status_rw::write_status(&app_clone, |g| {
+                                    g.resume_slave_listen();
+                                    Ok(())
+                                });
                             let _ = core_tx.send(CoreToUi::Refreshed);
                         }
                     }
@@ -106,29 +102,32 @@ pub fn start() -> Result<()> {
 
                 // Lightweight port list refresh (every 1s)
                 if last_ports_refresh.elapsed() >= Duration::from_millis(1000) {
-                    if let Ok(mut guard) = app_clone.lock() {
-                        guard.refresh_ports_only();
-                    }
+                    let _ = crate::protocol::status::status_rw::write_status(&app_clone, |g| {
+                        g.refresh_ports_only();
+                        Ok(())
+                    });
                     last_ports_refresh = std::time::Instant::now();
                     let _ = core_tx.send(CoreToUi::Refreshed);
                 }
 
                 // Full device scan (includes external commands) at lower frequency (e.g. every 15s) to avoid UI stalls
                 if last_full_scan.elapsed() >= Duration::from_secs(15) {
-                    if let Ok(mut guard) = app_clone.lock() {
-                        guard.refresh();
-                    }
+                    let _ = crate::protocol::status::status_rw::write_status(&app_clone, |g| {
+                        g.refresh();
+                        Ok(())
+                    });
                     last_full_scan = std::time::Instant::now();
                     let _ = core_tx.send(CoreToUi::Refreshed);
                 }
 
                 // Drive polling + sync runtime configs + drain events (keep lock short)
-                if let Ok(mut guard) = app_clone.lock() {
-                    guard.sync_runtime_configs();
-                    guard.drive_slave_polling();
-                    guard.drain_runtime_events();
-                    guard.tick_spinner();
-                }
+                let _ = crate::protocol::status::status_rw::write_status(&app_clone, |g| {
+                    g.sync_runtime_configs();
+                    g.drive_slave_polling();
+                    g.drain_runtime_events();
+                    g.tick_spinner();
+                    Ok(())
+                });
                 let _ = core_tx.send(CoreToUi::Tick);
                 thread::sleep(Duration::from_millis(40));
             }
@@ -153,10 +152,12 @@ fn run_app(
     loop {
         // First try to receive a notification from core thread (short timeout) to reduce busy waiting
         let _ = bus.core_rx.recv_timeout(Duration::from_millis(50));
-        // Rendering only (read state)
-        if let Ok(mut guard) = app.lock() {
-            terminal.draw(|f| crate::tui::ui::render_ui(f, &mut guard))?;
-        }
+
+        // Rendering only (read state) using read_status
+        let _ = crate::protocol::status::status_rw::read_status(&app, |g| {
+            terminal.draw(|f| crate::tui::ui::render_ui(f, &mut g.clone()))?;
+            Ok(())
+        });
 
         // Poll for input
         if crossterm::event::poll(Duration::from_millis(100))? {
@@ -165,25 +166,20 @@ fn run_app(
                     continue; // Ignore non-initial key press (repeat / release)
                 }
                 // Main keyboard event handling entry
-                let lock = app.lock();
-                // Removed unused `_is_editing` binding (no side-effects)
-
                 // Mode overlay handling
-                let overlay_active = lock
-                    .as_ref()
-                    .map(|g| g.ui.mode_overlay_active)
-                    .unwrap_or(false);
+                let overlay_active = crate::protocol::status::status_rw::read_status(&app, |g| {
+                    Ok(g.ui.mode_overlay_active)
+                })
+                .unwrap_or(false);
                 if overlay_active {
                     use crossterm::event::KeyCode as KC;
-                    // Release read lock before acquiring mutable
-                    drop(lock);
-                    if let Ok(mut guard) = app.lock() {
+                    // Apply overlay changes via write_status
+                    let _ = crate::protocol::status::status_rw::write_status(&app, |guard| {
                         match key.code {
                             KC::Esc => {
                                 guard.ui.mode_overlay_active = false;
                             }
                             KC::Tab => {
-                                // cycle overlay selection (2 items)
                                 let cur = guard.ui.mode_overlay_index.as_usize();
                                 let new = (cur + 1) % 2;
                                 guard.ui.mode_overlay_index = match new {
@@ -199,35 +195,62 @@ fn run_app(
                                 };
                                 if guard.ui.app_mode != sel {
                                     guard.ui.app_mode = sel;
-                                    guard.save_current_port_state();
+                                    // inline save_current_port_state to avoid direct Status method call
+                                    if guard.ui.selected < guard.ports.list.len() {
+                                        if let Some(info) = guard.ports.list.get(guard.ui.selected)
+                                        {
+                                            let snap = crate::protocol::status::PerPortState {
+                                                subpage_active: guard.ui.subpage_active,
+                                                subpage_form: guard.ui.subpage_form.clone(),
+                                                subpage_tab_index: guard.ui.subpage_tab_index,
+                                                logs: guard.ui.logs.clone(),
+                                                log_selected: guard.ui.log_selected,
+                                                log_view_offset: guard.ui.log_view_offset,
+                                                log_auto_scroll: guard.ui.log_auto_scroll,
+                                                log_clear_pending: guard.ui.log_clear_pending,
+                                                input_mode: guard.ui.input_mode,
+                                                input_editing: guard.ui.input_editing,
+                                                input_buffer: guard.ui.input_buffer.clone(),
+                                                app_mode: guard.ui.app_mode,
+                                                page: guard.ui.pages.last().cloned(),
+                                            };
+                                            guard
+                                                .per_port
+                                                .states
+                                                .insert(info.port_name.clone(), snap);
+                                        }
+                                    }
                                 }
                                 guard.ui.mode_overlay_active = false;
                             }
                             _ => {}
                         }
-                        guard.clear_error();
-                        // Redraw immediately
-                        terminal.draw(|f| crate::tui::ui::render_ui(f, &mut guard))?;
-                    }
+                        guard.ui.error = None;
+                        Ok(())
+                    });
+                    // Redraw immediately (snapshot)
+                    let _ = crate::protocol::status::status_rw::read_status(&app, |g| {
+                        terminal.draw(|f| crate::tui::ui::render_ui(f, &mut g.clone()))?;
+                        Ok(())
+                    });
                     continue;
                 } else {
-                    drop(lock);
+                    // nothing to drop
                 }
 
                 // Re-evaluate editing after potential selector handling
-                let is_editing = match app.lock() {
-                    Ok(g) => {
-                        g.ui.subpage_form
-                            .as_ref()
-                            .map(|f| f.editing)
-                            .unwrap_or(false)
-                    }
-                    Err(_) => false,
-                };
+                let is_editing = crate::protocol::status::status_rw::read_status(&app, |g| {
+                    Ok(g.ui
+                        .subpage_form
+                        .as_ref()
+                        .map(|f| f.editing)
+                        .unwrap_or(false))
+                })
+                .unwrap_or(false);
 
                 if is_editing {
                     use crossterm::event::KeyCode as KC;
-                    if let Ok(mut guard) = app.lock() {
+                    let _ = crate::protocol::status::status_rw::write_status(&app, |guard| {
                         let mut pending_error: Option<String> = None;
                         if let Some(form) = guard.ui.subpage_form.as_mut() {
                             match key.code {
@@ -384,36 +407,25 @@ fn run_app(
                                             form.edit_confirmed = true;
                                             form.editing = true;
                                             // Keep input_buffer as is (user may have typed)
-                                            continue;
+                                            return Ok(());
                                         }
                                     }
                                     let mut commit_success = true;
                                     if let Some(field) = &form.editing_field {
                                         match field {
                                             crate::protocol::status::EditingField::Baud => {
-                                                let presets: [u32; 8] = [
-                                                    1200, 2400, 4800, 9600, 19200, 38400, 57600,
-                                                    115200,
-                                                ];
+                                                let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
                                                 if let Some(idx) = form.edit_choice_index {
                                                     if idx < presets.len() {
                                                         form.baud = presets[idx];
                                                     } else {
                                                         // Custom: must parse and validate [1200..=2_000_000]
                                                         if !form.input_buffer.is_empty() {
-                                                            if let Ok(v) =
-                                                                form.input_buffer.parse::<u32>()
-                                                            {
+                                                            if let Ok(v) = form.input_buffer.parse::<u32>() {
                                                                 if (1200..=2_000_000).contains(&v) {
                                                                     form.baud = v;
                                                                 } else {
-                                                                    pending_error = Some(
-                                                                        lang()
-                                                                            .protocol
-                                                                            .modbus
-                                                                            .invalid_baud_range
-                                                                            .clone(),
-                                                                    );
+                                                                    pending_error = Some(lang().protocol.modbus.invalid_baud_range.clone());
                                                                     commit_success = false;
                                                                 }
                                                             } else {
@@ -426,19 +438,11 @@ fn run_app(
                                                 } else {
                                                     // Fallback: if buffer present try parse and validate
                                                     if !form.input_buffer.is_empty() {
-                                                        if let Ok(v) =
-                                                            form.input_buffer.parse::<u32>()
-                                                        {
+                                                        if let Ok(v) = form.input_buffer.parse::<u32>() {
                                                             if (1200..=2_000_000).contains(&v) {
                                                                 form.baud = v;
                                                             } else {
-                                                                pending_error = Some(
-                                                                    lang()
-                                                                        .protocol
-                                                                        .modbus
-                                                                        .invalid_baud_range
-                                                                        .clone(),
-                                                                );
+                                                                pending_error = Some(lang().protocol.modbus.invalid_baud_range.clone());
                                                                 commit_success = false;
                                                             }
                                                         } else {
@@ -485,36 +489,37 @@ fn run_app(
                             }
                         }
                         if let Some(msg) = pending_error {
-                            guard.set_error(msg);
+                            guard.ui.error = Some((msg.into(), chrono::Local::now()));
                         } else {
-                            guard.clear_error();
+                            guard.ui.error = None;
                         }
-                    }
+                        Ok(())
+                    });
+                    // Redraw immediately snapshot
+                    let _ = crate::protocol::status::status_rw::read_status(&app, |g| {
+                        terminal.draw(|f| crate::tui::ui::render_ui(f, &mut g.clone()))?;
+                        Ok(())
+                    });
                     continue;
                 }
 
-                if let Ok(mut guard) = app.lock() {
+                // Input / log handling via status_rw helpers to avoid direct lock usage
+                let _ = crate::protocol::status::status_rw::write_status(&app, |guard| {
                     if is_log_tab(&guard) {
-                        // Communication log subpage: allow Enter OR 'i' to begin editing the input box.
                         use crossterm::event::KeyCode as KC;
-                        // If currently in input editing mode, consume characters / backspace / enter / esc here
                         if guard.ui.input_editing {
                             match key.code {
                                 KC::Char(c) => {
                                     if guard.ui.input_mode == InputMode::Ascii {
                                         guard.ui.input_buffer.push(c);
-                                    } else {
-                                        // Hex mode: accept hex digits only (ignore other chars)
-                                        if c.is_ascii_hexdigit() || c.is_whitespace() {
-                                            guard.ui.input_buffer.push(c);
-                                        }
+                                    } else if c.is_ascii_hexdigit() || c.is_whitespace() {
+                                        guard.ui.input_buffer.push(c);
                                     }
                                 }
                                 KC::Backspace => {
                                     guard.ui.input_buffer.pop();
                                 }
                                 KC::Enter => {
-                                    // Send: append as raw log entry; mark as parsed with rw = "W" so the UI shows the send label.
                                     let parsed = crate::protocol::status::ParsedRequest {
                                         origin: "local-input".to_string(),
                                         rw: "W".to_string(),
@@ -528,7 +533,27 @@ fn run_app(
                                         raw: guard.ui.input_buffer.clone(),
                                         parsed: Some(parsed),
                                     };
-                                    guard.append_log(entry);
+                                    // inline Status::append_log
+                                    const MAX: usize = 1000;
+                                    guard.ui.logs.push(entry);
+                                    if guard.ui.logs.len() > MAX {
+                                        let excess = guard.ui.logs.len() - MAX;
+                                        guard.ui.logs.drain(0..excess);
+                                        if guard.ui.log_selected >= guard.ui.logs.len() {
+                                            guard.ui.log_selected =
+                                                guard.ui.logs.len().saturating_sub(1);
+                                        }
+                                    }
+                                    if guard.ui.log_auto_scroll {
+                                        if guard.ui.logs.is_empty() {
+                                            guard.ui.log_view_offset = 0;
+                                        } else {
+                                            guard.ui.log_view_offset =
+                                                guard.ui.logs.len().saturating_sub(1);
+                                            guard.ui.log_selected =
+                                                guard.ui.logs.len().saturating_sub(1);
+                                        }
+                                    }
                                     guard.ui.input_buffer.clear();
                                     guard.ui.input_editing = false;
                                 }
@@ -538,30 +563,23 @@ fn run_app(
                                 }
                                 _ => {}
                             }
-                            guard.clear_error();
-                            // Force redraw so input buffer appears immediately
-                            drop(guard);
-                            redraw(terminal, &app);
-                            continue; // Consumed
+                            guard.ui.error = None;
+                            return Ok(());
                         } else {
                             // Not editing: allow quick toggles for edit / mode
                             match key.code {
                                 KC::Enter | KC::Char('i') => {
                                     guard.ui.input_editing = true;
-                                    guard.clear_error();
-                                    drop(guard);
-                                    redraw(terminal, &app);
-                                    continue;
+                                    guard.ui.error = None;
+                                    return Ok(());
                                 }
                                 KC::Char('m') => {
                                     guard.ui.input_mode = match guard.ui.input_mode {
                                         InputMode::Ascii => InputMode::Hex,
                                         InputMode::Hex => InputMode::Ascii,
                                     };
-                                    guard.clear_error();
-                                    drop(guard);
-                                    redraw(terminal, &app);
-                                    continue;
+                                    guard.ui.error = None;
+                                    return Ok(());
                                 }
                                 KC::Up | KC::Char('k') => {
                                     let total = guard.ui.logs.len();
@@ -573,30 +591,86 @@ fn run_app(
                                         }
                                         let term_h =
                                             terminal.size().map(|r| r.height).unwrap_or(24);
-                                        adjust_log_view(&mut guard, term_h);
+                                        if !guard.ui.logs.is_empty() {
+                                            let bottom_len = if guard.ui.error.is_some()
+                                                || guard.ui.subpage_active
+                                            {
+                                                2
+                                            } else {
+                                                1
+                                            };
+                                            let logs_area_h =
+                                                (term_h as usize).saturating_sub(bottom_len + 5);
+                                            let inner_h = logs_area_h.saturating_sub(2);
+                                            let groups_per_screen = std::cmp::max(
+                                                1usize,
+                                                inner_h / crate::protocol::status::LOG_GROUP_HEIGHT,
+                                            );
+                                            let bottom = if guard.ui.log_auto_scroll {
+                                                guard.ui.logs.len().saturating_sub(1)
+                                            } else {
+                                                std::cmp::min(
+                                                    guard.ui.log_view_offset,
+                                                    guard.ui.logs.len().saturating_sub(1),
+                                                )
+                                            };
+                                            let top =
+                                                (bottom + 1).saturating_sub(groups_per_screen);
+                                            if guard.ui.log_selected < top {
+                                                guard.ui.log_auto_scroll = false;
+                                                let half = groups_per_screen / 2;
+                                                let new_bottom = std::cmp::min(
+                                                    guard.ui.logs.len().saturating_sub(1),
+                                                    guard.ui.log_selected + half,
+                                                );
+                                                guard.ui.log_view_offset = new_bottom;
+                                            } else if guard.ui.log_selected > bottom {
+                                                guard.ui.log_auto_scroll = false;
+                                                guard.ui.log_view_offset = guard.ui.log_selected;
+                                            }
+                                        }
                                     }
-                                    guard.clear_error();
-                                    drop(guard);
-                                    redraw(terminal, &app);
-                                    continue;
+                                    guard.ui.error = None;
+                                    return Ok(());
                                 }
                                 KC::Char('c') => {
-                                    // Require double-press to clear logs: first press sets a pending flag
                                     if !guard.ui.log_clear_pending {
                                         guard.ui.log_clear_pending = true;
                                     } else {
-                                        // Second press: perform clear
                                         guard.ui.logs.clear();
                                         guard.ui.log_selected = 0;
                                         guard.ui.log_view_offset = 0;
                                         guard.ui.log_auto_scroll = true;
                                         guard.ui.log_clear_pending = false;
-                                        guard.save_current_port_state();
+                                        // inline save_current_port_state
+                                        if guard.ui.selected < guard.ports.list.len() {
+                                            if let Some(info) =
+                                                guard.ports.list.get(guard.ui.selected)
+                                            {
+                                                let snap = crate::protocol::status::PerPortState {
+                                                    subpage_active: guard.ui.subpage_active,
+                                                    subpage_form: guard.ui.subpage_form.clone(),
+                                                    subpage_tab_index: guard.ui.subpage_tab_index,
+                                                    logs: guard.ui.logs.clone(),
+                                                    log_selected: guard.ui.log_selected,
+                                                    log_view_offset: guard.ui.log_view_offset,
+                                                    log_auto_scroll: guard.ui.log_auto_scroll,
+                                                    log_clear_pending: guard.ui.log_clear_pending,
+                                                    input_mode: guard.ui.input_mode,
+                                                    input_editing: guard.ui.input_editing,
+                                                    input_buffer: guard.ui.input_buffer.clone(),
+                                                    app_mode: guard.ui.app_mode,
+                                                    page: guard.ui.pages.last().cloned(),
+                                                };
+                                                guard
+                                                    .per_port
+                                                    .states
+                                                    .insert(info.port_name.clone(), snap);
+                                            }
+                                        }
                                     }
-                                    guard.clear_error();
-                                    drop(guard);
-                                    redraw(terminal, &app);
-                                    continue;
+                                    guard.ui.error = None;
+                                    return Ok(());
                                 }
                                 KC::Down | KC::Char('j') => {
                                     let total = guard.ui.logs.len();
@@ -604,12 +678,47 @@ fn run_app(
                                         guard.ui.log_selected = (guard.ui.log_selected + 1) % total;
                                         let term_h =
                                             terminal.size().map(|r| r.height).unwrap_or(24);
-                                        adjust_log_view(&mut guard, term_h);
+                                        if !guard.ui.logs.is_empty() {
+                                            let bottom_len = if guard.ui.error.is_some()
+                                                || guard.ui.subpage_active
+                                            {
+                                                2
+                                            } else {
+                                                1
+                                            };
+                                            let logs_area_h =
+                                                (term_h as usize).saturating_sub(bottom_len + 5);
+                                            let inner_h = logs_area_h.saturating_sub(2);
+                                            let groups_per_screen = std::cmp::max(
+                                                1usize,
+                                                inner_h / crate::protocol::status::LOG_GROUP_HEIGHT,
+                                            );
+                                            let bottom = if guard.ui.log_auto_scroll {
+                                                guard.ui.logs.len().saturating_sub(1)
+                                            } else {
+                                                std::cmp::min(
+                                                    guard.ui.log_view_offset,
+                                                    guard.ui.logs.len().saturating_sub(1),
+                                                )
+                                            };
+                                            let top =
+                                                (bottom + 1).saturating_sub(groups_per_screen);
+                                            if guard.ui.log_selected < top {
+                                                guard.ui.log_auto_scroll = false;
+                                                let half = groups_per_screen / 2;
+                                                let new_bottom = std::cmp::min(
+                                                    guard.ui.logs.len().saturating_sub(1),
+                                                    guard.ui.log_selected + half,
+                                                );
+                                                guard.ui.log_view_offset = new_bottom;
+                                            } else if guard.ui.log_selected > bottom {
+                                                guard.ui.log_auto_scroll = false;
+                                                guard.ui.log_view_offset = guard.ui.log_selected;
+                                            }
+                                        }
                                     }
-                                    guard.clear_error();
-                                    drop(guard);
-                                    redraw(terminal, &app);
-                                    continue;
+                                    guard.ui.error = None;
+                                    return Ok(());
                                 }
                                 _ => {}
                             }
@@ -618,35 +727,38 @@ fn run_app(
                         // Global mode cycle (m) when not in log tab quick-toggle context
                         use crossterm::event::KeyCode as KC;
                         if key.code == KC::Char('m') {
-                            // Open overlay instead of immediate cycle
                             guard.ui.mode_overlay_active = true;
-                            // Sync overlay index to current mode
                             guard.ui.mode_overlay_index = match guard.ui.app_mode {
                                 AppMode::Modbus => ModeOverlayIndex::Modbus,
                                 AppMode::Mqtt => ModeOverlayIndex::Mqtt,
                             };
-                            guard.clear_error();
-                            drop(guard);
-                            redraw(terminal, &app);
-                            continue;
+                            guard.ui.error = None;
+                            return Ok(());
                         }
                     }
-                }
+                    Ok(())
+                });
 
-                // Subpage first chance
-                if let Ok(mut guard) = app.lock() {
-                    if crate::tui::ui::pages::handle_key_in_subpage(key, &mut guard, &bus) {
-                        guard.clear_error();
-                        continue; // Consumed by subpage
+                // Subpage first chance (use write_status helper)
+                let handled = crate::protocol::status::status_rw::write_status(&app, |guard| {
+                    let handled = crate::tui::ui::pages::handle_key_in_subpage(key, guard, &bus);
+                    if handled {
+                        guard.ui.error = None;
                     }
+                    Ok(handled)
+                })
+                .unwrap_or(false);
+                if handled {
+                    continue;
                 }
 
                 {
                     // Try page-level mapping first (inner pages can override), fall back to global mapping
-                    let mut action_opt: Option<Action> = None;
-                    if let Ok(guard) = app.lock() {
-                        action_opt = crate::tui::ui::pages::map_key_in_page(key, &guard);
-                    }
+                    let mut action_opt =
+                        crate::protocol::status::status_rw::read_status(&app, |guard| {
+                            Ok(crate::tui::ui::pages::map_key_in_page(key, guard))
+                        })
+                        .unwrap_or(None);
                     if action_opt.is_none() {
                         match map_key(key.code) {
                             Action::None => {}
@@ -657,386 +769,865 @@ fn run_app(
                     if let Some(action) = action_opt {
                         match action {
                             Action::Quit => {
-                                if let Ok(guard) = app.lock() {
-                                    let in_editing = guard
-                                        .ui
-                                        .subpage_form
-                                        .as_ref()
-                                        .map(|f| f.editing)
-                                        .unwrap_or(false);
-                                    let allowed = !guard.ui.subpage_active && !in_editing;
-                                    if allowed {
-                                        let _ =
-                                            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Quit);
-                                        break;
-                                    } else {
-                                        // Silently ignore quit when not allowed (do not show message)
-                                    }
-                                } else {
-                                    log::error!("[TUI] failed to lock app for Quit check");
+                                let allowed =
+                                    crate::protocol::status::status_rw::read_status(&app, |g| {
+                                        Ok(!g.ui.subpage_active
+                                            && !g
+                                                .ui
+                                                .subpage_form
+                                                .as_ref()
+                                                .map(|f| f.editing)
+                                                .unwrap_or(false))
+                                    })
+                                    .unwrap_or(false);
+                                if allowed {
+                                    let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Quit);
+                                    break;
                                 }
                             }
                             Action::LeavePage => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if guard.ui.subpage_active {
-                                        guard.ui.subpage_active = false;
-                                    }
-                                    guard.clear_error();
-                                } else {
-                                    log::error!("[TUI] failed to lock app");
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if guard.ui.subpage_active {
+                                            guard.ui.subpage_active = false;
+                                        }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::EnterPage => {
-                                if let Ok(mut guard) = app.lock() {
-                                    let state = guard
-                                        .ports
-                                        .states
-                                        .get(guard.ui.selected)
-                                        .cloned()
-                                        .unwrap_or(crate::protocol::status::PortState::Free);
-                                    // If selected is a real port occupied by this app, open subpage form.
-                                    if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.ui.subpage_active = true;
-                                        guard.ui.subpage_tab_index = SubpageTab::Config;
-                                        guard.init_subpage_form();
-                                    } else {
-                                        // Allow entering About full-page when About virtual entry is selected.
-                                        let about_idx = guard.ports.list.len().saturating_add(2);
-                                        if guard.ui.selected == about_idx {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        let state = guard
+                                            .ports
+                                            .states
+                                            .get(guard.ui.selected)
+                                            .cloned()
+                                            .unwrap_or(crate::protocol::status::PortState::Free);
+                                        if state
+                                            == crate::protocol::status::PortState::OccupiedByThis
+                                        {
                                             guard.ui.subpage_active = true;
-                                            // no form to init; about page reads its own cache
+                                            guard.ui.subpage_tab_index = SubpageTab::Config;
+                                            guard.init_subpage_form();
+                                        } else {
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
+                                            if guard.ui.selected == about_idx {
+                                                guard.ui.subpage_active = true;
+                                            }
                                         }
-                                    }
-                                    guard.clear_error();
-                                } else {
-                                    log::error!("[TUI] failed to lock app");
-                                }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::MoveNext => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if guard.ui.subpage_active {
-                                        // Log tab navigation else form cursor
-                                        if is_log_tab(&guard) {
-                                            let total = guard.ui.logs.len();
-                                            if total > 0 {
-                                                guard.ui.log_selected =
-                                                    (guard.ui.log_selected + 1) % total;
-                                                let term_h =
-                                                    terminal.size().map(|r| r.height).unwrap_or(24);
-                                                adjust_log_view(&mut guard, term_h);
-                                            }
-                                        } else if let Some(form) = guard.ui.subpage_form.as_mut() {
-                                            let total = BASE_FIELD_COUNT
-                                                .saturating_add(form.registers.len());
-                                            if total > 0 {
-                                                form.cursor = (form.cursor + 1) % total;
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if guard.ui.subpage_active {
+                                            if is_log_tab(&guard) {
+                                                let total = guard.ui.logs.len();
+                                                if total > 0 {
+                                                    guard.ui.log_selected =
+                                                        (guard.ui.log_selected + 1) % total;
+                                                    let term_h = terminal
+                                                        .size()
+                                                        .map(|r| r.height)
+                                                        .unwrap_or(24);
+                                                    if !guard.ui.logs.is_empty() {
+                                                        let bottom_len = if guard.ui.error.is_some()
+                                                            || guard.ui.subpage_active
+                                                        {
+                                                            2
+                                                        } else {
+                                                            1
+                                                        };
+                                                        let logs_area_h = (term_h as usize)
+                                                            .saturating_sub(bottom_len + 5);
+                                                        let inner_h = logs_area_h.saturating_sub(2);
+                                                        let groups_per_screen = std::cmp::max(1usize, inner_h / crate::protocol::status::LOG_GROUP_HEIGHT);
+                                                        let bottom = if guard.ui.log_auto_scroll {
+                                                            guard.ui.logs.len().saturating_sub(1)
+                                                        } else {
+                                                            std::cmp::min(
+                                                                guard.ui.log_view_offset,
+                                                                guard
+                                                                    .ui
+                                                                    .logs
+                                                                    .len()
+                                                                    .saturating_sub(1),
+                                                            )
+                                                        };
+                                                        let top = (bottom + 1)
+                                                            .saturating_sub(groups_per_screen);
+                                                        if guard.ui.log_selected < top {
+                                                            guard.ui.log_auto_scroll = false;
+                                                            let half = groups_per_screen / 2;
+                                                            let new_bottom = std::cmp::min(
+                                                                guard
+                                                                    .ui
+                                                                    .logs
+                                                                    .len()
+                                                                    .saturating_sub(1),
+                                                                guard.ui.log_selected + half,
+                                                            );
+                                                            guard.ui.log_view_offset = new_bottom;
+                                                        } else if guard.ui.log_selected > bottom {
+                                                            guard.ui.log_auto_scroll = false;
+                                                            guard.ui.log_view_offset =
+                                                                guard.ui.log_selected;
+                                                        }
+                                                    }
+                                                }
+                                            } else if let Some(form) =
+                                                guard.ui.subpage_form.as_mut()
+                                            {
+                                                let total = BASE_FIELD_COUNT
+                                                    .saturating_add(form.registers.len());
+                                                if total > 0 {
+                                                    form.cursor = (form.cursor + 1) % total;
+                                                }
+                                            } else {
+                                                let about_idx =
+                                                    guard.ports.list.len().saturating_add(2);
+                                                if guard.ui.selected == about_idx {
+                                                    guard.ports.about_view_offset = guard
+                                                        .ports
+                                                        .about_view_offset
+                                                        .saturating_add(1);
+                                                }
                                             }
                                         } else {
-                                            // If About full-page is active, move view down
-                                            let about_idx =
-                                                guard.ports.list.len().saturating_add(2);
-                                            // If About full-page is active, move view down one line
-                                            if guard.ui.selected == about_idx {
-                                                guard.ports.about_view_offset =
-                                                    guard.ports.about_view_offset.saturating_add(1);
+                                            // inline Status::next_visual
+                                            {
+                                                // ports + Refresh + Manual + About = ports + 3 virtual entries
+                                                let total =
+                                                    guard.ports.list.len().saturating_add(3);
+                                                if total != 0 {
+                                                    let was_real =
+                                                        guard.ui.selected < guard.ports.list.len();
+                                                    if was_real {
+                                                        // inline save_current_port_state
+                                                        if guard.ui.selected
+                                                            < guard.ports.list.len()
+                                                        {
+                                                            if let Some(info) = guard
+                                                                .ports
+                                                                .list
+                                                                .get(guard.ui.selected)
+                                                            {
+                                                                let snap = crate::protocol::status::PerPortState {
+                                                                    subpage_active: guard.ui.subpage_active,
+                                                                    subpage_form: guard.ui.subpage_form.clone(),
+                                                                    subpage_tab_index: guard.ui.subpage_tab_index,
+                                                                    logs: guard.ui.logs.clone(),
+                                                                    log_selected: guard.ui.log_selected,
+                                                                    log_view_offset: guard.ui.log_view_offset,
+                                                                    log_auto_scroll: guard.ui.log_auto_scroll,
+                                                                    log_clear_pending: guard.ui.log_clear_pending,
+                                                                    input_mode: guard.ui.input_mode,
+                                                                    input_editing: guard.ui.input_editing,
+                                                                    input_buffer: guard.ui.input_buffer.clone(),
+                                                                    app_mode: guard.ui.app_mode,
+                                                                    page: guard.ui.pages.last().cloned(),
+                                                                };
+                                                                guard.per_port.states.insert(
+                                                                    info.port_name.clone(),
+                                                                    snap,
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                    guard.ui.selected =
+                                                        (guard.ui.selected + 1) % total;
+                                                    if guard.ui.selected < guard.ports.list.len() {
+                                                        // inline load_current_port_state
+                                                        if let Some(info) =
+                                                            guard.ports.list.get(guard.ui.selected)
+                                                        {
+                                                            if let Some(snap) = guard
+                                                                .per_port
+                                                                .states
+                                                                .get(&info.port_name)
+                                                                .cloned()
+                                                            {
+                                                                if let Some(page) = snap.page {
+                                                                    if guard.ui.pages.is_empty() {
+                                                                        guard.ui.pages.push(page);
+                                                                    } else {
+                                                                        *guard
+                                                                            .ui
+                                                                            .pages
+                                                                            .last_mut()
+                                                                            .unwrap() = page;
+                                                                    }
+                                                                    match guard.ui.pages.last().cloned().unwrap_or_default() {
+                                                                        crate::protocol::status::Page::Entry { selected, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            guard.ui.selected = selected;
+                                                                            guard.ui.input_mode = input_mode;
+                                                                            guard.ui.input_editing = input_editing;
+                                                                            guard.ui.input_buffer = input_buffer;
+                                                                            guard.ui.app_mode = app_mode;
+                                                                            guard.ui.subpage_active = false;
+                                                                            guard.ui.subpage_form = None;
+                                                                        }
+                                                                        crate::protocol::status::Page::Modbus { selected, subpage_active, subpage_form, subpage_tab_index, logs, log_selected, log_view_offset, log_auto_scroll, log_clear_pending, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            guard.ui.selected = selected;
+                                                                            guard.ui.subpage_active = subpage_active;
+                                                                            guard.ui.subpage_form = subpage_form;
+                                                                            guard.ui.subpage_tab_index = subpage_tab_index;
+                                                                            guard.ui.logs = logs;
+                                                                            guard.ui.log_selected = log_selected;
+                                                                            guard.ui.log_view_offset = log_view_offset;
+                                                                            guard.ui.log_auto_scroll = log_auto_scroll;
+                                                                            guard.ui.log_clear_pending = log_clear_pending;
+                                                                            guard.ui.input_mode = input_mode;
+                                                                            guard.ui.input_editing = input_editing;
+                                                                            guard.ui.input_buffer = input_buffer;
+                                                                            guard.ui.app_mode = app_mode;
+                                                                        }
+                                                                    }
+                                                                } else {
+                                                                    guard.ui.subpage_active =
+                                                                        snap.subpage_active;
+                                                                    guard.ui.subpage_form =
+                                                                        snap.subpage_form;
+                                                                    guard.ui.subpage_tab_index =
+                                                                        snap.subpage_tab_index;
+                                                                    guard.ui.logs = snap.logs;
+                                                                    guard.ui.log_selected =
+                                                                        snap.log_selected;
+                                                                    guard.ui.log_view_offset =
+                                                                        snap.log_view_offset;
+                                                                    guard.ui.log_auto_scroll =
+                                                                        snap.log_auto_scroll;
+                                                                    guard.ui.log_clear_pending =
+                                                                        snap.log_clear_pending;
+                                                                    guard.ui.input_mode =
+                                                                        snap.input_mode;
+                                                                    guard.ui.input_editing =
+                                                                        snap.input_editing;
+                                                                    guard.ui.input_buffer =
+                                                                        snap.input_buffer;
+                                                                    guard.ui.app_mode =
+                                                                        snap.app_mode;
+                                                                    if guard.ui.pages.is_empty() {
+                                                                        guard.ui.pages.push(crate::protocol::status::Page::default());
+                                                                    }
+                                                                    match guard.ui.pages.last_mut().unwrap() {
+                                                                        crate::protocol::status::Page::Entry { selected, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            *selected = guard.ui.selected;
+                                                                            *input_mode = guard.ui.input_mode;
+                                                                            *input_editing = guard.ui.input_editing;
+                                                                            *input_buffer = guard.ui.input_buffer.clone();
+                                                                            *app_mode = guard.ui.app_mode;
+                                                                        }
+                                                                        crate::protocol::status::Page::Modbus { selected, subpage_active, subpage_form, subpage_tab_index, logs, log_selected, log_view_offset, log_auto_scroll, log_clear_pending, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            *selected = guard.ui.selected;
+                                                                            *subpage_active = guard.ui.subpage_active;
+                                                                            *subpage_form = guard.ui.subpage_form.clone();
+                                                                            *subpage_tab_index = guard.ui.subpage_tab_index;
+                                                                            *logs = guard.ui.logs.clone();
+                                                                            *log_selected = guard.ui.log_selected;
+                                                                            *log_view_offset = guard.ui.log_view_offset;
+                                                                            *log_auto_scroll = guard.ui.log_auto_scroll;
+                                                                            *log_clear_pending = guard.ui.log_clear_pending;
+                                                                            *input_mode = guard.ui.input_mode;
+                                                                            *input_editing = guard.ui.input_editing;
+                                                                            *input_buffer = guard.ui.input_buffer.clone();
+                                                                            *app_mode = guard.ui.app_mode;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                guard.ui.subpage_active = false;
+                                                                guard.ui.subpage_form = None;
+                                                                guard.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
+                                                                guard.ui.logs.clear();
+                                                                guard.ui.log_selected = 0;
+                                                                guard.ui.log_view_offset = 0;
+                                                                guard.ui.log_auto_scroll = true;
+                                                                guard.ui.input_mode = crate::protocol::status::InputMode::Ascii;
+                                                                guard.ui.input_editing = false;
+                                                                guard.ui.input_buffer.clear();
+                                                                guard.ui.app_mode = crate::protocol::status::AppMode::Modbus;
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
-                                    } else {
-                                        // Use visual navigation so trailing virtual entries (Refresh / Manual)
-                                        // Can be selected in the UI
-                                        guard.next_visual();
-                                    }
-                                    guard.clear_error();
-                                } else {
-                                    log::error!("[TUI] failed to lock app for MoveNext");
-                                }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::MovePrev => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if guard.ui.subpage_active {
-                                        if is_log_tab(&guard) {
-                                            let total = guard.ui.logs.len();
-                                            if total > 0 {
-                                                if guard.ui.log_selected == 0 {
-                                                    guard.ui.log_selected = total - 1;
-                                                } else {
-                                                    guard.ui.log_selected -= 1;
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if guard.ui.subpage_active {
+                                            if is_log_tab(&guard) {
+                                                let total = guard.ui.logs.len();
+                                                if total > 0 {
+                                                    if guard.ui.log_selected == 0 {
+                                                        guard.ui.log_selected = total - 1;
+                                                    } else {
+                                                        guard.ui.log_selected -= 1;
+                                                    }
+                                                    let term_h = terminal
+                                                        .size()
+                                                        .map(|r| r.height)
+                                                        .unwrap_or(24);
+                                                    if !guard.ui.logs.is_empty() {
+                                                        let bottom_len = if guard.ui.error.is_some()
+                                                            || guard.ui.subpage_active
+                                                        {
+                                                            2
+                                                        } else {
+                                                            1
+                                                        };
+                                                        let logs_area_h = (term_h as usize)
+                                                            .saturating_sub(bottom_len + 5);
+                                                        let inner_h = logs_area_h.saturating_sub(2);
+                                                        let groups_per_screen = std::cmp::max(1usize, inner_h / crate::protocol::status::LOG_GROUP_HEIGHT);
+                                                        let bottom = if guard.ui.log_auto_scroll {
+                                                            guard.ui.logs.len().saturating_sub(1)
+                                                        } else {
+                                                            std::cmp::min(
+                                                                guard.ui.log_view_offset,
+                                                                guard
+                                                                    .ui
+                                                                    .logs
+                                                                    .len()
+                                                                    .saturating_sub(1),
+                                                            )
+                                                        };
+                                                        let top = (bottom + 1)
+                                                            .saturating_sub(groups_per_screen);
+                                                        if guard.ui.log_selected < top {
+                                                            guard.ui.log_auto_scroll = false;
+                                                            let half = groups_per_screen / 2;
+                                                            let new_bottom = std::cmp::min(
+                                                                guard
+                                                                    .ui
+                                                                    .logs
+                                                                    .len()
+                                                                    .saturating_sub(1),
+                                                                guard.ui.log_selected + half,
+                                                            );
+                                                            guard.ui.log_view_offset = new_bottom;
+                                                        } else if guard.ui.log_selected > bottom {
+                                                            guard.ui.log_auto_scroll = false;
+                                                            guard.ui.log_view_offset =
+                                                                guard.ui.log_selected;
+                                                        }
+                                                    }
                                                 }
-                                                let term_h =
-                                                    terminal.size().map(|r| r.height).unwrap_or(24);
-                                                adjust_log_view(&mut guard, term_h);
-                                            }
-                                        } else if let Some(form) = guard.ui.subpage_form.as_mut() {
-                                            let total = BASE_FIELD_COUNT
-                                                .saturating_add(form.registers.len());
-                                            if total > 0 {
-                                                if form.cursor == 0 {
-                                                    form.cursor = total - 1;
-                                                } else {
-                                                    form.cursor -= 1;
+                                            } else if let Some(form) =
+                                                guard.ui.subpage_form.as_mut()
+                                            {
+                                                let total = BASE_FIELD_COUNT
+                                                    .saturating_add(form.registers.len());
+                                                if total > 0 {
+                                                    if form.cursor == 0 {
+                                                        form.cursor = total - 1;
+                                                    } else {
+                                                        form.cursor -= 1;
+                                                    }
+                                                }
+                                            } else {
+                                                let about_idx =
+                                                    guard.ports.list.len().saturating_add(2);
+                                                if guard.ui.selected == about_idx {
+                                                    guard.ports.about_view_offset = guard
+                                                        .ports
+                                                        .about_view_offset
+                                                        .saturating_sub(1);
                                                 }
                                             }
                                         } else {
-                                            // If About full-page is active, move view up
-                                            let about_idx =
-                                                guard.ports.list.len().saturating_add(2);
-                                            if guard.ui.selected == about_idx {
-                                                guard.ports.about_view_offset =
-                                                    guard.ports.about_view_offset.saturating_sub(1);
+                                            // inline Status::prev_visual
+                                            {
+                                                let total =
+                                                    guard.ports.list.len().saturating_add(3);
+                                                if total != 0 {
+                                                    let was_real =
+                                                        guard.ui.selected < guard.ports.list.len();
+                                                    if was_real {
+                                                        // inline save_current_port_state
+                                                        if guard.ui.selected
+                                                            < guard.ports.list.len()
+                                                        {
+                                                            if let Some(info) = guard
+                                                                .ports
+                                                                .list
+                                                                .get(guard.ui.selected)
+                                                            {
+                                                                let snap = crate::protocol::status::PerPortState {
+                                                                    subpage_active: guard.ui.subpage_active,
+                                                                    subpage_form: guard.ui.subpage_form.clone(),
+                                                                    subpage_tab_index: guard.ui.subpage_tab_index,
+                                                                    logs: guard.ui.logs.clone(),
+                                                                    log_selected: guard.ui.log_selected,
+                                                                    log_view_offset: guard.ui.log_view_offset,
+                                                                    log_auto_scroll: guard.ui.log_auto_scroll,
+                                                                    log_clear_pending: guard.ui.log_clear_pending,
+                                                                    input_mode: guard.ui.input_mode,
+                                                                    input_editing: guard.ui.input_editing,
+                                                                    input_buffer: guard.ui.input_buffer.clone(),
+                                                                    app_mode: guard.ui.app_mode,
+                                                                    page: guard.ui.pages.last().cloned(),
+                                                                };
+                                                                guard.per_port.states.insert(
+                                                                    info.port_name.clone(),
+                                                                    snap,
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                    if guard.ui.selected == 0 {
+                                                        guard.ui.selected = total - 1;
+                                                    } else {
+                                                        guard.ui.selected -= 1;
+                                                    }
+                                                    if guard.ui.selected < guard.ports.list.len() {
+                                                        // inline load_current_port_state (same as next_visual)
+                                                        if let Some(info) =
+                                                            guard.ports.list.get(guard.ui.selected)
+                                                        {
+                                                            if let Some(snap) = guard
+                                                                .per_port
+                                                                .states
+                                                                .get(&info.port_name)
+                                                                .cloned()
+                                                            {
+                                                                if let Some(page) = snap.page {
+                                                                    if guard.ui.pages.is_empty() {
+                                                                        guard.ui.pages.push(page);
+                                                                    } else {
+                                                                        *guard
+                                                                            .ui
+                                                                            .pages
+                                                                            .last_mut()
+                                                                            .unwrap() = page;
+                                                                    }
+                                                                    match guard.ui.pages.last().cloned().unwrap_or_default() {
+                                                                        crate::protocol::status::Page::Entry { selected, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            guard.ui.selected = selected;
+                                                                            guard.ui.input_mode = input_mode;
+                                                                            guard.ui.input_editing = input_editing;
+                                                                            guard.ui.input_buffer = input_buffer;
+                                                                            guard.ui.app_mode = app_mode;
+                                                                            guard.ui.subpage_active = false;
+                                                                            guard.ui.subpage_form = None;
+                                                                        }
+                                                                        crate::protocol::status::Page::Modbus { selected, subpage_active, subpage_form, subpage_tab_index, logs, log_selected, log_view_offset, log_auto_scroll, log_clear_pending, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            guard.ui.selected = selected;
+                                                                            guard.ui.subpage_active = subpage_active;
+                                                                            guard.ui.subpage_form = subpage_form;
+                                                                            guard.ui.subpage_tab_index = subpage_tab_index;
+                                                                            guard.ui.logs = logs;
+                                                                            guard.ui.log_selected = log_selected;
+                                                                            guard.ui.log_view_offset = log_view_offset;
+                                                                            guard.ui.log_auto_scroll = log_auto_scroll;
+                                                                            guard.ui.log_clear_pending = log_clear_pending;
+                                                                            guard.ui.input_mode = input_mode;
+                                                                            guard.ui.input_editing = input_editing;
+                                                                            guard.ui.input_buffer = input_buffer;
+                                                                            guard.ui.app_mode = app_mode;
+                                                                        }
+                                                                    }
+                                                                } else {
+                                                                    guard.ui.subpage_active =
+                                                                        snap.subpage_active;
+                                                                    guard.ui.subpage_form =
+                                                                        snap.subpage_form;
+                                                                    guard.ui.subpage_tab_index =
+                                                                        snap.subpage_tab_index;
+                                                                    guard.ui.logs = snap.logs;
+                                                                    guard.ui.log_selected =
+                                                                        snap.log_selected;
+                                                                    guard.ui.log_view_offset =
+                                                                        snap.log_view_offset;
+                                                                    guard.ui.log_auto_scroll =
+                                                                        snap.log_auto_scroll;
+                                                                    guard.ui.log_clear_pending =
+                                                                        snap.log_clear_pending;
+                                                                    guard.ui.input_mode =
+                                                                        snap.input_mode;
+                                                                    guard.ui.input_editing =
+                                                                        snap.input_editing;
+                                                                    guard.ui.input_buffer =
+                                                                        snap.input_buffer;
+                                                                    guard.ui.app_mode =
+                                                                        snap.app_mode;
+                                                                    if guard.ui.pages.is_empty() {
+                                                                        guard.ui.pages.push(crate::protocol::status::Page::default());
+                                                                    }
+                                                                    match guard.ui.pages.last_mut().unwrap() {
+                                                                        crate::protocol::status::Page::Entry { selected, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            *selected = guard.ui.selected;
+                                                                            *input_mode = guard.ui.input_mode;
+                                                                            *input_editing = guard.ui.input_editing;
+                                                                            *input_buffer = guard.ui.input_buffer.clone();
+                                                                            *app_mode = guard.ui.app_mode;
+                                                                        }
+                                                                        crate::protocol::status::Page::Modbus { selected, subpage_active, subpage_form, subpage_tab_index, logs, log_selected, log_view_offset, log_auto_scroll, log_clear_pending, input_mode, input_editing, input_buffer, app_mode } => {
+                                                                            *selected = guard.ui.selected;
+                                                                            *subpage_active = guard.ui.subpage_active;
+                                                                            *subpage_form = guard.ui.subpage_form.clone();
+                                                                            *subpage_tab_index = guard.ui.subpage_tab_index;
+                                                                            *logs = guard.ui.logs.clone();
+                                                                            *log_selected = guard.ui.log_selected;
+                                                                            *log_view_offset = guard.ui.log_view_offset;
+                                                                            *log_auto_scroll = guard.ui.log_auto_scroll;
+                                                                            *log_clear_pending = guard.ui.log_clear_pending;
+                                                                            *input_mode = guard.ui.input_mode;
+                                                                            *input_editing = guard.ui.input_editing;
+                                                                            *input_buffer = guard.ui.input_buffer.clone();
+                                                                            *app_mode = guard.ui.app_mode;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                guard.ui.subpage_active = false;
+                                                                guard.ui.subpage_form = None;
+                                                                guard.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
+                                                                guard.ui.logs.clear();
+                                                                guard.ui.log_selected = 0;
+                                                                guard.ui.log_view_offset = 0;
+                                                                guard.ui.log_auto_scroll = true;
+                                                                guard.ui.input_mode = crate::protocol::status::InputMode::Ascii;
+                                                                guard.ui.input_editing = false;
+                                                                guard.ui.input_buffer.clear();
+                                                                guard.ui.app_mode = crate::protocol::status::AppMode::Modbus;
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
-                                    } else {
-                                        guard.prev_visual();
-                                    }
-                                    guard.clear_error();
-                                } else {
-                                    log::error!("[TUI] failed to lock app for MovePrev");
-                                }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::PageUp => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if is_log_tab(&guard) {
-                                        guard.page_up(LOG_PAGE_JUMP);
-                                    } else {
-                                        // If About subpage is active, page up
-                                        let about_idx = guard.ports.list.len().saturating_add(2);
-                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
-                                        {
-                                            // move up by a page (use LOG_PAGE_JUMP as a reasonable page size)
-                                            guard.ports.about_view_offset = guard
-                                                .ports
-                                                .about_view_offset
-                                                .saturating_sub(LOG_PAGE_JUMP);
-                                        }
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::PageDown => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if is_log_tab(&guard) {
-                                        guard.page_down(LOG_PAGE_JUMP);
-                                    } else {
-                                        let about_idx = guard.ports.list.len().saturating_add(2);
-                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
-                                        {
-                                            guard.ports.about_view_offset = guard
-                                                .ports
-                                                .about_view_offset
-                                                .saturating_add(LOG_PAGE_JUMP);
-                                        }
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::JumpTop => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if is_log_tab(&guard) {
-                                        // Jump to top: bottom index becomes the last index of the first page
-                                        guard.ui.log_view_offset = 0;
-                                        guard.ui.log_auto_scroll = false;
-                                    } else {
-                                        let about_idx = guard.ports.list.len().saturating_add(2);
-                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
-                                        {
-                                            guard.ports.about_view_offset = 0;
-                                        }
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::JumpBottom => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if is_log_tab(&guard) {
-                                        let total = guard.ui.logs.len();
-                                        if total > 0 {
-                                            guard.ui.log_view_offset = total - 1;
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if is_log_tab(&guard) {
+                                            // inline page_up
+                                            if !guard.ui.logs.is_empty() {
+                                                if guard.ui.log_view_offset > LOG_PAGE_JUMP {
+                                                    guard.ui.log_view_offset = guard
+                                                        .ui
+                                                        .log_view_offset
+                                                        .saturating_sub(LOG_PAGE_JUMP);
+                                                } else {
+                                                    guard.ui.log_view_offset = 0;
+                                                }
+                                                guard.ui.log_auto_scroll = false;
+                                            }
                                         } else {
-                                            guard.ui.log_view_offset = 0;
-                                        }
-                                        guard.ui.log_auto_scroll = true;
-                                    } else {
-                                        let about_idx = guard.ports.list.len().saturating_add(2);
-                                        if guard.ui.subpage_active && guard.ui.selected == about_idx
-                                        {
-                                            // For about, bottom resets to top to show start
-                                            guard.ports.about_view_offset = 0;
-                                        }
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::ToggleFollow => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if is_log_tab(&guard) {
-                                        // Toggle following newest logs
-                                        guard.ui.log_auto_scroll = !guard.ui.log_auto_scroll;
-                                        if guard.ui.log_auto_scroll {
-                                            // Move view to bottom (latest)
-                                            let total = guard.ui.logs.len();
-                                            if total > 0 {
-                                                guard.ui.log_view_offset = total - 1;
-                                            } else {
-                                                guard.ui.log_view_offset = 0;
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
+                                            if guard.ui.subpage_active
+                                                && guard.ui.selected == about_idx
+                                            {
+                                                guard.ports.about_view_offset = guard
+                                                    .ports
+                                                    .about_view_offset
+                                                    .saturating_sub(LOG_PAGE_JUMP);
                                             }
                                         }
-                                    }
-                                    guard.clear_error();
-                                }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
+                            }
+                            Action::PageDown => {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if is_log_tab(&guard) {
+                                            // inline page_down
+                                            if !guard.ui.logs.is_empty() {
+                                                let max_bottom =
+                                                    guard.ui.logs.len().saturating_sub(1);
+                                                let new_bottom = (guard.ui.log_view_offset)
+                                                    .saturating_add(LOG_PAGE_JUMP);
+                                                guard.ui.log_view_offset =
+                                                    std::cmp::min(max_bottom, new_bottom);
+                                                guard.ui.log_auto_scroll =
+                                                    guard.ui.log_view_offset >= max_bottom;
+                                            }
+                                        } else {
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
+                                            if guard.ui.subpage_active
+                                                && guard.ui.selected == about_idx
+                                            {
+                                                guard.ports.about_view_offset = guard
+                                                    .ports
+                                                    .about_view_offset
+                                                    .saturating_add(LOG_PAGE_JUMP);
+                                            }
+                                        }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
+                            }
+                            Action::JumpTop => {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if is_log_tab(&guard) {
+                                            guard.ui.log_view_offset = 0;
+                                            guard.ui.log_auto_scroll = false;
+                                        } else {
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
+                                            if guard.ui.subpage_active
+                                                && guard.ui.selected == about_idx
+                                            {
+                                                guard.ports.about_view_offset = 0;
+                                            }
+                                        }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
+                            }
+                            Action::JumpBottom => {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if is_log_tab(&guard) {
+                                            let total = guard.ui.logs.len();
+                                            guard.ui.log_view_offset =
+                                                if total > 0 { total - 1 } else { 0 };
+                                            guard.ui.log_auto_scroll = true;
+                                        } else {
+                                            let about_idx =
+                                                guard.ports.list.len().saturating_add(2);
+                                            if guard.ui.subpage_active
+                                                && guard.ui.selected == about_idx
+                                            {
+                                                guard.ports.about_view_offset = 0;
+                                            }
+                                        }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
+                            }
+                            Action::ToggleFollow => {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if is_log_tab(&guard) {
+                                            guard.ui.log_auto_scroll = !guard.ui.log_auto_scroll;
+                                            if guard.ui.log_auto_scroll {
+                                                let total = guard.ui.logs.len();
+                                                guard.ui.log_view_offset =
+                                                    if total > 0 { total - 1 } else { 0 };
+                                            }
+                                        }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             // Removed SwitchMode / CycleMode / ShowModeSelector branches after unifying mode
                             Action::EnterSubpage(_) => {
-                                if let Ok(mut guard) = app.lock() {
-                                    let state = guard
-                                        .ports
-                                        .states
-                                        .get(guard.ui.selected)
-                                        .cloned()
-                                        .unwrap_or(crate::protocol::status::PortState::Free);
-                                    if state == crate::protocol::status::PortState::OccupiedByThis {
-                                        guard.ui.subpage_active = true;
-                                        guard.init_subpage_form();
-                                    }
-                                    guard.clear_error();
-                                }
-                            }
-                            Action::AddRegister => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if guard.ui.subpage_active {
-                                        if guard.ui.subpage_form.is_none() {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        let state = guard
+                                            .ports
+                                            .states
+                                            .get(guard.ui.selected)
+                                            .cloned()
+                                            .unwrap_or(crate::protocol::status::PortState::Free);
+                                        if state
+                                            == crate::protocol::status::PortState::OccupiedByThis
+                                        {
+                                            guard.ui.subpage_active = true;
                                             guard.init_subpage_form();
                                         }
-                                        if let Some(form) = guard.ui.subpage_form.as_mut() {
-                                            form.registers.push(
-                                                crate::protocol::status::RegisterEntry {
-                                                    slave_id: 1,
-                                                    role: crate::protocol::status::EntryRole::Slave,
-                                                    mode: crate::protocol::status::RegisterMode::Coils,
-                                                    address: 0,
-                                                    length: 1,
-                                                    values: vec![0u16; 1],
-                                                    req_success: 0,
-                                                    req_total: 0,
-                                                    next_poll_at: std::time::Instant::now(),
-                                                    pending_requests: Vec::new(),
-                                                }
-                                            );
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
+                            }
+                            Action::AddRegister => {
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if guard.ui.subpage_active {
+                                            if guard.ui.subpage_form.is_none() {
+                                                guard.init_subpage_form();
+                                            }
+                                            if let Some(form) = guard.ui.subpage_form.as_mut() {
+                                                form.registers.push(crate::protocol::status::RegisterEntry {
+                                                slave_id: 1,
+                                                role: crate::protocol::status::EntryRole::Slave,
+                                                mode: crate::protocol::status::RegisterMode::Coils,
+                                                address: 0,
+                                                length: 1,
+                                                values: vec![0u16; 1],
+                                                req_success: 0,
+                                                req_total: 0,
+                                                next_poll_at: std::time::Instant::now(),
+                                                pending_requests: Vec::new(),
+                                            });
+                                            }
                                         }
-                                    }
-                                    guard.clear_error();
-                                }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::DeleteRegister => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if let Some(form) = guard.ui.subpage_form.as_mut() {
-                                        form.registers.pop();
-                                    }
-                                    guard.clear_error();
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if let Some(form) = guard.ui.subpage_form.as_mut() {
+                                            form.registers.pop();
+                                        }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::EditToggle => {
-                                if let Ok(mut guard) = app.lock() {
-                                    if let Some(form) = guard.ui.subpage_form.as_mut() {
-                                        form.editing = !form.editing;
-                                        if form.editing {
-                                            match form.cursor {
-                                                    0 => form.editing_field = Some(crate::protocol::status::EditingField::Loop),
-                                                    // idx 1 is the master_passive toggle and should not enter editing mode
-                                                    1 => {
-                                                        // Prevent entering edit mode for this cursor position
-                                                        form.editing = false;
-                                                        form.editing_field = None;
-                                                    }
-                                                    2 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
-                                                    3 => form.editing_field = Some(crate::protocol::status::EditingField::Parity),
-                                                    4 => form.editing_field = Some(crate::protocol::status::EditingField::DataBits),
-                                                    5 => form.editing_field = Some(crate::protocol::status::EditingField::StopBits),
-                                                    6 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalInterval),
-                                                    7 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalTimeout),
-                                                    n => {
-                                                        let ridx = n.saturating_sub(8);
-                                                        form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId });
-                                                    }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if let Some(form) = guard.ui.subpage_form.as_mut() {
+                                            form.editing = !form.editing;
+                                            if form.editing {
+                                                match form.cursor {
+                                                0 => form.editing_field = Some(crate::protocol::status::EditingField::Loop),
+                                                1 => { form.editing = false; form.editing_field = None; }
+                                                2 => form.editing_field = Some(crate::protocol::status::EditingField::Baud),
+                                                3 => form.editing_field = Some(crate::protocol::status::EditingField::Parity),
+                                                4 => form.editing_field = Some(crate::protocol::status::EditingField::DataBits),
+                                                5 => form.editing_field = Some(crate::protocol::status::EditingField::StopBits),
+                                                6 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalInterval),
+                                                7 => form.editing_field = Some(crate::protocol::status::EditingField::GlobalTimeout),
+                                                n => { let ridx = n.saturating_sub(8); form.editing_field = Some(crate::protocol::status::EditingField::RegisterField { idx: ridx, field: crate::protocol::status::RegisterField::SlaveId }); }
                                             }
-                                            form.input_buffer.clear();
-                                            if let Some(
-                                                crate::protocol::status::EditingField::Baud,
-                                            ) = form.editing_field.clone()
-                                            {
-                                                let presets: [u32; 8] = [
-                                                    1200, 2400, 4800, 9600, 19200, 38400, 57600,
-                                                    115200,
-                                                ];
-                                                let _custom_idx = presets.len();
-                                                let idx = presets
-                                                    .iter()
-                                                    .position(|&p| p == form.baud)
-                                                    .unwrap_or(_custom_idx);
-                                                form.edit_choice_index = Some(idx);
-                                                if idx == presets.len() {
-                                                    form.input_buffer = form.baud.to_string();
+                                                form.input_buffer.clear();
+                                                if let Some(
+                                                    crate::protocol::status::EditingField::Baud,
+                                                ) = form.editing_field.clone()
+                                                {
+                                                    let presets: [u32; 8] = [
+                                                        1200, 2400, 4800, 9600, 19200, 38400,
+                                                        57600, 115200,
+                                                    ];
+                                                    let _custom_idx = presets.len();
+                                                    let idx = presets
+                                                        .iter()
+                                                        .position(|&p| p == form.baud)
+                                                        .unwrap_or(_custom_idx);
+                                                    form.edit_choice_index = Some(idx);
+                                                    if idx == presets.len() {
+                                                        form.input_buffer = form.baud.to_string();
+                                                    }
+                                                    form.edit_confirmed = false;
                                                 }
+                                            } else {
+                                                form.editing_field = None;
+                                                form.input_buffer.clear();
+                                                form.edit_choice_index = None;
                                                 form.edit_confirmed = false;
                                             }
-                                        } else {
-                                            form.editing_field = None;
-                                            form.input_buffer.clear();
-                                            form.edit_choice_index = None;
-                                            form.edit_confirmed = false;
                                         }
-                                    }
-                                    guard.clear_error();
-                                }
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::ExitSubpage => {
-                                if let Ok(mut guard) = app.lock() {
-                                    guard.ui.subpage_active = false;
-                                    guard.clear_error();
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        guard.ui.subpage_active = false;
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::TogglePort => {
-                                if let Ok(mut guard) = app.lock() {
-                                    guard.toggle_selected_port();
-                                    let state = guard
-                                        .ports
-                                        .states
-                                        .get(guard.ui.selected)
-                                        .cloned()
-                                        .unwrap_or(crate::protocol::status::PortState::Free);
-                                    if state != crate::protocol::status::PortState::OccupiedByThis {
-                                        // Nothing to do: single-pane UI keeps left selection
-                                    }
-                                } else {
-                                    log::error!("[TUI] failed to lock app for TogglePort");
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        guard.toggle_selected_port();
+                                        let state = guard
+                                            .ports
+                                            .states
+                                            .get(guard.ui.selected)
+                                            .cloned()
+                                            .unwrap_or(crate::protocol::status::PortState::Free);
+                                        if state
+                                            != crate::protocol::status::PortState::OccupiedByThis
+                                        { /* nothing */
+                                        }
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::SwitchNext => {
-                                if let Ok(mut guard) = app.lock() {
-                                    // Unified mode: SwitchNext now no-op
-                                    guard.clear_error();
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::SwitchPrev => {
-                                if let Ok(mut guard) = app.lock() {
-                                    // unified mode: SwitchPrev now no-op
-                                    guard.clear_error();
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::ClearError => {
-                                if let Ok(mut guard) = app.lock() {
-                                    guard.clear_error();
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        guard.ui.error = None;
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::QuickScan => {
-                                if let Ok(mut guard) = app.lock() {
-                                    // Only meaningful when Refresh action item is selected
-                                    if guard.ui.selected >= guard.ports.list.len()
-                                        && guard.ui.selected == guard.ports.list.len()
-                                    {
-                                        // refresh item
-                                        guard.quick_scan();
-                                    }
-                                }
+                                let _ = crate::protocol::status::status_rw::write_status(
+                                    &app,
+                                    |guard| {
+                                        if guard.ui.selected >= guard.ports.list.len()
+                                            && guard.ui.selected == guard.ports.list.len()
+                                        {
+                                            // inline quick_scan -> perform_device_scan
+                                            guard.scan.last_scan_info.clear();
+                                            guard.scan.last_scan_time = Some(chrono::Local::now());
+                                        }
+                                        Ok(())
+                                    },
+                                );
                             }
                             Action::None => {}
                         }

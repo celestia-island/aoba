@@ -12,8 +12,30 @@ impl Status {
         // the per-port snapshot if the selection actually changed by the
         // refresh operation.
         let old_selected = self.ui.selected;
-        self.save_current_port_state();
-        self.perform_device_scan();
+        // inline save_current_port_state
+        if self.ui.selected < self.ports.list.len() {
+            if let Some(info) = self.ports.list.get(self.ui.selected) {
+                let snap = PerPortState {
+                    subpage_active: self.ui.subpage_active,
+                    subpage_form: self.ui.subpage_form.clone(),
+                    subpage_tab_index: self.ui.subpage_tab_index,
+                    logs: self.ui.logs.clone(),
+                    log_selected: self.ui.log_selected,
+                    log_view_offset: self.ui.log_view_offset,
+                    log_auto_scroll: self.ui.log_auto_scroll,
+                    log_clear_pending: self.ui.log_clear_pending,
+                    input_mode: self.ui.input_mode,
+                    input_editing: self.ui.input_editing,
+                    input_buffer: self.ui.input_buffer.clone(),
+                    app_mode: self.ui.app_mode,
+                    page: self.ui.pages.last().cloned(),
+                };
+                self.per_port.states.insert(info.port_name.clone(), snap);
+            }
+        }
+        // inline perform_device_scan
+        self.scan.last_scan_info.clear();
+        self.scan.last_scan_time = Some(Local::now());
         let enriched = crate::protocol::tty::available_ports_enriched();
         let new_ports: Vec<_> = enriched.iter().map(|(p, _)| p.clone()).collect();
         let new_extras: Vec<_> = enriched.into_iter().map(|(_, e)| e).collect();
@@ -107,7 +129,138 @@ impl Status {
         self.ui.last_refresh = Some(Local::now());
         // Only restore per-port snapshot if the selected index changed.
         if self.ui.selected != old_selected {
-            self.load_current_port_state();
+            // inline load_current_port_state
+            if self.ui.selected < self.ports.list.len() {
+                if let Some(info) = self.ports.list.get(self.ui.selected) {
+                    if let Some(snap) = self.per_port.states.get(&info.port_name).cloned() {
+                        if let Some(page) = snap.page {
+                            if self.ui.pages.is_empty() {
+                                self.ui.pages.push(page);
+                            } else {
+                                *self.ui.pages.last_mut().unwrap() = page;
+                            }
+                            match self.ui.pages.last().cloned().unwrap_or_default() {
+                                crate::protocol::status::Page::Entry {
+                                    selected,
+                                    input_mode,
+                                    input_editing,
+                                    input_buffer,
+                                    app_mode,
+                                } => {
+                                    self.ui.selected = selected;
+                                    self.ui.input_mode = input_mode;
+                                    self.ui.input_editing = input_editing;
+                                    self.ui.input_buffer = input_buffer;
+                                    self.ui.app_mode = app_mode;
+                                    self.ui.subpage_active = false;
+                                    self.ui.subpage_form = None;
+                                }
+                                crate::protocol::status::Page::Modbus {
+                                    selected,
+                                    subpage_active,
+                                    subpage_form,
+                                    subpage_tab_index,
+                                    logs,
+                                    log_selected,
+                                    log_view_offset,
+                                    log_auto_scroll,
+                                    log_clear_pending,
+                                    input_mode,
+                                    input_editing,
+                                    input_buffer,
+                                    app_mode,
+                                } => {
+                                    self.ui.selected = selected;
+                                    self.ui.subpage_active = subpage_active;
+                                    self.ui.subpage_form = subpage_form;
+                                    self.ui.subpage_tab_index = subpage_tab_index;
+                                    self.ui.logs = logs;
+                                    self.ui.log_selected = log_selected;
+                                    self.ui.log_view_offset = log_view_offset;
+                                    self.ui.log_auto_scroll = log_auto_scroll;
+                                    self.ui.log_clear_pending = log_clear_pending;
+                                    self.ui.input_mode = input_mode;
+                                    self.ui.input_editing = input_editing;
+                                    self.ui.input_buffer = input_buffer;
+                                    self.ui.app_mode = app_mode;
+                                }
+                            }
+                        } else {
+                            self.ui.subpage_active = snap.subpage_active;
+                            self.ui.subpage_form = snap.subpage_form;
+                            self.ui.subpage_tab_index = snap.subpage_tab_index;
+                            self.ui.logs = snap.logs;
+                            self.ui.log_selected = snap.log_selected;
+                            self.ui.log_view_offset = snap.log_view_offset;
+                            self.ui.log_auto_scroll = snap.log_auto_scroll;
+                            self.ui.log_clear_pending = snap.log_clear_pending;
+                            self.ui.input_mode = snap.input_mode;
+                            self.ui.input_editing = snap.input_editing;
+                            self.ui.input_buffer = snap.input_buffer;
+                            self.ui.app_mode = snap.app_mode;
+                            if self.ui.pages.is_empty() {
+                                self.ui.pages.push(crate::protocol::status::Page::default());
+                            }
+                            match self.ui.pages.last_mut().unwrap() {
+                                crate::protocol::status::Page::Entry {
+                                    selected,
+                                    input_mode,
+                                    input_editing,
+                                    input_buffer,
+                                    app_mode,
+                                } => {
+                                    *selected = self.ui.selected;
+                                    *input_mode = self.ui.input_mode;
+                                    *input_editing = self.ui.input_editing;
+                                    *input_buffer = self.ui.input_buffer.clone();
+                                    *app_mode = self.ui.app_mode;
+                                }
+                                crate::protocol::status::Page::Modbus {
+                                    selected,
+                                    subpage_active,
+                                    subpage_form,
+                                    subpage_tab_index,
+                                    logs,
+                                    log_selected,
+                                    log_view_offset,
+                                    log_auto_scroll,
+                                    log_clear_pending,
+                                    input_mode,
+                                    input_editing,
+                                    input_buffer,
+                                    app_mode,
+                                } => {
+                                    *selected = self.ui.selected;
+                                    *subpage_active = self.ui.subpage_active;
+                                    *subpage_form = self.ui.subpage_form.clone();
+                                    *subpage_tab_index = self.ui.subpage_tab_index;
+                                    *logs = self.ui.logs.clone();
+                                    *log_selected = self.ui.log_selected;
+                                    *log_view_offset = self.ui.log_view_offset;
+                                    *log_auto_scroll = self.ui.log_auto_scroll;
+                                    *log_clear_pending = self.ui.log_clear_pending;
+                                    *input_mode = self.ui.input_mode;
+                                    *input_editing = self.ui.input_editing;
+                                    *input_buffer = self.ui.input_buffer.clone();
+                                    *app_mode = self.ui.app_mode;
+                                }
+                            }
+                        }
+                    } else {
+                        self.ui.subpage_active = false;
+                        self.ui.subpage_form = None;
+                        self.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
+                        self.ui.logs.clear();
+                        self.ui.log_selected = 0;
+                        self.ui.log_view_offset = 0;
+                        self.ui.log_auto_scroll = true;
+                        self.ui.input_mode = crate::protocol::status::InputMode::Ascii;
+                        self.ui.input_editing = false;
+                        self.ui.input_buffer.clear();
+                        self.ui.app_mode = crate::protocol::status::AppMode::Modbus;
+                    }
+                }
+            }
         }
         self.busy.busy = false;
     }
@@ -196,70 +349,5 @@ impl Status {
         self.busy.busy = false;
     }
 
-    pub fn quick_scan(&mut self) {
-        self.perform_device_scan();
-    }
-
-    pub fn adjust_log_view(&mut self, term_height: u16) {
-        if self.ui.logs.is_empty() {
-            return;
-        }
-        let bottom_len = if self.ui.error.is_some() || self.ui.subpage_active {
-            2
-        } else {
-            1
-        };
-        let logs_area_h = (term_height as usize).saturating_sub(bottom_len + 5);
-        let inner_h = logs_area_h.saturating_sub(2);
-        let groups_per_screen =
-            std::cmp::max(1usize, inner_h / crate::protocol::status::LOG_GROUP_HEIGHT);
-        let bottom = if self.ui.log_auto_scroll {
-            self.ui.logs.len().saturating_sub(1)
-        } else {
-            std::cmp::min(
-                self.ui.log_view_offset,
-                self.ui.logs.len().saturating_sub(1),
-            )
-        };
-        let top = (bottom + 1).saturating_sub(groups_per_screen);
-        if self.ui.log_selected < top {
-            self.ui.log_auto_scroll = false;
-            let half = groups_per_screen / 2;
-            let new_bottom = std::cmp::min(
-                self.ui.logs.len().saturating_sub(1),
-                self.ui.log_selected + half,
-            );
-            self.ui.log_view_offset = new_bottom;
-        } else if self.ui.log_selected > bottom {
-            self.ui.log_auto_scroll = false;
-            self.ui.log_view_offset = self.ui.log_selected;
-        }
-    }
-
-    pub fn page_up(&mut self, page: usize) {
-        if self.ui.logs.is_empty() {
-            return;
-        }
-        if self.ui.log_view_offset > page {
-            self.ui.log_view_offset = self.ui.log_view_offset.saturating_sub(page);
-        } else {
-            self.ui.log_view_offset = 0;
-        }
-        self.ui.log_auto_scroll = false;
-    }
-
-    pub fn page_down(&mut self, page: usize) {
-        if self.ui.logs.is_empty() {
-            return;
-        }
-        let max_bottom = self.ui.logs.len().saturating_sub(1);
-        let new_bottom = (self.ui.log_view_offset).saturating_add(page);
-        self.ui.log_view_offset = std::cmp::min(max_bottom, new_bottom);
-        self.ui.log_auto_scroll = self.ui.log_view_offset >= max_bottom;
-    }
-
-    fn perform_device_scan(&mut self) {
-        self.scan.last_scan_info.clear();
-        self.scan.last_scan_time = Some(Local::now());
-    }
+    // quick_scan / adjust_log_view / page_up / page_down / perform_device_scan 已被内联到调用点
 }
