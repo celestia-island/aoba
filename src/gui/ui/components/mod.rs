@@ -55,7 +55,7 @@ pub fn render_drawer_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>, bus: &Bus) {
             let _ = crate::protocol::status::status_rw::write_status(inner, |g| {
                 g.ui.auto_refresh = checkbox;
                 // inline clear_error if needed (keep behaviour consistent)
-                g.ui.error = None;
+                crate::protocol::status::ui::ui_error_set(g, None);
                 Ok(())
             });
         }
@@ -70,7 +70,7 @@ pub fn render_drawer_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>, bus: &Bus) {
             if ui.selectable_label(selected_bool, label).clicked() {
                 let _ = crate::protocol::status::status_rw::write_status(inner, |g| {
                     g.ui.selected = i;
-                    g.ui.error = None; // inline clear_error
+                    crate::protocol::status::ui::ui_error_set(g, None); // inline clear_error
                     Ok(())
                 });
             }

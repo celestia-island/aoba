@@ -7,18 +7,17 @@ use std::{
 
 use ratatui::{
     prelude::*,
-    text::Line,
-    text::Span,
+    style::{Color, Style},
+    text::{Line, Span},
     widgets::{Block, Paragraph},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
     protocol::status::Status,
     tui::ui::components::{kv_pairs_to_lines, render_boxed_paragraph},
 };
-use ratatui::style::{Color, Style};
-use unicode_width::UnicodeWidthStr;
 
 #[derive(Default, Clone)]
 pub(crate) struct AboutCache {

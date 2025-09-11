@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{EntryRole, MasterEditField, RegisterEntry, Status},
+    protocol::status::{ui as ui_accessors, EntryRole, MasterEditField, RegisterEntry, Status},
     tui::ui::components::{render_boxed_paragraph, styled_spans, StyledSpanKind, TextState},
 };
 
@@ -16,7 +16,7 @@ use crate::{
 /// Added first editable field: Role, allowing switching between Master and Slave behaviors.
 pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut lines: Vec<Line> = Vec::new();
-    if let Some(form) = app.ui.subpage_form.as_ref() {
+    if let Some(form) = ui_accessors::ui_subpage_form_get(app).as_ref() {
         if form.registers.is_empty() {
             let sel = form.master_cursor == 0;
             let prefix = if sel { "> " } else { "  " };
@@ -55,7 +55,7 @@ pub fn render_modbus_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Scroll logic copied from master / pull panels
     let inner_height = area.height.saturating_sub(2) as usize;
     let mut first_visible = 0usize;
-    if let Some(form) = app.ui.subpage_form.as_ref() {
+    if let Some(form) = ui_accessors::ui_subpage_form_get(app).as_ref() {
         let mut cursor_line = 0usize;
         let mut accum = 0usize;
         for (i, r) in form.registers.iter().enumerate() {

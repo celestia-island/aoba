@@ -9,7 +9,9 @@ use ratatui::{
 };
 
 use crate::{
-    i18n::lang, protocol::status::Status, tui::ui::components::log_input::render_log_input,
+    i18n::lang,
+    protocol::status::{ui as ui_accessors, Status},
+    tui::ui::components::log_input::render_log_input,
 };
 
 /// Render a log panel. Each log entry is presented as a 3-line grouped item:
@@ -27,7 +29,8 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     let logs_area = chunks[0];
     // We'll render a windowed view of log groups. Each group is 3 lines.
-    let total_groups = app.ui.logs.len();
+    let logs = ui_accessors::ui_logs_get(app);
+    let total_groups = logs.len();
     let group_height = 3usize;
 
     // Inner height inside the block (account for borders)
@@ -37,10 +40,13 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Determine bottom index based on auto-scroll or explicit offset
     let bottom = if total_groups == 0 {
         0usize
-    } else if app.ui.log_auto_scroll {
+    } else if ui_accessors::ui_log_auto_scroll_get(app) {
         total_groups.saturating_sub(1)
     } else {
-        min(app.ui.log_view_offset, total_groups.saturating_sub(1))
+        min(
+            ui_accessors::ui_log_view_offset_get(app),
+            total_groups.saturating_sub(1),
+        )
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
@@ -55,10 +61,8 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     let mut styled_lines: Vec<Line> = Vec::new();
     for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
-        if let Some(entry) = app.ui.logs.get(g) {
-            let selected = app
-                .ui
-                .log_selected
+        if let Some(entry) = logs.get(g) {
+            let selected = ui_accessors::ui_log_selected_get(app)
                 .checked_sub(top_group)
                 .map(|s| s == idx)
                 .unwrap_or(false);
@@ -134,10 +138,10 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let sel_display = if total_groups == 0 {
         0
     } else {
-        app.ui.log_selected + 1
+        ui_accessors::ui_log_selected_get(app) + 1
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
-    let follow_label = if app.ui.log_auto_scroll {
+    let follow_label = if ui_accessors::ui_log_auto_scroll_get(app) {
         lang().tabs.log.hint_follow_on.as_str()
     } else {
         lang().tabs.log.hint_follow_off.as_str()
@@ -149,13 +153,13 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     );
     let title_span = Span::styled(
         title_text,
-        Style::default()
-            .add_modifier(Modifier::BOLD)
-            .fg(if app.ui.log_auto_scroll {
+        Style::default().add_modifier(Modifier::BOLD).fg(
+            if ui_accessors::ui_log_auto_scroll_get(app) {
                 Color::Green
             } else {
                 Color::Yellow
-            }),
+            },
+        ),
     );
     let block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
