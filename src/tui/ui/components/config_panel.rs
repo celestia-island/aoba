@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{EditingField, Status},
+    protocol::status::{ui as ui_accessors, EditingField, Status},
     tui::ui::components::{
         render_boxed_paragraph, styled_spans, styled_title_span, StyledSpanKind, TextState,
     },
@@ -17,8 +17,11 @@ use crate::{
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
-    // Use transient form if present
-    let form = app.ui.subpage_form.as_ref().cloned().unwrap_or_default();
+    // Use transient form if present (access via accessor to allow ephemeral migration)
+    let form = ui_accessors::ui_subpage_form_get(app)
+        .as_ref()
+        .cloned()
+        .unwrap_or_default();
 
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
 
@@ -110,7 +113,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         loop_label,
         loop_val,
         false,
-        form.input_buffer.as_str(),
+        ui_accessors::ui_input_buffer_get(app).as_str(),
     );
 
     // Master passive toggle (idx 1) - when true the simulated master will not
@@ -147,7 +150,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         master_passive_label,
         master_passive_val,
         false,
-        form.input_buffer.as_str(),
+        ui_accessors::ui_input_buffer_get(app).as_str(),
     );
 
     // Baud (idx 2)

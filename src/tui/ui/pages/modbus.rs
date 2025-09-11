@@ -10,7 +10,8 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     i18n::lang,
     protocol::status::{
-        AppMode, EntryRole, MasterEditField, RegisterMode, Status, SubpageForm, SubpageTab,
+        ui as ui_accessors, AppMode, EntryRole, MasterEditField, RegisterMode, Status, SubpageForm,
+        SubpageTab,
     },
     tui::ui::components::{
         config_panel::render_config_panel, log_panel::render_log_panel,
@@ -21,12 +22,13 @@ use crate::{
 
 /// Unified ModBus page (merges previous master / slave pages).
 pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
-    let port_name = if !app.ports.list.is_empty() && app.ui.selected < app.ports.list.len() {
-        app.ports.list[app.ui.selected].port_name.clone()
+    let sel_idx = ui_accessors::ui_selected_get(app);
+    let port_name = if !app.ports.list.is_empty() && sel_idx < app.ports.list.len() {
+        app.ports.list[sel_idx].port_name.clone()
     } else {
         "-".to_string()
     };
-    let mid_label = match app.ui.app_mode {
+    let mid_label = match ui_accessors::ui_app_mode_get(app) {
         AppMode::Modbus => lang().protocol.modbus.label_modbus_settings.as_str(),
         AppMode::Mqtt => "MQTT",
     };
@@ -35,9 +37,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
         mid_label,
         lang().tabs.tab_log.as_str(),
     ];
-    let tab_index = app
-        .ui
-        .subpage_tab_index
+    let tab_index = ui_accessors::ui_subpage_tab_index_get(app)
         .as_usize()
         .min(tabs.len().saturating_sub(1));
     let [header_area, content_area] = ratatui::layout::Layout::vertical([
@@ -46,7 +46,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     ])
     .areas(area);
 
-    let mode_text = match app.ui.app_mode {
+    let mode_text = match ui_accessors::ui_app_mode_get(app) {
         AppMode::Modbus => lang().protocol.modbus.label_modbus_settings.as_str(),
         AppMode::Mqtt => "MQTT",
     };
@@ -82,7 +82,7 @@ pub fn render_modbus(f: &mut Frame, area: Rect, app: &mut Status) {
     match tab_enum {
         SubpageTab::Config => render_config_panel(f, content_area, app, None),
         SubpageTab::Body => {
-            if matches!(app.ui.app_mode, AppMode::Modbus) {
+            if matches!(ui_accessors::ui_app_mode_get(app), AppMode::Modbus) {
                 render_modbus_panel(f, content_area, app)
             } else {
                 render_mqtt_panel(f, content_area, app)
@@ -100,11 +100,21 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
         app.sync_form_to_slave_context(pn.as_str());
     }
     // Ensure form exists when interacting with modbus settings tab
-    if app.ui.subpage_tab_index == SubpageTab::Body && app.ui.subpage_form.is_none() {
+    if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Body
+        && ui_accessors::ui_subpage_form_get(app).is_none()
+    {
         app.init_subpage_form();
     }
 
-    if app.ui.subpage_tab_index == SubpageTab::Body {
+    if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Body {
+        // Cache selected index and port name to avoid additional immutable borrows
+        // while we hold a mutable borrow to `app.ui.subpage_form` below.
+        let selected_index = ui_accessors::ui_selected_get(app);
+        let selected_port_name = if selected_index < app.ports.list.len() {
+            Some(app.ports.list[selected_index].port_name.clone())
+        } else {
+            None
+        };
         if let Some(form) = app.ui.subpage_form.as_mut() {
             if form.master_field_editing {
                 // Editing layer
@@ -122,8 +132,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                             commit_master_field(form); // Commit current field
                         }
                         // Schedule immediate sync to avoid double borrow of app while form is still borrowed
-                        if app.ui.selected < app.ports.list.len() {
-                            let pname = app.ports.list[app.ui.selected].port_name.clone();
+                        if let Some(pname) = selected_port_name.clone() {
                             app.per_port.pending_sync_port = Some(pname);
                         }
                         form.master_field_editing = false;
@@ -180,8 +189,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                             commit_master_field(form);
                         }
                         // After any commit that changes register values/config, schedule sync
-                        if app.ui.selected < app.ports.list.len() {
-                            let pname = app.ports.list[app.ui.selected].port_name.clone();
+                        if let Some(pname) = selected_port_name.clone() {
                             app.per_port.pending_sync_port = Some(pname);
                         }
                         form.master_field_editing = false;
@@ -322,28 +330,41 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
     match key.code {
         KC::Tab => {
             // cycle forward: compute new usize, wrap by 3 and map back to enum
-            let new_idx = (app.ui.subpage_tab_index.as_usize() + 1) % 3;
-            app.ui.subpage_tab_index = match new_idx {
-                0 => SubpageTab::Config,
-                1 => SubpageTab::Body,
-                2 => SubpageTab::Log,
-                _ => SubpageTab::Config,
-            };
+            let new_idx = (ui_accessors::ui_subpage_tab_index_get(app).as_usize() + 1) % 3;
+            ui_accessors::ui_subpage_tab_index_set(
+                app,
+                match new_idx {
+                    0 => SubpageTab::Config,
+                    1 => SubpageTab::Body,
+                    2 => SubpageTab::Log,
+                    _ => SubpageTab::Config,
+                },
+            );
             true
         }
         KC::BackTab => {
-            let cur = app.ui.subpage_tab_index.as_usize();
+            let cur = ui_accessors::ui_subpage_tab_index_get(app).as_usize();
             let new_idx = if cur == 0 { 2 } else { cur - 1 };
-            app.ui.subpage_tab_index = match new_idx {
-                0 => SubpageTab::Config,
-                1 => SubpageTab::Body,
-                2 => SubpageTab::Log,
-                _ => SubpageTab::Config,
-            };
+            ui_accessors::ui_subpage_tab_index_set(
+                app,
+                match new_idx {
+                    0 => SubpageTab::Config,
+                    1 => SubpageTab::Body,
+                    2 => SubpageTab::Log,
+                    _ => SubpageTab::Config,
+                },
+            );
             true
         }
         KC::Enter => {
-            if app.ui.subpage_tab_index == SubpageTab::Config {
+            if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Config {
+                // Cache selected index and port name before taking a mutable borrow to `app.ui.subpage_form`.
+                let __selected_index = ui_accessors::ui_selected_get(app);
+                let __selected_port_name = if __selected_index < app.ports.list.len() {
+                    Some(app.ports.list[__selected_index].port_name.clone())
+                } else {
+                    None
+                };
                 if let Some(form) = app.ui.subpage_form.as_mut() {
                     // If cursor on first item, toggle immediately and consume
                     if form.cursor == 0 {
@@ -373,8 +394,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                         // Toggle and store explicit choice
                         form.master_passive = Some(!effective_passive);
                         // schedule sync to avoid mutably borrowing app while still borrowed
-                        if app.ui.selected < app.ports.list.len() {
-                            let pname = app.ports.list[app.ui.selected].port_name.clone();
+                        if let Some(pname) = __selected_port_name.clone() {
                             app.per_port.pending_sync_port = Some(pname);
                         }
                         return true;
@@ -386,7 +406,7 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
                     }
                 }
                 return true;
-            } else if app.ui.subpage_tab_index == SubpageTab::Log {
+            } else if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Log {
                 // Let global mapping handle input editing
                 return false;
             }
@@ -398,9 +418,9 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
 
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
-    if app.ui.subpage_tab_index == SubpageTab::Config {
+    if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Config {
         // If cursor is on the first field (working toggle), show Enter-to-toggle hint and current state
-        if let Some(form) = &app.ui.subpage_form {
+        if let Some(form) = ui_accessors::ui_subpage_form_get(app) {
             if form.cursor == 0 {
                 // Show the localized Enter hint and a status kv showing current running/paused
                 if form.loop_enabled {
@@ -431,8 +451,8 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
         return hints;
     }
-    if app.ui.subpage_tab_index == SubpageTab::Body {
-        if let Some(form) = &app.ui.subpage_form {
+    if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Body {
+        if let Some(form) = ui_accessors::ui_subpage_form_get(app) {
             if form.master_field_editing {
                 if let Some(field) = &form.master_edit_field {
                     match field {
@@ -494,8 +514,8 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
         }
         return hints;
     }
-    if app.ui.subpage_tab_index == SubpageTab::Log {
-        if app.ui.input_editing {
+    if ui_accessors::ui_subpage_tab_index_get(app) == SubpageTab::Log {
+        if ui_accessors::ui_input_editing_get(app) {
             hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
             hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
         } else {
@@ -507,7 +527,7 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
                 "m",
                 lang().input.hint_input_mode_short.as_str(),
             ));
-            let action_label = if app.ui.log_auto_scroll {
+            let action_label = if ui_accessors::ui_log_auto_scroll_get(app) {
                 lang().tabs.log.hint_follow_off.as_str()
             } else {
                 lang().tabs.log.hint_follow_on.as_str()

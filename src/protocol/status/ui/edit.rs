@@ -20,9 +20,10 @@ impl Status {
 
     pub fn resume_slave_listen(&mut self) {
         let mut found_master = false;
-        self.ui.logs.clear();
-        self.ui.log_selected = 0;
-        self.ui.log_view_offset = 0;
+        // clear logs via accessor
+        crate::protocol::status::ui::ui_logs_set(self, Vec::new());
+        crate::protocol::status::ui::ui_log_selected_set(self, 0);
+        crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
         if let Some(form) = self.ui.subpage_form.as_mut() {
             for reg in form.registers.iter_mut() {
                 reg.next_poll_at = std::time::Instant::now();
@@ -32,35 +33,40 @@ impl Status {
             }
         }
         // Sync current form values to per-port slave contexts so auto-slave uses TUI values
-        if self.ui.subpage_form.is_some() {
-            if let Some(info) = self.ports.list.get(self.ui.selected) {
+        if crate::protocol::status::ui::ui_subpage_form_get(self).is_some() {
+            if let Some(info) = self
+                .ports
+                .list
+                .get(crate::protocol::status::ui::ui_selected_get(self))
+            {
                 let pname = info.port_name.clone();
                 self.sync_form_to_slave_context(pname.as_str());
             }
         }
         self.busy.polling_paused = false;
         if !found_master {
-            // inline Status::append_log
+            // inline Status::append_log via accessors
             {
                 const MAX: usize = 1000;
-                self.ui.logs.push(LogEntry {
+                let mut logs = crate::protocol::status::ui::ui_logs_get(&self);
+                logs.push(LogEntry {
                     when: Local::now(),
                     raw: "no master entries configured — nothing to poll".into(),
                     parsed: None,
                 });
-                if self.ui.logs.len() > MAX {
-                    let excess = self.ui.logs.len() - MAX;
-                    self.ui.logs.drain(0..excess);
-                    if self.ui.log_selected >= self.ui.logs.len() {
-                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
-                    }
+                if logs.len() > MAX {
+                    let excess = logs.len() - MAX;
+                    logs.drain(0..excess);
                 }
-                if self.ui.log_auto_scroll {
-                    if self.ui.logs.is_empty() {
-                        self.ui.log_view_offset = 0;
+                let len = logs.len();
+                crate::protocol::status::ui::ui_logs_set(self, logs);
+                if crate::protocol::status::ui::ui_log_auto_scroll_get(&self) {
+                    if len == 0 {
+                        crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
                     } else {
-                        self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
-                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                        let last = len.saturating_sub(1);
+                        crate::protocol::status::ui::ui_log_view_offset_set(self, last);
+                        crate::protocol::status::ui::ui_log_selected_set(self, last);
                     }
                 }
             }
@@ -68,10 +74,10 @@ impl Status {
     }
 
     pub fn init_subpage_form(&mut self) {
-        if self.ui.subpage_form.is_none() {
-            self.ui.subpage_form = Some(SubpageForm::default());
+        if crate::protocol::status::ui::ui_subpage_form_get(self).is_none() {
+            crate::protocol::status::ui::ui_subpage_form_set(self, Some(SubpageForm::default()));
         }
-        self.ui.subpage_active = true;
+        crate::protocol::status::ui::ui_subpage_active_set(self, true);
         // Ensure the page stack's top is a Modbus page so that per-port
         // snapshots capture the correct page variant. Older code sometimes
         // only updated flat ui fields which left the page stack as Entry;
@@ -79,19 +85,19 @@ impl Status {
         // to the homepage. Replace (or push) the top page with a Modbus
         // page reflecting the current flat fields.
         let modbus_page = crate::protocol::status::Page::Modbus {
-            selected: self.ui.selected,
-            subpage_active: self.ui.subpage_active,
-            subpage_form: self.ui.subpage_form.clone(),
-            subpage_tab_index: self.ui.subpage_tab_index,
-            logs: self.ui.logs.clone(),
-            log_selected: self.ui.log_selected,
-            log_view_offset: self.ui.log_view_offset,
-            log_auto_scroll: self.ui.log_auto_scroll,
-            log_clear_pending: self.ui.log_clear_pending,
-            input_mode: self.ui.input_mode,
-            input_editing: self.ui.input_editing,
-            input_buffer: self.ui.input_buffer.clone(),
-            app_mode: self.ui.app_mode,
+            selected: crate::protocol::status::ui::ui_selected_get(&self),
+            subpage_active: crate::protocol::status::ui::ui_subpage_active_get(&self),
+            subpage_form: crate::protocol::status::ui::ui_subpage_form_get(&self),
+            subpage_tab_index: crate::protocol::status::ui::ui_subpage_tab_index_get(&self),
+            logs: crate::protocol::status::ui::ui_logs_get(&self),
+            log_selected: crate::protocol::status::ui::ui_log_selected_get(&self),
+            log_view_offset: crate::protocol::status::ui::ui_log_view_offset_get(&self),
+            log_auto_scroll: crate::protocol::status::ui::ui_log_auto_scroll_get(&self),
+            log_clear_pending: crate::protocol::status::ui::ui_log_clear_pending_get(&self),
+            input_mode: crate::protocol::status::ui::ui_input_mode_get(&self),
+            input_editing: crate::protocol::status::ui::ui_input_editing_get(&self),
+            input_buffer: crate::protocol::status::ui::ui_input_buffer_get(&self),
+            app_mode: crate::protocol::status::ui::ui_app_mode_get(&self),
         };
         if self.ui.pages.is_empty() {
             self.ui.pages.push(modbus_page);

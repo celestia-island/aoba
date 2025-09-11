@@ -1,6 +1,7 @@
 use chrono::Local;
-use serialport::SerialPortInfo;
 use std::time::Duration;
+
+use serialport::SerialPortInfo;
 
 use crate::{
     i18n::lang,
@@ -24,30 +25,34 @@ impl Status {
 
     pub fn append_log(&mut self, entry: LogEntry) {
         const MAX: usize = 1000;
-        self.ui.logs.push(entry);
-        if self.ui.logs.len() > MAX {
-            let excess = self.ui.logs.len() - MAX;
-            self.ui.logs.drain(0..excess);
-            if self.ui.log_selected >= self.ui.logs.len() {
-                self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
-            }
+        // Use compatibility accessors: get-modify-set to avoid long borrows and
+        // centralize UI mutations through the accessor layer.
+        let mut logs = crate::protocol::status::ui::ui_logs_get(&self);
+        logs.push(entry);
+        if logs.len() > MAX {
+            let excess = logs.len() - MAX;
+            logs.drain(0..excess);
         }
-        if self.ui.log_auto_scroll {
-            if self.ui.logs.is_empty() {
-                self.ui.log_view_offset = 0;
+        let len = logs.len();
+        crate::protocol::status::ui::ui_logs_set(self, logs);
+
+        if crate::protocol::status::ui::ui_log_auto_scroll_get(&self) {
+            if len == 0 {
+                crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
             } else {
-                self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
-                self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                let last = len.saturating_sub(1);
+                crate::protocol::status::ui::ui_log_view_offset_set(self, last);
+                crate::protocol::status::ui::ui_log_selected_set(self, last);
             }
         }
     }
 
     pub fn set_error<T: Into<String>>(&mut self, msg: T) {
-        self.ui.error = Some((msg.into(), Local::now()));
+        crate::protocol::status::ui::ui_error_set(self, Some((msg.into(), Local::now())));
     }
 
     pub fn clear_error(&mut self) {
-        self.ui.error = None;
+        crate::protocol::status::ui::ui_error_set(self, None);
     }
 
     pub fn current_serial_config(&self) -> Option<SerialConfig> {
@@ -159,16 +164,16 @@ impl Status {
                     subpage_active: self.ui.subpage_active,
                     subpage_form: self.ui.subpage_form.clone(),
                     subpage_tab_index: self.ui.subpage_tab_index,
-                    logs: self.ui.logs.clone(),
-                    log_selected: self.ui.log_selected,
-                    log_view_offset: self.ui.log_view_offset,
-                    log_auto_scroll: self.ui.log_auto_scroll,
-                    log_clear_pending: self.ui.log_clear_pending,
+                    logs: crate::protocol::status::ui::ui_logs_get(&self),
+                    log_selected: crate::protocol::status::ui::ui_log_selected_get(&self),
+                    log_view_offset: crate::protocol::status::ui::ui_log_view_offset_get(&self),
+                    log_auto_scroll: crate::protocol::status::ui::ui_log_auto_scroll_get(&self),
+                    log_clear_pending: crate::protocol::status::ui::ui_log_clear_pending_get(&self),
                     input_mode: self.ui.input_mode,
                     input_editing: self.ui.input_editing,
-                    input_buffer: self.ui.input_buffer.clone(),
+                    input_buffer: crate::protocol::status::ui::ui_input_buffer_get(&self),
                     app_mode: self.ui.app_mode,
-                    page: self.ui.pages.last().cloned(),
+                    page: crate::protocol::status::ui::ui_pages_last_get(&self),
                 };
                 self.per_port.states.insert(info.port_name.clone(), snap);
             }
@@ -225,11 +230,23 @@ impl Status {
                                 self.ui.subpage_active = subpage_active;
                                 self.ui.subpage_form = subpage_form;
                                 self.ui.subpage_tab_index = subpage_tab_index;
-                                self.ui.logs = logs;
-                                self.ui.log_selected = log_selected;
-                                self.ui.log_view_offset = log_view_offset;
-                                self.ui.log_auto_scroll = log_auto_scroll;
-                                self.ui.log_clear_pending = log_clear_pending;
+                                crate::protocol::status::ui::ui_logs_set(self, logs);
+                                crate::protocol::status::ui::ui_log_selected_set(
+                                    self,
+                                    log_selected,
+                                );
+                                crate::protocol::status::ui::ui_log_view_offset_set(
+                                    self,
+                                    log_view_offset,
+                                );
+                                crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                    self,
+                                    log_auto_scroll,
+                                );
+                                crate::protocol::status::ui::ui_log_clear_pending_set(
+                                    self,
+                                    log_clear_pending,
+                                );
                                 self.ui.input_mode = input_mode;
                                 self.ui.input_editing = input_editing;
                                 self.ui.input_buffer = input_buffer;
@@ -240,11 +257,20 @@ impl Status {
                         self.ui.subpage_active = snap.subpage_active;
                         self.ui.subpage_form = snap.subpage_form;
                         self.ui.subpage_tab_index = snap.subpage_tab_index;
-                        self.ui.logs = snap.logs;
-                        self.ui.log_selected = snap.log_selected;
-                        self.ui.log_view_offset = snap.log_view_offset;
-                        self.ui.log_auto_scroll = snap.log_auto_scroll;
-                        self.ui.log_clear_pending = snap.log_clear_pending;
+                        crate::protocol::status::ui::ui_logs_set(self, snap.logs);
+                        crate::protocol::status::ui::ui_log_selected_set(self, snap.log_selected);
+                        crate::protocol::status::ui::ui_log_view_offset_set(
+                            self,
+                            snap.log_view_offset,
+                        );
+                        crate::protocol::status::ui::ui_log_auto_scroll_set(
+                            self,
+                            snap.log_auto_scroll,
+                        );
+                        crate::protocol::status::ui::ui_log_clear_pending_set(
+                            self,
+                            snap.log_clear_pending,
+                        );
                         self.ui.input_mode = snap.input_mode;
                         self.ui.input_editing = snap.input_editing;
                         self.ui.input_buffer = snap.input_buffer;
@@ -302,13 +328,13 @@ impl Status {
                     self.ui.subpage_active = false;
                     self.ui.subpage_form = None;
                     self.ui.subpage_tab_index = SubpageTab::Config;
-                    self.ui.logs.clear();
-                    self.ui.log_selected = 0;
-                    self.ui.log_view_offset = 0;
-                    self.ui.log_auto_scroll = true;
+                    crate::protocol::status::ui::ui_logs_set(self, Vec::new());
+                    crate::protocol::status::ui::ui_log_selected_set(self, 0);
+                    crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
+                    crate::protocol::status::ui::ui_log_auto_scroll_set(self, true);
                     self.ui.input_mode = InputMode::Ascii;
                     self.ui.input_editing = false;
-                    self.ui.input_buffer.clear();
+                    crate::protocol::status::ui::ui_input_buffer_set(self, String::new());
                     self.ui.app_mode = AppMode::Modbus;
                 }
             }

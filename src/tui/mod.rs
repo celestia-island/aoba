@@ -28,7 +28,8 @@ use crate::{
 use serialport::Parity;
 
 fn is_log_tab(app: &Status) -> bool {
-    app.ui.subpage_active && app.ui.subpage_tab_index == SubpageTab::Log
+    crate::protocol::status::ui::ui_subpage_active_get(app)
+        && crate::protocol::status::ui::ui_subpage_tab_index_get(app) == SubpageTab::Log
 }
 
 pub fn start() -> Result<()> {
@@ -46,10 +47,13 @@ pub fn start() -> Result<()> {
     // For manual testing: if AOBA_TUI_FORCE_ERROR is set, pre-populate an error to display
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
         let _ = crate::protocol::status::status_rw::write_status(&app, |g| {
-            g.ui.error = Some((
-                "demo forced error: AOBA_TUI_FORCE_ERROR".to_string(),
-                chrono::Local::now(),
-            ));
+            crate::protocol::status::ui::ui_error_set(
+                g,
+                Some((
+                    "demo forced error: AOBA_TUI_FORCE_ERROR".to_string(),
+                    chrono::Local::now(),
+                )),
+            );
             Ok(())
         });
     }
@@ -168,7 +172,7 @@ fn run_app(
                 // Main keyboard event handling entry
                 // Mode overlay handling
                 let overlay_active = crate::protocol::status::status_rw::read_status(&app, |g| {
-                    Ok(g.ui.mode_overlay_active)
+                    Ok(crate::protocol::status::ui::ui_mode_overlay_active_get(g))
                 })
                 .unwrap_or(false);
                 if overlay_active {
@@ -177,42 +181,55 @@ fn run_app(
                     let _ = crate::protocol::status::status_rw::write_status(&app, |guard| {
                         match key.code {
                             KC::Esc => {
-                                guard.ui.mode_overlay_active = false;
+                                crate::protocol::status::ui::ui_mode_overlay_active_set(
+                                    guard, false,
+                                );
                             }
                             KC::Tab => {
-                                let cur = guard.ui.mode_overlay_index.as_usize();
+                                let cur =
+                                    crate::protocol::status::ui::ui_mode_overlay_index_get(guard)
+                                        .as_usize();
                                 let new = (cur + 1) % 2;
-                                guard.ui.mode_overlay_index = match new {
-                                    0 => ModeOverlayIndex::Modbus,
-                                    1 => ModeOverlayIndex::Mqtt,
-                                    _ => ModeOverlayIndex::Modbus,
-                                };
+                                crate::protocol::status::ui::ui_mode_overlay_index_set(
+                                    guard,
+                                    match new {
+                                        0 => ModeOverlayIndex::Modbus,
+                                        1 => ModeOverlayIndex::Mqtt,
+                                        _ => ModeOverlayIndex::Modbus,
+                                    },
+                                );
                             }
                             KC::Enter => {
-                                let sel = match guard.ui.mode_overlay_index {
-                                    ModeOverlayIndex::Modbus => AppMode::Modbus,
-                                    ModeOverlayIndex::Mqtt => AppMode::Mqtt,
-                                };
-                                if guard.ui.app_mode != sel {
-                                    guard.ui.app_mode = sel;
+                                let sel =
+                                    match crate::protocol::status::ui::ui_mode_overlay_index_get(
+                                        guard,
+                                    ) {
+                                        ModeOverlayIndex::Modbus => AppMode::Modbus,
+                                        ModeOverlayIndex::Mqtt => AppMode::Mqtt,
+                                    };
+                                if crate::protocol::status::ui::ui_app_mode_get(guard) != sel {
+                                    crate::protocol::status::ui::ui_app_mode_set(guard, sel);
                                     // inline save_current_port_state to avoid direct Status method call
-                                    if guard.ui.selected < guard.ports.list.len() {
-                                        if let Some(info) = guard.ports.list.get(guard.ui.selected)
-                                        {
+                                    if crate::protocol::status::ui::ui_selected_get(guard)
+                                        < guard.ports.list.len()
+                                    {
+                                        if let Some(info) = guard.ports.list.get(
+                                            crate::protocol::status::ui::ui_selected_get(guard),
+                                        ) {
                                             let snap = crate::protocol::status::PerPortState {
-                                                subpage_active: guard.ui.subpage_active,
-                                                subpage_form: guard.ui.subpage_form.clone(),
-                                                subpage_tab_index: guard.ui.subpage_tab_index,
-                                                logs: guard.ui.logs.clone(),
-                                                log_selected: guard.ui.log_selected,
-                                                log_view_offset: guard.ui.log_view_offset,
-                                                log_auto_scroll: guard.ui.log_auto_scroll,
-                                                log_clear_pending: guard.ui.log_clear_pending,
-                                                input_mode: guard.ui.input_mode,
-                                                input_editing: guard.ui.input_editing,
-                                                input_buffer: guard.ui.input_buffer.clone(),
-                                                app_mode: guard.ui.app_mode,
-                                                page: guard.ui.pages.last().cloned(),
+                                                subpage_active: crate::protocol::status::ui::ui_subpage_active_get(guard),
+                                                subpage_form: crate::protocol::status::ui::ui_subpage_form_get(guard),
+                                                subpage_tab_index: crate::protocol::status::ui::ui_subpage_tab_index_get(guard),
+                                                logs: crate::protocol::status::ui::ui_logs_get(guard),
+                                                log_selected: crate::protocol::status::ui::ui_log_selected_get(guard),
+                                                log_view_offset: crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                log_auto_scroll: crate::protocol::status::ui::ui_log_auto_scroll_get(guard),
+                                                log_clear_pending: crate::protocol::status::ui::ui_log_clear_pending_get(guard),
+                                                input_mode: crate::protocol::status::ui::ui_input_mode_get(guard),
+                                                input_editing: crate::protocol::status::ui::ui_input_editing_get(guard),
+                                                input_buffer: crate::protocol::status::ui::ui_input_buffer_get(guard),
+                                                app_mode: crate::protocol::status::ui::ui_app_mode_get(guard),
+                                                page: crate::protocol::status::ui::ui_pages_last_get(guard),
                                             };
                                             guard
                                                 .per_port
@@ -221,11 +238,13 @@ fn run_app(
                                         }
                                     }
                                 }
-                                guard.ui.mode_overlay_active = false;
+                                crate::protocol::status::ui::ui_mode_overlay_active_set(
+                                    guard, false,
+                                );
                             }
                             _ => {}
                         }
-                        guard.ui.error = None;
+                        crate::protocol::status::ui::ui_error_set(guard, None);
                         Ok(())
                     });
                     // Redraw immediately (snapshot)
@@ -240,8 +259,7 @@ fn run_app(
 
                 // Re-evaluate editing after potential selector handling
                 let is_editing = crate::protocol::status::status_rw::read_status(&app, |g| {
-                    Ok(g.ui
-                        .subpage_form
+                    Ok(crate::protocol::status::ui::ui_subpage_form_get(g)
                         .as_ref()
                         .map(|f| f.editing)
                         .unwrap_or(false))
@@ -489,9 +507,12 @@ fn run_app(
                             }
                         }
                         if let Some(msg) = pending_error {
-                            guard.ui.error = Some((msg.into(), chrono::Local::now()));
+                            crate::protocol::status::ui::ui_error_set(
+                                guard,
+                                Some((msg.into(), chrono::Local::now())),
+                            );
                         } else {
-                            guard.ui.error = None;
+                            crate::protocol::status::ui::ui_error_set(guard, None);
                         }
                         Ok(())
                     });
@@ -507,17 +528,32 @@ fn run_app(
                 let _ = crate::protocol::status::status_rw::write_status(&app, |guard| {
                     if is_log_tab(&guard) {
                         use crossterm::event::KeyCode as KC;
-                        if guard.ui.input_editing {
+                        if crate::protocol::status::ui::ui_input_editing_get(guard) {
                             match key.code {
                                 KC::Char(c) => {
-                                    if guard.ui.input_mode == InputMode::Ascii {
-                                        guard.ui.input_buffer.push(c);
+                                    if crate::protocol::status::ui::ui_input_mode_get(guard)
+                                        == InputMode::Ascii
+                                    {
+                                        let mut buf =
+                                            crate::protocol::status::ui::ui_input_buffer_get(guard);
+                                        buf.push(c);
+                                        crate::protocol::status::ui::ui_input_buffer_set(
+                                            guard, buf,
+                                        );
                                     } else if c.is_ascii_hexdigit() || c.is_whitespace() {
-                                        guard.ui.input_buffer.push(c);
+                                        let mut buf =
+                                            crate::protocol::status::ui::ui_input_buffer_get(guard);
+                                        buf.push(c);
+                                        crate::protocol::status::ui::ui_input_buffer_set(
+                                            guard, buf,
+                                        );
                                     }
                                 }
                                 KC::Backspace => {
-                                    guard.ui.input_buffer.pop();
+                                    let mut buf =
+                                        crate::protocol::status::ui::ui_input_buffer_get(guard);
+                                    buf.pop();
+                                    crate::protocol::status::ui::ui_input_buffer_set(guard, buf);
                                 }
                                 KC::Enter => {
                                     let parsed = crate::protocol::status::ParsedRequest {
@@ -530,75 +566,101 @@ fn run_app(
                                     };
                                     let entry = LogEntry {
                                         when: chrono::Local::now(),
-                                        raw: guard.ui.input_buffer.clone(),
+                                        raw: crate::protocol::status::ui::ui_input_buffer_get(
+                                            guard,
+                                        ),
                                         parsed: Some(parsed),
                                     };
-                                    // inline Status::append_log
+                                    // inline Status::append_log (migrated to accessors)
                                     const MAX: usize = 1000;
-                                    guard.ui.logs.push(entry);
-                                    if guard.ui.logs.len() > MAX {
-                                        let excess = guard.ui.logs.len() - MAX;
-                                        guard.ui.logs.drain(0..excess);
-                                        if guard.ui.log_selected >= guard.ui.logs.len() {
-                                            guard.ui.log_selected =
-                                                guard.ui.logs.len().saturating_sub(1);
+                                    let mut logs = crate::protocol::status::ui::ui_logs_get(guard);
+                                    logs.push(entry);
+                                    if logs.len() > MAX {
+                                        let excess = logs.len() - MAX;
+                                        logs.drain(0..excess);
+                                        let log_sel =
+                                            crate::protocol::status::ui::ui_log_selected_get(guard);
+                                        if log_sel >= logs.len() {
+                                            crate::protocol::status::ui::ui_log_selected_set(
+                                                guard,
+                                                logs.len().saturating_sub(1),
+                                            );
                                         }
                                     }
-                                    if guard.ui.log_auto_scroll {
-                                        if guard.ui.logs.is_empty() {
-                                            guard.ui.log_view_offset = 0;
+                                    crate::protocol::status::ui::ui_logs_set(guard, logs);
+                                    if crate::protocol::status::ui::ui_log_auto_scroll_get(guard) {
+                                        let logs2 = crate::protocol::status::ui::ui_logs_get(guard);
+                                        if logs2.is_empty() {
+                                            crate::protocol::status::ui::ui_log_view_offset_set(
+                                                guard, 0,
+                                            );
                                         } else {
-                                            guard.ui.log_view_offset =
-                                                guard.ui.logs.len().saturating_sub(1);
-                                            guard.ui.log_selected =
-                                                guard.ui.logs.len().saturating_sub(1);
+                                            let last = logs2.len().saturating_sub(1);
+                                            crate::protocol::status::ui::ui_log_view_offset_set(
+                                                guard, last,
+                                            );
+                                            crate::protocol::status::ui::ui_log_selected_set(
+                                                guard, last,
+                                            );
                                         }
                                     }
-                                    guard.ui.input_buffer.clear();
-                                    guard.ui.input_editing = false;
-                                }
-                                KC::Esc => {
-                                    guard.ui.input_buffer.clear();
-                                    guard.ui.input_editing = false;
+                                    crate::protocol::status::ui::ui_input_buffer_set(
+                                        guard,
+                                        String::new(),
+                                    );
+                                    crate::protocol::status::ui::ui_input_editing_set(guard, false);
+                                    return Ok(());
                                 }
                                 _ => {}
                             }
-                            guard.ui.error = None;
-                            return Ok(());
                         } else {
                             // Not editing: allow quick toggles for edit / mode
                             match key.code {
                                 KC::Enter | KC::Char('i') => {
-                                    guard.ui.input_editing = true;
-                                    guard.ui.error = None;
+                                    crate::protocol::status::ui::ui_input_editing_set(guard, true);
+                                    crate::protocol::status::ui::ui_error_set(guard, None);
                                     return Ok(());
                                 }
                                 KC::Char('m') => {
-                                    guard.ui.input_mode = match guard.ui.input_mode {
-                                        InputMode::Ascii => InputMode::Hex,
-                                        InputMode::Hex => InputMode::Ascii,
-                                    };
-                                    guard.ui.error = None;
+                                    crate::protocol::status::ui::ui_input_mode_set(
+                                        guard,
+                                        match crate::protocol::status::ui::ui_input_mode_get(guard)
+                                        {
+                                            InputMode::Ascii => InputMode::Hex,
+                                            InputMode::Hex => InputMode::Ascii,
+                                        },
+                                    );
+                                    crate::protocol::status::ui::ui_error_set(guard, None);
                                     return Ok(());
                                 }
                                 KC::Up | KC::Char('k') => {
-                                    let total = guard.ui.logs.len();
+                                    let total =
+                                        crate::protocol::status::ui::ui_logs_get(guard).len();
                                     if total > 0 {
-                                        if guard.ui.log_selected == 0 {
-                                            guard.ui.log_selected = total - 1;
+                                        let mut sel =
+                                            crate::protocol::status::ui::ui_log_selected_get(guard);
+                                        if sel == 0 {
+                                            sel = total.saturating_sub(1);
                                         } else {
-                                            guard.ui.log_selected -= 1;
+                                            sel = sel.saturating_sub(1);
                                         }
+                                        crate::protocol::status::ui::ui_log_selected_set(
+                                            guard, sel,
+                                        );
                                         let term_h =
                                             terminal.size().map(|r| r.height).unwrap_or(24);
-                                        if !guard.ui.logs.is_empty() {
-                                            let bottom_len = if guard.ui.error.is_some()
-                                                || guard.ui.subpage_active
-                                            {
-                                                2
-                                            } else {
-                                                1
-                                            };
+                                        if !crate::protocol::status::ui::ui_logs_get(guard)
+                                            .is_empty()
+                                        {
+                                            let bottom_len =
+                                                if crate::protocol::status::ui::ui_error_get(guard)
+                                                    .is_some()
+                                                    || guard.ui.subpage_active
+                                                {
+                                                    2
+                                                } else {
+                                                    1
+                                                };
                                             let logs_area_h =
                                                 (term_h as usize).saturating_sub(bottom_len + 5);
                                             let inner_h = logs_area_h.saturating_sub(2);
@@ -606,61 +668,70 @@ fn run_app(
                                                 1usize,
                                                 inner_h / crate::protocol::status::LOG_GROUP_HEIGHT,
                                             );
-                                            let bottom = if guard.ui.log_auto_scroll {
-                                                guard.ui.logs.len().saturating_sub(1)
+                                            let bottom = if crate::protocol::status::ui::ui_log_auto_scroll_get(guard) {
+                                                crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1)
                                             } else {
                                                 std::cmp::min(
-                                                    guard.ui.log_view_offset,
-                                                    guard.ui.logs.len().saturating_sub(1),
+                                                    crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                    crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1),
                                                 )
                                             };
                                             let top =
                                                 (bottom + 1).saturating_sub(groups_per_screen);
-                                            if guard.ui.log_selected < top {
-                                                guard.ui.log_auto_scroll = false;
+                                            if crate::protocol::status::ui::ui_log_selected_get(guard) < top {
+                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
                                                 let half = groups_per_screen / 2;
                                                 let new_bottom = std::cmp::min(
-                                                    guard.ui.logs.len().saturating_sub(1),
-                                                    guard.ui.log_selected + half,
+                                                    crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1),
+                                                    crate::protocol::status::ui::ui_log_selected_get(guard) + half,
                                                 );
-                                                guard.ui.log_view_offset = new_bottom;
-                                            } else if guard.ui.log_selected > bottom {
-                                                guard.ui.log_auto_scroll = false;
-                                                guard.ui.log_view_offset = guard.ui.log_selected;
+                                                crate::protocol::status::ui::ui_log_view_offset_set(guard, new_bottom);
+                                            } else if crate::protocol::status::ui::ui_log_selected_get(guard) > bottom {
+                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
+                                                crate::protocol::status::ui::ui_log_view_offset_set(guard, crate::protocol::status::ui::ui_log_selected_get(guard));
                                             }
                                         }
                                     }
-                                    guard.ui.error = None;
+                                    crate::protocol::status::ui::ui_error_set(guard, None);
                                     return Ok(());
                                 }
                                 KC::Char('c') => {
-                                    if !guard.ui.log_clear_pending {
-                                        guard.ui.log_clear_pending = true;
+                                    if !crate::protocol::status::ui::ui_log_clear_pending_get(guard)
+                                    {
+                                        crate::protocol::status::ui::ui_log_clear_pending_set(
+                                            guard, true,
+                                        );
                                     } else {
-                                        guard.ui.logs.clear();
-                                        guard.ui.log_selected = 0;
-                                        guard.ui.log_view_offset = 0;
-                                        guard.ui.log_auto_scroll = true;
-                                        guard.ui.log_clear_pending = false;
+                                        crate::protocol::status::ui::ui_logs_set(guard, Vec::new());
+                                        crate::protocol::status::ui::ui_log_selected_set(guard, 0);
+                                        crate::protocol::status::ui::ui_log_view_offset_set(
+                                            guard, 0,
+                                        );
+                                        crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                            guard, true,
+                                        );
+                                        crate::protocol::status::ui::ui_log_clear_pending_set(
+                                            guard, false,
+                                        );
                                         // inline save_current_port_state
                                         if guard.ui.selected < guard.ports.list.len() {
                                             if let Some(info) =
                                                 guard.ports.list.get(guard.ui.selected)
                                             {
                                                 let snap = crate::protocol::status::PerPortState {
-                                                    subpage_active: guard.ui.subpage_active,
-                                                    subpage_form: guard.ui.subpage_form.clone(),
-                                                    subpage_tab_index: guard.ui.subpage_tab_index,
-                                                    logs: guard.ui.logs.clone(),
-                                                    log_selected: guard.ui.log_selected,
-                                                    log_view_offset: guard.ui.log_view_offset,
-                                                    log_auto_scroll: guard.ui.log_auto_scroll,
-                                                    log_clear_pending: guard.ui.log_clear_pending,
-                                                    input_mode: guard.ui.input_mode,
-                                                    input_editing: guard.ui.input_editing,
-                                                    input_buffer: guard.ui.input_buffer.clone(),
-                                                    app_mode: guard.ui.app_mode,
-                                                    page: guard.ui.pages.last().cloned(),
+                                                    subpage_active: crate::protocol::status::ui::ui_subpage_active_get(guard),
+                                                    subpage_form: crate::protocol::status::ui::ui_subpage_form_get(guard),
+                                                    subpage_tab_index: crate::protocol::status::ui::ui_subpage_tab_index_get(guard),
+                                                    logs: crate::protocol::status::ui::ui_logs_get(guard),
+                                                    log_selected: crate::protocol::status::ui::ui_log_selected_get(guard),
+                                                    log_view_offset: crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                    log_auto_scroll: crate::protocol::status::ui::ui_log_auto_scroll_get(guard),
+                                                    log_clear_pending: crate::protocol::status::ui::ui_log_clear_pending_get(guard),
+                                                    input_mode: crate::protocol::status::ui::ui_input_mode_get(guard),
+                                                    input_editing: crate::protocol::status::ui::ui_input_editing_get(guard),
+                                                    input_buffer: crate::protocol::status::ui::ui_input_buffer_get(guard),
+                                                    app_mode: crate::protocol::status::ui::ui_app_mode_get(guard),
+                                                    page: crate::protocol::status::ui::ui_pages_last_get(guard),
                                                 };
                                                 guard
                                                     .per_port
@@ -669,18 +740,26 @@ fn run_app(
                                             }
                                         }
                                     }
-                                    guard.ui.error = None;
+                                    crate::protocol::status::ui::ui_error_set(guard, None);
                                     return Ok(());
                                 }
                                 KC::Down | KC::Char('j') => {
-                                    let total = guard.ui.logs.len();
+                                    let total =
+                                        crate::protocol::status::ui::ui_logs_get(guard).len();
                                     if total > 0 {
-                                        guard.ui.log_selected = (guard.ui.log_selected + 1) % total;
+                                        let sel =
+                                            crate::protocol::status::ui::ui_log_selected_get(guard);
+                                        let sel = (sel + 1) % total;
+                                        crate::protocol::status::ui::ui_log_selected_set(
+                                            guard, sel,
+                                        );
                                         let term_h =
                                             terminal.size().map(|r| r.height).unwrap_or(24);
-                                        if !guard.ui.logs.is_empty() {
-                                            let bottom_len = if guard.ui.error.is_some()
-                                                || guard.ui.subpage_active
+                                        if !crate::protocol::status::ui::ui_logs_get(guard)
+                                            .is_empty()
+                                        {
+                                            let bottom_len = if crate::protocol::status::ui::ui_error_get(guard).is_some()
+                                                || crate::protocol::status::ui::ui_subpage_active_get(guard)
                                             {
                                                 2
                                             } else {
@@ -693,31 +772,31 @@ fn run_app(
                                                 1usize,
                                                 inner_h / crate::protocol::status::LOG_GROUP_HEIGHT,
                                             );
-                                            let bottom = if guard.ui.log_auto_scroll {
-                                                guard.ui.logs.len().saturating_sub(1)
-                                            } else {
-                                                std::cmp::min(
-                                                    guard.ui.log_view_offset,
-                                                    guard.ui.logs.len().saturating_sub(1),
-                                                )
-                                            };
+                                            let bottom = if crate::protocol::status::ui::ui_log_auto_scroll_get(guard) {
+                                                            crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1)
+                                                        } else {
+                                                            std::cmp::min(
+                                                                crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                                crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1),
+                                                            )
+                                                        };
                                             let top =
                                                 (bottom + 1).saturating_sub(groups_per_screen);
-                                            if guard.ui.log_selected < top {
-                                                guard.ui.log_auto_scroll = false;
-                                                let half = groups_per_screen / 2;
-                                                let new_bottom = std::cmp::min(
-                                                    guard.ui.logs.len().saturating_sub(1),
-                                                    guard.ui.log_selected + half,
-                                                );
-                                                guard.ui.log_view_offset = new_bottom;
-                                            } else if guard.ui.log_selected > bottom {
-                                                guard.ui.log_auto_scroll = false;
-                                                guard.ui.log_view_offset = guard.ui.log_selected;
-                                            }
+                                            if crate::protocol::status::ui::ui_log_selected_get(guard) < top {
+                                                            crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
+                                                            let half = groups_per_screen / 2;
+                                                            let new_bottom = std::cmp::min(
+                                                                crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1),
+                                                                crate::protocol::status::ui::ui_log_selected_get(guard) + half,
+                                                            );
+                                                            crate::protocol::status::ui::ui_log_view_offset_set(guard, new_bottom);
+                                                        } else if crate::protocol::status::ui::ui_log_selected_get(guard) > bottom {
+                                                            crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
+                                                            crate::protocol::status::ui::ui_log_view_offset_set(guard, crate::protocol::status::ui::ui_log_selected_get(guard));
+                                                        }
                                         }
                                     }
-                                    guard.ui.error = None;
+                                    crate::protocol::status::ui::ui_error_set(guard, None);
                                     return Ok(());
                                 }
                                 _ => {}
@@ -727,12 +806,15 @@ fn run_app(
                         // Global mode cycle (m) when not in log tab quick-toggle context
                         use crossterm::event::KeyCode as KC;
                         if key.code == KC::Char('m') {
-                            guard.ui.mode_overlay_active = true;
-                            guard.ui.mode_overlay_index = match guard.ui.app_mode {
-                                AppMode::Modbus => ModeOverlayIndex::Modbus,
-                                AppMode::Mqtt => ModeOverlayIndex::Mqtt,
-                            };
-                            guard.ui.error = None;
+                            crate::protocol::status::ui::ui_mode_overlay_active_set(guard, true);
+                            crate::protocol::status::ui::ui_mode_overlay_index_set(
+                                guard,
+                                match crate::protocol::status::ui::ui_app_mode_get(guard) {
+                                    AppMode::Modbus => ModeOverlayIndex::Modbus,
+                                    AppMode::Mqtt => ModeOverlayIndex::Mqtt,
+                                },
+                            );
+                            crate::protocol::status::ui::ui_error_set(guard, None);
                             return Ok(());
                         }
                     }
@@ -743,7 +825,7 @@ fn run_app(
                 let handled = crate::protocol::status::status_rw::write_status(&app, |guard| {
                     let handled = crate::tui::ui::pages::handle_key_in_subpage(key, guard, &bus);
                     if handled {
-                        guard.ui.error = None;
+                        crate::protocol::status::ui::ui_error_set(guard, None);
                     }
                     Ok(handled)
                 })
@@ -792,7 +874,7 @@ fn run_app(
                                         if guard.ui.subpage_active {
                                             guard.ui.subpage_active = false;
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -804,23 +886,32 @@ fn run_app(
                                         let state = guard
                                             .ports
                                             .states
-                                            .get(guard.ui.selected)
+                                            .get(crate::protocol::status::ui::ui_selected_get(
+                                                guard,
+                                            ))
                                             .cloned()
                                             .unwrap_or(crate::protocol::status::PortState::Free);
                                         if state
                                             == crate::protocol::status::PortState::OccupiedByThis
                                         {
-                                            guard.ui.subpage_active = true;
-                                            guard.ui.subpage_tab_index = SubpageTab::Config;
+                                            crate::protocol::status::ui::ui_subpage_active_set(
+                                                guard, true,
+                                            );
+                                            crate::protocol::status::ui::ui_subpage_tab_index_set(
+                                                guard,
+                                                SubpageTab::Config,
+                                            );
                                             guard.init_subpage_form();
                                         } else {
                                             let about_idx =
                                                 guard.ports.list.len().saturating_add(2);
                                             if guard.ui.selected == about_idx {
-                                                guard.ui.subpage_active = true;
+                                                crate::protocol::status::ui::ui_subpage_active_set(
+                                                    guard, true,
+                                                );
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -831,16 +922,22 @@ fn run_app(
                                     |guard| {
                                         if guard.ui.subpage_active {
                                             if is_log_tab(&guard) {
-                                                let total = guard.ui.logs.len();
+                                                let total =
+                                                    crate::protocol::status::ui::ui_logs_get(guard)
+                                                        .len();
                                                 if total > 0 {
-                                                    guard.ui.log_selected =
-                                                        (guard.ui.log_selected + 1) % total;
+                                                    let sel = (crate::protocol::status::ui::ui_log_selected_get(guard) + 1) % total;
+                                                    crate::protocol::status::ui::ui_log_selected_set(guard, sel);
                                                     let term_h = terminal
                                                         .size()
                                                         .map(|r| r.height)
                                                         .unwrap_or(24);
-                                                    if !guard.ui.logs.is_empty() {
-                                                        let bottom_len = if guard.ui.error.is_some()
+                                                    if !crate::protocol::status::ui::ui_logs_get(
+                                                        guard,
+                                                    )
+                                                    .is_empty()
+                                                    {
+                                                        let bottom_len = if crate::protocol::status::ui::ui_error_get(guard).is_some()
                                                             || guard.ui.subpage_active
                                                         {
                                                             2
@@ -851,36 +948,31 @@ fn run_app(
                                                             .saturating_sub(bottom_len + 5);
                                                         let inner_h = logs_area_h.saturating_sub(2);
                                                         let groups_per_screen = std::cmp::max(1usize, inner_h / crate::protocol::status::LOG_GROUP_HEIGHT);
-                                                        let bottom = if guard.ui.log_auto_scroll {
-                                                            guard.ui.logs.len().saturating_sub(1)
+                                                        let bottom = if crate::protocol::status::ui::ui_log_auto_scroll_get(guard) {
+                                                            crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1)
                                                         } else {
                                                             std::cmp::min(
-                                                                guard.ui.log_view_offset,
-                                                                guard
-                                                                    .ui
-                                                                    .logs
+                                                                crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                                crate::protocol::status::ui::ui_logs_get(guard)
                                                                     .len()
                                                                     .saturating_sub(1),
                                                             )
                                                         };
                                                         let top = (bottom + 1)
                                                             .saturating_sub(groups_per_screen);
-                                                        if guard.ui.log_selected < top {
-                                                            guard.ui.log_auto_scroll = false;
+                                                        if crate::protocol::status::ui::ui_log_selected_get(guard) < top {
+                                                            crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
                                                             let half = groups_per_screen / 2;
                                                             let new_bottom = std::cmp::min(
-                                                                guard
-                                                                    .ui
-                                                                    .logs
+                                                                crate::protocol::status::ui::ui_logs_get(guard)
                                                                     .len()
                                                                     .saturating_sub(1),
-                                                                guard.ui.log_selected + half,
+                                                                crate::protocol::status::ui::ui_log_selected_get(guard) + half,
                                                             );
-                                                            guard.ui.log_view_offset = new_bottom;
-                                                        } else if guard.ui.log_selected > bottom {
-                                                            guard.ui.log_auto_scroll = false;
-                                                            guard.ui.log_view_offset =
-                                                                guard.ui.log_selected;
+                                                            crate::protocol::status::ui::ui_log_view_offset_set(guard, new_bottom);
+                                                        } else if crate::protocol::status::ui::ui_log_selected_get(guard) > bottom {
+                                                            crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
+                                                            crate::protocol::status::ui::ui_log_view_offset_set(guard, crate::protocol::status::ui::ui_log_selected_get(guard));
                                                         }
                                                     }
                                                 }
@@ -895,7 +987,10 @@ fn run_app(
                                             } else {
                                                 let about_idx =
                                                     guard.ports.list.len().saturating_add(2);
-                                                if guard.ui.selected == about_idx {
+                                                if crate::protocol::status::ui::ui_selected_get(
+                                                    guard,
+                                                ) == about_idx
+                                                {
                                                     guard.ports.about_view_offset = guard
                                                         .ports
                                                         .about_view_offset
@@ -910,31 +1005,28 @@ fn run_app(
                                                     guard.ports.list.len().saturating_add(3);
                                                 if total != 0 {
                                                     let was_real =
-                                                        guard.ui.selected < guard.ports.list.len();
+                                                        crate::protocol::status::ui::ui_selected_get(
+                                                            guard,
+                                                        )
+                                                            < guard.ports.list.len();
                                                     if was_real {
                                                         // inline save_current_port_state
-                                                        if guard.ui.selected
-                                                            < guard.ports.list.len()
-                                                        {
-                                                            if let Some(info) = guard
-                                                                .ports
-                                                                .list
-                                                                .get(guard.ui.selected)
-                                                            {
+                                                        if crate::protocol::status::ui::ui_selected_get(guard) < guard.ports.list.len() {
+                                                            if let Some(info) = guard.ports.list.get(crate::protocol::status::ui::ui_selected_get(guard)) {
                                                                 let snap = crate::protocol::status::PerPortState {
-                                                                    subpage_active: guard.ui.subpage_active,
-                                                                    subpage_form: guard.ui.subpage_form.clone(),
-                                                                    subpage_tab_index: guard.ui.subpage_tab_index,
-                                                                    logs: guard.ui.logs.clone(),
-                                                                    log_selected: guard.ui.log_selected,
-                                                                    log_view_offset: guard.ui.log_view_offset,
-                                                                    log_auto_scroll: guard.ui.log_auto_scroll,
-                                                                    log_clear_pending: guard.ui.log_clear_pending,
-                                                                    input_mode: guard.ui.input_mode,
-                                                                    input_editing: guard.ui.input_editing,
-                                                                    input_buffer: guard.ui.input_buffer.clone(),
+                                                                    subpage_active: crate::protocol::status::ui::ui_subpage_active_get(guard),
+                                                                    subpage_form: crate::protocol::status::ui::ui_subpage_form_get(guard),
+                                                                    subpage_tab_index: crate::protocol::status::ui::ui_subpage_tab_index_get(guard),
+                                                                    logs: crate::protocol::status::ui::ui_logs_get(guard),
+                                                                    log_selected: crate::protocol::status::ui::ui_log_selected_get(guard),
+                                                                    log_view_offset: crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                                    log_auto_scroll: crate::protocol::status::ui::ui_log_auto_scroll_get(guard),
+                                                                    log_clear_pending: crate::protocol::status::ui::ui_log_clear_pending_get(guard),
+                                                                    input_mode: crate::protocol::status::ui::ui_input_mode_get(guard),
+                                                                    input_editing: crate::protocol::status::ui::ui_input_editing_get(guard),
+                                                                    input_buffer: crate::protocol::status::ui::ui_input_buffer_get(guard),
                                                                     app_mode: guard.ui.app_mode,
-                                                                    page: guard.ui.pages.last().cloned(),
+                                                                    page: crate::protocol::status::ui::ui_pages_last_get(guard),
                                                                 };
                                                                 guard.per_port.states.insert(
                                                                     info.port_name.clone(),
@@ -943,13 +1035,16 @@ fn run_app(
                                                             }
                                                         }
                                                     }
-                                                    guard.ui.selected =
-                                                        (guard.ui.selected + 1) % total;
-                                                    if guard.ui.selected < guard.ports.list.len() {
+                                                    crate::protocol::status::ui::ui_selected_set(
+                                                        guard,
+                                                        (crate::protocol::status::ui::ui_selected_get(guard) + 1) % total,
+                                                    );
+                                                    if crate::protocol::status::ui::ui_selected_get(
+                                                        guard,
+                                                    ) < guard.ports.list.len()
+                                                    {
                                                         // inline load_current_port_state
-                                                        if let Some(info) =
-                                                            guard.ports.list.get(guard.ui.selected)
-                                                        {
+                                                        if let Some(info) = guard.ports.list.get(crate::protocol::status::ui::ui_selected_get(guard)) {
                                                             if let Some(snap) = guard
                                                                 .per_port
                                                                 .states
@@ -966,30 +1061,30 @@ fn run_app(
                                                                             .last_mut()
                                                                             .unwrap() = page;
                                                                     }
-                                                                    match guard.ui.pages.last().cloned().unwrap_or_default() {
+                                                                    match crate::protocol::status::ui::ui_pages_last_get(guard).unwrap_or_default() {
                                                                         crate::protocol::status::Page::Entry { selected, input_mode, input_editing, input_buffer, app_mode } => {
-                                                                            guard.ui.selected = selected;
-                                                                            guard.ui.input_mode = input_mode;
-                                                                            guard.ui.input_editing = input_editing;
-                                                                            guard.ui.input_buffer = input_buffer;
-                                                                            guard.ui.app_mode = app_mode;
-                                                                            guard.ui.subpage_active = false;
-                                                                            guard.ui.subpage_form = None;
+                                                                            crate::protocol::status::ui::ui_selected_set(guard, selected);
+                                                                            crate::protocol::status::ui::ui_input_mode_set(guard, input_mode);
+                                                                            crate::protocol::status::ui::ui_input_editing_set(guard, input_editing);
+                                                                            crate::protocol::status::ui::ui_input_buffer_set(guard, input_buffer);
+                                                                            crate::protocol::status::ui::ui_app_mode_set(guard, app_mode);
+                                                                            crate::protocol::status::ui::ui_subpage_active_set(guard, false);
+                                                                            crate::protocol::status::ui::ui_subpage_form_set(guard, None);
                                                                         }
                                                                         crate::protocol::status::Page::Modbus { selected, subpage_active, subpage_form, subpage_tab_index, logs, log_selected, log_view_offset, log_auto_scroll, log_clear_pending, input_mode, input_editing, input_buffer, app_mode } => {
-                                                                            guard.ui.selected = selected;
-                                                                            guard.ui.subpage_active = subpage_active;
-                                                                            guard.ui.subpage_form = subpage_form;
-                                                                            guard.ui.subpage_tab_index = subpage_tab_index;
-                                                                            guard.ui.logs = logs;
-                                                                            guard.ui.log_selected = log_selected;
-                                                                            guard.ui.log_view_offset = log_view_offset;
-                                                                            guard.ui.log_auto_scroll = log_auto_scroll;
-                                                                            guard.ui.log_clear_pending = log_clear_pending;
-                                                                            guard.ui.input_mode = input_mode;
-                                                                            guard.ui.input_editing = input_editing;
-                                                                            guard.ui.input_buffer = input_buffer;
-                                                                            guard.ui.app_mode = app_mode;
+                                                                            crate::protocol::status::ui::ui_selected_set(guard, selected);
+                                                                            crate::protocol::status::ui::ui_subpage_active_set(guard, subpage_active);
+                                                                            crate::protocol::status::ui::ui_subpage_form_set(guard, subpage_form);
+                                                                            crate::protocol::status::ui::ui_subpage_tab_index_set(guard, subpage_tab_index);
+                                                                            crate::protocol::status::ui::ui_logs_set(guard, logs);
+                                                                            crate::protocol::status::ui::ui_log_selected_set(guard, log_selected);
+                                                                            crate::protocol::status::ui::ui_log_view_offset_set(guard, log_view_offset);
+                                                                            crate::protocol::status::ui::ui_log_auto_scroll_set(guard, log_auto_scroll);
+                                                                            crate::protocol::status::ui::ui_log_clear_pending_set(guard, log_clear_pending);
+                                                                            crate::protocol::status::ui::ui_input_mode_set(guard, input_mode);
+                                                                            crate::protocol::status::ui::ui_input_editing_set(guard, input_editing);
+                                                                            crate::protocol::status::ui::ui_input_buffer_set(guard, input_buffer);
+                                                                            crate::protocol::status::ui::ui_app_mode_set(guard, app_mode);
                                                                         }
                                                                     }
                                                                 } else {
@@ -999,15 +1094,11 @@ fn run_app(
                                                                         snap.subpage_form;
                                                                     guard.ui.subpage_tab_index =
                                                                         snap.subpage_tab_index;
-                                                                    guard.ui.logs = snap.logs;
-                                                                    guard.ui.log_selected =
-                                                                        snap.log_selected;
-                                                                    guard.ui.log_view_offset =
-                                                                        snap.log_view_offset;
-                                                                    guard.ui.log_auto_scroll =
-                                                                        snap.log_auto_scroll;
-                                                                    guard.ui.log_clear_pending =
-                                                                        snap.log_clear_pending;
+                                                                    crate::protocol::status::ui::ui_logs_set(guard, snap.logs);
+                                                                    crate::protocol::status::ui::ui_log_selected_set(guard, snap.log_selected);
+                                                                    crate::protocol::status::ui::ui_log_view_offset_set(guard, snap.log_view_offset);
+                                                                    crate::protocol::status::ui::ui_log_auto_scroll_set(guard, snap.log_auto_scroll);
+                                                                    crate::protocol::status::ui::ui_log_clear_pending_set(guard, snap.log_clear_pending);
                                                                     guard.ui.input_mode =
                                                                         snap.input_mode;
                                                                     guard.ui.input_editing =
@@ -1048,10 +1139,10 @@ fn run_app(
                                                                 guard.ui.subpage_active = false;
                                                                 guard.ui.subpage_form = None;
                                                                 guard.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
-                                                                guard.ui.logs.clear();
-                                                                guard.ui.log_selected = 0;
-                                                                guard.ui.log_view_offset = 0;
-                                                                guard.ui.log_auto_scroll = true;
+                                                                crate::protocol::status::ui::ui_logs_set(guard, Vec::new());
+                                                                crate::protocol::status::ui::ui_log_selected_set(guard, 0);
+                                                                crate::protocol::status::ui::ui_log_view_offset_set(guard, 0);
+                                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, true);
                                                                 guard.ui.input_mode = crate::protocol::status::InputMode::Ascii;
                                                                 guard.ui.input_editing = false;
                                                                 guard.ui.input_buffer.clear();
@@ -1062,7 +1153,7 @@ fn run_app(
                                                 }
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1073,20 +1164,29 @@ fn run_app(
                                     |guard| {
                                         if guard.ui.subpage_active {
                                             if is_log_tab(&guard) {
-                                                let total = guard.ui.logs.len();
+                                                let total =
+                                                    crate::protocol::status::ui::ui_logs_get(guard)
+                                                        .len();
                                                 if total > 0 {
-                                                    if guard.ui.log_selected == 0 {
-                                                        guard.ui.log_selected = total - 1;
+                                                    let mut sel = crate::protocol::status::ui::ui_log_selected_get(guard);
+                                                    if sel == 0 {
+                                                        sel = total.saturating_sub(1);
                                                     } else {
-                                                        guard.ui.log_selected -= 1;
+                                                        sel = sel.saturating_sub(1);
                                                     }
+                                                    crate::protocol::status::ui::ui_log_selected_set(guard, sel);
                                                     let term_h = terminal
                                                         .size()
                                                         .map(|r| r.height)
                                                         .unwrap_or(24);
-                                                    if !guard.ui.logs.is_empty() {
-                                                        let bottom_len = if guard.ui.error.is_some()
-                                                            || guard.ui.subpage_active
+                                                    if !crate::protocol::status::ui::ui_logs_get(
+                                                        guard,
+                                                    )
+                                                    .is_empty()
+                                                    {
+                                                        let bottom_len = if crate::protocol::status::ui::ui_error_get(guard)
+                                                            .is_some()
+                                                            || crate::protocol::status::ui::ui_subpage_active_get(guard)
                                                         {
                                                             2
                                                         } else {
@@ -1096,37 +1196,28 @@ fn run_app(
                                                             .saturating_sub(bottom_len + 5);
                                                         let inner_h = logs_area_h.saturating_sub(2);
                                                         let groups_per_screen = std::cmp::max(1usize, inner_h / crate::protocol::status::LOG_GROUP_HEIGHT);
-                                                        let bottom = if guard.ui.log_auto_scroll {
-                                                            guard.ui.logs.len().saturating_sub(1)
-                                                        } else {
-                                                            std::cmp::min(
-                                                                guard.ui.log_view_offset,
-                                                                guard
-                                                                    .ui
-                                                                    .logs
-                                                                    .len()
-                                                                    .saturating_sub(1),
-                                                            )
-                                                        };
+                                                        let bottom = if crate::protocol::status::ui::ui_log_auto_scroll_get(guard) {
+                                                                crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1)
+                                                            } else {
+                                                                std::cmp::min(
+                                                                    crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                                    crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1),
+                                                                )
+                                                            };
                                                         let top = (bottom + 1)
                                                             .saturating_sub(groups_per_screen);
-                                                        if guard.ui.log_selected < top {
-                                                            guard.ui.log_auto_scroll = false;
-                                                            let half = groups_per_screen / 2;
-                                                            let new_bottom = std::cmp::min(
-                                                                guard
-                                                                    .ui
-                                                                    .logs
-                                                                    .len()
-                                                                    .saturating_sub(1),
-                                                                guard.ui.log_selected + half,
-                                                            );
-                                                            guard.ui.log_view_offset = new_bottom;
-                                                        } else if guard.ui.log_selected > bottom {
-                                                            guard.ui.log_auto_scroll = false;
-                                                            guard.ui.log_view_offset =
-                                                                guard.ui.log_selected;
-                                                        }
+                                                        if crate::protocol::status::ui::ui_log_selected_get(guard) < top {
+                                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
+                                                                let half = groups_per_screen / 2;
+                                                                let new_bottom = std::cmp::min(
+                                                                    crate::protocol::status::ui::ui_logs_get(guard).len().saturating_sub(1),
+                                                                    crate::protocol::status::ui::ui_log_selected_get(guard) + half,
+                                                                );
+                                                                crate::protocol::status::ui::ui_log_view_offset_set(guard, new_bottom);
+                                                            } else if crate::protocol::status::ui::ui_log_selected_get(guard) > bottom {
+                                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, false);
+                                                                crate::protocol::status::ui::ui_log_view_offset_set(guard, crate::protocol::status::ui::ui_log_selected_get(guard));
+                                                            }
                                                     }
                                                 }
                                             } else if let Some(form) =
@@ -1173,16 +1264,16 @@ fn run_app(
                                                                     subpage_active: guard.ui.subpage_active,
                                                                     subpage_form: guard.ui.subpage_form.clone(),
                                                                     subpage_tab_index: guard.ui.subpage_tab_index,
-                                                                    logs: guard.ui.logs.clone(),
-                                                                    log_selected: guard.ui.log_selected,
-                                                                    log_view_offset: guard.ui.log_view_offset,
-                                                                    log_auto_scroll: guard.ui.log_auto_scroll,
-                                                                    log_clear_pending: guard.ui.log_clear_pending,
-                                                                    input_mode: guard.ui.input_mode,
-                                                                    input_editing: guard.ui.input_editing,
-                                                                    input_buffer: guard.ui.input_buffer.clone(),
-                                                                    app_mode: guard.ui.app_mode,
-                                                                    page: guard.ui.pages.last().cloned(),
+                                                                    logs: crate::protocol::status::ui::ui_logs_get(guard),
+                                                                    log_selected: crate::protocol::status::ui::ui_log_selected_get(guard),
+                                                                    log_view_offset: crate::protocol::status::ui::ui_log_view_offset_get(guard),
+                                                                    log_auto_scroll: crate::protocol::status::ui::ui_log_auto_scroll_get(guard),
+                                                                    log_clear_pending: crate::protocol::status::ui::ui_log_clear_pending_get(guard),
+                                                                    input_mode: crate::protocol::status::ui::ui_input_mode_get(guard),
+                                                                    input_editing: crate::protocol::status::ui::ui_input_editing_get(guard),
+                                                                    input_buffer: crate::protocol::status::ui::ui_input_buffer_get(guard),
+                                                                    app_mode: crate::protocol::status::ui::ui_app_mode_get(guard),
+                                                                    page: crate::protocol::status::ui::ui_pages_last_get(guard),
                                                                 };
                                                                 guard.per_port.states.insert(
                                                                     info.port_name.clone(),
@@ -1191,10 +1282,11 @@ fn run_app(
                                                             }
                                                         }
                                                     }
-                                                    if guard.ui.selected == 0 {
-                                                        guard.ui.selected = total - 1;
+                                                    let cur = crate::protocol::status::ui::ui_selected_get(guard);
+                                                    if cur == 0 {
+                                                        crate::protocol::status::ui::ui_selected_set(guard, total - 1);
                                                     } else {
-                                                        guard.ui.selected -= 1;
+                                                        crate::protocol::status::ui::ui_selected_set(guard, cur - 1);
                                                     }
                                                     if guard.ui.selected < guard.ports.list.len() {
                                                         // inline load_current_port_state (same as next_visual)
@@ -1232,11 +1324,11 @@ fn run_app(
                                                                             guard.ui.subpage_active = subpage_active;
                                                                             guard.ui.subpage_form = subpage_form;
                                                                             guard.ui.subpage_tab_index = subpage_tab_index;
-                                                                            guard.ui.logs = logs;
-                                                                            guard.ui.log_selected = log_selected;
-                                                                            guard.ui.log_view_offset = log_view_offset;
-                                                                            guard.ui.log_auto_scroll = log_auto_scroll;
-                                                                            guard.ui.log_clear_pending = log_clear_pending;
+                                                                            crate::protocol::status::ui::ui_logs_set(guard, logs);
+                                                                            crate::protocol::status::ui::ui_log_selected_set(guard, log_selected);
+                                                                            crate::protocol::status::ui::ui_log_view_offset_set(guard, log_view_offset);
+                                                                            crate::protocol::status::ui::ui_log_auto_scroll_set(guard, log_auto_scroll);
+                                                                            crate::protocol::status::ui::ui_log_clear_pending_set(guard, log_clear_pending);
                                                                             guard.ui.input_mode = input_mode;
                                                                             guard.ui.input_editing = input_editing;
                                                                             guard.ui.input_buffer = input_buffer;
@@ -1250,15 +1342,11 @@ fn run_app(
                                                                         snap.subpage_form;
                                                                     guard.ui.subpage_tab_index =
                                                                         snap.subpage_tab_index;
-                                                                    guard.ui.logs = snap.logs;
-                                                                    guard.ui.log_selected =
-                                                                        snap.log_selected;
-                                                                    guard.ui.log_view_offset =
-                                                                        snap.log_view_offset;
-                                                                    guard.ui.log_auto_scroll =
-                                                                        snap.log_auto_scroll;
-                                                                    guard.ui.log_clear_pending =
-                                                                        snap.log_clear_pending;
+                                                                    crate::protocol::status::ui::ui_logs_set(guard, snap.logs);
+                                                                    crate::protocol::status::ui::ui_log_selected_set(guard, snap.log_selected);
+                                                                    crate::protocol::status::ui::ui_log_view_offset_set(guard, snap.log_view_offset);
+                                                                    crate::protocol::status::ui::ui_log_auto_scroll_set(guard, snap.log_auto_scroll);
+                                                                    crate::protocol::status::ui::ui_log_clear_pending_set(guard, snap.log_clear_pending);
                                                                     guard.ui.input_mode =
                                                                         snap.input_mode;
                                                                     guard.ui.input_editing =
@@ -1299,10 +1387,10 @@ fn run_app(
                                                                 guard.ui.subpage_active = false;
                                                                 guard.ui.subpage_form = None;
                                                                 guard.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
-                                                                guard.ui.logs.clear();
-                                                                guard.ui.log_selected = 0;
-                                                                guard.ui.log_view_offset = 0;
-                                                                guard.ui.log_auto_scroll = true;
+                                                                crate::protocol::status::ui::ui_logs_set(guard, Vec::new());
+                                                                crate::protocol::status::ui::ui_log_selected_set(guard, 0);
+                                                                crate::protocol::status::ui::ui_log_view_offset_set(guard, 0);
+                                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, true);
                                                                 guard.ui.input_mode = crate::protocol::status::InputMode::Ascii;
                                                                 guard.ui.input_editing = false;
                                                                 guard.ui.input_buffer.clear();
@@ -1313,7 +1401,7 @@ fn run_app(
                                                 }
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1324,16 +1412,18 @@ fn run_app(
                                     |guard| {
                                         if is_log_tab(&guard) {
                                             // inline page_up
-                                            if !guard.ui.logs.is_empty() {
-                                                if guard.ui.log_view_offset > LOG_PAGE_JUMP {
-                                                    guard.ui.log_view_offset = guard
-                                                        .ui
-                                                        .log_view_offset
-                                                        .saturating_sub(LOG_PAGE_JUMP);
+                                            if !crate::protocol::status::ui::ui_logs_get(guard)
+                                                .is_empty()
+                                            {
+                                                let cur = crate::protocol::status::ui::ui_log_view_offset_get(guard);
+                                                if cur > LOG_PAGE_JUMP {
+                                                    crate::protocol::status::ui::ui_log_view_offset_set(guard, cur.saturating_sub(LOG_PAGE_JUMP));
                                                 } else {
-                                                    guard.ui.log_view_offset = 0;
+                                                    crate::protocol::status::ui::ui_log_view_offset_set(guard, 0);
                                                 }
-                                                guard.ui.log_auto_scroll = false;
+                                                crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                                    guard, false,
+                                                );
                                             }
                                         } else {
                                             let about_idx =
@@ -1347,7 +1437,7 @@ fn run_app(
                                                     .saturating_sub(LOG_PAGE_JUMP);
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1358,15 +1448,20 @@ fn run_app(
                                     |guard| {
                                         if is_log_tab(&guard) {
                                             // inline page_down
-                                            if !guard.ui.logs.is_empty() {
+                                            if !crate::protocol::status::ui::ui_logs_get(guard)
+                                                .is_empty()
+                                            {
                                                 let max_bottom =
-                                                    guard.ui.logs.len().saturating_sub(1);
-                                                let new_bottom = (guard.ui.log_view_offset)
-                                                    .saturating_add(LOG_PAGE_JUMP);
-                                                guard.ui.log_view_offset =
+                                                    crate::protocol::status::ui::ui_logs_get(guard)
+                                                        .len()
+                                                        .saturating_sub(1);
+                                                let new_bottom = crate::protocol::status::ui::ui_log_view_offset_get(guard).saturating_add(LOG_PAGE_JUMP);
+                                                let new_bottom =
                                                     std::cmp::min(max_bottom, new_bottom);
-                                                guard.ui.log_auto_scroll =
-                                                    guard.ui.log_view_offset >= max_bottom;
+                                                crate::protocol::status::ui::ui_log_view_offset_set(
+                                                    guard, new_bottom,
+                                                );
+                                                crate::protocol::status::ui::ui_log_auto_scroll_set(guard, crate::protocol::status::ui::ui_log_view_offset_get(guard) >= max_bottom);
                                             }
                                         } else {
                                             let about_idx =
@@ -1380,7 +1475,7 @@ fn run_app(
                                                     .saturating_add(LOG_PAGE_JUMP);
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1390,8 +1485,12 @@ fn run_app(
                                     &app,
                                     |guard| {
                                         if is_log_tab(&guard) {
-                                            guard.ui.log_view_offset = 0;
-                                            guard.ui.log_auto_scroll = false;
+                                            crate::protocol::status::ui::ui_log_view_offset_set(
+                                                guard, 0,
+                                            );
+                                            crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                                guard, false,
+                                            );
                                         } else {
                                             let about_idx =
                                                 guard.ports.list.len().saturating_add(2);
@@ -1401,7 +1500,7 @@ fn run_app(
                                                 guard.ports.about_view_offset = 0;
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1411,10 +1510,16 @@ fn run_app(
                                     &app,
                                     |guard| {
                                         if is_log_tab(&guard) {
-                                            let total = guard.ui.logs.len();
-                                            guard.ui.log_view_offset =
-                                                if total > 0 { total - 1 } else { 0 };
-                                            guard.ui.log_auto_scroll = true;
+                                            let total =
+                                                crate::protocol::status::ui::ui_logs_get(guard)
+                                                    .len();
+                                            crate::protocol::status::ui::ui_log_view_offset_set(
+                                                guard,
+                                                if total > 0 { total - 1 } else { 0 },
+                                            );
+                                            crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                                guard, true,
+                                            );
                                         } else {
                                             let about_idx =
                                                 guard.ports.list.len().saturating_add(2);
@@ -1424,7 +1529,7 @@ fn run_app(
                                                 guard.ports.about_view_offset = 0;
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1434,14 +1539,24 @@ fn run_app(
                                     &app,
                                     |guard| {
                                         if is_log_tab(&guard) {
-                                            guard.ui.log_auto_scroll = !guard.ui.log_auto_scroll;
-                                            if guard.ui.log_auto_scroll {
-                                                let total = guard.ui.logs.len();
-                                                guard.ui.log_view_offset =
-                                                    if total > 0 { total - 1 } else { 0 };
+                                            let cur =
+                                                crate::protocol::status::ui::ui_log_auto_scroll_get(
+                                                    guard,
+                                                );
+                                            crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                                guard, !cur,
+                                            );
+                                            if !cur {
+                                                let total =
+                                                    crate::protocol::status::ui::ui_logs_get(guard)
+                                                        .len();
+                                                crate::protocol::status::ui::ui_log_view_offset_set(
+                                                    guard,
+                                                    if total > 0 { total - 1 } else { 0 },
+                                                );
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1460,10 +1575,12 @@ fn run_app(
                                         if state
                                             == crate::protocol::status::PortState::OccupiedByThis
                                         {
-                                            guard.ui.subpage_active = true;
+                                            crate::protocol::status::ui::ui_subpage_active_set(
+                                                guard, true,
+                                            );
                                             guard.init_subpage_form();
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1491,7 +1608,7 @@ fn run_app(
                                             });
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1503,7 +1620,7 @@ fn run_app(
                                         if let Some(form) = guard.ui.subpage_form.as_mut() {
                                             form.registers.pop();
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1553,7 +1670,7 @@ fn run_app(
                                                 form.edit_confirmed = false;
                                             }
                                         }
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1562,8 +1679,10 @@ fn run_app(
                                 let _ = crate::protocol::status::status_rw::write_status(
                                     &app,
                                     |guard| {
-                                        guard.ui.subpage_active = false;
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_subpage_active_set(
+                                            guard, false,
+                                        );
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1591,7 +1710,7 @@ fn run_app(
                                 let _ = crate::protocol::status::status_rw::write_status(
                                     &app,
                                     |guard| {
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1600,7 +1719,7 @@ fn run_app(
                                 let _ = crate::protocol::status::status_rw::write_status(
                                     &app,
                                     |guard| {
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
@@ -1609,7 +1728,7 @@ fn run_app(
                                 let _ = crate::protocol::status::status_rw::write_status(
                                     &app,
                                     |guard| {
-                                        guard.ui.error = None;
+                                        crate::protocol::status::ui::ui_error_set(guard, None);
                                         Ok(())
                                     },
                                 );
