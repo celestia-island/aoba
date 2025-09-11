@@ -274,26 +274,32 @@ impl Status {
         }
         for (target, le) in deferred_logs {
             if let Some(pn) = target {
-                if let Some(ps) = self.per_port.states.get_mut(&pn) {
-                    ps.logs.push(le);
-                }
-            } else {
-                // inline append_log
+                let mut logs = crate::protocol::status::ui::per_port_logs_get(&self, pn.as_str());
+                logs.push(le);
                 const MAX: usize = 1000;
-                self.ui.logs.push(le);
-                if self.ui.logs.len() > MAX {
-                    let excess = self.ui.logs.len() - MAX;
-                    self.ui.logs.drain(0..excess);
-                    if self.ui.log_selected >= self.ui.logs.len() {
-                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
-                    }
+                if logs.len() > MAX {
+                    let excess = logs.len() - MAX;
+                    logs.drain(0..excess);
                 }
-                if self.ui.log_auto_scroll {
-                    if self.ui.logs.is_empty() {
-                        self.ui.log_view_offset = 0;
+                crate::protocol::status::ui::per_port_logs_set(self, pn.as_str(), logs);
+            } else {
+                // append via accessors
+                const MAX: usize = 1000;
+                let mut logs = crate::protocol::status::ui::ui_logs_get(&self);
+                logs.push(le);
+                if logs.len() > MAX {
+                    let excess = logs.len() - MAX;
+                    logs.drain(0..excess);
+                }
+                let len = logs.len();
+                crate::protocol::status::ui::ui_logs_set(self, logs);
+                if crate::protocol::status::ui::ui_log_auto_scroll_get(&self) {
+                    if len == 0 {
+                        crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
                     } else {
-                        self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
-                        self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                        let last = len.saturating_sub(1);
+                        crate::protocol::status::ui::ui_log_view_offset_set(self, last);
+                        crate::protocol::status::ui::ui_log_selected_set(self, last);
                     }
                 }
             }

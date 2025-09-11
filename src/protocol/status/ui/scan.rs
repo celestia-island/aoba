@@ -2,7 +2,7 @@ use chrono::Local;
 
 use crate::{
     protocol::runtime::{PortRuntimeHandle, RuntimeCommand},
-    protocol::status::*,
+    protocol::status::{ui as ui_accessors, *},
 };
 
 impl Status {
@@ -19,7 +19,7 @@ impl Status {
                     subpage_active: self.ui.subpage_active,
                     subpage_form: self.ui.subpage_form.clone(),
                     subpage_tab_index: self.ui.subpage_tab_index,
-                    logs: self.ui.logs.clone(),
+                    logs: crate::protocol::status::ui::ui_logs_get(&self),
                     log_selected: self.ui.log_selected,
                     log_view_offset: self.ui.log_view_offset,
                     log_auto_scroll: self.ui.log_auto_scroll,
@@ -28,7 +28,7 @@ impl Status {
                     input_editing: self.ui.input_editing,
                     input_buffer: self.ui.input_buffer.clone(),
                     app_mode: self.ui.app_mode,
-                    page: self.ui.pages.last().cloned(),
+                    page: ui_accessors::ui_pages_last_get(&self),
                 };
                 self.per_port.states.insert(info.port_name.clone(), snap);
             }
@@ -174,11 +174,23 @@ impl Status {
                                     self.ui.subpage_active = subpage_active;
                                     self.ui.subpage_form = subpage_form;
                                     self.ui.subpage_tab_index = subpage_tab_index;
-                                    self.ui.logs = logs;
-                                    self.ui.log_selected = log_selected;
-                                    self.ui.log_view_offset = log_view_offset;
-                                    self.ui.log_auto_scroll = log_auto_scroll;
-                                    self.ui.log_clear_pending = log_clear_pending;
+                                    crate::protocol::status::ui::ui_logs_set(self, logs);
+                                    crate::protocol::status::ui::ui_log_selected_set(
+                                        self,
+                                        log_selected,
+                                    );
+                                    crate::protocol::status::ui::ui_log_view_offset_set(
+                                        self,
+                                        log_view_offset,
+                                    );
+                                    crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                        self,
+                                        log_auto_scroll,
+                                    );
+                                    crate::protocol::status::ui::ui_log_clear_pending_set(
+                                        self,
+                                        log_clear_pending,
+                                    );
                                     self.ui.input_mode = input_mode;
                                     self.ui.input_editing = input_editing;
                                     self.ui.input_buffer = input_buffer;
@@ -189,11 +201,23 @@ impl Status {
                             self.ui.subpage_active = snap.subpage_active;
                             self.ui.subpage_form = snap.subpage_form;
                             self.ui.subpage_tab_index = snap.subpage_tab_index;
-                            self.ui.logs = snap.logs;
-                            self.ui.log_selected = snap.log_selected;
-                            self.ui.log_view_offset = snap.log_view_offset;
-                            self.ui.log_auto_scroll = snap.log_auto_scroll;
-                            self.ui.log_clear_pending = snap.log_clear_pending;
+                            crate::protocol::status::ui::ui_logs_set(self, snap.logs);
+                            crate::protocol::status::ui::ui_log_selected_set(
+                                self,
+                                snap.log_selected,
+                            );
+                            crate::protocol::status::ui::ui_log_view_offset_set(
+                                self,
+                                snap.log_view_offset,
+                            );
+                            crate::protocol::status::ui::ui_log_auto_scroll_set(
+                                self,
+                                snap.log_auto_scroll,
+                            );
+                            crate::protocol::status::ui::ui_log_clear_pending_set(
+                                self,
+                                snap.log_clear_pending,
+                            );
                             self.ui.input_mode = snap.input_mode;
                             self.ui.input_editing = snap.input_editing;
                             self.ui.input_buffer = snap.input_buffer;
@@ -250,10 +274,10 @@ impl Status {
                         self.ui.subpage_active = false;
                         self.ui.subpage_form = None;
                         self.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
-                        self.ui.logs.clear();
-                        self.ui.log_selected = 0;
-                        self.ui.log_view_offset = 0;
-                        self.ui.log_auto_scroll = true;
+                        crate::protocol::status::ui::ui_logs_set(self, Vec::new());
+                        crate::protocol::status::ui::ui_log_selected_set(self, 0);
+                        crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
+                        crate::protocol::status::ui::ui_log_auto_scroll_set(self, true);
                         self.ui.input_mode = crate::protocol::status::InputMode::Ascii;
                         self.ui.input_editing = false;
                         self.ui.input_buffer.clear();

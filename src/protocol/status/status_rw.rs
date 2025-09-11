@@ -114,11 +114,11 @@ mod tests {
                     st.ui.subpage_active = subpage_active;
                     st.ui.subpage_form = subpage_form;
                     st.ui.subpage_tab_index = subpage_tab_index;
-                    st.ui.logs = logs;
-                    st.ui.log_selected = log_selected;
-                    st.ui.log_view_offset = log_view_offset;
-                    st.ui.log_auto_scroll = log_auto_scroll;
-                    st.ui.log_clear_pending = log_clear_pending;
+                    crate::protocol::status::ui::ui_logs_set(st, logs);
+                    crate::protocol::status::ui::ui_log_selected_set(st, log_selected);
+                    crate::protocol::status::ui::ui_log_view_offset_set(st, log_view_offset);
+                    crate::protocol::status::ui::ui_log_auto_scroll_set(st, log_auto_scroll);
+                    crate::protocol::status::ui::ui_log_clear_pending_set(st, log_clear_pending);
                     st.ui.input_mode = input_mode;
                     st.ui.input_editing = input_editing;
                     st.ui.input_buffer = input_buffer;

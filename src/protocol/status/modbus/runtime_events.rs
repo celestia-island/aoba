@@ -71,9 +71,24 @@ impl Status {
                             if idx == selected {
                                 pending_logs.push(recv_le);
                                 pending_logs.push(sent_le);
-                            } else if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
-                                ps.logs.push(recv_le);
-                                ps.logs.push(sent_le);
+                            } else {
+                                let mut logs = crate::protocol::status::ui::per_port_logs_get(
+                                    &self,
+                                    pname.as_str(),
+                                );
+                                logs.push(recv_le);
+                                logs.push(sent_le);
+                                // trim to MAX if needed
+                                const MAX: usize = 1000;
+                                if logs.len() > MAX {
+                                    let excess = logs.len() - MAX;
+                                    logs.drain(0..excess);
+                                }
+                                crate::protocol::status::ui::per_port_logs_set(
+                                    self,
+                                    pname.as_str(),
+                                    logs,
+                                );
                             }
                             consumed = true;
                         }
@@ -265,9 +280,21 @@ impl Status {
                         if idx == selected {
                             pending_logs.push(unmatched_entry);
                         } else if let Some(ref pname) = port_name {
-                            if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
-                                ps.logs.push(unmatched_entry);
+                            let mut logs = crate::protocol::status::ui::per_port_logs_get(
+                                &self,
+                                pname.as_str(),
+                            );
+                            logs.push(unmatched_entry);
+                            const MAX: usize = 1000;
+                            if logs.len() > MAX {
+                                let excess = logs.len() - MAX;
+                                logs.drain(0..excess);
                             }
+                            crate::protocol::status::ui::per_port_logs_set(
+                                self,
+                                pname.as_str(),
+                                logs,
+                            );
                         }
                     }
                 }
@@ -344,9 +371,15 @@ impl Status {
                     if idx == selected {
                         pending_logs.push(entry);
                     } else if let Some(ref pname) = port_name {
-                        if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
-                            ps.logs.push(entry);
+                        let mut logs =
+                            crate::protocol::status::ui::per_port_logs_get(&self, pname.as_str());
+                        logs.push(entry);
+                        const MAX: usize = 1000;
+                        if logs.len() > MAX {
+                            let excess = logs.len() - MAX;
+                            logs.drain(0..excess);
                         }
+                        crate::protocol::status::ui::per_port_logs_set(self, pname.as_str(), logs);
                     }
                 }
                 RuntimeEvent::Reconfigured(cfg) => {
@@ -365,50 +398,63 @@ impl Status {
                     if idx == selected {
                         pending_logs.push(entry);
                     } else if let Some(ref pname) = port_name {
-                        if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
-                            ps.logs.push(entry);
+                        let mut logs =
+                            crate::protocol::status::ui::per_port_logs_get(&self, pname.as_str());
+                        logs.push(entry);
+                        const MAX: usize = 1000;
+                        if logs.len() > MAX {
+                            let excess = logs.len() - MAX;
+                            logs.drain(0..excess);
                         }
+                        crate::protocol::status::ui::per_port_logs_set(self, pname.as_str(), logs);
                     }
                 }
                 RuntimeEvent::Error(e) => {
                     if idx == selected {
                         pending_error = Some(e);
                     } else if let Some(ref pname) = port_name {
-                        if let Some(ps) = self.per_port.states.get_mut(pname.as_str()) {
-                            ps.logs.push(LogEntry {
-                                when: Local::now(),
-                                raw: format!("Runtime error: {e}"),
-                                parsed: None,
-                            });
+                        let mut logs =
+                            crate::protocol::status::ui::per_port_logs_get(&self, pname.as_str());
+                        logs.push(LogEntry {
+                            when: Local::now(),
+                            raw: format!("Runtime error: {e}"),
+                            parsed: None,
+                        });
+                        const MAX: usize = 1000;
+                        if logs.len() > MAX {
+                            let excess = logs.len() - MAX;
+                            logs.drain(0..excess);
                         }
+                        crate::protocol::status::ui::per_port_logs_set(self, pname.as_str(), logs);
                     }
                 }
                 RuntimeEvent::Stopped => {}
             }
         }
         for l in pending_logs {
-            // inline append_log
+            // append via accessors
             const MAX: usize = 1000;
-            self.ui.logs.push(l);
-            if self.ui.logs.len() > MAX {
-                let excess = self.ui.logs.len() - MAX;
-                self.ui.logs.drain(0..excess);
-                if self.ui.log_selected >= self.ui.logs.len() {
-                    self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
-                }
+            let mut logs = crate::protocol::status::ui::ui_logs_get(&self);
+            logs.push(l);
+            if logs.len() > MAX {
+                let excess = logs.len() - MAX;
+                logs.drain(0..excess);
             }
-            if self.ui.log_auto_scroll {
-                if self.ui.logs.is_empty() {
-                    self.ui.log_view_offset = 0;
+            let len = logs.len();
+            crate::protocol::status::ui::ui_logs_set(self, logs);
+            if crate::protocol::status::ui::ui_log_auto_scroll_get(&self) {
+                if len == 0 {
+                    crate::protocol::status::ui::ui_log_view_offset_set(self, 0);
                 } else {
-                    self.ui.log_view_offset = self.ui.logs.len().saturating_sub(1);
-                    self.ui.log_selected = self.ui.logs.len().saturating_sub(1);
+                    let last = len.saturating_sub(1);
+                    crate::protocol::status::ui::ui_log_view_offset_set(self, last);
+                    crate::protocol::status::ui::ui_log_selected_set(self, last);
                 }
             }
         }
         if let Some(e) = pending_error {
-            // inline set_error
-            self.ui.error = Some((e, Local::now()));
+            // inline set_error via accessor
+            crate::protocol::status::ui::ui_error_set(self, Some((e, Local::now())));
         }
         // Perform deferred syncs from updated form values into per-port slave storage.
         for pn in need_sync_ports {

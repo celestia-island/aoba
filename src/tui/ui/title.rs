@@ -1,3 +1,4 @@
+use crate::protocol::status::ui as ui_accessors;
 use crate::{i18n::lang, protocol::status::Status};
 use ratatui::{prelude::*, widgets::*};
 
@@ -31,9 +32,9 @@ pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
     }
 
     // Title text (center area)
-    let title_text = if app.ui.subpage_active {
-        if !app.ports.list.is_empty() && app.ui.selected < app.ports.list.len() {
-            let p = &app.ports.list[app.ui.selected];
+    let title_text = if ui_accessors::ui_subpage_active_get(app) {
+        if !app.ports.list.is_empty() && ui_accessors::ui_selected_get(app) < app.ports.list.len() {
+            let p = &app.ports.list[ui_accessors::ui_selected_get(app)];
             format!("{} - {}", p.port_name, lang().index.title.as_str())
         } else {
             lang().index.title.as_str().to_string()
