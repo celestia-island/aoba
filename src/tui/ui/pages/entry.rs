@@ -9,11 +9,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{
-    i18n::lang,
-    protocol::status::{ui as ui_accessors, Status},
-    tui::input::Action,
-};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
 
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
@@ -24,11 +20,13 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     hints.push(lang().hotkeys.hint_enter_subpage.as_str().to_string());
 
     // Append quit hint only when allowed (mirror global rule)
-    let in_subpage_editing = ui_accessors::ui_subpage_form_get(app)
+    let in_subpage_editing = app
+        .page
+        .subpage_form
         .as_ref()
         .map(|f| f.editing)
         .unwrap_or(false);
-    let can_quit = !ui_accessors::ui_subpage_active_get(app) && !in_subpage_editing;
+    let can_quit = !app.page.subpage_active && !in_subpage_editing;
     if can_quit {
         hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
@@ -83,11 +81,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         };
 
         // Prefix: two chars to avoid shifting when navigating. Selected shows '> ', else two spaces.
-        let prefix = if i == ui_accessors::ui_selected_get(app) {
-            "> "
-        } else {
-            "  "
-        };
+        let prefix = if i == app.page.selected { "> " } else { "  " };
         let inner = width.saturating_sub(2);
         // Account for prefix width in name column
         let name_w = UnicodeWidthStr::width(name.as_str()) + UnicodeWidthStr::width(prefix);
@@ -105,7 +99,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             Span::raw(spacer),
             Span::styled(state_text, state_style),
         ];
-        if i == ui_accessors::ui_selected_get(app) {
+        if i == app.page.selected {
             // Highlight entire row including prefix
             let styled = spans
                 .into_iter()
@@ -140,13 +134,9 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
 
     for (j, lbl) in extras.into_iter().enumerate() {
         let idx = app.ports.list.len() + j;
-        let prefix = if idx == ui_accessors::ui_selected_get(app) {
-            "> "
-        } else {
-            "  "
-        };
+        let prefix = if idx == app.page.selected { "> " } else { "  " };
         let spans = vec![Span::raw(prefix), Span::raw(lbl)];
-        if idx == ui_accessors::ui_selected_get(app) {
+        if idx == app.page.selected {
             let styled = spans
                 .into_iter()
                 .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
@@ -168,12 +158,12 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     let selected_state = app
         .ports
         .states
-        .get(ui_accessors::ui_selected_get(app))
+        .get(app.page.selected)
         .cloned()
         .unwrap_or(crate::protocol::status::PortState::Free);
 
     // If a subpage is active, delegate the entire right area to it.
-    if ui_accessors::ui_subpage_active_get(app) {
+    if app.page.subpage_active {
         // Unified ModBus page now handled elsewhere; entry no longer renders legacy subpages.
         return;
     }
@@ -187,8 +177,8 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         Paragraph::new(lang().index.no_com_ports.as_str()).block(content_block)
     } else {
         let special_base = app.ports.list.len();
-        if ui_accessors::ui_selected_get(app) >= special_base {
-            let rel = ui_accessors::ui_selected_get(app) - special_base;
+        if app.page.selected >= special_base {
+            let rel = app.page.selected - special_base;
             if rel == 0 {
                 // Refresh action item: show last scan summary
                 let mut lines: Vec<Line> = Vec::new();
@@ -242,18 +232,16 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
             }
         } else {
-            let p = &app.ports.list[ui_accessors::ui_selected_get(app)];
+            let p = &app.ports.list[app.page.selected];
             let extra = app
                 .ports
                 .extras
-                .get(ui_accessors::ui_selected_get(app))
+                .get(app.page.selected)
                 .cloned()
                 .unwrap_or_default();
 
             // Prefer runtime's current_cfg (live synchronized config). If not occupied we hide these fields.
-            let runtime_cfg = if let Some(Some(rt)) =
-                app.ports.runtimes.get(ui_accessors::ui_selected_get(app))
-            {
+            let runtime_cfg = if let Some(Some(rt)) = app.ports.runtimes.get(app.page.selected) {
                 Some(rt.current_cfg.clone())
             } else {
                 None
@@ -364,7 +352,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             ));
             // Current per-port application mode (ModBus / MQTT)
             if selected_state == crate::protocol::status::PortState::OccupiedByThis {
-                let mode_label = match ui_accessors::ui_app_mode_get(app) {
+                let mode_label = match app.page.app_mode {
                     crate::protocol::status::AppMode::Modbus => {
                         lang().protocol.common.mode_modbus.as_str()
                     }

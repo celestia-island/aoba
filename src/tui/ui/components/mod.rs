@@ -1,9 +1,5 @@
-pub mod config_panel;
 pub mod log_input;
-pub mod log_panel;
-pub mod modbus_panel;
 pub mod mode_selector;
-pub mod mqtt_panel;
 
 use ratatui::{
     prelude::*,

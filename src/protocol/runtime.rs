@@ -1,7 +1,7 @@
 use anyhow::Result;
 use flume::{Receiver, Sender};
 use std::{
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     thread,
     time::{Duration, Instant},
 };
@@ -64,7 +64,7 @@ pub struct PortRuntimeHandle {
     pub cmd_tx: Sender<RuntimeCommand>,
     pub evt_rx: Receiver<RuntimeEvent>,
     pub current_cfg: SerialConfig,
-    pub shared_serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
+    pub shared_serial: Arc<RwLock<Box<dyn SerialPort + Send + 'static>>>,
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -81,7 +81,8 @@ impl PortRuntimeHandle {
             serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(200));
         let builder = initial.apply_builder(builder);
         let handle = builder.open()?;
-        let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> = Arc::new(Mutex::new(handle));
+        let serial: Arc<RwLock<Box<dyn SerialPort + Send + 'static>>> =
+            Arc::new(RwLock::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
@@ -115,7 +116,7 @@ impl PortRuntimeHandle {
 }
 
 fn run_loop(
-    serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
+    serial: Arc<RwLock<Box<dyn SerialPort + Send + 'static>>>,
     port_name: String,
     initial: SerialConfig,
     cmd_rx: Receiver<RuntimeCommand>,
@@ -200,6 +201,7 @@ fn crc16_modbus(data: &[u8]) -> u16 {
     }
     crc
 }
+
 fn candidate_lengths(b: &[u8]) -> Vec<usize> {
     let mut v = Vec::new();
     if b.len() < 2 {
@@ -236,6 +238,7 @@ fn candidate_lengths(b: &[u8]) -> Vec<usize> {
     }
     v
 }
+
 fn salvage_search(buf: &[u8]) -> Option<(usize, usize)> {
     if buf.len() < 5 {
         return None;
@@ -260,6 +263,7 @@ fn salvage_search(buf: &[u8]) -> Option<(usize, usize)> {
     }
     None
 }
+
 fn finalize_residual(res: &mut Vec<u8>, out: &mut Vec<bytes::Bytes>) {
     if res.is_empty() {
         return;
@@ -310,6 +314,7 @@ fn finalize_residual(res: &mut Vec<u8>, out: &mut Vec<bytes::Bytes>) {
         res.clear();
     }
 }
+
 fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) {
     let mut frames = Vec::new();
     finalize_residual(buf, &mut frames);
@@ -328,19 +333,21 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) {
         }
     }
 }
+
 fn compute_gap(cfg: &SerialConfig) -> Duration {
-    let bits = 1.0
+    let bits = 1.
         + cfg.data_bits as f32
         + (if cfg.parity != serialport::Parity::None {
-            1.0
+            1.
         } else {
-            0.0
+            0.
         })
         + cfg.stop_bits as f32;
-    let char_ms = (bits / cfg.baud as f32) * 1000.0;
-    let gap_ms = (char_ms * 4.0).clamp(3.0, 50.0);
+    let char_ms = (bits / cfg.baud as f32) * 1000.;
+    let gap_ms = (char_ms * 4.).clamp(3., 50.);
     Duration::from_millis(gap_ms as u64)
 }
+
 fn reopen_serial(
     shared: &Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     port: &str,

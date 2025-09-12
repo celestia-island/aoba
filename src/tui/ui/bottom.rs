@@ -1,6 +1,5 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::protocol::status::ui as ui_accessors;
 use crate::{i18n::lang, protocol::status::Status, tui::ui::pages};
 
 pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
@@ -8,7 +7,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
 
     // If app has an error message, display it on the first line (red),
     // And on the second line show instructions on how to clear it.
-    if let Some(err) = ui_accessors::ui_error_get(_app).as_ref() {
+    if let Some(err) = _app.page.error.as_ref() {
         // Split the provided area into two rows
         let rows = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
@@ -43,10 +42,10 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
-    if ui_accessors::ui_subpage_active_get(_app) {
+    if _app.page.subpage_active {
         // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
         // [confirmation row - yellow bg] [page hints] [global hints]
-        if ui_accessors::ui_log_clear_pending_get(_app) {
+        if _app.page.log_clear_pending {
             let rows = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .margin(0)

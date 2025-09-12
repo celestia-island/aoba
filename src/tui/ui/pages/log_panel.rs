@@ -9,17 +9,9 @@ use ratatui::{
 };
 
 use crate::{
-    i18n::lang,
-    protocol::status::{ui as ui_accessors, Status},
-    tui::ui::components::log_input::render_log_input,
+    i18n::lang, protocol::status::Status, tui::ui::components::log_input::render_log_input,
 };
 
-/// Render a log panel. Each log entry is presented as a 3-line grouped item:
-/// 1) timestamp
-/// 2) raw payload (single line, truncated)
-/// 3) parsed summary (origin, R / W, command, slave id, range)
-///    Navigation selects a whole group. Selected group is prefixed with "> " on the left
-///    And rendered with a highlighted background; unselected groups get 2 spaces prefix.
 pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Min(3),
@@ -29,7 +21,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
 
     let logs_area = chunks[0];
     // We'll render a windowed view of log groups. Each group is 3 lines.
-    let logs = ui_accessors::ui_logs_get(app);
+    let logs = app.page.logs.clone();
     let total_groups = logs.len();
     let group_height = 3usize;
 
@@ -40,13 +32,10 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Determine bottom index based on auto-scroll or explicit offset
     let bottom = if total_groups == 0 {
         0usize
-    } else if ui_accessors::ui_log_auto_scroll_get(app) {
+    } else if app.page.log_auto_scroll {
         total_groups.saturating_sub(1)
     } else {
-        min(
-            ui_accessors::ui_log_view_offset_get(app),
-            total_groups.saturating_sub(1),
-        )
+        min(app.page.log_view_offset, total_groups.saturating_sub(1))
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
@@ -62,7 +51,9 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let mut styled_lines: Vec<Line> = Vec::new();
     for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
         if let Some(entry) = logs.get(g) {
-            let selected = ui_accessors::ui_log_selected_get(app)
+            let selected = app
+                .page
+                .log_selected
                 .checked_sub(top_group)
                 .map(|s| s == idx)
                 .unwrap_or(false);
@@ -138,10 +129,10 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     let sel_display = if total_groups == 0 {
         0
     } else {
-        ui_accessors::ui_log_selected_get(app) + 1
+        app.page.log_selected + 1
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
-    let follow_label = if ui_accessors::ui_log_auto_scroll_get(app) {
+    let follow_label = if app.page.log_auto_scroll {
         lang().tabs.log.hint_follow_on.as_str()
     } else {
         lang().tabs.log.hint_follow_off.as_str()
@@ -153,13 +144,13 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     );
     let title_span = Span::styled(
         title_text,
-        Style::default().add_modifier(Modifier::BOLD).fg(
-            if ui_accessors::ui_log_auto_scroll_get(app) {
+        Style::default()
+            .add_modifier(Modifier::BOLD)
+            .fg(if app.page.log_auto_scroll {
                 Color::Green
             } else {
                 Color::Yellow
-            },
-        ),
+            }),
     );
     let block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
@@ -183,10 +174,10 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
         let bar_y = logs_area.y + 1; // Inside top border
         let bar_h = logs_area.height.saturating_sub(2); // Inside borders
         let denom = (total_groups.saturating_sub(groups_per_screen)) as f32;
-        let ratio = if denom > 0.0 {
+        let ratio = if denom > 0. {
             (top_group as f32) / denom
         } else {
-            0.0
+            0.
         };
         let thumb_pos = bar_y + ((ratio * (bar_h.saturating_sub(1) as f32)).round() as u16);
         for i in 0..bar_h {
@@ -200,4 +191,47 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
     // Bottom: input area (fixed height)
     let input_area = chunks[1];
     render_log_input(f, input_area, app);
+}
+
+pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+    let mut hints: Vec<String> = Vec::new();
+    if app.page.input_editing {
+        hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
+        hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
+    } else {
+        hints.push(crate::tui::ui::bottom::format_kv_hint(
+            "Enter / i",
+            lang().input.hint_input_edit_short.as_str(),
+        ));
+        hints.push(crate::tui::ui::bottom::format_kv_hint(
+            "m",
+            lang().input.hint_input_mode_short.as_str(),
+        ));
+        let action_label = if app.page.log_auto_scroll {
+            lang().tabs.log.hint_follow_off.as_str()
+        } else {
+            lang().tabs.log.hint_follow_on.as_str()
+        };
+        hints.push(crate::tui::ui::bottom::format_kv_hint("p", action_label));
+        hints.push(crate::tui::ui::bottom::format_kv_hint(
+            "c",
+            lang().hotkeys.press_c_clear.as_str(),
+        ));
+    }
+    hints
+}
+
+pub fn map_key(
+    _key: crossterm::event::KeyEvent,
+    _app: &Status,
+) -> Option<crate::tui::input::Action> {
+    // no page-specific map beyond global
+    None
+}
+
+use crate::tui::utils::bus::Bus;
+use crossterm::event::KeyEvent;
+
+pub fn handle_subpage_key(_key: KeyEvent, _app: &mut Status, _bus: &Bus) -> bool {
+    false
 }

@@ -62,6 +62,4 @@ pub fn render_mode_selector(f: &mut Frame, index: usize) {
     let opts_rect = Rect::new(inner.x, start_y, inner.width, opts_h);
     let opts_para = Paragraph::new(lines).alignment(ratatui::layout::Alignment::Center);
     f.render_widget(opts_para, opts_rect);
-
-    // (Bottom inline hint removed)
 }

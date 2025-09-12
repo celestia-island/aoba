@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{ui as ui_accessors, EditingField, Status},
+    protocol::status::{EditingField, Page, Status},
     tui::ui::components::{
         render_boxed_paragraph, styled_spans, styled_title_span, StyledSpanKind, TextState,
     },
@@ -18,10 +18,26 @@ use crate::{
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
     // Use transient form if present (access via accessor to allow ephemeral migration)
-    let form = ui_accessors::ui_subpage_form_get(app)
-        .as_ref()
-        .cloned()
-        .unwrap_or_default();
+    let form = match app.page {
+        Page::ModbusConfig { selected_port: _ } => {
+            if let Some(ref form) = app.page {
+                form
+            } else {
+                // No form, render placeholder
+                let lines = vec![ratatui::text::Line::from(
+                    lang().protocol.modbus.no_form_loaded.as_str(),
+                )];
+                return render_boxed_paragraph(f, area, lines, style);
+            }
+        }
+        _ => {
+            // Not in config page, render placeholder
+            let lines = vec![ratatui::text::Line::from(
+                lang().protocol.modbus.no_form_loaded.as_str(),
+            )];
+            return render_boxed_paragraph(f, area, lines, style);
+        }
+    };
 
     let mut lines: Vec<ratatui::text::Line> = Vec::new();
 
@@ -113,7 +129,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         loop_label,
         loop_val,
         false,
-        ui_accessors::ui_input_buffer_get(app).as_str(),
+        app.page.input_buffer.as_str(),
     );
 
     // Master passive toggle (idx 1) - when true the simulated master will not
@@ -150,7 +166,7 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
         master_passive_label,
         master_passive_val,
         false,
-        ui_accessors::ui_input_buffer_get(app).as_str(),
+        app.page.input_buffer.as_str(),
     );
 
     // Baud (idx 2)
@@ -535,4 +551,54 @@ pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: O
     }
 
     render_boxed_paragraph(f, area, lines, style);
+}
+
+/// Page-level map_key placeholder to allow pages::mod to dispatch key mapping.
+pub fn map_key(
+    _key: crossterm::event::KeyEvent,
+    _app: &Status,
+) -> Option<crate::tui::input::Action> {
+    None
+}
+
+use crate::tui::utils::bus::Bus;
+use crossterm::event::KeyEvent;
+
+pub fn handle_subpage_key(_key: KeyEvent, _app: &mut Status, _bus: &Bus) -> bool {
+    // Config panel currently has no special per-subpage key handling; do not consume.
+    false
+}
+
+// Provide bottom hints for this page (used by pages::mod routing)
+pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+    // reuse existing helper semantics from previous components
+    let mut hints: Vec<String> = Vec::new();
+    if let Some(form) = app.page.subpage_form.as_ref() {
+        if form.cursor == 0 {
+            if form.loop_enabled {
+                hints.push(
+                    lang()
+                        .protocol
+                        .modbus
+                        .hint_enter_pause_work
+                        .as_str()
+                        .to_string(),
+                );
+            } else {
+                hints.push(
+                    lang()
+                        .protocol
+                        .modbus
+                        .hint_enter_start_work
+                        .as_str()
+                        .to_string(),
+                );
+            }
+            hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
+            return hints;
+        }
+    }
+    hints.push(lang().hotkeys.press_enter_confirm_edit.as_str().to_string());
+    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
+    hints
 }
