@@ -9,7 +9,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action, tui::utils::bus::Bus};
 
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
@@ -39,7 +39,35 @@ pub fn map_key(_key: KeyEvent, _app: &Status) -> Option<Action> {
     None
 }
 
-pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
+/// Handle input for entry page. Only processes input, does not mutate Status.
+/// Sends appropriate messages via UiToCore channel.
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
+    use crossterm::event::KeyCode as KC;
+    
+    // Basic navigation keys for entry page
+    match key.code {
+        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
+            // Send navigation commands to core
+            // For now, send a generic command that core will handle
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Enter | KC::Char('l') => {
+            // Enter subpage
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Char('r') => {
+            // Refresh ports
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        _ => false
+    }
+}
+
+/// Render the entry page. Only reads from Status, does not mutate.
+pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     // Horizontal split: left ports | right details
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Horizontal)
@@ -62,7 +90,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             .ports
             .states
             .get(i)
-            .cloned()
+            .map(|s| s.port_state.clone())
             .unwrap_or(crate::protocol::status::PortState::Free);
         let (state_text, state_style) = match state {
             crate::protocol::status::PortState::Free => {
@@ -159,7 +187,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         .ports
         .states
         .get(app.page.selected)
-        .cloned()
+        .map(|s| s.port_state.clone())
         .unwrap_or(crate::protocol::status::PortState::Free);
 
     // If a subpage is active, delegate the entire right area to it.
@@ -201,15 +229,13 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
                 } else {
                     lines.push(Line::from(lang().index.scan_raw_header.as_str()));
-                    for l in app.scan.last_scan_info.iter().take(100) {
+                    for l in app.scan.last_scan_info.lines().take(100) {
                         // Cap lines to avoid overflow
                         if l.starts_with("ERROR:") {
-                            lines.push(Line::from(Span::styled(
-                                l.as_str(),
-                                Style::default().fg(Color::Red),
-                            )));
+                            lines
+                                .push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
                         } else {
-                            lines.push(Line::from(l.as_str()));
+                            lines.push(Line::from(l));
                         }
                     }
                     if app.scan.last_scan_info.len() > 100 {
@@ -226,7 +252,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             } else if rel == 2 {
                 // About page selected; show a compact preview that reuses about rendering logic
                 // Build an AboutCache snapshot if available by peeking the internal cache (best-effort)
-                crate::tui::ui::pages::about::render_about(f, right, app);
+                crate::tui::ui::pages::about::render(f, right, app);
                 return;
             } else {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
@@ -237,12 +263,12 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 .ports
                 .extras
                 .get(app.page.selected)
-                .cloned()
+                .map(|e| e.port_extra.clone())
                 .unwrap_or_default();
 
             // Prefer runtime's current_cfg (live synchronized config). If not occupied we hide these fields.
-            let runtime_cfg = if let Some(Some(rt)) = app.ports.runtimes.get(app.page.selected) {
-                Some(rt.current_cfg.clone())
+            let runtime_cfg = if let Some(r) = app.ports.runtimes.get(app.page.selected) {
+                r.runtime.as_ref().map(|rt| rt.current_cfg.clone())
             } else {
                 None
             };
@@ -351,7 +377,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 Some(status_style),
             ));
             // Current per-port application mode (ModBus / MQTT)
-            if selected_state == crate::protocol::status::PortState::OccupiedByThis {
+            if matches!(
+                selected_state,
+                crate::protocol::status::PortState::OccupiedByThis
+            ) {
                 let mode_label = match app.page.app_mode {
                     crate::protocol::status::AppMode::Modbus => {
                         lang().protocol.common.mode_modbus.as_str()
@@ -369,7 +398,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
 
             // Mode always unified; hide previous master / slave mode line.
 
-            if selected_state == crate::protocol::status::PortState::OccupiedByThis {
+            if matches!(
+                selected_state,
+                crate::protocol::status::PortState::OccupiedByThis
+            ) {
                 if let Some(cfg) = runtime_cfg.clone() {
                     let baud = cfg.baud.to_string();
                     let data_bits = cfg.data_bits.to_string();
@@ -441,26 +473,4 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     f.render_widget(content, right);
 
     // Mode selector removed (unified ModBus RTU) – overlay no longer rendered.
-}
-
-/// Handle key events when entry is used as a full-area subpage (listen). Return true if consumed.
-pub fn handle_subpage_key(
-    _key: crossterm::event::KeyEvent,
-    _app: &mut crate::protocol::status::Status,
-) -> bool {
-    use crossterm::event::KeyCode as KC;
-    // Provide simple handling for listen mode: consume Up / Down / Enter to avoid bubbling
-    match _key.code {
-        KC::Up
-        | KC::Down
-        | KC::Left
-        | KC::Right
-        | KC::Char('k')
-        | KC::Char('j')
-        | KC::Char('h')
-        | KC::Char('l') => return true,
-        KC::Enter => return true,
-        _ => {}
-    }
-    false
 }
