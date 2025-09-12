@@ -62,7 +62,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             .ports
             .states
             .get(i)
-            .map(|s| s.port_state)
+            .map(|s| s.port_state.clone())
             .unwrap_or(crate::protocol::status::PortState::Free);
         let (state_text, state_style) = match state {
             crate::protocol::status::PortState::Free => {
@@ -159,7 +159,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
         .ports
         .states
         .get(app.page.selected)
-        .map(|s| s.port_state)
+        .map(|s| s.port_state.clone())
         .unwrap_or(crate::protocol::status::PortState::Free);
 
     // If a subpage is active, delegate the entire right area to it.

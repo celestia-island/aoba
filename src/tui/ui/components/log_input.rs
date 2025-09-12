@@ -81,7 +81,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
     lines.push(Line::from(Span::raw(format!(" {edit_hint}"))));
 
     // Choose title and block based on whether we're editing
-    let (title, block) = if !content.is_empty() {
+    let (_title, block) = if !content.is_empty() {
         // Highlight title when editing (use library green)
         let title = Span::styled(
             format!(" {} ", lang().input.input_label.as_str()),
@@ -90,7 +90,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
         );
-        (title, Block::default().borders(Borders::ALL).title(title))
+        (title.clone(), Block::default().borders(Borders::ALL).title(title))
     } else {
         let title_text = format!(" {} ", lang().input.input_label.as_str());
         (Span::raw(title_text.clone()), Block::default().borders(Borders::ALL).title(title_text))

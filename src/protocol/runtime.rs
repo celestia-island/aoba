@@ -1,7 +1,7 @@
 use anyhow::Result;
 use flume::{Receiver, Sender};
 use std::{
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     thread,
     time::{Duration, Instant},
 };
@@ -64,7 +64,7 @@ pub struct PortRuntimeHandle {
     pub cmd_tx: Sender<RuntimeCommand>,
     pub evt_rx: Receiver<RuntimeEvent>,
     pub current_cfg: SerialConfig,
-    pub shared_serial: Arc<RwLock<Box<dyn SerialPort + Send + 'static>>>,
+    pub shared_serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -81,8 +81,8 @@ impl PortRuntimeHandle {
             serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(200));
         let builder = initial.apply_builder(builder);
         let handle = builder.open()?;
-        let serial: Arc<RwLock<Box<dyn SerialPort + Send + 'static>>> =
-            Arc::new(RwLock::new(handle));
+        let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> =
+            Arc::new(Mutex::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
@@ -116,7 +116,7 @@ impl PortRuntimeHandle {
 }
 
 fn run_loop(
-    serial: Arc<RwLock<Box<dyn SerialPort + Send + 'static>>>,
+    serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     port_name: String,
     initial: SerialConfig,
     cmd_rx: Receiver<RuntimeCommand>,
@@ -139,7 +139,7 @@ fn run_loop(
                 }
                 RuntimeCommand::Write(bytes) => {
                     let mut ok = false;
-                    if let Ok(mut g) = serial.write() {
+                    if let Ok(mut g) = serial.lock() {
                         use std::io::Write;
                         if g.write_all(&bytes).is_ok() && g.flush().is_ok() {
                             ok = true;
@@ -162,7 +162,7 @@ fn run_loop(
                 last_byte = None;
             }
         }
-        if let Ok(mut g) = serial.write() {
+        if let Ok(mut g) = serial.lock() {
             use std::io::Read;
             let mut buf = [0u8; 256];
             match g.read(&mut buf) {
@@ -349,7 +349,7 @@ fn compute_gap(cfg: &SerialConfig) -> Duration {
 }
 
 fn reopen_serial(
-    shared: &Arc<RwLock<Box<dyn SerialPort + Send + 'static>>>,
+    shared: &Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     port: &str,
     cfg: &SerialConfig,
 ) -> Result<()> {
@@ -359,7 +359,7 @@ fn reopen_serial(
     let builder = serialport::new(port, cfg.baud).timeout(Duration::from_millis(200));
     let builder = cfg.apply_builder(builder);
     let new_handle = builder.open()?;
-    if let Ok(mut g) = shared.write() {
+    if let Ok(mut g) = shared.lock() {
         *g = new_handle;
     }
     Ok(())

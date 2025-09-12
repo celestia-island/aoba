@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 use yuuka::derive_struct;
 
 use serialport::{SerialPort, SerialPortInfo};
@@ -12,14 +12,8 @@ pub enum InputMode {
     Hex,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ErrorInfo {
-    pub message: String,
-    pub timestamp: DateTime<Local>,
-}
-
 #[derive(Clone)]
-pub struct SerialPortWrapper(Arc<RwLock<Box<dyn SerialPort + Send>>>);
+pub struct SerialPortWrapper(Arc<Mutex<Box<dyn SerialPort + Send>>>);
 
 impl std::fmt::Debug for SerialPortWrapper {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -175,7 +169,7 @@ derive_struct! {
                 About {
                     view_offset: usize,
                 }
-            } = Page::Entry { cursor: None },
+            } = __Status::Page::Entry { cursor: None },
         },
         temporarily: {
             input_raw_buffer: String,

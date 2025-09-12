@@ -100,7 +100,7 @@ pub struct RegisterEntry {
     pub values: Vec<u16>, // Register values
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct SubpageForm {
     pub registers: Vec<RegisterEntry>,
     pub master_cursor: usize,

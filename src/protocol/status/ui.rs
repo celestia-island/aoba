@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use super::{Status, ErrorInfo};
+use super::Status;
 
 /// Stub implementation for ui_error_set function
 pub fn ui_error_set(
@@ -9,7 +9,8 @@ pub fn ui_error_set(
     // TODO: Implement error setting functionality
     // Convert tuple to ErrorInfo if needed
     if let Some((message, timestamp)) = _error {
-        _status.page.error = Some(ErrorInfo { message, timestamp });
+        // Use the generated ErrorInfo type from the derive_struct macro
+        _status.page.error = Some(crate::protocol::status::__Status::ErrorInfo { message, timestamp });
     } else {
         _status.page.error = None;
     }
