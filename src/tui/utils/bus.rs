@@ -11,6 +11,26 @@ pub enum UiToCore {
     PausePolling,
     /// Resume polling / start master polling loop.
     ResumePolling,
+    /// Navigate up in the current list/menu.
+    NavigateUp,
+    /// Navigate down in the current list/menu.
+    NavigateDown,
+    /// Enter the selected item/subpage.
+    EnterSelection,
+    /// Go back to the previous page/level.
+    GoBack,
+    /// Force an immediate port scan.
+    ScanPorts,
+    /// Start editing the currently selected field.
+    StartEdit,
+    /// Cancel current editing operation.
+    CancelEdit,
+    /// Input character during editing.
+    InputChar(char),
+    /// Backspace during editing.
+    Backspace,
+    /// Confirm/apply the current edit.
+    ConfirmEdit,
 }
 
 /// Messages sent from core worker thread back to UI thread.

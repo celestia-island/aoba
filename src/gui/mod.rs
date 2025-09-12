@@ -74,6 +74,14 @@ impl GuiApp {
                     UiToCore::ResumePolling => {
                         let _ = core_tx.send(CoreToUi::Refreshed);
                     }
+                    // Handle new navigation and editing commands (demo implementation)
+                    UiToCore::NavigateUp | UiToCore::NavigateDown | UiToCore::EnterSelection
+                    | UiToCore::GoBack | UiToCore::ScanPorts | UiToCore::StartEdit
+                    | UiToCore::CancelEdit | UiToCore::InputChar(_) | UiToCore::Backspace
+                    | UiToCore::ConfirmEdit => {
+                        log::debug!("[GUI-core-demo] received {:?} (not implemented)", msg);
+                        let _ = core_tx.send(CoreToUi::Refreshed);
+                    }
                 }
             }
             thread::sleep(Duration::from_millis(50));

@@ -78,14 +78,18 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, style: Option<Style>) {
         lines.push(ratatui::text::Line::from(spans));
     };
 
-    // Global Interval (idx 0) - simplified version
-    let _selected = 0 == form.cursor;
-    let val = "Global interval display placeholder".to_string();
-    push_field(&mut lines, 0, "Global Interval", val, false, "");
+    // Global Interval (idx 0)
+    let global_interval_editing = form.editing && form.cursor == 0;
+    let global_interval_val = form.global_interval_ms.to_string();
+    push_field(&mut lines, 0, "Global Interval (ms)", global_interval_val, global_interval_editing, &form.input_buffer);
 
-    // Master Passive (idx 1) - simplified
+    // Master Passive (idx 1) - toggle field
     let master_passive_label = "Master Passive";
-    let master_passive_val = "Configuration display placeholder".to_string();
+    let master_passive_val = match form.master_passive {
+        Some(true) => "Enabled".to_string(),
+        Some(false) => "Disabled".to_string(),
+        None => "Auto".to_string(),
+    };
     push_field(
         &mut lines,
         1,
@@ -95,18 +99,29 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, style: Option<Style>) {
         "",
     );
 
-    // Basic configuration fields display - simplified
-    let baud_val = "9600".to_string();
-    push_field(&mut lines, 2, "Baud Rate", baud_val, false, "");
+    // Baud Rate (idx 2)
+    let baud_editing = form.editing && form.cursor == 2;
+    let baud_val = form.baud.to_string();
+    push_field(&mut lines, 2, "Baud Rate", baud_val, baud_editing, &form.input_buffer);
 
-    let data_bits_val = "8".to_string();
-    push_field(&mut lines, 3, "Data Bits", data_bits_val, false, "");
+    // Data Bits (idx 3)
+    let data_bits_editing = form.editing && form.cursor == 3;
+    let data_bits_val = form.data_bits.to_string();
+    push_field(&mut lines, 3, "Data Bits", data_bits_val, data_bits_editing, &form.input_buffer);
 
-    let parity_val = "None".to_string();
-    push_field(&mut lines, 4, "Parity", parity_val, false, "");
+    // Parity (idx 4)
+    let parity_editing = form.editing && form.cursor == 4;
+    let parity_val = match form.parity {
+        serialport::Parity::None => "None".to_string(),
+        serialport::Parity::Odd => "Odd".to_string(),
+        serialport::Parity::Even => "Even".to_string(),
+    };
+    push_field(&mut lines, 4, "Parity", parity_val, parity_editing, &form.input_buffer);
 
-    let stop_bits_val = "1".to_string();
-    push_field(&mut lines, 5, "Stop Bits", stop_bits_val, false, "");
+    // Stop Bits (idx 5)
+    let stop_bits_editing = form.editing && form.cursor == 5;
+    let stop_bits_val = form.stop_bits.to_string();
+    push_field(&mut lines, 5, "Stop Bits", stop_bits_val, stop_bits_editing, &form.input_buffer);
 
     render_boxed_paragraph(f, area, lines, style);
 }
@@ -126,25 +141,71 @@ pub fn map_key(
 }
 
 /// Handle input for config panel. Sends commands via UiToCore.
-pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
+pub fn handle_input(key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
     use crossterm::event::KeyCode as KC;
 
-    match _key.code {
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Navigation
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+    match key.code {
+        KC::Up | KC::Char('k') => {
+            // Navigate up in config fields
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::NavigateUp);
+            true
+        }
+        KC::Down | KC::Char('j') => {
+            // Navigate down in config fields
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::NavigateDown);
             true
         }
         KC::Enter => {
-            // Edit field
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            // Begin editing the selected field OR confirm current edit
+            send_config_action(bus, ConfigAction::StartEditOrConfirm);
             true
         }
         KC::Esc => {
-            // Cancel edit
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            // Cancel editing and go back
+            send_config_action(bus, ConfigAction::CancelEdit);
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::GoBack);
+            true
+        }
+        KC::Char(c) if c.is_ascii_digit() || c == 'n' || c == 'e' || c == 'o' => {
+            // Input for editing (digits for numbers, n/e/o for parity)
+            send_config_action(bus, ConfigAction::InputChar(c));
+            true
+        }
+        KC::Backspace => {
+            // Delete character during editing
+            send_config_action(bus, ConfigAction::Backspace);
             true
         }
         _ => false
+    }
+}
+
+#[derive(Debug)]
+enum ConfigAction {
+    StartEditOrConfirm,
+    CancelEdit,
+    InputChar(char),
+    Backspace,
+}
+
+fn send_config_action(bus: &Bus, action: ConfigAction) {
+    match action {
+        ConfigAction::StartEditOrConfirm => {
+            log::debug!("[CONFIG] Start edit or confirm");
+            // We'll let the core determine if this should start edit or confirm
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::StartEdit);
+        }
+        ConfigAction::CancelEdit => {
+            log::debug!("[CONFIG] Canceling edit mode");
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::CancelEdit);
+        }
+        ConfigAction::InputChar(c) => {
+            log::debug!("[CONFIG] Input char: {}", c);
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::InputChar(c));
+        }
+        ConfigAction::Backspace => {
+            log::debug!("[CONFIG] Backspace");
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Backspace);
+        }
     }
 }

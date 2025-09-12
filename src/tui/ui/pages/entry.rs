@@ -46,20 +46,29 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
     
     // Basic navigation keys for entry page
     match key.code {
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Send navigation commands to core
-            // For now, send a generic command that core will handle
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+        KC::Up | KC::Char('k') => {
+            // Navigate up
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::NavigateUp);
+            true
+        }
+        KC::Down | KC::Char('j') => {
+            // Navigate down
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::NavigateDown);
             true
         }
         KC::Enter | KC::Char('l') => {
-            // Enter subpage
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            // Enter selected item/subpage
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::EnterSelection);
+            true
+        }
+        KC::Esc | KC::Char('h') => {
+            // Go back (though at entry level, this might not do much)
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::GoBack);
             true
         }
         KC::Char('r') => {
-            // Refresh ports
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            // Force refresh/scan ports
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::ScanPorts);
             true
         }
         _ => false
