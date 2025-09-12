@@ -24,7 +24,7 @@ pub fn start() -> Result<()> {
     let backend = CrosstermBackend::new(&mut stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let app = Arc::new(RwLock::new(Status::new()));
+    let app = Arc::new(RwLock::new(Status::default()));
 
     // For manual testing: if AOBA_TUI_FORCE_ERROR is set, pre-populate an error to display
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {

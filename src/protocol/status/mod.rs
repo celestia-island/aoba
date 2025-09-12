@@ -1,5 +1,4 @@
 pub mod modbus;
-mod status_impl;
 pub mod status_rw;
 pub mod ui;
 
