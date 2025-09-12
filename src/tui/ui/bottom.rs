@@ -35,7 +35,7 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
         f.render_widget(p, rows[0]);
 
         // Delegate construction of bottom hints to page layer so behavior is consistent.
-        let hints = crate::tui::ui::pages_re::bottom_hints_for_app(app);
+        let hints = crate::tui::ui::pages::bottom_hints_for_app(app);
         let hint_rect = rows[1];
         // Use the unified renderer for hints
         render_hints(f, hint_rect, hints.iter().map(|s| s.as_str()));
@@ -74,11 +74,11 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
             f.render_widget(confirm_para, rows[0]);
 
             // Page-specific hints (middle)
-            let page_hints = crate::tui::ui::pages_re::bottom_hints_for_app(app);
+            let page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
             render_hints(f, rows[1], page_hints.iter().map(|s| s.as_str()));
 
             // Global hints (bottom-most)
-            let global_hints = crate::tui::ui::pages_re::global_hints_for_app(app);
+            let global_hints = crate::tui::ui::pages::global_hints_for_app(app);
             render_hints(f, rows[2], global_hints.iter().map(|s| s.as_str()));
         } else {
             let rows = ratatui::layout::Layout::default()
@@ -91,16 +91,16 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
                 .split(area);
 
             // Page-specific hints (above)
-            let page_hints = crate::tui::ui::pages_re::bottom_hints_for_app(app);
+            let page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
             render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
 
             // Global hints (bottom-most)
-            let global_hints = crate::tui::ui::pages_re::global_hints_for_app(app);
+            let global_hints = crate::tui::ui::pages::global_hints_for_app(app);
             render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
         }
     } else {
         // Single-line bottom hints when not in a subpage
-        let hints = crate::tui::ui::pages_re::bottom_hints_for_app(app);
+        let hints = crate::tui::ui::pages::bottom_hints_for_app(app);
         let text = format_hints(hints.iter().map(|s| s.as_str()));
         let help = Paragraph::new(text)
             .alignment(Alignment::Center)

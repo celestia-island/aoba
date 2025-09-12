@@ -9,10 +9,12 @@ use ratatui::{
 };
 
 use crate::{
-    i18n::lang, protocol::status::Status, tui::ui::components::log_input::render_log_input,
+    i18n::lang, protocol::status::Status,
+    tui::utils::bus::Bus,
 };
 
-pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
+/// Render the log panel. Only reads from Status, does not mutate.
+pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Min(3),
         ratatui::layout::Constraint::Length(3),
@@ -88,13 +90,7 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
                     .fg(Color::Yellow)
             };
             ts_spans.push(Span::styled(dir_text, dir_span_style));
-            // If selected, also apply background to the non-direction spans so selection has visible bg
-            // Build Line from spans vector
-            let mut ts_line_spans: Vec<Span> = Vec::new();
-            for s in ts_spans.into_iter() {
-                ts_line_spans.push(s);
-            }
-            styled_lines.push(Line::from(ts_line_spans));
+            styled_lines.push(Line::from(ts_spans));
 
             // Raw payload line: prefix + truncated raw
             let raw = entry.raw.replace('\n', " ");
@@ -149,74 +145,43 @@ pub fn render_log_panel(f: &mut Frame, area: Rect, app: &mut Status) {
             .fg(if app.page.log_auto_scroll {
                 Color::Green
             } else {
-                Color::Yellow
+                Color::Blue
             }),
     );
-    let block = Block::default()
+
+    let log_block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .title(title_span);
 
-    // Render content area (leave 1 column for scrollbar)
-    let content_rect = Rect::new(
-        logs_area.x,
-        logs_area.y,
-        logs_area.width.saturating_sub(1),
-        logs_area.height,
-    );
-    let para = Paragraph::new(styled_lines)
-        .block(block)
-        .wrap(ratatui::widgets::Wrap { trim: false });
-    f.render_widget(para, content_rect);
+    let log_para = Paragraph::new(styled_lines)
+        .block(log_block)
+        .wrap(ratatui::widgets::Wrap { trim: true });
+    f.render_widget(log_para, logs_area);
 
-    // Draw a simple scrollbar at the right edge of logs_area
-    if total_groups > groups_per_screen {
-        let bar_x = logs_area.x + logs_area.width.saturating_sub(1);
-        let bar_y = logs_area.y + 1; // Inside top border
-        let bar_h = logs_area.height.saturating_sub(2); // Inside borders
-        let denom = (total_groups.saturating_sub(groups_per_screen)) as f32;
-        let ratio = if denom > 0. {
-            (top_group as f32) / denom
-        } else {
-            0.
-        };
-        let thumb_pos = bar_y + ((ratio * (bar_h.saturating_sub(1) as f32)).round() as u16);
-        for i in 0..bar_h {
-            let ch = if bar_y + i == thumb_pos { '█' } else { '│' };
-            let p = Paragraph::new(ch.to_string()).style(Style::default().fg(Color::DarkGray));
-            let r = Rect::new(bar_x, bar_y + i, 1, 1);
-            f.render_widget(p, r);
-        }
-    }
-
-    // Bottom: input area (fixed height)
-    let input_area = chunks[1];
-    render_log_input(f, input_area, app);
+    // Bottom text input for sending - simplified placeholder
+    let input_block = Block::default()
+        .borders(ratatui::widgets::Borders::ALL)
+        .title("Input (simplified)");
+    let input_para = Paragraph::new("Log input placeholder").block(input_block);
+    f.render_widget(input_para, chunks[1]);
 }
 
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
-    if app.page.input_editing {
-        hints.push(lang().hotkeys.press_enter_submit.as_str().to_string());
-        hints.push(lang().hotkeys.press_esc_cancel.as_str().to_string());
-    } else {
-        hints.push(crate::tui::ui::bottom::format_kv_hint(
-            "Enter / i",
-            lang().input.hint_input_edit_short.as_str(),
-        ));
-        hints.push(crate::tui::ui::bottom::format_kv_hint(
-            "m",
-            lang().input.hint_input_mode_short.as_str(),
-        ));
-        let action_label = if app.page.log_auto_scroll {
-            lang().tabs.log.hint_follow_off.as_str()
-        } else {
-            lang().tabs.log.hint_follow_on.as_str()
-        };
-        hints.push(crate::tui::ui::bottom::format_kv_hint("p", action_label));
-        hints.push(crate::tui::ui::bottom::format_kv_hint(
-            "c",
-            lang().hotkeys.press_c_clear.as_str(),
-        ));
+    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
+    hints.push("f: Toggle follow".to_string());
+    hints.push("c: Clear logs".to_string());
+
+    // Append quit hint only when allowed (mirror global rule)
+    let in_subpage_editing = app
+        .page
+        .subpage_form
+        .as_ref()
+        .map(|f| f.editing)
+        .unwrap_or(false);
+    let can_quit = !app.page.subpage_active && !in_subpage_editing;
+    if can_quit {
+        hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
     hints
 }
@@ -225,13 +190,30 @@ pub fn map_key(
     _key: crossterm::event::KeyEvent,
     _app: &Status,
 ) -> Option<crate::tui::input::Action> {
-    // no page-specific map beyond global
+    // Log panel does not add extra mappings; let global mapping handle it
     None
 }
 
-use crate::tui::utils::bus::Bus;
-use crossterm::event::KeyEvent;
+/// Handle input for log panel. Sends commands via UiToCore.
+pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
+    use crossterm::event::KeyCode as KC;
 
-pub fn handle_subpage_key(_key: KeyEvent, _app: &mut Status, _bus: &Bus) -> bool {
-    false
+    match _key.code {
+        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
+            // Navigation commands
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Char('f') => {
+            // Toggle follow mode
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Char('c') => {
+            // Clear logs
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        _ => false
+    }
 }

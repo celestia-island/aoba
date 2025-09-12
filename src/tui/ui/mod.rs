@@ -1,7 +1,6 @@
 pub mod bottom;
 pub mod components;
 pub mod pages;
-pub mod pages_re;
 pub mod title;
 
 use ratatui::prelude::*;

@@ -48,7 +48,7 @@ pub fn start() -> Result<()> {
 
     // Thread 1: Core processing thread - handles UiToCore and CoreToUi communication
     {
-        let app_clone = Arc::clone(&app);
+        let _app_clone = Arc::clone(&app);
         let core_tx_clone = core_tx.clone();
         thread::spawn(move || {
             loop {
@@ -107,7 +107,7 @@ pub fn start() -> Result<()> {
 
                         // Route input to appropriate page handler
                         if let Ok(app_read) = app_clone.read() {
-                            let consumed = crate::tui::ui::pages_re::handle_input_in_subpage(
+                            let consumed = crate::tui::ui::pages::handle_input_in_subpage(
                                 key, &app_read, &bus_clone
                             );
                             
@@ -206,9 +206,9 @@ fn render_ui_readonly(f: &mut Frame, app: &Status) {
         ])
         .split(area);
 
-    // Use the new pages_re module for rendering
+    // Use the new pages module for rendering
     crate::tui::ui::title::render_title_readonly(f, main_chunks[0], app);
-    crate::tui::ui::pages_re::render_panels(f, main_chunks[1], app);
+    crate::tui::ui::pages::render_panels(f, main_chunks[1], app);
     crate::tui::ui::bottom::render_bottom_readonly(f, main_chunks[2], app);
 
     if app.page.mode_overlay_active {
