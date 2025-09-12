@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{EditingField, Page, Status},
+    protocol::status::{EditingField, Status},
     tui::ui::components::{
         render_boxed_paragraph, styled_spans, styled_title_span, StyledSpanKind, TextState,
     },
@@ -17,26 +17,15 @@ use crate::{
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
-    // Use transient form if present (access via accessor to allow ephemeral migration)
-    let form = match app.page {
-        Page::ModbusConfig { selected_port: _ } => {
-            if let Some(ref form) = app.page {
-                form
-            } else {
-                // No form, render placeholder
-                let lines = vec![ratatui::text::Line::from(
-                    lang().protocol.modbus.no_form_loaded.as_str(),
-                )];
-                return render_boxed_paragraph(f, area, lines, style);
-            }
-        }
-        _ => {
-            // Not in config page, render placeholder
-            let lines = vec![ratatui::text::Line::from(
-                lang().protocol.modbus.no_form_loaded.as_str(),
-            )];
-            return render_boxed_paragraph(f, area, lines, style);
-        }
+    // Use subpage_form if present 
+    let form = if let Some(ref form) = app.page.subpage_form {
+        form
+    } else {
+        // No form, render placeholder
+        let lines = vec![ratatui::text::Line::from(
+            "No form loaded",
+        )];
+        return render_boxed_paragraph(f, area, lines, style);
     };
 
     let mut lines: Vec<ratatui::text::Line> = Vec::new();

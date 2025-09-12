@@ -536,7 +536,7 @@ pub(crate) fn move_master_field_dir(
             };
             if let Some((_, _, f)) = coords
                 .iter()
-                .find(|(r, c, _)| *r == target. && *c == target.1)
+                .find(|(r, c, _)| *r == target.0 && *c == target.1)
             {
                 form.master_edit_field = Some(f.clone());
                 form.master_input_buffer.clear();

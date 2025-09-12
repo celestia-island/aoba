@@ -13,7 +13,7 @@ use crate::{
 /// with small gaps on left/right. Each level is styled as a button; only the
 /// first level (Home / app name) is clickable. '>' is used as separator.
 pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
-    let desired_h = 32.f32;
+    let desired_h = 32.0f32;
     let avail_w = ui.available_width();
     let size = Vec2::new(avail_w, desired_h);
 
@@ -43,7 +43,7 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
             ui.add_space(8.);
             let app_w = (app_title.chars().count() * 10 + 8) as f32;
             let app_size = Vec2::new(app_w, 24.);
-            let app_rect = ui.allocate_exact_size(app_size, egui::Sense::hover()).;
+            let app_rect = ui.allocate_exact_size(app_size, egui::Sense::hover()).0;
             ui.painter().text(
                 app_rect.left_center(),
                 Align2::LEFT_CENTER,
@@ -63,15 +63,15 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
                 .clicked()
             {
                 write_status(inner, |g| {
-                    g.page = Page::Entry { cursor: None };
+                    g.page.current_page = Page::Entry { cursor: None };
                     Ok(())
-                })?;
+                }).unwrap_or(());
             }
 
             // separator (non-selectable)
             ui.add_space(4.);
             let sep_size = Vec2::new(12., 24.);
-            let sep_rect = ui.allocate_exact_size(sep_size, egui::Sense::hover()).;
+            let sep_rect = ui.allocate_exact_size(sep_size, egui::Sense::hover()).0;
             ui.painter().text(
                 sep_rect.center(),
                 Align2::CENTER_CENTER,

@@ -78,7 +78,7 @@ pub fn start() -> Result<()> {
 
 fn run_app(
     terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
-    app: Arc<RwLock<Status>>,
+    _app: Arc<RwLock<Status>>,
     bus: crate::tui::utils::bus::Bus,
 ) -> Result<()> {
     loop {

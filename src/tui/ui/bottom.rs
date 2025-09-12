@@ -24,7 +24,7 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         );
-        let (msg, _ts) = err;
+        let (msg, _ts) = (&err.message, &err.timestamp);
         let p = Paragraph::new(msg.as_str())
             .alignment(Alignment::Left)
             .block(err_block);

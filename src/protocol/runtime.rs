@@ -139,7 +139,7 @@ fn run_loop(
                 }
                 RuntimeCommand::Write(bytes) => {
                     let mut ok = false;
-                    if let Ok(mut g) = serial.lock() {
+                    if let Ok(mut g) = serial.write() {
                         use std::io::Write;
                         if g.write_all(&bytes).is_ok() && g.flush().is_ok() {
                             ok = true;
@@ -162,7 +162,7 @@ fn run_loop(
                 last_byte = None;
             }
         }
-        if let Ok(mut g) = serial.lock() {
+        if let Ok(mut g) = serial.write() {
             use std::io::Read;
             let mut buf = [0u8; 256];
             match g.read(&mut buf) {
@@ -349,7 +349,7 @@ fn compute_gap(cfg: &SerialConfig) -> Duration {
 }
 
 fn reopen_serial(
-    shared: &Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
+    shared: &Arc<RwLock<Box<dyn SerialPort + Send + 'static>>>,
     port: &str,
     cfg: &SerialConfig,
 ) -> Result<()> {
@@ -359,7 +359,7 @@ fn reopen_serial(
     let builder = serialport::new(port, cfg.baud).timeout(Duration::from_millis(200));
     let builder = cfg.apply_builder(builder);
     let new_handle = builder.open()?;
-    if let Ok(mut g) = shared.lock() {
+    if let Ok(mut g) = shared.write() {
         *g = new_handle;
     }
     Ok(())

@@ -166,7 +166,7 @@ pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
     // read current offset from global app state
     let first_visible = std::cmp::min(
         max_start,
-        match app.page {
+        match app.page.current_page {
             Page::About { view_offset } => view_offset,
             _ => 0,
         },
