@@ -251,23 +251,13 @@ pub fn handle_subpage_key(key: KeyEvent, app: &mut Status, bus: &Bus) -> bool {
         KC::Tab => {
             // cycle forward: compute new usize, wrap by 3 and map back to enum
             let new_idx = (app.page.subpage_tab_index.as_usize() + 1) % 3;
-            app.page.subpage_tab_index = match new_idx {
-                0 => crate::protocol::status::SubpageTab::Config,
-                1 => crate::protocol::status::SubpageTab::Body,
-                2 => crate::protocol::status::SubpageTab::Log,
-                _ => crate::protocol::status::SubpageTab::Config,
-            };
+            app.page.subpage_tab_index = crate::protocol::status::SubpageTab::from_usize(new_idx);
             true
         }
         KC::BackTab => {
             let cur = app.page.subpage_tab_index.as_usize();
             let new_idx = if cur == 0 { 2 } else { cur - 1 };
-            app.page.subpage_tab_index = match new_idx {
-                0 => crate::protocol::status::SubpageTab::Config,
-                1 => crate::protocol::status::SubpageTab::Body,
-                2 => crate::protocol::status::SubpageTab::Log,
-                _ => crate::protocol::status::SubpageTab::Config,
-            };
+            app.page.subpage_tab_index = crate::protocol::status::SubpageTab::from_usize(new_idx);
             true
         }
         KC::Enter => {
@@ -489,7 +479,19 @@ pub(crate) fn move_master_field_dir(
             let cur = form.master_edit_field.clone().unwrap_or(F::Role);
             let (crow, ccol) = coords
                 .iter()
-                .find(|(_, _, f)| *f == cur)
+                .find(|(_, _, f)| {
+                    use MasterEditField as MF;
+                    match (&cur, f) {
+                        (MF::Role, MF::Role) => true,
+                        (MF::Id, MF::Id) => true,
+                        (MF::Type, MF::Type) => true,
+                        (MF::Start, MF::Start) => true,
+                        (MF::End, MF::End) => true,
+                        (MF::Counter, MF::Counter) => true,
+                        (MF::Value(a), MF::Value(b)) => a == b,
+                        _ => false,
+                    }
+                })
                 .map(|(r, c, _)| (*r, *c))
                 .unwrap_or((0, 0));
             let target = match dir {

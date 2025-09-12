@@ -60,7 +60,7 @@ pub fn start() -> Result<()> {
                     }
                 }
 
-                let _ = core_tx.send(CoreToUi::Tick)?;
+                let _ = core_tx.send(CoreToUi::Tick);
                 thread::sleep(Duration::from_millis(50));
             }
         });

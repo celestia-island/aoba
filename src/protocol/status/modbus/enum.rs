@@ -52,10 +52,38 @@ pub enum SubpageTab {
     Log,
 }
 
+impl SubpageTab {
+    pub fn as_usize(self) -> usize {
+        match self {
+            SubpageTab::Config => 0,
+            SubpageTab::Body => 1,
+            SubpageTab::Log => 2,
+        }
+    }
+    
+    pub fn from_usize(idx: usize) -> SubpageTab {
+        match idx {
+            0 => SubpageTab::Config,
+            1 => SubpageTab::Body,
+            2 => SubpageTab::Log,
+            _ => SubpageTab::Config,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppMode {
     Modbus,
     Mqtt,
+}
+
+impl AppMode {
+    pub fn as_usize(self) -> usize {
+        match self {
+            AppMode::Modbus => 0,
+            AppMode::Mqtt => 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,6 +97,7 @@ pub struct RegisterEntry {
     pub req_total: u32,
     pub next_poll_at: std::time::Instant,
     pub pending_requests: Vec<u8>, // simplified type for now
+    pub values: Vec<u16>, // Register values
 }
 
 #[derive(Debug, Clone, PartialEq)]

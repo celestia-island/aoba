@@ -1,6 +1,12 @@
 use super::{Status, SubpageForm};
 
 impl Status {
+    /// Create a new Status instance with default values
+    pub fn new() -> Self {
+        // The derive_struct macro generates a Default implementation
+        Self::default()
+    }
+
     /// Initialize the subpage form with default values
     pub fn init_subpage_form(&mut self) {
         self.page.subpage_form = Some(SubpageForm {

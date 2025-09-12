@@ -18,16 +18,6 @@ pub struct ErrorInfo {
     pub timestamp: DateTime<Local>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ParsedRequest {
-    pub origin: String,
-    pub rw: String,
-    pub command: String,
-    pub slave_id: u8,
-    pub address: u16,
-    pub length: u16,
-}
-
 #[derive(Clone)]
 pub struct SerialPortWrapper(Arc<RwLock<Box<dyn SerialPort + Send>>>);
 
@@ -70,6 +60,11 @@ derive_struct! {
             last_scan_info: String = String::new(),
         },
 
+        busy: {
+            busy: bool = false,
+            spinner_frame: u32 = 0,
+        },
+
         per_port: {
             pending_sync_port?: String,
         },
@@ -105,6 +100,8 @@ derive_struct! {
             log_auto_scroll: bool = true,
             input_editing: bool = false,
             input_mode: InputMode = InputMode::Ascii,
+            mode_overlay_active: bool = false,
+            mode_overlay_index: crate::protocol::status::AppMode = crate::protocol::status::AppMode::Modbus,
             
             // Legacy fields for compatibility
             current_page: enum Page {
@@ -165,14 +162,7 @@ derive_struct! {
                     logs: [LogEntry {
                         when: DateTime<Local>,
                         raw: String,
-                        parsed?: ParsedRequest {
-                            origin: String,
-                            rw: String,
-                            command: String,
-                            slave_id: u8,
-                            address: u16,
-                            length: u16,
-                        },
+                        parsed?: String, // Simplified - use string instead of complex struct
                     }],
                     log_selected: usize,
                     log_view_offset: usize,
