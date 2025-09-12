@@ -111,7 +111,7 @@ pub fn boot_modbus_slave_service(
     }
 
     // Detect duplicated payload repetitions (e.g. data body repeated twice or three times)
-    // and trim to a single copy, fixing byte count & CRC. Applies to standard read functions 0x01..0x04.
+    // and trim to a single copy, fixing byte count & CRC. Applies to standard read functions 0x01..x04.
     fn trim_duplicate_payload(func: u8, frame: &mut Vec<u8>) -> bool {
         if frame.len() < 5 {
             // minimal: sid func bc data crc1 crc2

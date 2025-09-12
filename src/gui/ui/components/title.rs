@@ -1,16 +1,19 @@
+use anyhow::Result;
+use std::sync::{Arc, RwLock};
+
 use eframe::egui;
 use egui::{Align, Align2, Button, ColorImage, FontId, Layout, TextureOptions, Ui, Vec2};
-use image;
 
-use crate::i18n::lang;
-use crate::protocol::status::Status;
-use std::sync::{Arc, Mutex};
+use crate::{
+    i18n::lang,
+    protocol::status::{status_rw::write_status, Page, Status},
+};
 
 /// Render a single-row breadcrumb (no big heading). Layout is left-to-right
 /// with small gaps on left/right. Each level is styled as a button; only the
 /// first level (Home / app name) is clickable. '>' is used as separator.
-pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
-    let desired_h = 32.0f32;
+pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
+    let desired_h = 32.f32;
     let avail_w = ui.available_width();
     let size = Vec2::new(avail_w, desired_h);
 
@@ -23,67 +26,66 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
         // left-to-right layout with vertical centering
         child.with_layout(Layout::left_to_right(Align::Center), |ui| {
             // Logo at left
-            if let Ok(img) = image::load_from_memory(include_bytes!("../../../res/logo.png")) {
+            if let Ok(img) = image::load_from_memory(include_bytes!("../../../../res/logo.png")) {
                 let img = img.to_rgba8();
                 let (w, h) = (img.width() as usize, img.height() as usize);
                 let color_image = ColorImage::from_rgba_unmultiplied([w, h], &img);
                 let tex =
                     ui.ctx()
                         .load_texture("aoba_logo", color_image, TextureOptions::default());
-                ui.image((tex.id(), egui::vec2(24.0, 24.0)));
+                ui.image((tex.id(), egui::vec2(24., 24.)));
             } else {
-                ui.add_space(4.0);
+                ui.add_space(4.);
             }
 
             // Big app title (to the right of logo) - render with painter so it's not selectable
             let app_title = lang().index.title.as_str();
-            ui.add_space(8.0);
+            ui.add_space(8.);
             let app_w = (app_title.chars().count() * 10 + 8) as f32;
-            let app_size = Vec2::new(app_w, 24.0);
-            let app_rect = ui.allocate_exact_size(app_size, egui::Sense::hover()).0;
+            let app_size = Vec2::new(app_w, 24.);
+            let app_rect = ui.allocate_exact_size(app_size, egui::Sense::hover()).;
             ui.painter().text(
                 app_rect.left_center(),
                 Align2::LEFT_CENTER,
                 app_title,
-                FontId::proportional(18.0),
+                FontId::proportional(18.),
                 ui.visuals().text_color(),
             );
             // small gap before breadcrumb
-            ui.add_space(12.0);
+            ui.add_space(12.);
 
             // Level 1: Home (clickable)
             // Use i18n text for the home label
             let home_label = lang().index.home.as_str();
             let home_w = (home_label.chars().count() * 8 + 8) as f32;
             if ui
-                .add_sized(Vec2::new(home_w, 24.0), Button::new(home_label).small())
+                .add_sized(Vec2::new(home_w, 24.), Button::new(home_label).small())
                 .clicked()
             {
-                let _ = crate::protocol::status::status_rw::write_status(inner, |g| {
-                    g.ui.subpage_active = false;
-                    g.ui.subpage_tab_index = crate::protocol::status::SubpageTab::Config;
+                write_status(inner, |g| {
+                    g.page = Page::Entry { cursor: None };
                     Ok(())
-                });
+                })?;
             }
 
             // separator (non-selectable)
-            ui.add_space(4.0);
-            let sep_size = Vec2::new(12.0, 24.0);
-            let sep_rect = ui.allocate_exact_size(sep_size, egui::Sense::hover()).0;
+            ui.add_space(4.);
+            let sep_size = Vec2::new(12., 24.);
+            let sep_rect = ui.allocate_exact_size(sep_size, egui::Sense::hover()).;
             ui.painter().text(
                 sep_rect.center(),
                 Align2::CENTER_CENTER,
                 ">",
-                FontId::proportional(14.0),
+                FontId::proportional(14.),
                 ui.visuals().text_color(),
             );
-            ui.add_space(4.0);
+            ui.add_space(4.);
 
             // Level 2: Page name (auto-sized)
             if let Ok((label, maybe_port)) =
                 crate::protocol::status::status_rw::read_status(inner, |g| {
-                    let label = if g.ui.subpage_active {
-                        match g.ui.subpage_tab_index {
+                    let label = if g.page.subpage_active {
+                        match g.page.subpage_tab_index {
                             crate::protocol::status::SubpageTab::Body => lang()
                                 .protocol
                                 .modbus
@@ -99,11 +101,11 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
                         lang().index.details.as_str().to_string()
                     };
 
-                    let maybe_port = if g.ui.subpage_active
+                    let maybe_port = if g.page.subpage_active
                         && !g.ports.list.is_empty()
-                        && g.ui.selected < g.ports.list.len()
+                        && g.page.selected < g.ports.list.len()
                     {
-                        Some(g.ports.list[g.ui.selected].port_name.clone())
+                        Some(g.ports.list[g.page.selected].port_name.clone())
                     } else {
                         None
                     };
@@ -111,33 +113,35 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<Mutex<Status>>) {
                 })
             {
                 let label_w = (label.chars().count() * 8 + 8) as f32;
-                ui.add_sized(Vec2::new(label_w, 24.0), Button::new(label).small());
+                ui.add_sized(Vec2::new(label_w, 24.), Button::new(label).small());
 
                 if let Some(port_name) = maybe_port {
-                    ui.add_space(4.0);
+                    ui.add_space(4.);
                     let sep_rect = ui
-                        .allocate_exact_size(Vec2::new(12.0, 24.0), egui::Sense::hover())
+                        .allocate_exact_size(Vec2::new(12., 24.), egui::Sense::hover())
                         .0;
                     ui.painter().text(
                         sep_rect.center(),
                         Align2::CENTER_CENTER,
                         ">",
-                        FontId::proportional(14.0),
+                        FontId::proportional(14.),
                         ui.visuals().text_color(),
                     );
-                    ui.add_space(4.0);
+                    ui.add_space(4.);
                     let port_w = (port_name.chars().count() * 8 + 8) as f32;
-                    ui.add_sized(Vec2::new(port_w, 24.0), Button::new(port_name).small());
+                    ui.add_sized(Vec2::new(port_w, 24.), Button::new(port_name).small());
                 }
             } else {
                 // fallback: show default second-level label
                 let fallback = lang().index.details.as_str();
                 let fw = (fallback.chars().count() * 8 + 8) as f32;
-                ui.add_sized(Vec2::new(fw, 24.0), Button::new(fallback).small());
+                ui.add_sized(Vec2::new(fw, 24.), Button::new(fallback).small());
             }
 
             // right padding
-            ui.add_space(8.0);
+            ui.add_space(8.);
         });
     });
+
+    Ok(())
 }
