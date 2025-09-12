@@ -2,11 +2,12 @@ mod init_font;
 mod ui;
 
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 
 use eframe::{self, egui};
 use egui::{vec2, IconData};
 
+use crate::protocol::status::status_rw::read_status;
 use crate::protocol::status::Status;
 use crate::tui::utils::bus::{Bus, CoreToUi, UiToCore};
 use flume;
@@ -39,7 +40,7 @@ pub fn start() -> Result<()> {
 }
 
 pub struct GuiApp {
-    status: Arc<Mutex<Status>>,
+    status: Arc<RwLock<Status>>,
     bus: Bus,
 }
 
@@ -47,7 +48,7 @@ impl GuiApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         init_font::replace_fonts(&cc.egui_ctx);
 
-        let status = Arc::new(Mutex::new(Status::new()));
+        let status = Arc::new(RwLock::new(Status::default()));
 
         // Create channels and a simple core-like thread for demo handling of Refresh/Quit.
         let (core_tx, core_rx) = flume::unbounded::<CoreToUi>();
@@ -84,27 +85,6 @@ impl GuiApp {
 
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        // Snapshot state quickly using read_status helper to avoid holding lock while drawing
-        let (_ports, _selected, _auto_refresh, _last_refresh, _error) =
-            crate::protocol::status::status_rw::read_status(&self.status, |guard| {
-                Ok((
-                    guard.ports.clone(),
-                    guard.ui.selected,
-                    guard.ui.auto_refresh,
-                    guard.ui.last_refresh,
-                    guard.ui.error.clone(),
-                ))
-            })
-            .unwrap_or_else(|_| {
-                (
-                    crate::protocol::status::Status::default().ports,
-                    0usize,
-                    false,
-                    None,
-                    None,
-                )
-            });
-
         // Delegate to centralized UI renderer (title + breadcrumb + pages + status)
         crate::gui::ui::render_ui(ctx, frame, &self.status, &self.bus);
     }
