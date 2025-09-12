@@ -169,7 +169,7 @@ derive_struct! {
                 About {
                     view_offset: usize,
                 }
-            },
+            } = Entry { cursor: None },
         },
         temporarily: {
             input_raw_buffer: String,
