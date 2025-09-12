@@ -9,7 +9,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{i18n::lang, protocol::status::Status, tui::input::Action};
+use crate::{i18n::lang, protocol::status::Status, tui::input::Action, tui::utils::bus::Bus};
 
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
@@ -39,7 +39,35 @@ pub fn map_key(_key: KeyEvent, _app: &Status) -> Option<Action> {
     None
 }
 
-pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
+/// Handle input for entry page. Only processes input, does not mutate Status.
+/// Sends appropriate messages via UiToCore channel.
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
+    use crossterm::event::KeyCode as KC;
+    
+    // Basic navigation keys for entry page
+    match key.code {
+        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
+            // Send navigation commands to core
+            // For now, send a generic command that core will handle
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Enter | KC::Char('l') => {
+            // Enter subpage
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Char('r') => {
+            // Refresh ports
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        _ => false
+    }
+}
+
+/// Render the entry page. Only reads from Status, does not mutate.
+pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     // Horizontal split: left ports | right details
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Horizontal)
@@ -224,7 +252,7 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
             } else if rel == 2 {
                 // About page selected; show a compact preview that reuses about rendering logic
                 // Build an AboutCache snapshot if available by peeking the internal cache (best-effort)
-                crate::tui::ui::pages::about::render_about(f, right, app);
+                crate::tui::ui::pages::about::render(f, right, app);
                 return;
             } else {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
@@ -445,26 +473,4 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
     f.render_widget(content, right);
 
     // Mode selector removed (unified ModBus RTU) – overlay no longer rendered.
-}
-
-/// Handle key events when entry is used as a full-area subpage (listen). Return true if consumed.
-pub fn handle_subpage_key(
-    _key: crossterm::event::KeyEvent,
-    _app: &mut crate::protocol::status::Status,
-) -> bool {
-    use crossterm::event::KeyCode as KC;
-    // Provide simple handling for listen mode: consume Up / Down / Enter to avoid bubbling
-    match _key.code {
-        KC::Up
-        | KC::Down
-        | KC::Left
-        | KC::Right
-        | KC::Char('k')
-        | KC::Char('j')
-        | KC::Char('h')
-        | KC::Char('l') => return true,
-        KC::Enter => return true,
-        _ => {}
-    }
-    false
 }

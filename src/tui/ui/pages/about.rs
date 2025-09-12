@@ -15,6 +15,7 @@ use crate::{
     i18n::lang,
     protocol::status::{Page, Status},
     tui::ui::components::{kv_pairs_to_lines, render_boxed_paragraph},
+    tui::utils::bus::Bus,
 };
 
 #[derive(Default, Clone)]
@@ -48,16 +49,20 @@ fn init_about_cache() -> Arc<Mutex<AboutCache>> {
         Ok(val) => {
             // package section
             if let Some(pkg) = val.get("package") {
-                if let Some(version) = pkg.get("version").and_then(|v| v.as_str()) {
-                    cache.version = Some(version.to_string());
+                if let Some(n) = pkg.get("name").and_then(|v| v.as_str()) {
+                    cache.full_name = Some(n.to_string());
                 }
-                if let Some(authors) = pkg.get("authors").and_then(|a| a.as_array()) {
-                    let auths: Vec<String> = authors
+                if let Some(ver) = pkg.get("version").and_then(|v| v.as_str()) {
+                    cache.version = Some(ver.to_string());
+                }
+                if let Some(a) = pkg.get("authors").and_then(|v| v.as_array()) {
+                    let auth_str = a
                         .iter()
-                        .filter_map(|s| s.as_str().map(|s| s.to_string()))
-                        .collect();
-                    if !auths.is_empty() {
-                        cache.authors = Some(auths.join(", "));
+                        .filter_map(|v| v.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    if !auth_str.is_empty() {
+                        cache.authors = Some(auth_str);
                     }
                 }
                 if let Some(repo) = pkg.get("repository").and_then(|v| v.as_str()) {
@@ -68,32 +73,27 @@ fn init_about_cache() -> Arc<Mutex<AboutCache>> {
                 }
             }
 
-            // dependencies list
-            if let Some(deps) = val.get("dependencies").and_then(|d| d.as_array()) {
-                for dep in deps.iter() {
-                    if let (Some(name), Some(version)) = (
-                        dep.get("name").and_then(|n| n.as_str()),
-                        dep.get("version").and_then(|v| v.as_str()),
-                    ) {
-                        cache.deps.push((name.to_string(), version.to_string()));
+            // deps section
+            if let Some(deps) = val.get("deps").and_then(|v| v.as_array()) {
+                for dep in deps {
+                    if let Some(dep_map) = dep.as_table() {
+                        if let (Some(name), Some(version)) = (
+                            dep_map.get("name").and_then(|v| v.as_str()),
+                            dep_map.get("version").and_then(|v| v.as_str()),
+                        ) {
+                            cache.deps.push((name.to_string(), version.to_string()));
+                            if let Some(lic) = dep_map.get("license").and_then(|v| v.as_str()) {
+                                cache.license_map.insert(name.to_string(), lic.to_string());
+                            }
+                        }
                     }
                 }
             }
-
-            // license_map table
-            if let Some(lmap) = val.get("license_map").and_then(|l| l.as_table()) {
-                for (k, v) in lmap.iter() {
-                    if let Some(s) = v.as_str() {
-                        cache.license_map.insert(k.clone(), s.to_string());
-                    }
-                }
-            }
-
             cache.ready = true;
         }
         Err(e) => {
-            cache.err = Some(format!("failed to parse about cache: {}", e));
-            cache.ready = true; // mark ready so UI shows error instead of loading
+            cache.err = Some(format!("Error parsing about_cache.toml: {e}"));
+            cache.ready = true;
         }
     }
 
@@ -112,6 +112,45 @@ pub fn map_key(
     _app: &Status,
 ) -> Option<crate::tui::input::Action> {
     None
+}
+
+/// Handle input for about page. Sends navigation commands via UiToCore.
+pub fn handle_input(key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
+    use crossterm::event::KeyCode as KC;
+
+    match key.code {
+        KC::Up | KC::Char('k') => {
+            // Send scroll up command to core
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Down | KC::Char('j') => {
+            // Send scroll down command to core
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::PageUp => {
+            // Send page up command to core
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::PageDown => {
+            // Send page down command to core
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Home => {
+            // Send home command to core
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::End => {
+            // Send end command to core
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        _ => false,
+    }
 }
 
 /// Render about content on right panel. Reads Cargo.toml at repo root and shows package and deps.
@@ -188,7 +227,8 @@ pub(crate) fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static
     out
 }
 
-pub fn render_about(f: &mut Frame, area: Rect, app: &Status) {
+/// Render the about page. Only reads from Status, does not mutate.
+pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     let block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .title(Span::raw(format!(" {}", lang().index.title)));
