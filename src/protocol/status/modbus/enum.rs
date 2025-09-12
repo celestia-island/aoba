@@ -1,5 +1,5 @@
 use std::fmt;
-use serialport::Parity;
+// use serialport::Parity; // Used in SubpageForm fields via full path
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryRole {
@@ -83,6 +83,7 @@ pub struct SubpageForm {
     pub cursor: usize,
     pub loop_enabled: bool,
     pub master_passive: Option<bool>,
+    pub editing: bool,
     
     // Configuration fields
     pub editing_field: Option<crate::protocol::status::EditingField>,

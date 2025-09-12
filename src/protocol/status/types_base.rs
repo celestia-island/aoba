@@ -18,6 +18,16 @@ pub struct ErrorInfo {
     pub timestamp: DateTime<Local>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParsedRequest {
+    pub origin: String,
+    pub rw: String,
+    pub command: String,
+    pub slave_id: u8,
+    pub address: u16,
+    pub length: u16,
+}
+
 #[derive(Clone)]
 pub struct SerialPortWrapper(Arc<RwLock<Box<dyn SerialPort + Send>>>);
 
@@ -32,6 +42,7 @@ derive_struct! {
         ports: {
             list: [{
                 port_name: String,
+                port_type: String, // Simplified type representation
                 info?: SerialPortInfo,
                 extra: PortExtra,
                 state: enum PortState {
@@ -42,7 +53,21 @@ derive_struct! {
                 handle?: SerialPortWrapper,
                 runtimes?: PortRuntimeHandle,
             }] = vec![],
+            states: [{
+                port_state: PortState,
+            }] = vec![],
+            extras: [{
+                port_extra: PortExtra,
+            }] = vec![],
+            runtimes: [{
+                runtime?: PortRuntimeHandle,
+            }] = vec![],
             about_view_offset: usize = 0,
+        },
+
+        scan: {
+            last_scan_time?: DateTime<Local>,
+            last_scan_info: String = String::new(),
         },
 
         per_port: {
@@ -60,6 +85,26 @@ derive_struct! {
                 timestamp: DateTime<Local>,
             },
             log_clear_pending: bool = false,
+            input_buffer: String = String::new(),
+            
+            // Log panel fields
+            logs: [{
+                when: DateTime<Local>,
+                raw: String,
+                parsed?: ParsedRequest {
+                    origin: String,
+                    rw: String,
+                    command: String,
+                    slave_id: u8,
+                    address: u16,
+                    length: u16,
+                },
+            }] = vec![],
+            log_selected: usize = 0,
+            log_view_offset: usize = 0,
+            log_auto_scroll: bool = true,
+            input_editing: bool = false,
+            input_mode: InputMode = InputMode::Ascii,
             
             // Legacy fields for compatibility
             current_page: enum Page {
