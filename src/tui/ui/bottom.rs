@@ -1,13 +1,17 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::{i18n::lang, protocol::status::Status, tui::ui::pages};
+use crate::{i18n::lang, protocol::status::Status};
 
-pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
+pub fn render_bottom(f: &mut Frame, area: Rect, app: &mut Status) {
+    render_bottom_readonly(f, area, app);
+}
+
+pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
     let help_block = Block::default().borders(Borders::NONE);
 
     // If app has an error message, display it on the first line (red),
     // And on the second line show instructions on how to clear it.
-    if let Some(err) = _app.page.error.as_ref() {
+    if let Some(err) = app.page.error.as_ref() {
         // Split the provided area into two rows
         let rows = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
@@ -24,14 +28,14 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         );
-        let (msg, _ts) = err;
+        let (msg, _ts) = (&err.message, &err.timestamp);
         let p = Paragraph::new(msg.as_str())
             .alignment(Alignment::Left)
             .block(err_block);
         f.render_widget(p, rows[0]);
 
         // Delegate construction of bottom hints to page layer so behavior is consistent.
-        let hints = crate::tui::ui::pages::bottom_hints_for_app(_app);
+        let hints = crate::tui::ui::pages::bottom_hints_for_app(app);
         let hint_rect = rows[1];
         // Use the unified renderer for hints
         render_hints(f, hint_rect, hints.iter().map(|s| s.as_str()));
@@ -42,10 +46,10 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
     let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
-    if _app.page.subpage_active {
+    if app.page.subpage_active {
         // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
         // [confirmation row - yellow bg] [page hints] [global hints]
-        if _app.page.log_clear_pending {
+        if app.page.log_clear_pending {
             let rows = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .margin(0)
@@ -70,11 +74,11 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
             f.render_widget(confirm_para, rows[0]);
 
             // Page-specific hints (middle)
-            let page_hints = pages::bottom_hints_for_app(_app);
+            let page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
             render_hints(f, rows[1], page_hints.iter().map(|s| s.as_str()));
 
             // Global hints (bottom-most)
-            let global_hints = pages::global_hints_for_app(_app);
+            let global_hints = crate::tui::ui::pages::global_hints_for_app(app);
             render_hints(f, rows[2], global_hints.iter().map(|s| s.as_str()));
         } else {
             let rows = ratatui::layout::Layout::default()
@@ -87,16 +91,16 @@ pub fn render_bottom(f: &mut Frame, area: Rect, _app: &mut Status) {
                 .split(area);
 
             // Page-specific hints (above)
-            let page_hints = pages::bottom_hints_for_app(_app);
+            let page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
             render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
 
             // Global hints (bottom-most)
-            let global_hints = pages::global_hints_for_app(_app);
+            let global_hints = crate::tui::ui::pages::global_hints_for_app(app);
             render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
         }
     } else {
         // Single-line bottom hints when not in a subpage
-        let hints = pages::bottom_hints_for_app(_app);
+        let hints = crate::tui::ui::pages::bottom_hints_for_app(app);
         let text = format_hints(hints.iter().map(|s| s.as_str()));
         let help = Paragraph::new(text)
             .alignment(Alignment::Center)

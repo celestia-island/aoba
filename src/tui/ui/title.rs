@@ -2,6 +2,10 @@ use crate::{i18n::lang, protocol::status::Status};
 use ratatui::{prelude::*, widgets::*};
 
 pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
+    render_title_readonly(f, area, app);
+}
+
+pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
     // Horizontal layout: left (spinner) + center (title) + right (reserved)
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
