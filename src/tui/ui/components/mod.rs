@@ -1,3 +1,4 @@
+pub mod error_msg;
 pub mod log_input;
 pub mod mode_selector;
 

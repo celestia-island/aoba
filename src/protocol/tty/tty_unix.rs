@@ -4,6 +4,64 @@ use serialport::{SerialPortInfo, SerialPortType};
 
 use super::PortExtra;
 
+// Utility functions for parsing debug strings (shared with Windows)
+fn parse_string_after(s: &str, key: &str) -> Option<String> {
+    // Look for key and then accept an '=' separated value; stop at first non-accepted char
+    let tail = s.split_once(key)?.1;
+    // prefer explicit '=' value first
+    if let Some((_, after)) = tail.split_once('=') {
+        let after_trim = after.trim_start();
+        let mut out = String::new();
+        for c in after_trim.chars() {
+            if c.is_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == ':' || c == '.' {
+                out.push(c);
+            } else {
+                break;
+            }
+        }
+        if !out.is_empty() {
+            return Some(out);
+        }
+    }
+    None
+}
+
+fn parse_hex_after(s: &str, key: &str) -> Option<u16> {
+    let tail = s.split_once(key)?.1;
+    // check for 0x... first
+    if let Some((_, after)) = tail.split_once("0x") {
+        let num: String = after
+            .chars()
+            .take_while(|c| c.is_ascii_hexdigit())
+            .collect();
+        if !num.is_empty() {
+            if let Ok(v) = u16::from_str_radix(&num, 16) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn parse_serial_after(s: &str, key: &str) -> Option<String> {
+    let tail = s.split_once(key)?.1;
+    if let Some((_, after)) = tail.split_once('=') {
+        let after_trim = after.trim_start();
+        let mut out = String::new();
+        for c in after_trim.chars() {
+            if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' {
+                out.push(c);
+            } else {
+                break;
+            }
+        }
+        if !out.is_empty() {
+            return Some(out);
+        }
+    }
+    None
+}
+
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     let raw_ports = serialport::available_ports().unwrap_or_default();
@@ -43,8 +101,8 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
             None => p.port_name.to_lowercase(),
         };
         let key = match &p.port_type {
-            SerialPortType::UsbPort { vid, pid, .. } => {
-                format!("{}:vid={:04x}:pid={:04x}", base, vid, pid)
+            SerialPortType::UsbPort(info) => {
+                format!("{}:vid={:04x}:pid={:04x}", base, info.vid, info.pid)
             }
             _ => base,
         };
@@ -71,9 +129,11 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
             continue;
         }
         for i in idxs.into_iter() {
-            if let SerialPortType::UsbPort { vid, pid, .. } = ports[i].port_type {
-                ports[i].port_name =
-                    format!("{} (vid:{:04x} pid:{:04x})", ports[i].port_name, vid, pid);
+            if let SerialPortType::UsbPort(info) = &ports[i].port_type {
+                ports[i].port_name = format!(
+                    "{} (vid:{:04x} pid:{:04x})",
+                    ports[i].port_name, info.vid, info.pid
+                );
             }
         }
     }
@@ -110,31 +170,23 @@ pub fn try_extract_vid_pid_serial(
     pt: &serialport::SerialPortType,
 ) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
     match pt {
-        serialport::SerialPortType::UsbPort {
-            vid,
-            pid,
-            serial_number,
-            manufacturer,
-            product,
-        } => {
-            let sn = serial_number.as_ref().map(|s| s.clone());
-            let m = manufacturer.as_ref().map(|s| s.clone());
-            let p = product.as_ref().map(|s| s.clone());
-            Some((*vid, *pid, sn, m, p))
+        serialport::SerialPortType::UsbPort(info) => {
+            let sn = info.serial_number.as_ref().map(|s| s.clone());
+            let m = info.manufacturer.as_ref().map(|s| s.clone());
+            let p = info.product.as_ref().map(|s| s.clone());
+            Some((info.vid, info.pid, sn, m, p))
         }
         // Some serialport versions have different field names; try to fall back
         // To Debug parsing (best-effort).
         _ => {
             let dbg = format!("{:?}", pt).to_lowercase();
-            let vid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "vid");
-            let pid = crate::protocol::tty::tty_windows::parse_hex_after(&dbg, "pid");
-            let sn = crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial")
-                .or_else(|| {
-                    crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "serial_number")
-                })
-                .or_else(|| crate::protocol::tty::tty_windows::parse_serial_after(&dbg, "sn"));
-            let manu = crate::protocol::tty::tty_windows::parse_string_after(&dbg, "manufacturer");
-            let prod = crate::protocol::tty::tty_windows::parse_string_after(&dbg, "product");
+            let vid = parse_hex_after(&dbg, "vid");
+            let pid = parse_hex_after(&dbg, "pid");
+            let sn = parse_serial_after(&dbg, "serial")
+                .or_else(|| parse_serial_after(&dbg, "serial_number"))
+                .or_else(|| parse_serial_after(&dbg, "sn"));
+            let manu = parse_string_after(&dbg, "manufacturer");
+            let prod = parse_string_after(&dbg, "product");
             match (vid, pid) {
                 (Some(v), Some(p)) => Some((v, p, sn, manu, prod)),
                 _ => None,
