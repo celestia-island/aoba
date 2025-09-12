@@ -60,7 +60,7 @@ impl SubpageTab {
             SubpageTab::Log => 2,
         }
     }
-    
+
     pub fn from_usize(idx: usize) -> SubpageTab {
         match idx {
             0 => SubpageTab::Config,
@@ -97,7 +97,7 @@ pub struct RegisterEntry {
     pub req_total: u32,
     pub next_poll_at: std::time::Instant,
     pub pending_requests: Vec<u8>, // simplified type for now
-    pub values: Vec<u16>, // Register values
+    pub values: Vec<u16>,          // Register values
 }
 
 #[derive(Debug, Clone)]
@@ -113,13 +113,13 @@ pub struct SubpageForm {
     pub loop_enabled: bool,
     pub master_passive: Option<bool>,
     pub editing: bool,
-    
+
     // Configuration fields
     pub editing_field: Option<crate::protocol::status::EditingField>,
     pub input_buffer: String,
     pub edit_choice_index: Option<usize>,
     pub edit_confirmed: bool,
-    
+
     // Serial configuration
     pub baud: u32,
     pub parity: serialport::Parity,

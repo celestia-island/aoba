@@ -81,8 +81,7 @@ impl PortRuntimeHandle {
             serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(200));
         let builder = initial.apply_builder(builder);
         let handle = builder.open()?;
-        let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> =
-            Arc::new(Mutex::new(handle));
+        let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> = Arc::new(Mutex::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);

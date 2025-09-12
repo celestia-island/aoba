@@ -90,10 +90,16 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
         );
-        (title.clone(), Block::default().borders(Borders::ALL).title(title))
+        (
+            title.clone(),
+            Block::default().borders(Borders::ALL).title(title),
+        )
     } else {
         let title_text = format!(" {} ", lang().input.input_label.as_str());
-        (Span::raw(title_text.clone()), Block::default().borders(Borders::ALL).title(title_text))
+        (
+            Span::raw(title_text.clone()),
+            Block::default().borders(Borders::ALL).title(title_text),
+        )
     };
 
     let para = Paragraph::new(lines)

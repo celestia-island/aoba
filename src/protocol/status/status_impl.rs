@@ -21,13 +21,13 @@ impl Status {
             loop_enabled: false,
             master_passive: None,
             editing: false,
-            
+
             // Configuration fields with defaults
             editing_field: None,
             input_buffer: String::new(),
             edit_choice_index: None,
             edit_confirmed: false,
-            
+
             // Serial configuration defaults
             baud: 9600,
             parity: serialport::Parity::None,

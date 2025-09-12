@@ -130,8 +130,10 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         }
         for i in idxs.into_iter() {
             if let SerialPortType::UsbPort(info) = &ports[i].port_type {
-                ports[i].port_name =
-                    format!("{} (vid:{:04x} pid:{:04x})", ports[i].port_name, info.vid, info.pid);
+                ports[i].port_name = format!(
+                    "{} (vid:{:04x} pid:{:04x})",
+                    ports[i].port_name, info.vid, info.pid
+                );
             }
         }
     }

@@ -17,14 +17,12 @@ use crate::{
 
 /// Render a configuration panel for a subpage. Reads `app.subpage_form` and renders fields.
 pub fn render_config_panel(f: &mut Frame, area: Rect, app: &mut Status, style: Option<Style>) {
-    // Use subpage_form if present 
+    // Use subpage_form if present
     let form = if let Some(ref form) = app.page.subpage_form {
         form
     } else {
         // No form, render placeholder
-        let lines = vec![ratatui::text::Line::from(
-            "No form loaded",
-        )];
+        let lines = vec![ratatui::text::Line::from("No form loaded")];
         return render_boxed_paragraph(f, area, lines, style);
     };
 

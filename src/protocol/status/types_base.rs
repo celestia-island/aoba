@@ -75,7 +75,7 @@ derive_struct! {
             },
             log_clear_pending: bool = false,
             input_buffer: String = String::new(),
-            
+
             // Log panel fields
             logs: [{
                 when: DateTime<Local>,
@@ -96,7 +96,7 @@ derive_struct! {
             input_mode: InputMode = InputMode::Ascii,
             mode_overlay_active: bool = false,
             mode_overlay_index: crate::protocol::status::AppMode = crate::protocol::status::AppMode::Modbus,
-            
+
             // Legacy fields for compatibility
             current_page: enum Page {
                 Entry {

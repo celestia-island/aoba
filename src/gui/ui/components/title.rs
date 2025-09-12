@@ -65,7 +65,8 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
                 write_status(inner, |g| {
                     g.page.current_page = Page::Entry { cursor: None };
                     Ok(())
-                }).unwrap_or(());
+                })
+                .unwrap_or(());
             }
 
             // separator (non-selectable)

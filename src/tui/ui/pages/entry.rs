@@ -204,10 +204,8 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                     for l in app.scan.last_scan_info.lines().take(100) {
                         // Cap lines to avoid overflow
                         if l.starts_with("ERROR:") {
-                            lines.push(Line::from(Span::styled(
-                                l,
-                                Style::default().fg(Color::Red),
-                            )));
+                            lines
+                                .push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
                         } else {
                             lines.push(Line::from(l));
                         }
@@ -351,7 +349,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
                 Some(status_style),
             ));
             // Current per-port application mode (ModBus / MQTT)
-            if matches!(selected_state, crate::protocol::status::PortState::OccupiedByThis) {
+            if matches!(
+                selected_state,
+                crate::protocol::status::PortState::OccupiedByThis
+            ) {
                 let mode_label = match app.page.app_mode {
                     crate::protocol::status::AppMode::Modbus => {
                         lang().protocol.common.mode_modbus.as_str()
@@ -369,7 +370,10 @@ pub fn render_entry(f: &mut Frame, area: Rect, app: &mut Status) {
 
             // Mode always unified; hide previous master / slave mode line.
 
-            if matches!(selected_state, crate::protocol::status::PortState::OccupiedByThis) {
+            if matches!(
+                selected_state,
+                crate::protocol::status::PortState::OccupiedByThis
+            ) {
                 if let Some(cfg) = runtime_cfg.clone() {
                     let baud = cfg.baud.to_string();
                     let data_bits = cfg.data_bits.to_string();
