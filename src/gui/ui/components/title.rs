@@ -6,7 +6,8 @@ use egui::{Align, Align2, Button, ColorImage, FontId, Layout, TextureOptions, Ui
 
 use crate::{
     i18n::lang,
-    protocol::status::{status_rw::write_status, Page, Status},
+    protocol::status::{read_status, write_status},
+    protocol::status::types::{Page, Status},
 };
 
 /// Render a single-row breadcrumb (no big heading). Layout is left-to-right
@@ -63,7 +64,7 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
                 .clicked()
             {
                 write_status(inner, |g| {
-                    g.page.current_page = Page::Entry { cursor: None };
+                    g.page = Page::Entry { cursor: None };
                     Ok(())
                 })
                 .unwrap_or(());
@@ -83,36 +84,51 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<Status>>) -> Result<()> {
             ui.add_space(4.);
 
             // Level 2: Page name (auto-sized)
-            if let Ok((label, maybe_port)) =
-                crate::protocol::status::status_rw::read_status(inner, |g| {
-                    let label = if g.page.subpage_active {
-                        match g.page.subpage_tab_index {
-                            crate::protocol::status::SubpageTab::Body => lang()
-                                .protocol
-                                .modbus
-                                .label_modbus_settings
-                                .as_str()
-                                .to_string(),
-                            crate::protocol::status::SubpageTab::Log => {
-                                lang().tabs.tab_log.as_str().to_string()
-                            }
-                            _ => lang().index.details.as_str().to_string(),
-                        }
-                    } else {
-                        lang().index.details.as_str().to_string()
-                    };
+            if let Ok((label, maybe_port)) = read_status(inner, |g| {
+                let subpage_active = matches!(g.page, crate::protocol::status::types::Page::ModbusConfig { .. } | crate::protocol::status::types::Page::ModbusDashboard { .. } | crate::protocol::status::types::Page::ModbusLog { .. } | crate::protocol::status::types::Page::About { .. });
+                let label = if subpage_active {
+                    // Try to infer a tab label from current_page; default to details.
+                    match g.page {
+                        crate::protocol::status::types::Page::ModbusDashboard { .. } => lang()
+                            .protocol
+                            .modbus
+                            .label_modbus_settings
+                            .as_str()
+                            .to_string(),
+                        crate::protocol::status::types::Page::ModbusLog { .. } =>
+                            lang().tabs.tab_log.as_str().to_string(),
+                        _ => lang().index.details.as_str().to_string(),
+                    }
+                } else {
+                    lang().index.details.as_str().to_string()
+                };
 
-                    let maybe_port = if g.page.subpage_active
-                        && !g.ports.list.is_empty()
-                        && g.page.selected < g.ports.list.len()
-                    {
-                        Some(g.ports.list[g.page.selected].port_name.clone())
+                let maybe_port = if subpage_active && !g.ports.order.is_empty() {
+                    // derive selection from page
+                    let sel = match &g.page {
+                        crate::protocol::status::types::Page::Entry { cursor } => match cursor {
+                            Some(crate::protocol::status::types::ui::EntryCursor::Com { idx }) => *idx,
+                            Some(crate::protocol::status::types::ui::EntryCursor::About) => g.ports.order.len().saturating_add(2),
+                            Some(crate::protocol::status::types::ui::EntryCursor::Refresh) => g.ports.order.len(),
+                            Some(crate::protocol::status::types::ui::EntryCursor::CreateVirtual) => g.ports.order.len().saturating_add(1),
+                            None => 0usize,
+                        },
+                        crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. }
+                        | crate::protocol::status::types::Page::ModbusConfig { selected_port }
+                        | crate::protocol::status::types::Page::ModbusLog { selected_port, .. } => *selected_port,
+                        _ => 0usize,
+                    };
+                    if sel < g.ports.order.len() {
+                        let name = &g.ports.order[sel];
+                        Some(g.ports.map.get(name).map(|p| p.port_name.clone()).unwrap_or_default())
                     } else {
                         None
-                    };
-                    Ok((label, maybe_port))
-                })
-            {
+                    }
+                } else {
+                    None
+                };
+                Ok((label, maybe_port))
+            }) {
                 let label_w = (label.chars().count() * 8 + 8) as f32;
                 ui.add_sized(Vec2::new(label_w, 24.), Button::new(label).small());
 

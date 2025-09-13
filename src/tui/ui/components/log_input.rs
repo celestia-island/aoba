@@ -7,7 +7,8 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{InputMode, Status},
+    protocol::status::types::Status,
+    protocol::status::types::ui::InputMode,
 };
 
 /// Render a small input area showing current mode and buffer. Height expected to be small (3 lines).

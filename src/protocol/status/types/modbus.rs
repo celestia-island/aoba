@@ -1,14 +1,11 @@
-use std::fmt;
-// use serialport::Parity; // Used in SubpageForm fields via full path
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryRole {
     Master,
     Slave,
 }
 
-impl fmt::Display for EntryRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for EntryRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EntryRole::Master => write!(f, "Master"),
             EntryRole::Slave => write!(f, "Slave"),
@@ -45,8 +42,9 @@ impl RegisterMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum SubpageTab {
+    #[default]
     Config,
     Body,
     Log,
@@ -71,21 +69,6 @@ impl SubpageTab {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppMode {
-    Modbus,
-    Mqtt,
-}
-
-impl AppMode {
-    pub fn as_usize(self) -> usize {
-        match self {
-            AppMode::Modbus => 0,
-            AppMode::Mqtt => 1,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct RegisterEntry {
     pub slave_id: u8,
@@ -100,31 +83,40 @@ pub struct RegisterEntry {
     pub values: Vec<u16>,          // Register values
 }
 
-#[derive(Debug, Clone)]
-pub struct SubpageForm {
-    pub registers: Vec<RegisterEntry>,
-    pub master_cursor: usize,
-    pub master_field_selected: bool,
-    pub master_field_editing: bool,
-    pub master_edit_field: Option<crate::protocol::status::MasterEditField>,
-    pub master_edit_index: Option<usize>,
-    pub master_input_buffer: String,
-    pub cursor: usize,
-    pub loop_enabled: bool,
-    pub master_passive: Option<bool>,
-    pub editing: bool,
+// SubpageForm removed — type intentionally deleted to simplify status types.
+// If any functionality relied on SubpageForm, consider replacing it with
+// a smaller, focused structure in another module or in the UI layer.
 
-    // Configuration fields
-    pub editing_field: Option<crate::protocol::status::EditingField>,
-    pub input_buffer: String,
-    pub edit_choice_index: Option<usize>,
-    pub edit_confirmed: bool,
-
-    // Serial configuration
-    pub baud: u32,
-    pub parity: serialport::Parity,
-    pub data_bits: u8,
-    pub stop_bits: u8,
-    pub global_interval_ms: u64,
-    pub global_timeout_ms: u64,
+// Reusable enums moved here so other modules can reference them via types::modbus::*
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditingField {
+    Loop,
+    Baud,
+    Parity,
+    StopBits,
+    DataBits,
+    GlobalInterval,
+    GlobalTimeout,
+    RegisterField { idx: usize, field: RegisterField },
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegisterField {
+    SlaveId,
+    Mode,
+    Address,
+    Length,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MasterEditField {
+    Role,
+    Id,
+    Type,
+    Start,
+    End,
+    Counter,
+    Value(u16),
+}
+
+// EntryCursor moved to `types::ui` (ui.rs). Keep modbus.rs focused on modbus-specific types.
