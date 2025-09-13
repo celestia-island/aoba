@@ -9,7 +9,27 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{i18n::lang, protocol::status::Status, tui::input::Action, tui::utils::bus::Bus};
+use crate::protocol::status::types::port::{PortData, PortState};
+use crate::protocol::status::types::ui::SpecialEntry;
+use crate::protocol::status::types::Page;
+use crate::{
+    i18n::lang, protocol::status::types::Status, tui::input::Action, tui::utils::bus::Bus,
+};
+
+// `SpecialEntry` moved to `protocol::status::types::ui::SpecialEntry` so it can be
+// shared across UI modules. The label text remains localized here in the page.
+impl SpecialEntry {
+    pub fn label(&self) -> String {
+        // Localized labels where available, otherwise fallback to English placeholder
+        match self {
+            SpecialEntry::Refresh => lang().index.refresh_action.clone(),
+            SpecialEntry::ManualSpecify => lang().index.manual_specify_label.clone(),
+            // Note: manual_refresh_port and create_virtual_port keys exist in i18n but
+            // these menu items were removed per user request.
+            SpecialEntry::About => lang().index.about_label.clone(),
+        }
+    }
+}
 
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
 pub fn page_bottom_hints(app: &Status) -> Vec<String> {
@@ -20,13 +40,16 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     hints.push(lang().hotkeys.hint_enter_subpage.as_str().to_string());
 
     // Append quit hint only when allowed (mirror global rule)
-    let in_subpage_editing = app
-        .page
-        .subpage_form
-        .as_ref()
-        .map(|f| f.editing)
-        .unwrap_or(false);
-    let can_quit = !app.page.subpage_active && !in_subpage_editing;
+    // Core no longer stores full SubpageForm; assume editing state is managed in the UI layer.
+    let in_subpage_editing = false;
+    let subpage_active = matches!(
+        app.page,
+        Page::ModbusConfig { .. }
+            | Page::ModbusDashboard { .. }
+            | Page::ModbusLog { .. }
+            | Page::About { .. }
+    );
+    let can_quit = !subpage_active && !in_subpage_editing;
     if can_quit {
         hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
@@ -43,7 +66,7 @@ pub fn map_key(_key: KeyEvent, _app: &Status) -> Option<Action> {
 /// Sends appropriate messages via UiToCore channel.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
     use crossterm::event::KeyCode as KC;
-    
+
     // Basic navigation keys for entry page
     match key.code {
         KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
@@ -62,7 +85,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
             true
         }
-        _ => false
+        _ => false,
     }
 }
 
@@ -81,26 +104,40 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     let left = chunks[0];
     let right = chunks[1];
 
+    // Derive current selection index from page (Entry cursor or subpage selected_port)
+    let selection = match &app.page {
+        Page::Entry { cursor } => match cursor {
+            Some(crate::protocol::status::types::ui::EntryCursor::Com { idx }) => *idx,
+            Some(crate::protocol::status::types::ui::EntryCursor::About) => {
+                app.ports.order.len().saturating_add(2)
+            }
+            Some(crate::protocol::status::types::ui::EntryCursor::Refresh) => app.ports.order.len(),
+            Some(crate::protocol::status::types::ui::EntryCursor::CreateVirtual) => {
+                app.ports.order.len().saturating_add(1)
+            }
+            None => 0usize,
+        },
+        Page::ModbusDashboard { selected_port, .. }
+        | Page::ModbusConfig { selected_port }
+        | Page::ModbusLog { selected_port, .. } => *selected_port,
+        _ => 0usize,
+    };
+
     // LEFT: ports list
     let width = left.width as usize;
     let mut lines: Vec<Line> = Vec::new();
-    for (i, p) in app.ports.list.iter().enumerate() {
+    let default_pd = PortData::default();
+    for (i, name) in app.ports.order.iter().enumerate() {
+        let p = app.ports.map.get(name).unwrap_or(&default_pd);
         let name = p.port_name.clone();
-        let state = app
-            .ports
-            .states
-            .get(i)
-            .map(|s| s.port_state.clone())
-            .unwrap_or(crate::protocol::status::PortState::Free);
+        let state = p.state.clone();
         let (state_text, state_style) = match state {
-            crate::protocol::status::PortState::Free => {
-                (lang().index.port_state_free.clone(), Style::default())
-            }
-            crate::protocol::status::PortState::OccupiedByThis => (
+            PortState::Free => (lang().index.port_state_free.clone(), Style::default()),
+            PortState::OccupiedByThis => (
                 lang().index.port_state_owned.clone(),
                 Style::default().fg(Color::Green),
             ),
-            crate::protocol::status::PortState::OccupiedByOther => (
+            PortState::OccupiedByOther => (
                 lang().index.port_state_other.clone(),
                 Style::default()
                     .fg(Color::DarkGray)
@@ -109,7 +146,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
         };
 
         // Prefix: two chars to avoid shifting when navigating. Selected shows '> ', else two spaces.
-        let prefix = if i == app.page.selected { "> " } else { "  " };
+        let prefix = if i == selection { "> " } else { "  " };
         let inner = width.saturating_sub(2);
         // Account for prefix width in name column
         let name_w = UnicodeWidthStr::width(name.as_str()) + UnicodeWidthStr::width(prefix);
@@ -127,7 +164,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
             Span::raw(spacer),
             Span::styled(state_text, state_style),
         ];
-        if i == app.page.selected {
+        if i == selection {
             // Highlight entire row including prefix
             let styled = spans
                 .into_iter()
@@ -139,12 +176,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
         }
     }
 
-    // Extra labels (anchor to bottom of left panel)
-    let extras = vec![
-        lang().index.refresh_action.clone(),
-        lang().index.manual_specify_label.clone(),
-        lang().index.about_label.clone(),
-    ];
+    // Extra labels (anchor to bottom of left panel) - now driven by SpecialEntry enum
+    let extras = SpecialEntry::all()
+        .iter()
+        .map(|s| s.label())
+        .collect::<Vec<_>>();
     // Compute inner vertical space (accounting for borders)
     let inner_h = left.height.saturating_sub(2) as usize;
     // How many lines will be occupied by ports currently
@@ -161,10 +197,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     }
 
     for (j, lbl) in extras.into_iter().enumerate() {
-        let idx = app.ports.list.len() + j;
-        let prefix = if idx == app.page.selected { "> " } else { "  " };
+        let idx = app.ports.order.len() + j; // idx maps into SpecialEntry::all()
+        let prefix = if idx == selection { "> " } else { "  " };
         let spans = vec![Span::raw(prefix), Span::raw(lbl)];
-        if idx == app.page.selected {
+        if idx == selection {
             let styled = spans
                 .into_iter()
                 .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
@@ -183,15 +219,26 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
 
     // RIGHT: content (no tabs). When selected port is OccupiedByThis and not in a subpage,
     // Details should occupy the full right area and include serial parameters.
-    let selected_state = app
-        .ports
-        .states
-        .get(app.page.selected)
-        .map(|s| s.port_state.clone())
-        .unwrap_or(crate::protocol::status::PortState::Free);
+    let selected_state = if selection < app.ports.order.len() {
+        let name = &app.ports.order[selection];
+        app.ports
+            .map
+            .get(name)
+            .map(|p| p.state.clone())
+            .unwrap_or(PortState::Free)
+    } else {
+        PortState::Free
+    };
 
     // If a subpage is active, delegate the entire right area to it.
-    if app.page.subpage_active {
+    let subpage_active = matches!(
+        app.page,
+        Page::ModbusConfig { .. }
+            | Page::ModbusDashboard { .. }
+            | Page::ModbusLog { .. }
+            | Page::About { .. }
+    );
+    if subpage_active {
         // Unified ModBus page now handled elsewhere; entry no longer renders legacy subpages.
         return;
     }
@@ -201,12 +248,12 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
         .title(Span::raw(format!(" {}", lang().index.details.as_str())));
 
     // Build the content taking full height of the right area.
-    let content = if app.ports.list.is_empty() {
+    let content = if app.ports.order.is_empty() {
         Paragraph::new(lang().index.no_com_ports.as_str()).block(content_block)
     } else {
-        let special_base = app.ports.list.len();
-        if app.page.selected >= special_base {
-            let rel = app.page.selected - special_base;
+        let special_base = app.ports.order.len();
+        if selection >= special_base {
+            let rel = selection - special_base;
             if rel == 0 {
                 // Refresh action item: show last scan summary
                 let mut lines: Vec<Line> = Vec::new();
@@ -216,7 +263,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
                     lang().index.scan_quick_hint.as_str(),
                     Style::default().fg(Color::LightBlue),
                 )));
-                if let Some(ts) = app.scan.last_scan_time {
+                if let Some(ts) = app.temporarily.scan.last_scan_time {
                     lines.push(Line::from(format!(
                         "{} {}",
                         lang().index.scan_last_header.as_str(),
@@ -225,11 +272,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
                 } else {
                     lines.push(Line::from(lang().index.scan_none.as_str()));
                 }
-                if app.scan.last_scan_info.is_empty() {
+                if app.temporarily.scan.last_scan_info.is_empty() {
                     lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
                 } else {
                     lines.push(Line::from(lang().index.scan_raw_header.as_str()));
-                    for l in app.scan.last_scan_info.lines().take(100) {
+                    for l in app.temporarily.scan.last_scan_info.lines().take(100) {
                         // Cap lines to avoid overflow
                         if l.starts_with("ERROR:") {
                             lines
@@ -238,10 +285,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
                             lines.push(Line::from(l));
                         }
                     }
-                    if app.scan.last_scan_info.len() > 100 {
+                    if app.temporarily.scan.last_scan_info.len() > 100 {
                         lines.push(Line::from(format!(
                             "... ({} {})",
-                            app.scan.last_scan_info.len() - 100,
+                            app.temporarily.scan.last_scan_info.len() - 100,
                             lang().index.scan_truncated_suffix.as_str()
                         )));
                     }
@@ -258,38 +305,27 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
             }
         } else {
-            let p = &app.ports.list[app.page.selected];
-            let extra = app
-                .ports
-                .extras
-                .get(app.page.selected)
-                .map(|e| e.port_extra.clone())
-                .unwrap_or_default();
+            let port_name = app.ports.order.get(selection).cloned().unwrap_or_default();
+            let default_pd = PortData::default();
+            let p = app.ports.map.get(&port_name).unwrap_or(&default_pd);
+            let extra = p.extra.clone();
 
             // Prefer runtime's current_cfg (live synchronized config). If not occupied we hide these fields.
-            let runtime_cfg = if let Some(r) = app.ports.runtimes.get(app.page.selected) {
-                r.runtime.as_ref().map(|rt| rt.current_cfg.clone())
-            } else {
-                None
-            };
+            let runtime_cfg = p.runtime.as_ref().map(|r| r.current_cfg.clone());
 
             // Localized status text and style
             let status_text = match selected_state {
-                crate::protocol::status::PortState::Free => lang().index.port_state_free.clone(),
-                crate::protocol::status::PortState::OccupiedByThis => {
-                    lang().index.port_state_owned.clone()
-                }
-                crate::protocol::status::PortState::OccupiedByOther => {
-                    lang().index.port_state_other.clone()
-                }
+                PortState::Free => lang().index.port_state_free.clone(),
+                PortState::OccupiedByThis => lang().index.port_state_owned.clone(),
+                PortState::OccupiedByOther => lang().index.port_state_other.clone(),
             };
 
             let status_style = match selected_state {
-                crate::protocol::status::PortState::Free => Style::default(),
-                crate::protocol::status::PortState::OccupiedByThis => Style::default()
+                PortState::Free => Style::default(),
+                PortState::OccupiedByThis => Style::default()
                     .fg(Color::Green)
                     .add_modifier(Modifier::BOLD),
-                crate::protocol::status::PortState::OccupiedByOther => Style::default()
+                PortState::OccupiedByOther => Style::default()
                     .fg(Color::DarkGray)
                     .add_modifier(Modifier::ITALIC),
             };
@@ -377,15 +413,12 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
                 Some(status_style),
             ));
             // Current per-port application mode (ModBus / MQTT)
-            if matches!(
-                selected_state,
-                crate::protocol::status::PortState::OccupiedByThis
-            ) {
-                let mode_label = match app.page.app_mode {
-                    crate::protocol::status::AppMode::Modbus => {
+            if matches!(selected_state, PortState::OccupiedByThis) {
+                let mode_label = match app.temporarily.modals.mode_selector.selector {
+                    crate::protocol::status::types::ui::AppMode::Modbus => {
                         lang().protocol.common.mode_modbus.as_str()
                     }
-                    crate::protocol::status::AppMode::Mqtt => {
+                    crate::protocol::status::types::ui::AppMode::Mqtt => {
                         lang().protocol.common.mode_mqtt.as_str()
                     }
                 };
@@ -398,10 +431,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
 
             // Mode always unified; hide previous master / slave mode line.
 
-            if matches!(
-                selected_state,
-                crate::protocol::status::PortState::OccupiedByThis
-            ) {
+            if matches!(selected_state, PortState::OccupiedByThis) {
                 if let Some(cfg) = runtime_cfg.clone() {
                     let baud = cfg.baud.to_string();
                     let data_bits = cfg.data_bits.to_string();

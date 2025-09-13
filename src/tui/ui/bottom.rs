@@ -1,6 +1,6 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::{i18n::lang, protocol::status::Status};
+use crate::{i18n::lang, protocol::status::types::Status};
 
 pub fn render_bottom(f: &mut Frame, area: Rect, app: &mut Status) {
     render_bottom_readonly(f, area, app);
@@ -11,7 +11,7 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
 
     // If app has an error message, display it on the first line (red),
     // And on the second line show instructions on how to clear it.
-    if let Some(err) = app.page.error.as_ref() {
+    if let Some(err) = app.temporarily.error.as_ref() {
         // Split the provided area into two rows
         let rows = ratatui::layout::Layout::default()
             .direction(ratatui::layout::Direction::Vertical)
@@ -46,10 +46,27 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
     let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
-    if app.page.subpage_active {
+    let subpage_active = matches!(
+        app.page,
+        crate::protocol::status::types::Page::ModbusConfig { .. }
+            | crate::protocol::status::types::Page::ModbusDashboard { .. }
+            | crate::protocol::status::types::Page::ModbusLog { .. }
+            | crate::protocol::status::types::Page::About { .. }
+    );
+    if subpage_active {
         // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
         // [confirmation row - yellow bg] [page hints] [global hints]
-        if app.page.log_clear_pending {
+        // Determine whether a log-clear confirmation is pending from the currently
+        // selected port's transient state (per-port), not the old global `temporarily`.
+        let mut port_log_clear_pending = false;
+        if let crate::protocol::status::types::Page::ModbusLog { selected_port } = app.page {
+            if let Some(port_name) = app.ports.order.get(selected_port) {
+                if let Some(pdata) = app.ports.map.get(port_name) {
+                    port_log_clear_pending = pdata.log_clear_pending;
+                }
+            }
+        }
+        if port_log_clear_pending {
             let rows = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .margin(0)
