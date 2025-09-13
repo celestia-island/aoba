@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 use eframe::{egui::Context, Frame};
 use egui::TopBottomPanel;
 
-use crate::{protocol::status::Status, tui::utils::bus::Bus};
+use crate::{protocol::status::types::Status, tui::utils::bus::Bus};
 
 /// Centralized UI renderer: title, breadcrumb navigation, pages and bottom status.
 pub fn render_ui(ctx: &Context, frame: &mut Frame, inner: &Arc<RwLock<Status>>, bus: &Bus) {
@@ -16,7 +16,7 @@ pub fn render_ui(ctx: &Context, frame: &mut Frame, inner: &Arc<RwLock<Status>>, 
         .default_height(56.)
         .resizable(false)
         .show(ctx, |ui| {
-            components::title::render_title_ui(ui, inner);
+            let _ = components::title::render_title_ui(ui, inner);
         });
 
     // Central area: delegate to per-page renderers

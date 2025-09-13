@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 
-use crate::protocol::status::Status;
+use crate::protocol::status::types::Status;
 
 /// Stub implementation for ui_error_set function
 pub fn ui_error_set(_status: &mut Status, _error: Option<(String, DateTime<Local>)>) {
@@ -8,9 +8,8 @@ pub fn ui_error_set(_status: &mut Status, _error: Option<(String, DateTime<Local
     // Convert tuple to ErrorInfo if needed
     if let Some((message, timestamp)) = _error {
         // Use the generated ErrorInfo type from the derive_struct macro
-        _status.page.error =
-            Some(crate::protocol::status::__Status::ErrorInfo { message, timestamp });
+        _status.temporarily.error = Some(crate::protocol::status::types::__Status::ErrorInfo { message, timestamp });
     } else {
-        _status.page.error = None;
+        _status.temporarily.error = None;
     }
 }

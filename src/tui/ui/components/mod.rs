@@ -10,14 +10,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-/// Explicit text state for helper styling to avoid boolean parameter ambiguity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextState {
-    Normal,
-    Selected,
-    Chosen,
-    Editing,
-}
+use crate::protocol::status::types::ui::TextState;
 
 /// Produce a title span (bold) for a label. When `selected` is true the title is green; when
 /// `editing` is true the title is yellow. Always bold to match existing UI conventions.

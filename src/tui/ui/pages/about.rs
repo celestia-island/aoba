@@ -13,7 +13,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{Page, Status},
+    protocol::status::types::{Page, Status},
     tui::ui::components::{kv_pairs_to_lines, render_boxed_paragraph},
     tui::utils::bus::Bus,
 };
@@ -273,7 +273,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     // read current offset from global app state
     let first_visible = std::cmp::min(
         max_start,
-        match app.page.current_page {
+        match app.page {
             Page::About { view_offset } => view_offset,
             _ => 0,
         },
