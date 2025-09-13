@@ -8,7 +8,7 @@ use eframe::{self, egui};
 use egui::{vec2, IconData};
 
 // use crate::protocol::status::status_rw::read_status; // TODO: implement usage
-use crate::protocol::status::Status;
+use crate::protocol::status::types::Status;
 use crate::tui::utils::bus::{Bus, CoreToUi, UiToCore};
 use flume;
 use std::{thread, time::Duration};

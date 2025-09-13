@@ -8,10 +8,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{
-    i18n::lang, protocol::status::Status,
-    tui::utils::bus::Bus,
-};
+use crate::{i18n::lang, protocol::status::types::Status, tui::utils::bus::Bus};
 
 /// Render the log panel. Only reads from Status, does not mutate.
 pub fn render(f: &mut Frame, area: Rect, app: &Status) {
@@ -22,22 +19,40 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     .areas(area);
 
     let logs_area = chunks[0];
-    // We'll render a windowed view of log groups. Each group is 3 lines.
-    let logs = app.page.logs.clone();
+    // Only render when current page is ModbusLog pointing to a valid port
+    let (logs, port_log_selected, port_log_view_offset, port_log_auto_scroll) =
+        match &app.page {
+            crate::protocol::status::types::Page::ModbusLog { selected_port, .. } => {
+                if let Some(port_name) = app.ports.order.get(*selected_port) {
+                    let pd = app.ports.map.get(port_name).cloned().unwrap_or_default();
+                    (
+                        pd.logs.clone(),
+                        pd.log_selected,
+                        pd.log_view_offset,
+                        pd.log_auto_scroll,
+                    )
+                } else {
+                    // No such port - nothing to render
+                    return;
+                }
+            }
+            _ => return, // not on log page
+        };
     let total_groups = logs.len();
+    // We'll render a windowed view of log groups. Each group is 3 lines.
     let group_height = 3usize;
 
     // Inner height inside the block (account for borders)
     let inner_h = logs_area.height.saturating_sub(2) as usize;
     let groups_per_screen = max(1usize, inner_h / group_height);
 
-    // Determine bottom index based on auto-scroll or explicit offset
+    // Determine bottom index based on auto-scroll or explicit offset (use per-port settings)
     let bottom = if total_groups == 0 {
         0usize
-    } else if app.page.log_auto_scroll {
+    } else if port_log_auto_scroll {
         total_groups.saturating_sub(1)
     } else {
-        min(app.page.log_view_offset, total_groups.saturating_sub(1))
+        min(port_log_view_offset, total_groups.saturating_sub(1))
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
@@ -53,19 +68,20 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     let mut styled_lines: Vec<Line> = Vec::new();
     for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
         if let Some(entry) = logs.get(g) {
-            let selected = app
-                .page
-                .log_selected
+            let selected = port_log_selected
                 .checked_sub(top_group)
                 .map(|s| s == idx)
                 .unwrap_or(false);
 
             let prefix_text = if selected { "> " } else { "  " };
-            // Direction: determine send / recv
+            // Direction: try to infer send/recv from parsed summary (best-effort)
             let is_send = entry
                 .parsed
                 .as_ref()
-                .map(|p| p.rw.to_uppercase() == "W")
+                .map(|p| {
+                    let up = p.to_uppercase();
+                    up.contains(" W ") || up.starts_with('W')
+                })
                 .unwrap_or(false);
             let dir_text = if is_send {
                 crate::i18n::lang().tabs.log_dir_send.as_str()
@@ -108,14 +124,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
             styled_lines.push(Line::from(raw_spans));
 
             // Parsed summary line
-            let parsed_str = if let Some(p) = &entry.parsed {
-                format!(
-                    "{} {} {} id={} @{} len= {}",
-                    p.origin, p.rw, p.command, p.slave_id, p.address, p.length
-                )
-            } else {
-                "(unparsed)".to_string()
-            };
+            let parsed_str = entry
+                .parsed
+                .clone()
+                .unwrap_or_else(|| "(unparsed)".to_string());
             let parsed_spans: Vec<Span> = vec![Span::raw(prefix_text), Span::raw(parsed_str)];
             styled_lines.push(Line::from(parsed_spans));
         }
@@ -125,10 +137,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     let sel_display = if total_groups == 0 {
         0
     } else {
-        app.page.log_selected + 1
+        port_log_selected + 1
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
-    let follow_label = if app.page.log_auto_scroll {
+    let follow_label = if port_log_auto_scroll {
         lang().tabs.log.hint_follow_on.as_str()
     } else {
         lang().tabs.log.hint_follow_off.as_str()
@@ -142,7 +154,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
         title_text,
         Style::default()
             .add_modifier(Modifier::BOLD)
-            .fg(if app.page.log_auto_scroll {
+            .fg(if port_log_auto_scroll {
                 Color::Green
             } else {
                 Color::Blue
@@ -173,13 +185,16 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     hints.push("c: Clear logs".to_string());
 
     // Append quit hint only when allowed (mirror global rule)
-    let in_subpage_editing = app
-        .page
-        .subpage_form
-        .as_ref()
-        .map(|f| f.editing)
-        .unwrap_or(false);
-    let can_quit = !app.page.subpage_active && !in_subpage_editing;
+    // Core no longer stores SubpageForm; assume not editing in core state.
+    let in_subpage_editing = false;
+    let subpage_active = matches!(
+        app.page,
+        crate::protocol::status::types::Page::ModbusConfig { .. }
+            | crate::protocol::status::types::Page::ModbusDashboard { .. }
+            | crate::protocol::status::types::Page::ModbusLog { .. }
+            | crate::protocol::status::types::Page::About { .. }
+    );
+    let can_quit = !subpage_active && !in_subpage_editing;
     if can_quit {
         hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
@@ -214,6 +229,6 @@ pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
             true
         }
-        _ => false
+        _ => false,
     }
 }

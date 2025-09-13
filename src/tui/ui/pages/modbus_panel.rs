@@ -1,72 +1,53 @@
 use std::cmp::min;
 
-use ratatui::{
-    prelude::*,
-    text::Line,
-};
+use ratatui::{prelude::*, text::Line};
 
 use crate::tui::utils::bus::Bus;
 use crate::{
-    i18n::lang,
-    protocol::status::{Status},
-    tui::ui::components::{render_boxed_paragraph},
+    i18n::lang, protocol::status::types::Status, tui::ui::components::render_boxed_paragraph,
 };
 
 /// Render the ModBus panel. Only reads from Status, does not mutate.
 pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     let mut lines: Vec<Line> = Vec::new();
-    
+
     // Simple display of ModBus status
     lines.push(Line::from("ModBus Panel"));
     lines.push(Line::from(""));
-    
-    if let Some(ref form) = app.page.subpage_form {
-        lines.push(Line::from(format!("Registers: {}", form.registers.len())));
-        lines.push(Line::from(format!("Cursor: {}", form.master_cursor)));
-        
-        // Display some register info
-        for (i, reg) in form.registers.iter().enumerate().take(10) {
-            let prefix = if i == form.master_cursor { "> " } else { "  " };
-            lines.push(Line::from(format!(
-                "{}[{}] Role: {:?}",
-                prefix, i, reg.role
-            )));
-        }
-        
-        if form.registers.len() > 10 {
-            lines.push(Line::from(format!("... and {} more", form.registers.len() - 10)));
-        }
+
+    let subpage_active = matches!(app.page, crate::protocol::status::types::Page::ModbusConfig { .. } | crate::protocol::status::types::Page::ModbusDashboard { .. });
+    if subpage_active {
+        lines.push(Line::from("Subpage form present (details moved to UI layer)"));
     } else {
         lines.push(Line::from("No form data available"));
     }
 
     // Calculate visible area for scrolling
     let inner_height = area.height.saturating_sub(2) as usize;
-    let cursor_line = app.page.subpage_form
-        .as_ref()
-        .map(|f| f.master_cursor)
-        .unwrap_or(0);
-    
+    // Core no longer stores SubpageForm; default cursor to 0 for rendering purposes.
+    let cursor_line = 0;
+
     let mut first_visible = 0;
     if cursor_line >= inner_height {
         first_visible = cursor_line + 1 - inner_height;
     }
-    
+
     let total = lines.len();
     let last_start = total.saturating_sub(inner_height);
     if first_visible > last_start {
         first_visible = last_start;
     }
     let end = min(total, first_visible + inner_height);
-    
+
     render_boxed_paragraph(f, area, lines[first_visible..end].to_vec(), None);
 }
 
 pub fn page_bottom_hints(_app: &Status) -> Vec<String> {
-    let mut hints: Vec<String> = Vec::new();
-    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
-    hints.push("Enter: Edit".to_string());
-    hints.push("Del: Delete".to_string());
+    let hints: Vec<String> = vec![
+        lang().hotkeys.hint_move_vertical.as_str().to_string(),
+        "Enter: Edit".to_string(),
+        "Del: Delete".to_string(),
+    ];
     hints
 }
 
@@ -112,6 +93,6 @@ pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
             true
         }
-        _ => false
+        _ => false,
     }
 }

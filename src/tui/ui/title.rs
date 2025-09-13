@@ -1,4 +1,5 @@
-use crate::{i18n::lang, protocol::status::Status};
+use crate::protocol::status::types::port::PortData;
+use crate::{i18n::lang, protocol::status::types::Status};
 use ratatui::{prelude::*, widgets::*};
 
 pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
@@ -23,9 +24,9 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
     f.render_widget(bg_block, area);
 
     // Spinner (top-left)
-    if app.busy.busy {
+    if app.temporarily.busy.busy {
         let frames = ["●○○", "○●○", "○○●"];
-        let ch = frames[(app.busy.spinner_frame as usize) % frames.len()];
+        let ch = frames[(app.temporarily.busy.spinner_frame as usize) % frames.len()];
         let spin = Paragraph::new(ch).style(
             Style::default()
                 .fg(Color::Yellow)
@@ -35,9 +36,40 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
     }
 
     // Title text (center area)
-    let title_text = if app.page.subpage_active {
-        if !app.ports.list.is_empty() && app.page.selected < app.ports.list.len() {
-            let p = &app.ports.list[app.page.selected];
+    let subpage_active = matches!(
+        app.page,
+        crate::protocol::status::types::Page::ModbusConfig { .. }
+            | crate::protocol::status::types::Page::ModbusDashboard { .. }
+            | crate::protocol::status::types::Page::ModbusLog { .. }
+            | crate::protocol::status::types::Page::About { .. }
+    );
+    let title_text = if subpage_active {
+        // derive selection from page
+        let sel = match &app.page {
+            crate::protocol::status::types::Page::Entry { cursor } => match cursor {
+                Some(crate::protocol::status::types::ui::EntryCursor::Com { idx }) => *idx,
+                Some(crate::protocol::status::types::ui::EntryCursor::About) => {
+                    app.ports.order.len().saturating_add(2)
+                }
+                Some(crate::protocol::status::types::ui::EntryCursor::Refresh) => {
+                    app.ports.order.len()
+                }
+                Some(crate::protocol::status::types::ui::EntryCursor::CreateVirtual) => {
+                    app.ports.order.len().saturating_add(1)
+                }
+                None => 0usize,
+            },
+            crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. }
+            | crate::protocol::status::types::Page::ModbusConfig { selected_port }
+            | crate::protocol::status::types::Page::ModbusLog { selected_port, .. } => {
+                *selected_port
+            }
+            _ => 0usize,
+        };
+        if !app.ports.order.is_empty() && sel < app.ports.order.len() {
+            let name = &app.ports.order[sel];
+            let default_pd = PortData::default();
+            let p = app.ports.map.get(name).unwrap_or(&default_pd);
             format!("{} - {}", p.port_name, lang().index.title.as_str())
         } else {
             lang().index.title.as_str().to_string()
