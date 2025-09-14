@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use ratatui::prelude::*;
 
 use crate::{
@@ -193,7 +195,7 @@ pub fn handle_input(
     key: crossterm::event::KeyEvent,
     app: &Status,
     bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    app_arc: &Arc<RwLock<types::Status>>,
     _snap: &types::ui::ModbusConfigStatus,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
