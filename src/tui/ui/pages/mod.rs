@@ -171,7 +171,7 @@ pub fn handle_input_in_subpage(
             }
             types::Page::ModbusLog { .. } => {
                 let snap = app.snapshot_modbus_log();
-                return log_panel::handle_input(key, bus, &snap);
+                return log_panel::handle_input(key, app, bus, app_arc, &snap);
             }
             _ => {}
         }
