@@ -62,31 +62,219 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<St
 }
 
 /// Page-level key mapping for entry. Return Some(Action) if page wants to map the key.
-pub fn map_key(_key: KeyEvent, _app: &Status, _snap: &types::ui::EntryStatus) -> Option<Action> {
-    // Entry does not add extra mappings; let global mapping handle it
-    None
+pub fn map_key(key: KeyEvent, _app: &Status, _snap: &types::ui::EntryStatus) -> Option<Action> {
+    use crossterm::event::KeyCode as KC;
+    
+    // Entry page handles its own navigation and basic actions
+    match key.code {
+        KC::Down | KC::Char('j') => Some(Action::MoveNext),
+        KC::Up | KC::Char('k') => Some(Action::MovePrev),
+        KC::Enter => Some(Action::EnterPage),
+        KC::Char(' ') => Some(Action::TogglePort),
+        KC::Char('r') => Some(Action::QuickScan),
+        KC::Esc | KC::Char('h') => Some(Action::LeavePage),
+        _ => None,
+    }
 }
 
-/// Handle input for entry page. Only processes input, does not mutate Status.
-/// Sends appropriate messages via UiToCore channel.
-pub fn handle_input(key: KeyEvent, bus: &Bus, _snap: &types::ui::EntryStatus) -> bool {
+/// Handle input for entry page. Processes navigation and page actions.
+/// Now handles its own navigation instead of delegating to global handlers.
+pub fn handle_input(
+    key: KeyEvent, 
+    app: &Status,
+    bus: &Bus, 
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    _snap: &types::ui::EntryStatus
+) -> bool {
     use crossterm::event::KeyCode as KC;
+    use crate::tui::utils::bus::UiToCore;
 
-    // Basic navigation keys for entry page
+    // Handle navigation and actions for entry page
     match key.code {
-        // Do not consume navigation or enter here; let global mapping handle MoveNext/MovePrev/Enter
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            return false;
+        KC::Down | KC::Char('j') => {
+            // Move selection down
+            handle_move_next(bus, app_arc, app);
+            true
         }
-        KC::Enter | KC::Char('l') => {
-            return false;
+        KC::Up | KC::Char('k') => {
+            // Move selection up
+            handle_move_prev(bus, app_arc, app);
+            true
+        }
+        KC::Enter => {
+            // Enter page/subpage
+            handle_enter_page(bus, app_arc, app);
+            true
+        }
+        KC::Char(' ') => {
+            // Toggle port runtime
+            handle_toggle_port(bus, app_arc, app);
+            true
         }
         KC::Char('r') => {
             // Refresh ports
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            let _ = bus.ui_tx.send(UiToCore::Refresh);
+            true
+        }
+        KC::Esc | KC::Char('h') => {
+            // Leave page (only effective if in a subpage)
+            handle_leave_page(bus, app_arc);
             true
         }
         _ => false,
+    }
+}
+
+/// Handle moving selection down in entry page
+fn handle_move_next(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    let _ = write_status(app_arc, |s| {
+        let special_base = s.ports.order.len();
+        let extra_count = SpecialEntry::all().len();
+        let total = special_base + extra_count;
+        
+        let mut sel = derive_selection_from_page(&s.page, &s.ports.order);
+        if sel + 1 < total {
+            sel += 1;
+        } else {
+            sel = total.saturating_sub(1);
+        }
+        
+        // Write back as Entry cursor
+        s.page = types::Page::Entry {
+            cursor: Some(types::ui::EntryCursor::Com { idx: sel }),
+        };
+        Ok(())
+    });
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
+}
+
+/// Handle moving selection up in entry page
+fn handle_move_prev(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    let _ = write_status(app_arc, |s| {
+        let mut sel = derive_selection_from_page(&s.page, &s.ports.order);
+        if sel > 0 {
+            sel = sel.saturating_sub(1);
+        } else {
+            sel = 0;
+        }
+        
+        s.page = types::Page::Entry {
+            cursor: Some(types::ui::EntryCursor::Com { idx: sel }),
+        };
+        Ok(())
+    });
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
+}
+
+/// Handle entering a page/subpage from entry page
+fn handle_enter_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+    use crate::protocol::status::{write_status, read_status};
+    use crate::tui::utils::bus::UiToCore;
+    
+    if let Ok((sel, ports_order)) = read_status(app_arc, |s| {
+        let sel = derive_selection_from_page(&s.page, &s.ports.order);
+        Ok((sel, s.ports.order.clone()))
+    }) {
+        let ports_len = ports_order.len();
+        if sel < ports_len {
+            // Open ModbusDashboard for the selected port
+            let port_name = ports_order.get(sel).cloned().unwrap_or_default();
+            let _ = write_status(app_arc, |s| {
+                s.page = types::Page::ModbusDashboard {
+                    selected_port: sel,
+                    cursor: 0,
+                    editing_field: None,
+                    input_buffer: String::new(),
+                    edit_choice_index: None,
+                    edit_confirmed: false,
+                    master_cursor: 0,
+                    master_field_selected: false,
+                    master_field_editing: false,
+                    master_edit_field: None,
+                    master_edit_index: None,
+                    master_input_buffer: String::new(),
+                    poll_round_index: 0,
+                    in_flight_reg_index: None,
+                };
+                s.temporarily.per_port.pending_sync_port = Some(port_name.clone());
+                Ok(())
+            });
+            let _ = bus.ui_tx.send(UiToCore::Refresh);
+        } else {
+            // Selection points into special entries (Refresh, ManualSpecify, About)
+            let rel = sel.saturating_sub(ports_len);
+            // If About (third special entry) is selected -> open About page
+            if rel == 2 {
+                let _ = write_status(app_arc, |s| {
+                    s.page = types::Page::About { view_offset: 0 };
+                    Ok(())
+                });
+                let _ = bus.ui_tx.send(UiToCore::Refresh);
+            }
+        }
+    }
+}
+
+/// Handle toggling port runtime from entry page
+fn handle_toggle_port(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+    use crate::protocol::status::read_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    if let Ok((sel, ports_order)) = read_status(app_arc, |s| {
+        let sel = derive_selection_from_page(&s.page, &s.ports.order);
+        Ok((sel, s.ports.order.clone()))
+    }) {
+        let ports_len = ports_order.len();
+        if sel < ports_len {
+            if let Some(port_name) = ports_order.get(sel).cloned() {
+                let _ = bus.ui_tx.send(UiToCore::ToggleRuntime(port_name));
+            }
+        }
+    }
+}
+
+/// Handle leaving current page (only effective if in a subpage)
+fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    let _ = write_status(app_arc, |s| {
+        // Only change page when currently in a subpage
+        let subpage_active = matches!(
+            s.page,
+            types::Page::ModbusConfig { .. }
+                | types::Page::ModbusDashboard { .. }
+                | types::Page::ModbusLog { .. }
+                | types::Page::About { .. }
+        );
+        if subpage_active {
+            s.page = types::Page::Entry { cursor: None };
+        }
+        Ok(())
+    });
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
+}
+
+/// Helper function to derive selection from page state (entry page specific)
+fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> usize {
+    match page {
+        types::Page::Entry { cursor } => match cursor {
+            Some(types::ui::EntryCursor::Com { idx }) => *idx,
+            Some(types::ui::EntryCursor::Refresh) => ports_order.len(),
+            Some(types::ui::EntryCursor::CreateVirtual) => ports_order.len().saturating_add(1),
+            Some(types::ui::EntryCursor::About) => ports_order.len().saturating_add(2),
+            None => 0usize,
+        },
+        types::Page::ModbusDashboard { selected_port, .. }
+        | types::Page::ModbusConfig { selected_port, .. }
+        | types::Page::ModbusLog { selected_port, .. } => *selected_port,
+        _ => 0usize,
     }
 }
 
