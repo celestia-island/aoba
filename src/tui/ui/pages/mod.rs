@@ -204,7 +204,7 @@ pub fn handle_input_in_page(
 
     // No subpage active: let entry page have a chance to consume the key.
     let entry_snap = app.snapshot_entry();
-    entry::handle_input(key, bus, &entry_snap)
+    entry::handle_input(key, app, bus, app_arc, &entry_snap)
 }
 
 /// Render the appropriate page based on the current app state.
