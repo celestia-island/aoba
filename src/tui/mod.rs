@@ -24,6 +24,7 @@ use crate::{
     },
     tui::{
         ui::components::error_msg::ui_error_set,
+        ui::pages::about,
         utils::bus::{Bus, CoreToUi, UiToCore},
     },
 };
@@ -34,7 +35,11 @@ pub fn start() -> Result<()> {
     // Setup terminal
     let mut stdout = io::stdout();
     crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+    crossterm::execute!(
+        stdout,
+        crossterm::terminal::EnterAlternateScreen,
+        crossterm::event::EnableMouseCapture
+    )?;
     let backend = CrosstermBackend::new(&mut stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -102,9 +107,6 @@ pub fn start() -> Result<()> {
                     Ok(())
                 });
                 // After adding ports to status, spawn per-port runtime listeners.
-                // Each listener will watch the PortRuntimeHandle.evt_rx (if runtime exists)
-                // and append FrameReceived/FrameSent events into the corresponding PortData.logs.
-                // Use a short-lived snapshot to find runtime handles to listen to.
                 if let Ok(snapshot) =
                     crate::protocol::status::read_status(app_ref, |s| Ok(s.clone()))
                 {
@@ -112,12 +114,10 @@ pub fn start() -> Result<()> {
                         if let Some(pd) = snapshot.ports.map.get(port_name) {
                             if let Some(runtime) = pd.runtime.as_ref() {
                                 // Spawn a listener thread for this runtime's evt_rx.
-                                // Clone channel/handles needed into thread.
                                 let evt_rx = runtime.evt_rx.clone();
                                 let app_clone3 = Arc::clone(app_ref);
                                 let port_name_clone = port_name.clone();
                                 thread::spawn(move || {
-                                    // Limit per-port log length
                                     const MAX_LOGS: usize = 2000;
                                     while let Ok(evt) = evt_rx.recv() {
                                         match evt {
@@ -125,23 +125,19 @@ pub fn start() -> Result<()> {
                                             | crate::protocol::runtime::RuntimeEvent::FrameSent(b) => {
                                                 let now = chrono::Local::now();
                                                 let raw = b.iter().map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().join(" ");
-                                                // Best-effort parsed summary: first few bytes hex
                                                 let parsed = Some(format!("{} bytes", b.len()));
                                                 let entry = PortLogEntry {
                                                     when: now,
                                                     raw,
                                                     parsed,
                                                 };
-                                                // Append into Status under write_status
                                                 let _ = write_status(&app_clone3, |s| {
                                                     if let Some(pdata) = s.ports.map.get_mut(&port_name_clone) {
                                                         pdata.logs.push(entry.clone());
-                                                        // Truncate if exceeding max
                                                         if pdata.logs.len() > MAX_LOGS {
                                                             let drop = pdata.logs.len() - MAX_LOGS;
                                                             pdata.logs.drain(0..drop);
                                                         }
-                                                        // If auto-scroll is enabled, move selection to last
                                                         if pdata.log_auto_scroll {
                                                             pdata.log_selected = pdata.logs.len().saturating_sub(1);
                                                         }
@@ -316,142 +312,124 @@ pub fn start() -> Result<()> {
             loop {
                 // Poll for input
                 if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
-                    if let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() {
-                        if key.kind != crossterm::event::KeyEventKind::Press {
-                            continue; // Ignore non-initial key press (repeat / release)
-                        }
+                    if let Ok(ev) = crossterm::event::read() {
+                        // Support both Key and Mouse scroll events. Map Mouse ScrollUp/Down to
+                        // synthesized KeyEvent Up/Down so existing key handlers can be reused.
+                        let mut key_opt: Option<crossterm::event::KeyEvent> = None;
+                        match ev {
+                            crossterm::event::Event::Key(k) => key_opt = Some(k),
+                            crossterm::event::Event::Mouse(me) => {
+                                // First: if About page is active, let it consume the mouse scroll.
+                                let mut consumed_by_page = false;
+                                if let Ok(snapshot) =
+                                    crate::protocol::status::read_status(&app_clone, |s| {
+                                        Ok(s.clone())
+                                    })
+                                {
+                                    // Check if About is active (either selected virtual entry or full page)
+                                    let about_idx = snapshot.ports.order.len().saturating_add(2);
+                                    let sel = match &snapshot.page {
+                                        types::Page::Entry { cursor } => match cursor {
+                                            Some(types::ui::EntryCursor::Com { idx }) => *idx,
+                                            Some(types::ui::EntryCursor::Refresh) => {
+                                                snapshot.ports.order.len()
+                                            }
+                                            Some(types::ui::EntryCursor::CreateVirtual) => {
+                                                snapshot.ports.order.len().saturating_add(1)
+                                            }
+                                            Some(types::ui::EntryCursor::About) => {
+                                                snapshot.ports.order.len().saturating_add(2)
+                                            }
+                                            None => 0usize,
+                                        },
+                                        types::Page::ModbusDashboard { selected_port, .. }
+                                        | types::Page::ModbusConfig { selected_port, .. }
+                                        | types::Page::ModbusLog { selected_port, .. } => {
+                                            *selected_port
+                                        }
+                                        types::Page::About { .. } => about_idx,
+                                    };
 
-                        // Handle global quit
-                        if key
-                            .modifiers
-                            .contains(crossterm::event::KeyModifiers::CONTROL)
-                        {
-                            if let crossterm::event::KeyCode::Char('c') = key.code {
-                                let _ = bus_clone.ui_tx.send(UiToCore::Quit);
-                                break;
+                                    if sel == about_idx {
+                                        // Snapshot for about page input
+                                        let snap_about = snapshot.snapshot_about();
+                                        consumed_by_page = about::handle_mouse(
+                                            me,
+                                            &snapshot,
+                                            &bus_clone,
+                                            &app_clone,
+                                            &snap_about,
+                                        );
+                                    }
+                                }
+
+                                if consumed_by_page {
+                                    // Page consumed the mouse event; do not map to a key
+                                } else {
+                                    // Fallback: map scroll to Up/Down key events for global handling
+                                    use crossterm::event::MouseEventKind as MEK;
+                                    match me.kind {
+                                        MEK::ScrollUp => {
+                                            key_opt = Some(crossterm::event::KeyEvent::new(
+                                                crossterm::event::KeyCode::Up,
+                                                crossterm::event::KeyModifiers::NONE,
+                                            ));
+                                        }
+                                        MEK::ScrollDown => {
+                                            key_opt = Some(crossterm::event::KeyEvent::new(
+                                                crossterm::event::KeyCode::Down,
+                                                crossterm::event::KeyModifiers::NONE,
+                                            ));
+                                        }
+                                        _ => {}
+                                    }
+                                }
                             }
+                            _ => {}
                         }
 
-                        // Route input to appropriate page handler. Use read_status to read a
-                        // cloned snapshot of Status instead of directly locking the RwLock.
-                        if let Ok(snapshot) =
-                            crate::protocol::status::read_status(&app_clone, |s| Ok(s.clone()))
-                        {
-                            // First, let subpages consume input if applicable
-                            let consumed = crate::tui::ui::pages::handle_input_in_subpage(
-                                key, &snapshot, &bus_clone, &app_clone,
-                            );
+                        if let Some(key) = key_opt {
+                            if key.kind != crossterm::event::KeyEventKind::Press {
+                                continue; // Ignore non-initial key press (repeat / release)
+                            }
 
-                            if !consumed {
-                                // Handle global keys first
-                                use crate::tui::input::map_key;
-                                match map_key(key.code) {
-                                    crate::tui::input::Action::Quit => {
-                                        let _ = bus_clone.ui_tx.send(UiToCore::Quit);
-                                        break;
-                                    }
-                                    crate::tui::input::Action::MoveNext => {
-                                        // Move selection down
-                                        let _ = write_status(&app_clone, |s| {
-                                            let special_base = s.ports.order.len();
-                                            let extra_count = SpecialEntry::all().len();
-                                            let total = special_base + extra_count; // dynamic extras length
-                                                                                    // Read current selection from page
-                                            let mut sel = match &s.page {
-                                                types::Page::Entry { cursor } => match cursor {
-                                                    Some(types::ui::EntryCursor::Com { idx }) => {
-                                                        *idx
-                                                    }
-                                                    Some(types::ui::EntryCursor::Refresh) => {
-                                                        s.ports.order.len()
-                                                    }
-                                                    Some(types::ui::EntryCursor::CreateVirtual) => {
-                                                        s.ports.order.len().saturating_add(1)
-                                                    }
-                                                    Some(types::ui::EntryCursor::About) => {
-                                                        s.ports.order.len().saturating_add(2)
-                                                    }
-                                                    None => 0usize,
-                                                },
-                                                types::Page::ModbusDashboard {
-                                                    selected_port,
-                                                    ..
-                                                }
-                                                | types::Page::ModbusConfig {
-                                                    selected_port, ..
-                                                }
-                                                | types::Page::ModbusLog {
-                                                    selected_port, ..
-                                                } => *selected_port,
-                                                _ => 0usize,
-                                            };
-                                            if sel + 1 < total {
-                                                sel += 1;
-                                            } else {
-                                                sel = total.saturating_sub(1);
-                                            }
-                                            // Write back as Entry cursor
-                                            s.page = types::Page::Entry {
-                                                cursor: Some(types::ui::EntryCursor::Com {
-                                                    idx: sel,
-                                                }),
-                                            };
-                                            Ok(())
-                                        });
-                                        let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                    }
-                                    crate::tui::input::Action::MovePrev => {
-                                        // Move selection up
-                                        let _ = write_status(&app_clone, |s| {
-                                            // Read current selection
-                                            let mut sel = match &s.page {
-                                                types::Page::Entry { cursor } => match cursor {
-                                                    Some(types::ui::EntryCursor::Com { idx }) => {
-                                                        *idx
-                                                    }
-                                                    Some(types::ui::EntryCursor::Refresh) => {
-                                                        s.ports.order.len()
-                                                    }
-                                                    Some(types::ui::EntryCursor::CreateVirtual) => {
-                                                        s.ports.order.len().saturating_add(1)
-                                                    }
-                                                    Some(types::ui::EntryCursor::About) => {
-                                                        s.ports.order.len().saturating_add(2)
-                                                    }
-                                                    None => 0usize,
-                                                },
-                                                types::Page::ModbusDashboard {
-                                                    selected_port,
-                                                    ..
-                                                }
-                                                | types::Page::ModbusConfig {
-                                                    selected_port, ..
-                                                }
-                                                | types::Page::ModbusLog {
-                                                    selected_port, ..
-                                                } => *selected_port,
-                                                _ => 0usize,
-                                            };
-                                            if sel > 0 {
-                                                sel = sel.saturating_sub(1);
-                                            } else {
-                                                sel = 0;
-                                            }
-                                            s.page = types::Page::Entry {
-                                                cursor: Some(types::ui::EntryCursor::Com {
-                                                    idx: sel,
-                                                }),
-                                            };
-                                            Ok(())
-                                        });
-                                        let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                    }
-                                    crate::tui::input::Action::EnterPage => {
-                                        // 'l' pressed - enter page (open dashboard) if a port selected
-                                        if let Ok((sel, ports_order)) =
-                                            crate::protocol::status::read_status(&app_clone, |s| {
-                                                // derive sel from page to be consistent
-                                                let sel = match &s.page {
+                            // Handle global quit
+                            if key
+                                .modifiers
+                                .contains(crossterm::event::KeyModifiers::CONTROL)
+                            {
+                                if let crossterm::event::KeyCode::Char('c') = key.code {
+                                    let _ = bus_clone.ui_tx.send(UiToCore::Quit);
+                                    break;
+                                }
+                            }
+
+                            // Route input to appropriate page handler. Use read_status to read a
+                            // cloned snapshot of Status instead of directly locking the RwLock.
+                            if let Ok(snapshot) =
+                                crate::protocol::status::read_status(&app_clone, |s| Ok(s.clone()))
+                            {
+                                // First, let subpages consume input if applicable
+                                let consumed = crate::tui::ui::pages::handle_input_in_subpage(
+                                    key, &snapshot, &bus_clone, &app_clone,
+                                );
+
+                                if !consumed {
+                                    // Handle global keys first
+                                    use crate::tui::input::map_key;
+                                    match map_key(key.code) {
+                                        crate::tui::input::Action::Quit => {
+                                            let _ = bus_clone.ui_tx.send(UiToCore::Quit);
+                                            break;
+                                        }
+                                        crate::tui::input::Action::MoveNext => {
+                                            // Move selection down
+                                            let _ = write_status(&app_clone, |s| {
+                                                let special_base = s.ports.order.len();
+                                                let extra_count = SpecialEntry::all().len();
+                                                let total = special_base + extra_count; // dynamic extras length
+                                                                                        // Read current selection from page
+                                                let mut sel = match &s.page {
                                                     types::Page::Entry { cursor } => match cursor {
                                                         Some(types::ui::EntryCursor::Com {
                                                             idx,
@@ -481,197 +459,321 @@ pub fn start() -> Result<()> {
                                                     } => *selected_port,
                                                     _ => 0usize,
                                                 };
-                                                Ok((sel, s.ports.order.clone()))
-                                            })
-                                        {
-                                            let ports_len = ports_order.len();
-                                            if sel < ports_len {
-                                                let port_name = ports_order
-                                                    .get(sel)
-                                                    .cloned()
-                                                    .unwrap_or_default();
-                                                let _ = write_status(&app_clone, |s| {
-                                                    // Open the ModbusDashboard for the selected port.
-                                                    s.page = types::Page::ModbusDashboard {
-                                                        selected_port: sel,
-                                                        cursor: 0,
-                                                        editing_field: None,
-                                                        input_buffer: String::new(),
-                                                        edit_choice_index: None,
-                                                        edit_confirmed: false,
-                                                        master_cursor: 0,
-                                                        master_field_selected: false,
-                                                        master_field_editing: false,
-                                                        master_edit_field: None,
-                                                        master_edit_index: None,
-                                                        master_input_buffer: String::new(),
-                                                        poll_round_index: 0,
-                                                        in_flight_reg_index: None,
+                                                if sel + 1 < total {
+                                                    sel += 1;
+                                                } else {
+                                                    sel = total.saturating_sub(1);
+                                                }
+                                                // Write back as Entry cursor
+                                                s.page = types::Page::Entry {
+                                                    cursor: Some(types::ui::EntryCursor::Com {
+                                                        idx: sel,
+                                                    }),
+                                                };
+                                                Ok(())
+                                            });
+                                            let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                        }
+                                        crate::tui::input::Action::MovePrev => {
+                                            // Move selection up
+                                            let _ = write_status(&app_clone, |s| {
+                                                // Read current selection
+                                                let mut sel = match &s.page {
+                                                    types::Page::Entry { cursor } => match cursor {
+                                                        Some(types::ui::EntryCursor::Com {
+                                                            idx,
+                                                        }) => *idx,
+                                                        Some(types::ui::EntryCursor::Refresh) => {
+                                                            s.ports.order.len()
+                                                        }
+                                                        Some(
+                                                            types::ui::EntryCursor::CreateVirtual,
+                                                        ) => s.ports.order.len().saturating_add(1),
+                                                        Some(types::ui::EntryCursor::About) => {
+                                                            s.ports.order.len().saturating_add(2)
+                                                        }
+                                                        None => 0usize,
+                                                    },
+                                                    types::Page::ModbusDashboard {
+                                                        selected_port,
+                                                        ..
+                                                    }
+                                                    | types::Page::ModbusConfig {
+                                                        selected_port,
+                                                        ..
+                                                    }
+                                                    | types::Page::ModbusLog {
+                                                        selected_port,
+                                                        ..
+                                                    } => *selected_port,
+                                                    _ => 0usize,
+                                                };
+                                                if sel > 0 {
+                                                    sel = sel.saturating_sub(1);
+                                                } else {
+                                                    sel = 0;
+                                                }
+                                                s.page = types::Page::Entry {
+                                                    cursor: Some(types::ui::EntryCursor::Com {
+                                                        idx: sel,
+                                                    }),
+                                                };
+                                                Ok(())
+                                            });
+                                            let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                        }
+                                        crate::tui::input::Action::EnterPage => {
+                                            // Enter pressed - if on Entry page:
+                                            //  - open ModbusDashboard when a physical port is selected
+                                            //  - open About page when the About special entry is selected
+                                            if let Ok((sel, ports_order)) =
+                                                crate::protocol::status::read_status(
+                                                    &app_clone,
+                                                    |s| {
+                                                        // derive sel from page to be consistent
+                                                        let sel = match &s.page {
+                                                        types::Page::Entry { cursor } => match cursor {
+                                                            Some(types::ui::EntryCursor::Com {
+                                                                idx,
+                                                            }) => *idx,
+                                                            Some(types::ui::EntryCursor::Refresh) => {
+                                                                s.ports.order.len()
+                                                            }
+                                                            Some(
+                                                                types::ui::EntryCursor::CreateVirtual,
+                                                            ) => s.ports.order.len().saturating_add(1),
+                                                            Some(types::ui::EntryCursor::About) => {
+                                                                s.ports.order.len().saturating_add(2)
+                                                            }
+                                                            None => 0usize,
+                                                        },
+                                                        types::Page::ModbusDashboard {
+                                                            selected_port,
+                                                            ..
+                                                        }
+                                                        | types::Page::ModbusConfig {
+                                                            selected_port,
+                                                            ..
+                                                        }
+                                                        | types::Page::ModbusLog {
+                                                            selected_port,
+                                                            ..
+                                                        } => *selected_port,
+                                                        _ => 0usize,
                                                     };
-                                                    s.temporarily.per_port.pending_sync_port =
-                                                        Some(port_name.clone());
-                                                    Ok(())
-                                                });
-                                                let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                            }
-                                        }
-                                    }
-                                    crate::tui::input::Action::LeavePage => {
-                                        // Esc pressed - if a subpage is active, go back to Entry page
-                                        let _ = write_status(&app_clone, |s| {
-                                            // Only change page when currently in a subpage
-                                            let subpage_active = matches!(
-                                                s.page,
-                                                types::Page::ModbusConfig { .. }
-                                                    | types::Page::ModbusDashboard { .. }
-                                                    | types::Page::ModbusLog { .. }
-                                                    | types::Page::About { .. }
-                                            );
-                                            if subpage_active {
-                                                s.page = types::Page::Entry { cursor: None };
-                                            }
-                                            Ok(())
-                                        });
-                                        let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                    }
-                                    crate::tui::input::Action::TogglePort => {
-                                        // Enter pressed - toggle runtime for selected port
-                                        if let Ok((sel, ports_order)) =
-                                            crate::protocol::status::read_status(&app_clone, |s| {
-                                                let sel = match &s.page {
-                                                    types::Page::Entry { cursor } => match cursor {
-                                                        Some(types::ui::EntryCursor::Com {
-                                                            idx,
-                                                        }) => *idx,
-                                                        Some(types::ui::EntryCursor::Refresh) => {
-                                                            s.ports.order.len()
-                                                        }
-                                                        Some(
-                                                            types::ui::EntryCursor::CreateVirtual,
-                                                        ) => s.ports.order.len().saturating_add(1),
-                                                        Some(types::ui::EntryCursor::About) => {
-                                                            s.ports.order.len().saturating_add(2)
-                                                        }
-                                                        None => 0usize,
+                                                        Ok((sel, s.ports.order.clone()))
                                                     },
-                                                    types::Page::ModbusDashboard {
-                                                        selected_port,
-                                                        ..
+                                                )
+                                            {
+                                                let ports_len = ports_order.len();
+                                                if sel < ports_len {
+                                                    // Open ModbusDashboard for the selected port (existing behavior)
+                                                    let port_name = ports_order
+                                                        .get(sel)
+                                                        .cloned()
+                                                        .unwrap_or_default();
+                                                    let _ = write_status(&app_clone, |s| {
+                                                        s.page = types::Page::ModbusDashboard {
+                                                            selected_port: sel,
+                                                            cursor: 0,
+                                                            editing_field: None,
+                                                            input_buffer: String::new(),
+                                                            edit_choice_index: None,
+                                                            edit_confirmed: false,
+                                                            master_cursor: 0,
+                                                            master_field_selected: false,
+                                                            master_field_editing: false,
+                                                            master_edit_field: None,
+                                                            master_edit_index: None,
+                                                            master_input_buffer: String::new(),
+                                                            poll_round_index: 0,
+                                                            in_flight_reg_index: None,
+                                                        };
+                                                        s.temporarily.per_port.pending_sync_port =
+                                                            Some(port_name.clone());
+                                                        Ok(())
+                                                    });
+                                                    let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                                } else {
+                                                    // Selection points into special entries (Refresh, ManualSpecify, About)
+                                                    let rel = sel.saturating_sub(ports_len);
+                                                    // If About (third special entry) is selected -> open About page
+                                                    if rel == 2 {
+                                                        let _ = write_status(&app_clone, |s| {
+                                                            s.page = types::Page::About {
+                                                                view_offset: 0,
+                                                            };
+                                                            Ok(())
+                                                        });
+                                                        let _ =
+                                                            bus_clone.ui_tx.send(UiToCore::Refresh);
                                                     }
-                                                    | types::Page::ModbusConfig {
-                                                        selected_port,
-                                                        ..
-                                                    }
-                                                    | types::Page::ModbusLog {
-                                                        selected_port,
-                                                        ..
-                                                    } => *selected_port,
-                                                    _ => 0usize,
-                                                };
-                                                Ok((sel, s.ports.order.clone()))
-                                            })
-                                        {
-                                            let ports_len = ports_order.len();
-                                            if sel < ports_len {
-                                                if let Some(port_name) =
-                                                    ports_order.get(sel).cloned()
-                                                {
-                                                    let _ = bus_clone
-                                                        .ui_tx
-                                                        .send(UiToCore::ToggleRuntime(port_name));
                                                 }
                                             }
                                         }
-                                    }
-                                    crate::tui::input::Action::QuickScan => {
-                                        let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                    }
-                                    crate::tui::input::Action::None => {
-                                        // No global action mapped: consult page-level mapping and handlers.
-                                        if let Some(page_act) =
-                                            crate::tui::ui::pages::map_key_in_page(key, &snapshot)
-                                        {
-                                            match page_act {
-                                                crate::tui::input::Action::MoveNext => {
-                                                    let _ = write_status(&app_clone, |s| {
-                                                        let special_base = s.ports.order.len();
-                                                        let extra_count = SpecialEntry::all().len();
-                                                        let total = special_base + extra_count;
-                                                        let mut sel = match &s.page {
-                                                            types::Page::Entry { cursor } => match cursor {
-                                                                Some(types::ui::EntryCursor::Com { idx }) => *idx,
-                                                                Some(types::ui::EntryCursor::Refresh) => s.ports.order.len(),
-                                                                Some(types::ui::EntryCursor::CreateVirtual) => s.ports.order.len().saturating_add(1),
-                                                                Some(types::ui::EntryCursor::About) => s.ports.order.len().saturating_add(2),
-                                                                None => 0usize,
-                                                            },
-                                                            types::Page::ModbusDashboard { selected_port, .. }
-                                                            | types::Page::ModbusConfig { selected_port, .. }
-                                                            | types::Page::ModbusLog { selected_port, .. } => *selected_port,
-                                                            _ => 0usize,
-                                                        };
-                                                        if sel + 1 < total {
-                                                            sel += 1;
-                                                        } else {
-                                                            sel = total.saturating_sub(1);
-                                                        }
-                                                        s.page = types::Page::Entry {
-                                                            cursor: Some(
-                                                                types::ui::EntryCursor::Com {
-                                                                    idx: sel,
-                                                                },
-                                                            ),
-                                                        };
-                                                        Ok(())
-                                                    });
-                                                    let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                                }
-                                                crate::tui::input::Action::MovePrev => {
-                                                    let _ = write_status(&app_clone, |s| {
-                                                        let mut sel = match &s.page {
-                                                            types::Page::Entry { cursor } => match cursor {
-                                                                Some(types::ui::EntryCursor::Com { idx }) => *idx,
-                                                                Some(types::ui::EntryCursor::Refresh) => s.ports.order.len(),
-                                                                Some(types::ui::EntryCursor::CreateVirtual) => s.ports.order.len().saturating_add(1),
-                                                                Some(types::ui::EntryCursor::About) => s.ports.order.len().saturating_add(2),
-                                                                None => 0usize,
-                                                            },
-                                                            types::Page::ModbusDashboard { selected_port, .. }
-                                                            | types::Page::ModbusConfig { selected_port, .. }
-                                                            | types::Page::ModbusLog { selected_port, .. } => *selected_port,
-                                                            _ => 0usize,
-                                                        };
-                                                        if sel > 0 {
-                                                            sel = sel.saturating_sub(1);
-                                                        } else {
-                                                            sel = 0;
-                                                        }
-                                                        s.page = types::Page::Entry {
-                                                            cursor: Some(
-                                                                types::ui::EntryCursor::Com {
-                                                                    idx: sel,
-                                                                },
-                                                            ),
-                                                        };
-                                                        Ok(())
-                                                    });
-                                                    let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
-                                                }
-                                                _ => {}
-                                            }
-                                        } else {
-                                            // If page didn't map the key, call raw page handler which may consume it
-                                            let _consumed =
-                                                crate::tui::ui::pages::handle_input_in_page(
-                                                    key, &snapshot, &bus_clone, &app_clone,
+                                        crate::tui::input::Action::LeavePage => {
+                                            // Esc pressed - if a subpage is active, go back to Entry page
+                                            let _ = write_status(&app_clone, |s| {
+                                                // Only change page when currently in a subpage
+                                                let subpage_active = matches!(
+                                                    s.page,
+                                                    types::Page::ModbusConfig { .. }
+                                                        | types::Page::ModbusDashboard { .. }
+                                                        | types::Page::ModbusLog { .. }
+                                                        | types::Page::About { .. }
                                                 );
-                                            // If consumed, we may want to trigger a refresh
-                                            if _consumed {
-                                                let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                                if subpage_active {
+                                                    s.page = types::Page::Entry { cursor: None };
+                                                }
+                                                Ok(())
+                                            });
+                                            let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                        }
+                                        crate::tui::input::Action::TogglePort => {
+                                            // Enter pressed - toggle runtime for selected port
+                                            if let Ok((sel, ports_order)) =
+                                                crate::protocol::status::read_status(
+                                                    &app_clone,
+                                                    |s| {
+                                                        let sel = match &s.page {
+                                                        types::Page::Entry { cursor } => match cursor {
+                                                            Some(types::ui::EntryCursor::Com {
+                                                                idx,
+                                                            }) => *idx,
+                                                            Some(types::ui::EntryCursor::Refresh) => {
+                                                                s.ports.order.len()
+                                                            }
+                                                            Some(
+                                                                types::ui::EntryCursor::CreateVirtual,
+                                                            ) => s.ports.order.len().saturating_add(1),
+                                                            Some(types::ui::EntryCursor::About) => {
+                                                                s.ports.order.len().saturating_add(2)
+                                                            }
+                                                            None => 0usize,
+                                                        },
+                                                        types::Page::ModbusDashboard {
+                                                            selected_port,
+                                                            ..
+                                                        }
+                                                        | types::Page::ModbusConfig {
+                                                            selected_port, ..
+                                                        }
+                                                        | types::Page::ModbusLog {
+                                                            selected_port, ..
+                                                        } => *selected_port,
+                                                        _ => 0usize,
+                                                    };
+                                                        Ok((sel, s.ports.order.clone()))
+                                                    },
+                                                )
+                                            {
+                                                let ports_len = ports_order.len();
+                                                if sel < ports_len {
+                                                    if let Some(port_name) =
+                                                        ports_order.get(sel).cloned()
+                                                    {
+                                                        let _ = bus_clone.ui_tx.send(
+                                                            UiToCore::ToggleRuntime(port_name),
+                                                        );
+                                                    }
+                                                }
                                             }
                                         }
+                                        crate::tui::input::Action::QuickScan => {
+                                            let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                        }
+                                        crate::tui::input::Action::None => {
+                                            // No global action mapped: consult page-level mapping and handlers.
+                                            if let Some(page_act) =
+                                                crate::tui::ui::pages::map_key_in_page(
+                                                    key, &snapshot,
+                                                )
+                                            {
+                                                match page_act {
+                                                    crate::tui::input::Action::MoveNext => {
+                                                        let _ = write_status(&app_clone, |s| {
+                                                            let special_base = s.ports.order.len();
+                                                            let extra_count =
+                                                                SpecialEntry::all().len();
+                                                            let total = special_base + extra_count;
+                                                            let mut sel = match &s.page {
+                                                                types::Page::Entry { cursor } => match cursor {
+                                                                    Some(types::ui::EntryCursor::Com { idx }) => *idx,
+                                                                    Some(types::ui::EntryCursor::Refresh) => s.ports.order.len(),
+                                                                    Some(types::ui::EntryCursor::CreateVirtual) => s.ports.order.len().saturating_add(1),
+                                                                    Some(types::ui::EntryCursor::About) => s.ports.order.len().saturating_add(2),
+                                                                    None => 0usize,
+                                                                },
+                                                                types::Page::ModbusDashboard { selected_port, .. }
+                                                                | types::Page::ModbusConfig { selected_port, .. }
+                                                                | types::Page::ModbusLog { selected_port, .. } => *selected_port,
+                                                                _ => 0usize,
+                                                            };
+                                                            if sel + 1 < total {
+                                                                sel += 1;
+                                                            } else {
+                                                                sel = total.saturating_sub(1);
+                                                            }
+                                                            s.page = types::Page::Entry {
+                                                                cursor: Some(
+                                                                    types::ui::EntryCursor::Com {
+                                                                        idx: sel,
+                                                                    },
+                                                                ),
+                                                            };
+                                                            Ok(())
+                                                        });
+                                                        let _ =
+                                                            bus_clone.ui_tx.send(UiToCore::Refresh);
+                                                    }
+                                                    crate::tui::input::Action::MovePrev => {
+                                                        let _ = write_status(&app_clone, |s| {
+                                                            let mut sel = match &s.page {
+                                                                types::Page::Entry { cursor } => match cursor {
+                                                                    Some(types::ui::EntryCursor::Com { idx }) => *idx,
+                                                                    Some(types::ui::EntryCursor::Refresh) => s.ports.order.len(),
+                                                                    Some(types::ui::EntryCursor::CreateVirtual) => s.ports.order.len().saturating_add(1),
+                                                                    Some(types::ui::EntryCursor::About) => s.ports.order.len().saturating_add(2),
+                                                                    None => 0usize,
+                                                                },
+                                                                types::Page::ModbusDashboard { selected_port, .. }
+                                                                | types::Page::ModbusConfig { selected_port, .. }
+                                                                | types::Page::ModbusLog { selected_port, .. } => *selected_port,
+                                                                _ => 0usize,
+                                                            };
+                                                            if sel > 0 {
+                                                                sel = sel.saturating_sub(1);
+                                                            } else {
+                                                                sel = 0;
+                                                            }
+                                                            s.page = types::Page::Entry {
+                                                                cursor: Some(
+                                                                    types::ui::EntryCursor::Com {
+                                                                        idx: sel,
+                                                                    },
+                                                                ),
+                                                            };
+                                                            Ok(())
+                                                        });
+                                                        let _ =
+                                                            bus_clone.ui_tx.send(UiToCore::Refresh);
+                                                    }
+                                                    _ => {}
+                                                }
+                                            } else {
+                                                // If page didn't map the key, call raw page handler which may consume it
+                                                let _consumed =
+                                                    crate::tui::ui::pages::handle_input_in_page(
+                                                        key, &snapshot, &bus_clone, &app_clone,
+                                                    );
+                                                // If consumed, we may want to trigger a refresh
+                                                if _consumed {
+                                                    let _ = bus_clone.ui_tx.send(UiToCore::Refresh);
+                                                }
+                                            }
+                                        }
+                                        _ => {}
                                     }
-                                    _ => {}
                                 }
                             }
                         }
@@ -686,7 +788,11 @@ pub fn start() -> Result<()> {
 
     // Restore terminal
     let mut stdout = io::stdout();
-    crossterm::execute!(stdout, crossterm::terminal::LeaveAlternateScreen)?;
+    crossterm::execute!(
+        stdout,
+        crossterm::terminal::LeaveAlternateScreen,
+        crossterm::event::DisableMouseCapture
+    )?;
     crossterm::terminal::disable_raw_mode()?;
 
     res
