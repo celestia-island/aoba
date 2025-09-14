@@ -11,6 +11,8 @@ pub enum UiToCore {
     PausePolling,
     /// Resume polling / start master polling loop.
     ResumePolling,
+    /// Toggle (start/stop) per-port runtime. Contains port name.
+    ToggleRuntime(String),
 }
 
 /// Messages sent from core worker thread back to UI thread.

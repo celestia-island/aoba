@@ -2,20 +2,17 @@ use std::cmp::min;
 
 use ratatui::{prelude::*, text::Line};
 
-use crate::tui::utils::bus::Bus;
-use crate::{
-    i18n::lang, protocol::status::types::Status, tui::ui::components::render_boxed_paragraph,
-};
+use crate::{i18n::lang, protocol::status::types::{self, Status}, tui::ui::components::render_boxed_paragraph, tui::utils::bus::Bus};
 
 /// Render the ModBus panel. Only reads from Status, does not mutate.
-pub fn render(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::ModbusDashboardStatus) {
     let mut lines: Vec<Line> = Vec::new();
 
     // Simple display of ModBus status
     lines.push(Line::from("ModBus Panel"));
     lines.push(Line::from(""));
 
-    let subpage_active = matches!(app.page, crate::protocol::status::types::Page::ModbusConfig { .. } | crate::protocol::status::types::Page::ModbusDashboard { .. });
+    let subpage_active = matches!(app.page, types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. });
     if subpage_active {
         lines.push(Line::from("Subpage form present (details moved to UI layer)"));
     } else {
@@ -42,7 +39,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     render_boxed_paragraph(f, area, lines[first_visible..end].to_vec(), None);
 }
 
-pub fn page_bottom_hints(_app: &Status) -> Vec<String> {
+pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusDashboardStatus) -> Vec<String> {
     let hints: Vec<String> = vec![
         lang().hotkeys.hint_move_vertical.as_str().to_string(),
         "Enter: Edit".to_string(),
@@ -54,12 +51,13 @@ pub fn page_bottom_hints(_app: &Status) -> Vec<String> {
 pub fn map_key(
     _key: crossterm::event::KeyEvent,
     _app: &Status,
+    _snap: &types::ui::ModbusDashboardStatus,
 ) -> Option<crate::tui::input::Action> {
     None
 }
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
-pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
+pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus, _snap: &types::ui::ModbusDashboardStatus) -> bool {
     use crossterm::event::KeyCode as KC;
 
     match _key.code {

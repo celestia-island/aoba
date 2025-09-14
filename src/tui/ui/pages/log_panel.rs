@@ -8,10 +8,14 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{i18n::lang, protocol::status::types::Status, tui::utils::bus::Bus};
+use crate::{
+    i18n::lang,
+    protocol::status::types::{self, Status},
+    tui::utils::bus::Bus,
+};
 
 /// Render the log panel. Only reads from Status, does not mutate.
-pub fn render(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::ModbusLogStatus) {
     let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
         ratatui::layout::Constraint::Min(3),
         ratatui::layout::Constraint::Length(3),
@@ -20,24 +24,23 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
 
     let logs_area = chunks[0];
     // Only render when current page is ModbusLog pointing to a valid port
-    let (logs, port_log_selected, port_log_view_offset, port_log_auto_scroll) =
-        match &app.page {
-            crate::protocol::status::types::Page::ModbusLog { selected_port, .. } => {
-                if let Some(port_name) = app.ports.order.get(*selected_port) {
-                    let pd = app.ports.map.get(port_name).cloned().unwrap_or_default();
-                    (
-                        pd.logs.clone(),
-                        pd.log_selected,
-                        pd.log_view_offset,
-                        pd.log_auto_scroll,
-                    )
-                } else {
-                    // No such port - nothing to render
-                    return;
-                }
+    let (logs, port_log_selected, port_log_view_offset, port_log_auto_scroll) = match &app.page {
+        types::Page::ModbusLog { selected_port, .. } => {
+            if let Some(port_name) = app.ports.order.get(*selected_port) {
+                let pd = app.ports.map.get(port_name).cloned().unwrap_or_default();
+                (
+                    pd.logs.clone(),
+                    pd.log_selected,
+                    pd.log_view_offset,
+                    pd.log_auto_scroll,
+                )
+            } else {
+                // No such port - nothing to render
+                return;
             }
-            _ => return, // not on log page
-        };
+        }
+        _ => return, // not on log page
+    };
     let total_groups = logs.len();
     // We'll render a windowed view of log groups. Each group is 3 lines.
     let group_height = 3usize;
@@ -178,7 +181,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     f.render_widget(input_para, chunks[1]);
 }
 
-pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+pub fn page_bottom_hints(app: &Status, _snap: &types::ui::ModbusLogStatus) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
     hints.push("f: Toggle follow".to_string());
@@ -189,10 +192,10 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let in_subpage_editing = false;
     let subpage_active = matches!(
         app.page,
-        crate::protocol::status::types::Page::ModbusConfig { .. }
-            | crate::protocol::status::types::Page::ModbusDashboard { .. }
-            | crate::protocol::status::types::Page::ModbusLog { .. }
-            | crate::protocol::status::types::Page::About { .. }
+        types::Page::ModbusConfig { .. }
+            | types::Page::ModbusDashboard { .. }
+            | types::Page::ModbusLog { .. }
+            | types::Page::About { .. }
     );
     let can_quit = !subpage_active && !in_subpage_editing;
     if can_quit {
@@ -204,13 +207,18 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
 pub fn map_key(
     _key: crossterm::event::KeyEvent,
     _app: &Status,
+    _snap: &types::ui::ModbusLogStatus,
 ) -> Option<crate::tui::input::Action> {
     // Log panel does not add extra mappings; let global mapping handle it
     None
 }
 
 /// Handle input for log panel. Sends commands via UiToCore.
-pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
+pub fn handle_input(
+    _key: crossterm::event::KeyEvent,
+    bus: &Bus,
+    _snap: &types::ui::ModbusLogStatus,
+) -> bool {
     use crossterm::event::KeyCode as KC;
 
     match _key.code {
