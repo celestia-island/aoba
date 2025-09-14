@@ -108,30 +108,10 @@ pub fn global_hints_for_app(app: &Status) -> Vec<String> {
 }
 
 /// Allow the active page to map a KeyEvent to a high-level Action when the global
-/// Key mapping returns no action. Returns Some(Action) if mapped.
-pub fn map_key_in_page(key: KeyEvent, app: &Status) -> Option<Action> {
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    );
-    if subpage_active {
-        match app.page {
-            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
-                let snap = app.snapshot_modbus_config();
-                return config_panel::map_key(key, app, &snap);
-            }
-            types::Page::ModbusLog { .. } => {
-                let snap = app.snapshot_modbus_log();
-                return log_panel::map_key(key, app, &snap);
-            }
-            _ => {}
-        }
-    }
-    let entry_snap = app.snapshot_entry();
-    entry::map_key(key, app, &entry_snap)
+/// Key mapping returns no action. This was previously used to translate keys to
+/// Actions, but pages now handle KeyEvent directly via `handle_input_in_page`.
+pub fn map_key_in_page(_key: KeyEvent, _app: &Status) -> Option<Action> {
+    None
 }
 
 /// Route a KeyEvent to the active subpage input handler.
@@ -157,12 +137,24 @@ pub fn handle_input_in_subpage(
             | types::Page::About { .. }
     );
     if subpage_active {
-        // If About full-page is active, consume navigation keys here.
-        let about_idx = app.ports.order.len().saturating_add(2);
-        let sel = derive_selection(app);
-        if sel == about_idx {
+        // If About page variant is active, route directly to about::handle_input.
+        if let types::Page::About { .. } = app.page {
+            // If about::handle_input consumes the key, we're done. Otherwise,
+            // as a defensive fallback, pressing Esc will always return to Entry.
             let snap = app.snapshot_about();
-            return about::handle_input(key, app, bus, app_arc, &snap);
+            let consumed = about::handle_input(key, app, bus, app_arc, &snap);
+            if consumed {
+                return true;
+            }
+            if let KC::Esc = key.code {
+                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                    s.page = types::Page::Entry { cursor: None };
+                    Ok(())
+                });
+                let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+                return true;
+            }
+            // fallthrough to other handlers if not consumed
         }
         match app.page {
             types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {

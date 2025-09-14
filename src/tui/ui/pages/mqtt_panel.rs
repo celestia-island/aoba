@@ -44,14 +44,6 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::EntryStatus) -> Vec<S
     hints
 }
 
-pub fn map_key(
-    _key: crossterm::event::KeyEvent,
-    _app: &Status,
-    _snap: &types::ui::EntryStatus,
-) -> Option<crate::tui::input::Action> {
-    None
-}
-
 /// Handle input for MQTT panel. Sends commands via UiToCore.
 pub fn handle_input(
     _key: crossterm::event::KeyEvent,
@@ -66,6 +58,7 @@ pub fn handle_input(
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
             true
         }
+        // No direct Esc handling here; map_key returns LeavePage so routing layer will handle navigation.
         _ => false,
     }
 }

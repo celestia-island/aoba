@@ -160,7 +160,8 @@ pub fn start() -> Result<()> {
                     match msg {
                         UiToCore::Quit => {
                             log::info!("[CORE] Received quit signal");
-                            let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                            // Notify UI to quit and then exit core thread
+                            let _ = core_tx_clone.send(CoreToUi::Quit);
                             return;
                         }
                         UiToCore::Refresh => {
@@ -339,6 +340,10 @@ fn run_rendering_loop(
             Ok(CoreToUi::Error) => {
                 // Redraw on error
                 false
+            }
+            Ok(CoreToUi::Quit) => {
+                // Core requested quit; terminate rendering loop
+                true
             }
             Err(flume::RecvTimeoutError::Timeout) => {
                 // Continue rendering loop on timeout
