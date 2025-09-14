@@ -6,10 +6,37 @@ pub mod i18n;
 pub mod protocol;
 
 use anyhow::Result;
+use chrono::Local;
+use std::{fs::File, io::Write};
+
+use env_logger::Builder;
+use log::LevelFilter;
 
 /// Common initialization used by both GUI and TUI entrypoints.
 pub fn init_common() {
+    #[cfg(not(debug_assertions))]
     env_logger::init();
+
+    #[cfg(debug_assertions)]
+    {
+        let target = Box::new(File::create("./log.log").expect("Can't create file"));
+        Builder::new()
+            .format(|buf, record| {
+                writeln!(
+                    buf,
+                    "{}:{} {} [{}] - {}",
+                    record.file().unwrap_or("unknown"),
+                    record.line().unwrap_or(0),
+                    Local::now().format("%Y-%m-%dT%H:%M:%S%.3f"),
+                    record.level(),
+                    record.args()
+                )
+            })
+            .target(env_logger::Target::Pipe(target))
+            .filter(None, LevelFilter::Debug)
+            .init();
+    }
+
     crate::i18n::init_i18n();
 }
 
