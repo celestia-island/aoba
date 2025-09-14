@@ -1,6 +1,9 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::{i18n::lang, protocol::status::types::Status};
+use crate::{
+    i18n::lang,
+    protocol::status::types::{self, Status},
+};
 
 pub fn render_bottom(f: &mut Frame, area: Rect, app: &mut Status) {
     render_bottom_readonly(f, area, app);
@@ -48,10 +51,10 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
     // If a subpage is active, render two parallel hint lines: page-specific above and global below.
     let subpage_active = matches!(
         app.page,
-        crate::protocol::status::types::Page::ModbusConfig { .. }
-            | crate::protocol::status::types::Page::ModbusDashboard { .. }
-            | crate::protocol::status::types::Page::ModbusLog { .. }
-            | crate::protocol::status::types::Page::About { .. }
+        types::Page::ModbusConfig { .. }
+            | types::Page::ModbusDashboard { .. }
+            | types::Page::ModbusLog { .. }
+            | types::Page::About { .. }
     );
     if subpage_active {
         // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
@@ -59,7 +62,7 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
         // Determine whether a log-clear confirmation is pending from the currently
         // selected port's transient state (per-port), not the old global `temporarily`.
         let mut port_log_clear_pending = false;
-        if let crate::protocol::status::types::Page::ModbusLog { selected_port } = app.page {
+        if let types::Page::ModbusLog { selected_port } = app.page {
             if let Some(port_name) = app.ports.order.get(selected_port) {
                 if let Some(pdata) = app.ports.map.get(port_name) {
                     port_log_clear_pending = pdata.log_clear_pending;

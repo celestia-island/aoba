@@ -13,7 +13,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::types::{Page, Status},
+    protocol::status::types::{self, Status},
     tui::ui::components::{kv_pairs_to_lines, render_boxed_paragraph},
     tui::utils::bus::Bus,
 };
@@ -103,19 +103,20 @@ fn init_about_cache() -> Arc<Mutex<AboutCache>> {
 }
 
 // Return bottom hints for about page (same as entry, but no extras)
-pub fn page_bottom_hints(_app: &Status) -> Vec<String> {
+pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::AboutStatus) -> Vec<String> {
     Vec::new()
 }
 
 pub fn map_key(
     _key: crossterm::event::KeyEvent,
     _app: &Status,
+    _snap: &types::ui::AboutStatus,
 ) -> Option<crate::tui::input::Action> {
     None
 }
 
 /// Handle input for about page. Sends navigation commands via UiToCore.
-pub fn handle_input(key: crossterm::event::KeyEvent, bus: &Bus) -> bool {
+pub fn handle_input(key: crossterm::event::KeyEvent, bus: &Bus, _snap: &types::ui::AboutStatus) -> bool {
     use crossterm::event::KeyCode as KC;
 
     match key.code {
@@ -228,7 +229,7 @@ pub(crate) fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static
 }
 
 /// Render the about page. Only reads from Status, does not mutate.
-pub fn render(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render(f: &mut Frame, area: Rect, _app: &Status, snap: &types::ui::AboutStatus) {
     let block = Block::default()
         .borders(ratatui::widgets::Borders::ALL)
         .title(Span::raw(format!(" {}", lang().index.title)));
@@ -271,13 +272,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     }
 
     // read current offset from global app state
-    let first_visible = std::cmp::min(
-        max_start,
-        match app.page {
-            Page::About { view_offset } => view_offset,
-            _ => 0,
-        },
-    );
+    let first_visible = std::cmp::min(max_start, snap.view_offset);
     let end = std::cmp::min(total, first_visible + inner_height);
     let windowed: Vec<Line> = full_lines[first_visible..end].to_vec();
 

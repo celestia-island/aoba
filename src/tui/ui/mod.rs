@@ -5,17 +5,16 @@ pub mod title;
 
 use ratatui::prelude::*;
 
-use crate::protocol::status::types::Status;
-use crate::tui::ui::components::mode_selector::render_mode_selector;
+use crate::{protocol::status::types::{self, Status}, tui::ui::components::mode_selector::render_mode_selector};
 
 pub fn render_ui(f: &mut Frame, app: &mut Status) {
     let area = f.area();
     let subpage_active = matches!(
         app.page,
-        crate::protocol::status::types::Page::ModbusConfig { .. }
-            | crate::protocol::status::types::Page::ModbusDashboard { .. }
-            | crate::protocol::status::types::Page::ModbusLog { .. }
-            | crate::protocol::status::types::Page::About { .. }
+        types::Page::ModbusConfig { .. }
+            | types::Page::ModbusDashboard { .. }
+            | types::Page::ModbusLog { .. }
+            | types::Page::About { .. }
     );
     let bottom_len = if app.temporarily.error.is_some() || subpage_active {
         2

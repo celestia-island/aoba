@@ -31,7 +31,8 @@ pub fn map_key(code: KeyCode) -> Action {
     match code {
         KeyCode::Char('q') => Action::Quit,
         KeyCode::Esc | KeyCode::Char('h') => Action::LeavePage,
-        KeyCode::Char('l') => Action::EnterPage,
+        // Key 'l' used to enter subpage historically; removed per UI change.
+        // Map Enter to EnterPage instead.
         KeyCode::Down | KeyCode::Char('j') => Action::MoveNext,
         KeyCode::Up | KeyCode::Char('k') => Action::MovePrev,
         KeyCode::PageUp => Action::PageUp,
@@ -46,7 +47,9 @@ pub fn map_key(code: KeyCode) -> Action {
         KeyCode::Char('r') => Action::QuickScan,
         KeyCode::Tab => Action::SwitchNext,
         KeyCode::BackTab => Action::SwitchPrev,
-        KeyCode::Enter => Action::TogglePort,
+        KeyCode::Enter => Action::EnterPage,
+        // Space toggles runtime/selection (was Enter previously)
+        KeyCode::Char(' ') => Action::TogglePort,
 
         _ => Action::None,
     }

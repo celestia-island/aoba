@@ -65,3 +65,52 @@ impl AppMode {
         }
     }
 }
+
+/// Snapshot structs for page-specific state to be passed into render/handler
+/// functions so callers don't need to inspect the whole `Status` repeatedly.
+#[derive(Debug, Clone)]
+pub struct ModbusConfigStatus {
+    pub selected_port: usize,
+
+    pub edit_active: bool,
+    pub edit_port: Option<String>,
+    pub edit_field_index: usize,
+    pub edit_field_key: Option<String>,
+    pub edit_buffer: String,
+    pub edit_cursor_pos: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModbusDashboardStatus {
+    pub selected_port: usize,
+
+    pub cursor: usize,
+    pub editing_field: Option<crate::protocol::status::types::modbus::EditingField>,
+    pub input_buffer: String,
+    pub edit_choice_index: Option<usize>,
+    pub edit_confirmed: bool,
+
+    pub master_cursor: usize,
+    pub master_field_selected: bool,
+    pub master_field_editing: bool,
+    pub master_edit_field: Option<crate::protocol::status::types::modbus::MasterEditField>,
+    pub master_edit_index: Option<usize>,
+    pub master_input_buffer: String,
+    pub poll_round_index: usize,
+    pub in_flight_reg_index: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ModbusLogStatus {
+    pub selected_port: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct AboutStatus {
+    pub view_offset: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct EntryStatus {
+    pub cursor: Option<EntryCursor>,
+}

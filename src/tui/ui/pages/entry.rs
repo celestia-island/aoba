@@ -9,11 +9,16 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::protocol::status::types::port::{PortData, PortState};
-use crate::protocol::status::types::ui::SpecialEntry;
-use crate::protocol::status::types::Page;
 use crate::{
-    i18n::lang, protocol::status::types::Status, tui::input::Action, tui::utils::bus::Bus,
+    i18n::lang,
+    protocol::status::types::{
+        self,
+        port::{PortData, PortState},
+        ui::SpecialEntry,
+        Status,
+    },
+    tui::input::Action,
+    tui::utils::bus::Bus,
 };
 
 // `SpecialEntry` moved to `protocol::status::types::ui::SpecialEntry` so it can be
@@ -32,7 +37,7 @@ impl SpecialEntry {
 }
 
 /// Provide bottom bar hints for the entry view (when used as full-area or main view).
-pub fn page_bottom_hints(app: &Status) -> Vec<String> {
+pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<String> {
     let mut hints: Vec<String> = Vec::new();
     // First hint: switching COM ports with Up / Down or k / j
     hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
@@ -44,10 +49,10 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
     let in_subpage_editing = false;
     let subpage_active = matches!(
         app.page,
-        Page::ModbusConfig { .. }
-            | Page::ModbusDashboard { .. }
-            | Page::ModbusLog { .. }
-            | Page::About { .. }
+        types::Page::ModbusConfig { .. }
+            | types::Page::ModbusDashboard { .. }
+            | types::Page::ModbusLog { .. }
+            | types::Page::About { .. }
     );
     let can_quit = !subpage_active && !in_subpage_editing;
     if can_quit {
@@ -57,28 +62,24 @@ pub fn page_bottom_hints(app: &Status) -> Vec<String> {
 }
 
 /// Page-level key mapping for entry. Return Some(Action) if page wants to map the key.
-pub fn map_key(_key: KeyEvent, _app: &Status) -> Option<Action> {
+pub fn map_key(_key: KeyEvent, _app: &Status, _snap: &types::ui::EntryStatus) -> Option<Action> {
     // Entry does not add extra mappings; let global mapping handle it
     None
 }
 
 /// Handle input for entry page. Only processes input, does not mutate Status.
 /// Sends appropriate messages via UiToCore channel.
-pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
+pub fn handle_input(key: KeyEvent, bus: &Bus, _snap: &types::ui::EntryStatus) -> bool {
     use crossterm::event::KeyCode as KC;
 
     // Basic navigation keys for entry page
     match key.code {
+        // Do not consume navigation or enter here; let global mapping handle MoveNext/MovePrev/Enter
         KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Send navigation commands to core
-            // For now, send a generic command that core will handle
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-            true
+            return false;
         }
         KC::Enter | KC::Char('l') => {
-            // Enter subpage
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-            true
+            return false;
         }
         KC::Char('r') => {
             // Refresh ports
@@ -90,7 +91,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> bool {
 }
 
 /// Render the entry page. Only reads from Status, does not mutate.
-pub fn render(f: &mut Frame, area: Rect, app: &Status) {
+pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryStatus) {
     // Horizontal split: left ports | right details
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Horizontal)
@@ -106,20 +107,16 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
 
     // Derive current selection index from page (Entry cursor or subpage selected_port)
     let selection = match &app.page {
-        Page::Entry { cursor } => match cursor {
-            Some(crate::protocol::status::types::ui::EntryCursor::Com { idx }) => *idx,
-            Some(crate::protocol::status::types::ui::EntryCursor::About) => {
-                app.ports.order.len().saturating_add(2)
-            }
-            Some(crate::protocol::status::types::ui::EntryCursor::Refresh) => app.ports.order.len(),
-            Some(crate::protocol::status::types::ui::EntryCursor::CreateVirtual) => {
-                app.ports.order.len().saturating_add(1)
-            }
+        types::Page::Entry { cursor } => match cursor {
+            Some(types::ui::EntryCursor::Com { idx }) => *idx,
+            Some(types::ui::EntryCursor::About) => app.ports.order.len().saturating_add(2),
+            Some(types::ui::EntryCursor::Refresh) => app.ports.order.len(),
+            Some(types::ui::EntryCursor::CreateVirtual) => app.ports.order.len().saturating_add(1),
             None => 0usize,
         },
-        Page::ModbusDashboard { selected_port, .. }
-        | Page::ModbusConfig { selected_port }
-        | Page::ModbusLog { selected_port, .. } => *selected_port,
+        types::Page::ModbusDashboard { selected_port, .. }
+        | types::Page::ModbusConfig { selected_port, .. }
+        | types::Page::ModbusLog { selected_port, .. } => *selected_port,
         _ => 0usize,
     };
 
@@ -233,10 +230,10 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
     // If a subpage is active, delegate the entire right area to it.
     let subpage_active = matches!(
         app.page,
-        Page::ModbusConfig { .. }
-            | Page::ModbusDashboard { .. }
-            | Page::ModbusLog { .. }
-            | Page::About { .. }
+        types::Page::ModbusConfig { .. }
+            | types::Page::ModbusDashboard { .. }
+            | types::Page::ModbusLog { .. }
+            | types::Page::About { .. }
     );
     if subpage_active {
         // Unified ModBus page now handled elsewhere; entry no longer renders legacy subpages.
@@ -299,7 +296,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
             } else if rel == 2 {
                 // About page selected; show a compact preview that reuses about rendering logic
                 // Build an AboutCache snapshot if available by peeking the internal cache (best-effort)
-                crate::tui::ui::pages::about::render(f, right, app);
+                let about_snap = app.snapshot_about();
+                crate::tui::ui::pages::about::render(f, right, app, &about_snap);
                 return;
             } else {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
@@ -415,12 +413,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status) {
             // Current per-port application mode (ModBus / MQTT)
             if matches!(selected_state, PortState::OccupiedByThis) {
                 let mode_label = match app.temporarily.modals.mode_selector.selector {
-                    crate::protocol::status::types::ui::AppMode::Modbus => {
-                        lang().protocol.common.mode_modbus.as_str()
-                    }
-                    crate::protocol::status::types::ui::AppMode::Mqtt => {
-                        lang().protocol.common.mode_mqtt.as_str()
-                    }
+                    types::ui::AppMode::Modbus => lang().protocol.common.mode_modbus.as_str(),
+                    types::ui::AppMode::Mqtt => lang().protocol.common.mode_mqtt.as_str(),
                 };
                 pairs.push((
                     lang().protocol.common.label_mode.as_str().to_string(),
