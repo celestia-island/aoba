@@ -2,7 +2,12 @@ use std::cmp::min;
 
 use ratatui::{prelude::*, text::Line};
 
-use crate::{i18n::lang, protocol::status::types::{self, Status}, tui::ui::components::render_boxed_paragraph, tui::utils::bus::Bus};
+use crate::{
+    i18n::lang,
+    protocol::status::types::{self, Status},
+    tui::ui::components::render_boxed_paragraph,
+    tui::utils::bus::Bus,
+};
 
 /// Render the ModBus panel. Only reads from Status, does not mutate.
 pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::ModbusDashboardStatus) {
@@ -12,9 +17,14 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
     lines.push(Line::from("ModBus Panel"));
     lines.push(Line::from(""));
 
-    let subpage_active = matches!(app.page, types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. });
+    let subpage_active = matches!(
+        app.page,
+        types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. }
+    );
     if subpage_active {
-        lines.push(Line::from("Subpage form present (details moved to UI layer)"));
+        lines.push(Line::from(
+            "Subpage form present (details moved to UI layer)",
+        ));
     } else {
         lines.push(Line::from("No form data available"));
     }
@@ -48,30 +58,13 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusDashboardStatus
     hints
 }
 
-pub fn map_key(
-    key: crossterm::event::KeyEvent,
-    _app: &Status,
-    _snap: &types::ui::ModbusDashboardStatus,
-) -> Option<crate::tui::input::Action> {
-    use crossterm::event::KeyCode as KC;
-    
-    // Modbus dashboard handles its own navigation and actions
-    match key.code {
-        KC::Esc | KC::Char('h') => Some(crate::tui::input::Action::LeavePage),
-        KC::Enter => Some(crate::tui::input::Action::EditToggle),
-        KC::Delete | KC::Char('x') => Some(crate::tui::input::Action::DeleteRegister),
-        KC::Char('n') => Some(crate::tui::input::Action::AddRegister),
-        _ => None,
-    }
-}
-
 /// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(
-    key: crossterm::event::KeyEvent, 
-    app: &Status,
-    bus: &Bus, 
+    key: crossterm::event::KeyEvent,
+    _app: &Status,
+    bus: &Bus,
     app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    _snap: &types::ui::ModbusDashboardStatus
+    _snap: &types::ui::ModbusDashboardStatus,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
 
@@ -87,9 +80,36 @@ pub fn handle_input(
             true
         }
         KC::Esc => {
-            // Leave dashboard - go back to entry
-            handle_leave_page(bus, app_arc);
-            true
+            // If dashboard has nested edit state in Status (e.g. editing_field or master_field_editing),
+            // prefer to cancel those first. Otherwise leave to entry page.
+            use crate::protocol::status::write_status;
+            let mut cancelled = false;
+            let _ = write_status(app_arc, |s| {
+                if let types::Page::ModbusDashboard {
+                    editing_field,
+                    master_field_editing,
+                    master_edit_field,
+                    ..
+                } = &mut s.page
+                {
+                    // If any editing sub-state is active, clear it instead of leaving page
+                    if editing_field.is_some() || *master_field_editing {
+                        *editing_field = None;
+                        *master_field_editing = false;
+                        *master_edit_field = None;
+                        cancelled = true;
+                    }
+                }
+                Ok(())
+            });
+            if cancelled {
+                let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+                true
+            } else {
+                // No nested edit active: leave dashboard
+                handle_leave_page(bus, app_arc);
+                true
+            }
         }
         KC::Enter => {
             // Edit entry
@@ -119,7 +139,7 @@ pub fn handle_input(
 fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     let _ = write_status(app_arc, |s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };

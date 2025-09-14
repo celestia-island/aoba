@@ -17,7 +17,6 @@ use crate::{
         ui::SpecialEntry,
         Status,
     },
-    tui::input::Action,
     tui::utils::bus::Bus,
 };
 
@@ -61,33 +60,17 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<St
     hints
 }
 
-/// Page-level key mapping for entry. Return Some(Action) if page wants to map the key.
-pub fn map_key(key: KeyEvent, _app: &Status, _snap: &types::ui::EntryStatus) -> Option<Action> {
-    use crossterm::event::KeyCode as KC;
-    
-    // Entry page handles its own navigation and basic actions
-    match key.code {
-        KC::Down | KC::Char('j') => Some(Action::MoveNext),
-        KC::Up | KC::Char('k') => Some(Action::MovePrev),
-        KC::Enter => Some(Action::EnterPage),
-        KC::Char(' ') => Some(Action::TogglePort),
-        KC::Char('r') => Some(Action::QuickScan),
-        KC::Esc | KC::Char('h') => Some(Action::LeavePage),
-        _ => None,
-    }
-}
-
 /// Handle input for entry page. Processes navigation and page actions.
 /// Now handles its own navigation instead of delegating to global handlers.
 pub fn handle_input(
-    key: KeyEvent, 
+    key: KeyEvent,
     app: &Status,
-    bus: &Bus, 
+    bus: &Bus,
     app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    _snap: &types::ui::EntryStatus
+    _snap: &types::ui::EntryStatus,
 ) -> bool {
-    use crossterm::event::KeyCode as KC;
     use crate::tui::utils::bus::UiToCore;
+    use crossterm::event::KeyCode as KC;
 
     // Handle navigation and actions for entry page
     match key.code {
@@ -126,22 +109,26 @@ pub fn handle_input(
 }
 
 /// Handle moving selection down in entry page
-fn handle_move_next(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+fn handle_move_next(
+    bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    _app: &Status,
+) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     let _ = write_status(app_arc, |s| {
         let special_base = s.ports.order.len();
         let extra_count = SpecialEntry::all().len();
         let total = special_base + extra_count;
-        
+
         let mut sel = derive_selection_from_page(&s.page, &s.ports.order);
         if sel + 1 < total {
             sel += 1;
         } else {
             sel = total.saturating_sub(1);
         }
-        
+
         // Write back as Entry cursor
         s.page = types::Page::Entry {
             cursor: Some(types::ui::EntryCursor::Com { idx: sel }),
@@ -152,10 +139,14 @@ fn handle_move_next(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types:
 }
 
 /// Handle moving selection up in entry page
-fn handle_move_prev(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+fn handle_move_prev(
+    bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    _app: &Status,
+) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     let _ = write_status(app_arc, |s| {
         let mut sel = derive_selection_from_page(&s.page, &s.ports.order);
         if sel > 0 {
@@ -163,7 +154,7 @@ fn handle_move_prev(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types:
         } else {
             sel = 0;
         }
-        
+
         s.page = types::Page::Entry {
             cursor: Some(types::ui::EntryCursor::Com { idx: sel }),
         };
@@ -173,10 +164,14 @@ fn handle_move_prev(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types:
 }
 
 /// Handle entering a page/subpage from entry page
-fn handle_enter_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
-    use crate::protocol::status::{write_status, read_status};
+fn handle_enter_page(
+    bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    _app: &Status,
+) {
+    use crate::protocol::status::{read_status, write_status};
     use crate::tui::utils::bus::UiToCore;
-    
+
     if let Ok((sel, ports_order)) = read_status(app_arc, |s| {
         let sel = derive_selection_from_page(&s.page, &s.ports.order);
         Ok((sel, s.ports.order.clone()))
@@ -222,10 +217,14 @@ fn handle_enter_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types
 }
 
 /// Handle toggling port runtime from entry page
-fn handle_toggle_port(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, _app: &Status) {
+fn handle_toggle_port(
+    bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    _app: &Status,
+) {
     use crate::protocol::status::read_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     if let Ok((sel, ports_order)) = read_status(app_arc, |s| {
         let sel = derive_selection_from_page(&s.page, &s.ports.order);
         Ok((sel, s.ports.order.clone()))
@@ -243,7 +242,7 @@ fn handle_toggle_port(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<type
 fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     let _ = write_status(app_arc, |s| {
         // Only change page when currently in a subpage
         let subpage_active = matches!(
