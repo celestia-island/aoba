@@ -205,38 +205,103 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::ModbusLogStatus) -> Ve
 }
 
 pub fn map_key(
-    _key: crossterm::event::KeyEvent,
+    key: crossterm::event::KeyEvent,
     _app: &Status,
     _snap: &types::ui::ModbusLogStatus,
 ) -> Option<crate::tui::input::Action> {
-    // Log panel does not add extra mappings; let global mapping handle it
-    None
+    use crossterm::event::KeyCode as KC;
+    
+    // Log panel handles some navigation actions
+    match key.code {
+        KC::Esc | KC::Char('h') => Some(crate::tui::input::Action::LeavePage),
+        KC::Char('f') => Some(crate::tui::input::Action::ToggleFollow),
+        _ => None,
+    }
 }
 
 /// Handle input for log panel. Sends commands via UiToCore.
 pub fn handle_input(
-    _key: crossterm::event::KeyEvent,
+    key: crossterm::event::KeyEvent,
+    app: &Status,
     bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
     _snap: &types::ui::ModbusLogStatus,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
 
-    match _key.code {
+    match key.code {
         KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Navigation commands
+            // Navigation commands within the log
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Esc | KC::Char('h') => {
+            // Leave page - go back to entry
+            handle_leave_page(bus, app_arc);
             true
         }
         KC::Char('f') => {
             // Toggle follow mode
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            handle_toggle_follow(bus, app_arc, app);
             true
         }
         KC::Char('c') => {
             // Clear logs
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            handle_clear_logs(bus, app_arc, app);
             true
         }
         _ => false,
     }
+}
+
+/// Handle leaving the log panel back to entry page
+fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    let _ = write_status(app_arc, |s| {
+        // Go back to entry page
+        s.page = types::Page::Entry { cursor: None };
+        Ok(())
+    });
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
+}
+
+/// Handle toggling follow mode for logs
+fn handle_toggle_follow(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, app: &Status) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    // Toggle the auto-scroll flag for the current port
+    if let types::Page::ModbusLog { selected_port, .. } = &app.page {
+        let _ = write_status(app_arc, |s| {
+            if let Some(port_name) = s.ports.order.get(*selected_port) {
+                if let Some(port_data) = s.ports.map.get_mut(port_name) {
+                    port_data.log_auto_scroll = !port_data.log_auto_scroll;
+                }
+            }
+            Ok(())
+        });
+    }
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
+}
+
+/// Handle clearing logs for the current port
+fn handle_clear_logs(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, app: &Status) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    // Clear logs for the current port
+    if let types::Page::ModbusLog { selected_port, .. } = &app.page {
+        let _ = write_status(app_arc, |s| {
+            if let Some(port_name) = s.ports.order.get(*selected_port) {
+                if let Some(port_data) = s.ports.map.get_mut(port_name) {
+                    port_data.logs.clear();
+                    port_data.log_selected = 0;
+                }
+            }
+            Ok(())
+        });
+    }
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
 }

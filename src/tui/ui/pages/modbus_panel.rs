@@ -49,26 +49,46 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusDashboardStatus
 }
 
 pub fn map_key(
-    _key: crossterm::event::KeyEvent,
+    key: crossterm::event::KeyEvent,
     _app: &Status,
     _snap: &types::ui::ModbusDashboardStatus,
 ) -> Option<crate::tui::input::Action> {
-    None
+    use crossterm::event::KeyCode as KC;
+    
+    // Modbus dashboard handles its own navigation and actions
+    match key.code {
+        KC::Esc | KC::Char('h') => Some(crate::tui::input::Action::LeavePage),
+        KC::Enter => Some(crate::tui::input::Action::EditToggle),
+        KC::Delete | KC::Char('x') => Some(crate::tui::input::Action::DeleteRegister),
+        KC::Char('n') => Some(crate::tui::input::Action::AddRegister),
+        _ => None,
+    }
 }
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
-pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus, _snap: &types::ui::ModbusDashboardStatus) -> bool {
+pub fn handle_input(
+    key: crossterm::event::KeyEvent, 
+    app: &Status,
+    bus: &Bus, 
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    _snap: &types::ui::ModbusDashboardStatus
+) -> bool {
     use crossterm::event::KeyCode as KC;
 
-    match _key.code {
+    match key.code {
         KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Navigation
+            // Navigation within the dashboard
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
             true
         }
-        KC::Left | KC::Right | KC::Char('h') | KC::Char('l') => {
-            // Horizontal navigation
+        KC::Left | KC::Right => {
+            // Horizontal navigation within fields
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Esc => {
+            // Leave dashboard - go back to entry
+            handle_leave_page(bus, app_arc);
             true
         }
         KC::Enter => {
@@ -93,4 +113,17 @@ pub fn handle_input(_key: crossterm::event::KeyEvent, bus: &Bus, _snap: &types::
         }
         _ => false,
     }
+}
+
+/// Handle leaving the modbus dashboard back to entry page
+fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
+    use crate::protocol::status::write_status;
+    use crate::tui::utils::bus::UiToCore;
+    
+    let _ = write_status(app_arc, |s| {
+        // Go back to entry page
+        s.page = types::Page::Entry { cursor: None };
+        Ok(())
+    });
+    let _ = bus.ui_tx.send(UiToCore::Refresh);
 }
