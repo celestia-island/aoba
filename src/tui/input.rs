@@ -6,9 +6,7 @@ use std::{
 };
 
 use crate::{
-    protocol::status::{
-        types::{self, Status},
-    },
+    protocol::status::types::{self, Status},
     tui::{
         ui::pages::about,
         utils::bus::{Bus, UiToCore},
@@ -84,7 +82,7 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
     // Support both Key and Mouse scroll events. Map Mouse ScrollUp/Down to
     // synthesized KeyEvent Up/Down so existing key handlers can be reused.
     let mut key_opt: Option<KeyEvent> = None;
-    
+
     match ev {
         crossterm::event::Event::Key(k) => key_opt = Some(k),
         crossterm::event::Event::Mouse(me) => {
@@ -98,13 +96,7 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
                 if sel == about_idx {
                     // Snapshot for about page input
                     let snap_about = snapshot.snapshot_about();
-                    consumed_by_page = about::handle_mouse(
-                        me,
-                        &snapshot,
-                        bus,
-                        app,
-                        &snap_about,
-                    );
+                    consumed_by_page = about::handle_mouse(me, &snapshot, bus, app, &snap_about);
                 }
             }
 
@@ -136,7 +128,7 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
     if let Some(key) = key_opt {
         return handle_key_event(key, bus, app);
     }
-    
+
     false
 }
 
@@ -148,7 +140,10 @@ fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> bool
     }
 
     // Handle global quit with Ctrl+C
-    if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) {
+    if key
+        .modifiers
+        .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
         if let KeyCode::Char('c') = key.code {
             let _ = bus.ui_tx.send(UiToCore::Quit);
             return true;
@@ -158,22 +153,23 @@ fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> bool
     // Route input to appropriate page handler
     if let Ok(snapshot) = crate::protocol::status::read_status(app, |s| Ok(s.clone())) {
         // First, let subpages consume input if applicable
-        let consumed = crate::tui::ui::pages::handle_input_in_subpage(
-            key, &snapshot, bus, app,
-        );
+        let consumed = crate::tui::ui::pages::handle_input_in_subpage(key, &snapshot, bus, app);
 
         if !consumed {
-            // Try to handle as a page-specific action first
-            if let Some(page_action) = crate::tui::ui::pages::map_key_in_page(key, &snapshot) {
-                handle_page_action(page_action, bus, app, &snapshot);
+            // If the active page maps the key, dispatch the original KeyEvent to the page handler
+            if crate::tui::ui::pages::map_key_in_page(key, &snapshot).is_some() {
+                let _ = crate::tui::ui::pages::handle_input_in_page(key, &snapshot, bus, app);
             } else {
-                // Handle global keys
                 let action = map_key(key.code);
-                handle_global_action(action, bus, app, &snapshot);
+                if let Action::None = action {
+                    let _ = crate::tui::ui::pages::handle_input_in_page(key, &snapshot, bus, app);
+                } else {
+                    handle_global_action(action, bus, app, &snapshot);
+                }
             }
         }
     }
-    
+
     false
 }
 
@@ -202,7 +198,9 @@ fn handle_page_action(action: Action, bus: &Bus, app: &Arc<RwLock<Status>>, snap
             // The global input handler just routes to the appropriate page
             let _ = crate::tui::ui::pages::handle_input_in_page(
                 KeyEvent::new(KeyCode::Null, crossterm::event::KeyModifiers::NONE), // placeholder
-                snapshot, bus, app,
+                snapshot,
+                bus,
+                app,
             );
         }
     }
@@ -218,7 +216,9 @@ fn handle_global_action(action: Action, bus: &Bus, app: &Arc<RwLock<Status>>, sn
             // If global mapping didn't handle it, try page-level handlers
             let _ = crate::tui::ui::pages::handle_input_in_page(
                 KeyEvent::new(KeyCode::Null, crossterm::event::KeyModifiers::NONE),
-                snapshot, bus, app,
+                snapshot,
+                bus,
+                app,
             );
         }
         _ => {
@@ -228,5 +228,3 @@ fn handle_global_action(action: Action, bus: &Bus, app: &Arc<RwLock<Status>>, sn
         }
     }
 }
-
-
