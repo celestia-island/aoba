@@ -24,6 +24,8 @@ pub enum CoreToUi {
     Refreshed,
     /// Core encountered an error condition (already stored in Status, provided for wake-up).
     Error,
+    /// Core is requesting UI to quit.
+    Quit,
 }
 
 /// Simple holder passed into UI loop containing the receiving side from core and the sending side to core.

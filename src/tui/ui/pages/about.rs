@@ -142,14 +142,6 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::AboutStatus) -> Vec<S
     Vec::new()
 }
 
-pub fn map_key(
-    _key: crossterm::event::KeyEvent,
-    _app: &Status,
-    _snap: &types::ui::AboutStatus,
-) -> Option<crate::tui::input::Action> {
-    None
-}
-
 /// Handle input for about page. Sends navigation commands via UiToCore.
 pub fn handle_input(
     key: crossterm::event::KeyEvent,
@@ -239,6 +231,15 @@ pub fn handle_input(
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = total.saturating_sub(1);
                 }
+                Ok(())
+            });
+            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
+            true
+        }
+        KC::Esc => {
+            // Return to entry page when pressing Esc from About
+            let _ = crate::protocol::status::write_status(app_arc, |s| {
+                s.page = types::Page::Entry { cursor: None };
                 Ok(())
             });
             let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
