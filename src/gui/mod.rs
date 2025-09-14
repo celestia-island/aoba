@@ -1,17 +1,21 @@
 mod init_font;
 mod ui;
+use flume;
 
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, RwLock};
+use std::{
+    sync::{Arc, RwLock},
+    thread,
+    time::Duration,
+};
 
 use eframe::{self, egui};
 use egui::{vec2, IconData};
 
-// use crate::protocol::status::status_rw::read_status; // TODO: implement usage
-use crate::protocol::status::types::Status;
-use crate::tui::utils::bus::{Bus, CoreToUi, UiToCore};
-use flume;
-use std::{thread, time::Duration};
+use crate::{
+    protocol::status::types::Status,
+    tui::utils::bus::{Bus, CoreToUi, UiToCore},
+};
 
 pub fn start() -> Result<()> {
     log::info!("[GUI] aoba GUI starting...");
@@ -72,6 +76,10 @@ impl GuiApp {
                         let _ = core_tx.send(CoreToUi::Refreshed);
                     }
                     UiToCore::ResumePolling => {
+                        let _ = core_tx.send(CoreToUi::Refreshed);
+                    }
+                    UiToCore::ToggleRuntime(_) => {
+                        // Demo GUI core ignores ToggleRuntime
                         let _ = core_tx.send(CoreToUi::Refreshed);
                     }
                 }

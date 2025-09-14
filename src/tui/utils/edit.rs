@@ -26,7 +26,10 @@ pub fn select_field_by_cursor(
         7 => EditingField::GlobalTimeout,
         n => {
             let ridx = n.saturating_sub(8);
-            EditingField::RegisterField { idx: ridx, field: RegisterField::SlaveId }
+            EditingField::RegisterField {
+                idx: ridx,
+                field: RegisterField::SlaveId,
+            }
         }
     });
 
@@ -34,7 +37,10 @@ pub fn select_field_by_cursor(
     if matches!(editing_field, Some(EditingField::Baud)) {
         let presets: [u32; 8] = [1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200];
         let custom_idx = presets.len();
-        let idx = presets.iter().position(|&p| p == baud).unwrap_or(custom_idx);
+        let idx = presets
+            .iter()
+            .position(|&p| p == baud)
+            .unwrap_or(custom_idx);
         *edit_choice_index = Some(idx);
         if idx == presets.len() {
             *input_buffer = baud.to_string();
