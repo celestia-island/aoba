@@ -5,11 +5,18 @@ pub mod log_panel;
 pub mod modbus_panel;
 pub mod mqtt_panel;
 
+use std::sync::{Arc, RwLock};
+
 use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
 
 // AppMode and SubpageTab are not used directly in this module; derive from Page when needed
-use crate::{i18n::lang, protocol::status::types::{self, Status}, tui::input::Action, tui::utils::bus::Bus};
+use crate::{
+    i18n::lang,
+    protocol::status::types::{self, Status},
+    tui::input::Action,
+    tui::utils::bus::Bus,
+};
 
 // Helper: derive the current selection index from `page` so callers
 // don't rely on transient `temporarily.selected`.
@@ -133,7 +140,7 @@ pub fn handle_input_in_subpage(
     key: KeyEvent,
     app: &Status,
     bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    app_arc: &Arc<RwLock<types::Status>>,
 ) -> bool {
     use crossterm::event::KeyCode as KC;
 
@@ -155,7 +162,7 @@ pub fn handle_input_in_subpage(
         let sel = derive_selection(app);
         if sel == about_idx {
             let snap = app.snapshot_about();
-            return about::handle_input(key, bus, &snap);
+            return about::handle_input(key, app, bus, app_arc, &snap);
         }
         match app.page {
             types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
@@ -178,7 +185,7 @@ pub fn handle_input_in_page(
     key: KeyEvent,
     app: &Status,
     bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    app_arc: &Arc<RwLock<types::Status>>,
 ) -> bool {
     // If a subpage is active, delegate to existing subpage handlers (which already
     // consume keys like 'q' for About etc.). When no subpage is active, delegate to
