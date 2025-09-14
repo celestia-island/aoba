@@ -204,21 +204,6 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::ModbusLogStatus) -> Ve
     hints
 }
 
-pub fn map_key(
-    key: crossterm::event::KeyEvent,
-    _app: &Status,
-    _snap: &types::ui::ModbusLogStatus,
-) -> Option<crate::tui::input::Action> {
-    use crossterm::event::KeyCode as KC;
-    
-    // Log panel handles some navigation actions
-    match key.code {
-        KC::Esc | KC::Char('h') => Some(crate::tui::input::Action::LeavePage),
-        KC::Char('f') => Some(crate::tui::input::Action::ToggleFollow),
-        _ => None,
-    }
-}
-
 /// Handle input for log panel. Sends commands via UiToCore.
 pub fn handle_input(
     key: crossterm::event::KeyEvent,
@@ -258,7 +243,7 @@ pub fn handle_input(
 fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     let _ = write_status(app_arc, |s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
@@ -268,10 +253,14 @@ fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types
 }
 
 /// Handle toggling follow mode for logs
-fn handle_toggle_follow(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, app: &Status) {
+fn handle_toggle_follow(
+    bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    app: &Status,
+) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     // Toggle the auto-scroll flag for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
         let _ = write_status(app_arc, |s| {
@@ -287,10 +276,14 @@ fn handle_toggle_follow(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<ty
 }
 
 /// Handle clearing logs for the current port
-fn handle_clear_logs(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>, app: &Status) {
+fn handle_clear_logs(
+    bus: &Bus,
+    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
+    app: &Status,
+) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
-    
+
     // Clear logs for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
         let _ = write_status(app_arc, |s| {
