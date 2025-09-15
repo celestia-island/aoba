@@ -31,10 +31,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
         _ => 0usize,
     };
     lines.push(Line::from(format!("Selected port: {sel}")));
-    lines.push(Line::from(format!(
-        "App mode: {:?}",
-        app.temporarily.modals.mode_selector.selector
-    )));
+    // MQTT panel placeholder.
 
     render_boxed_paragraph(f, area, lines, None);
 }

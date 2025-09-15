@@ -74,8 +74,7 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
     }
     // Default to entry hints when no subpage
     let entry_snap = app.snapshot_entry();
-    let mut hints = entry::page_bottom_hints(app, &entry_snap);
-    hints.push(lang().hotkeys.press_m_switch_protocol.as_str().to_string());
+    let hints = entry::page_bottom_hints(app, &entry_snap);
     hints
 }
 
@@ -99,11 +98,9 @@ pub fn global_hints_for_app(app: &Status) -> Vec<String> {
         // Default to entry hints when no subpage
         let entry_snap = app.snapshot_entry();
         hints = entry::page_bottom_hints(app, &entry_snap);
-        hints.push(lang().hotkeys.press_m_switch_protocol.as_str().to_string());
+        // protocol switching hint not included here
     }
-    // If the transient mode selector overlay is active, append its hints so the bottom bar
-    // Can render them (keeps rendering centralized in bottom.rs)
-    // Mode selector hints now rendered inside popup; do not append here.
+    // If a transient overlay were active, its hints would be appended here.
     hints
 }
 

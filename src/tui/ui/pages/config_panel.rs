@@ -32,10 +32,6 @@ pub fn render(
     render_kv_panel(f, area, app, &snap);
     // If the UI needs per-field state it should derive it from Status or local state.
     // For now render a simplified placeholder view.
-
-    // Since `SubpageForm` was removed from core status, render a simplified placeholder
-    // that displays high-level information derived from `Status` or instructs the UI
-    // to manage detailed editing state locally.
     let lines = vec![ratatui::text::Line::from(
         "Configuration panel: details managed in UI layer",
     )];
