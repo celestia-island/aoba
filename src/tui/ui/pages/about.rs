@@ -142,6 +142,12 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::AboutStatus) -> Vec<S
     Vec::new()
 }
 
+/// Global hints for About page.
+pub fn global_hints(_app: &Status) -> Vec<String> {
+    // Only provide a back hint for About page.
+    vec![lang().hotkeys.hint_back_list.as_str().to_string()]
+}
+
 /// Handle input for about page. Sends navigation commands via UiToCore.
 pub fn handle_input(
     key: crossterm::event::KeyEvent,
