@@ -11,7 +11,7 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::types::{self, Status},
-    tui::utils::bus::Bus,
+    // Bus intentionally unused in render; kept for parity with original file
 };
 
 /// Render the log panel. Only reads from Status, does not mutate.
@@ -137,11 +137,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
     }
 
     // Prepare a block with a small progress indicator in the title: " {selected}/{total}"
-    let sel_display = if total_groups == 0 {
-        0
-    } else {
-        port_log_selected + 1
-    };
+    let sel_display = if total_groups == 0 { 0 } else { port_log_selected + 1 };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if port_log_auto_scroll {
         lang().tabs.log.hint_follow_on.as_str()
@@ -157,11 +153,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
         title_text,
         Style::default()
             .add_modifier(Modifier::BOLD)
-            .fg(if port_log_auto_scroll {
-                Color::Green
-            } else {
-                Color::Blue
-            }),
+            .fg(if port_log_auto_scroll { Color::Green } else { Color::Blue }),
     );
 
     let log_block = Block::default()
@@ -209,99 +201,4 @@ pub fn global_hints(app: &Status) -> Vec<String> {
     // Reuse the page bottom hints implementation which contains the relevant commands.
     let snap = app.snapshot_modbus_log();
     page_bottom_hints(app, &snap)
-}
-
-/// Handle input for log panel. Sends commands via UiToCore.
-pub fn handle_input(
-    key: crossterm::event::KeyEvent,
-    app: &Status,
-    bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    _snap: &types::ui::ModbusLogStatus,
-) -> bool {
-    use crossterm::event::KeyCode as KC;
-
-    match key.code {
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Navigation commands within the log
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-            true
-        }
-        KC::Esc | KC::Char('h') => {
-            // Leave page - go back to entry
-            handle_leave_page(bus, app_arc);
-            true
-        }
-        KC::Char('f') => {
-            // Toggle follow mode
-            handle_toggle_follow(bus, app_arc, app);
-            true
-        }
-        KC::Char('c') => {
-            // Clear logs
-            handle_clear_logs(bus, app_arc, app);
-            true
-        }
-        _ => false,
-    }
-}
-
-/// Handle leaving the log panel back to entry page
-fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
-    let _ = write_status(app_arc, |s| {
-        // Go back to entry page
-        s.page = types::Page::Entry { cursor: None };
-        Ok(())
-    });
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
-}
-
-/// Handle toggling follow mode for logs
-fn handle_toggle_follow(
-    bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    app: &Status,
-) {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
-    // Toggle the auto-scroll flag for the current port
-    if let types::Page::ModbusLog { selected_port, .. } = &app.page {
-        let _ = write_status(app_arc, |s| {
-            if let Some(port_name) = s.ports.order.get(*selected_port) {
-                if let Some(port_data) = s.ports.map.get_mut(port_name) {
-                    port_data.log_auto_scroll = !port_data.log_auto_scroll;
-                }
-            }
-            Ok(())
-        });
-    }
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
-}
-
-/// Handle clearing logs for the current port
-fn handle_clear_logs(
-    bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    app: &Status,
-) {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
-    // Clear logs for the current port
-    if let types::Page::ModbusLog { selected_port, .. } = &app.page {
-        let _ = write_status(app_arc, |s| {
-            if let Some(port_name) = s.ports.order.get(*selected_port) {
-                if let Some(port_data) = s.ports.map.get_mut(port_name) {
-                    port_data.logs.clear();
-                    port_data.log_selected = 0;
-                }
-            }
-            Ok(())
-        });
-    }
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
 }
