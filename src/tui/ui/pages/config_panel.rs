@@ -32,10 +32,6 @@ pub fn render(
     render_kv_panel(f, area, app, &snap);
     // If the UI needs per-field state it should derive it from Status or local state.
     // For now render a simplified placeholder view.
-
-    // Since `SubpageForm` was removed from core status, render a simplified placeholder
-    // that displays high-level information derived from `Status` or instructs the UI
-    // to manage detailed editing state locally.
     let lines = vec![ratatui::text::Line::from(
         "Configuration panel: details managed in UI layer",
     )];
@@ -177,6 +173,13 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusConfigStatus) -
         lang().hotkeys.press_enter_enable.as_str().to_string(),
     ];
     hints
+}
+
+/// Global hints for Modbus config/dashboard pages.
+pub fn global_hints(app: &Status) -> Vec<String> {
+    // Reuse page bottom hints; this keeps global hints consistent with page-level hints.
+    let snap = app.snapshot_modbus_config();
+    page_bottom_hints(app, &snap)
 }
 
 /// Handle input for config panel. Sends commands via UiToCore.

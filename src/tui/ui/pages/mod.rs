@@ -12,7 +12,6 @@ use ratatui::prelude::*;
 
 // AppMode and SubpageTab are not used directly in this module; derive from Page when needed
 use crate::{
-    i18n::lang,
     protocol::status::types::{self, Status},
     tui::input::Action,
     tui::utils::bus::Bus,
@@ -74,8 +73,7 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
     }
     // Default to entry hints when no subpage
     let entry_snap = app.snapshot_entry();
-    let mut hints = entry::page_bottom_hints(app, &entry_snap);
-    hints.push(lang().hotkeys.press_m_switch_protocol.as_str().to_string());
+    let hints = entry::page_bottom_hints(app, &entry_snap);
     hints
 }
 
@@ -83,28 +81,27 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
 /// Of which subpage is active. This keeps page-specific hints separate (they can
 /// Be shown on an extra line above).
 pub fn global_hints_for_app(app: &Status) -> Vec<String> {
-    let mut hints: Vec<String> = Vec::new();
-    // If a subpage is active, show back / list and tab-switch hints as global controls.
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    );
-    if subpage_active {
-        hints.push(lang().hotkeys.hint_back_list.as_str().to_string());
-        hints.push(lang().hotkeys.hint_switch_tab.as_str().to_string());
-    } else {
-        // Default to entry hints when no subpage
-        let entry_snap = app.snapshot_entry();
-        hints = entry::page_bottom_hints(app, &entry_snap);
-        hints.push(lang().hotkeys.press_m_switch_protocol.as_str().to_string());
+    // Produce global hints by delegating to each page's `page_bottom_hints`,
+    // but perform the snapshotting here in the parent so child modules only
+    // implement rendering of hints for a given snapshot.
+    match &app.page {
+        types::Page::Entry { .. } => {
+            let snap = app.snapshot_entry();
+            entry::page_bottom_hints(app, &snap)
+        }
+        types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
+            let snap = app.snapshot_modbus_config();
+            config_panel::page_bottom_hints(app, &snap)
+        }
+        types::Page::ModbusLog { .. } => {
+            let snap = app.snapshot_modbus_log();
+            log_panel::page_bottom_hints(app, &snap)
+        }
+        types::Page::About { .. } => {
+            let snap = app.snapshot_about();
+            about::page_bottom_hints(app, &snap)
+        }
     }
-    // If the transient mode selector overlay is active, append its hints so the bottom bar
-    // Can render them (keeps rendering centralized in bottom.rs)
-    // Mode selector hints now rendered inside popup; do not append here.
-    hints
 }
 
 /// Allow the active page to map a KeyEvent to a high-level Action when the global

@@ -3,9 +3,8 @@ use crate::protocol::status::types::modbus::{EditingField, RegisterField};
 
 /// Select the field being edited based on the current `cursor` position.
 ///
-/// This helper is adapted to work on minimal pieces of state instead of the
-/// removed `SubpageForm` structure. Callers should pass mutable references to
-/// the fields that need updating.
+/// This helper operates on minimal pieces of state; callers should pass
+/// mutable references for fields that need updating.
 pub fn select_field_by_cursor(
     cursor: usize,
     editing_field: &mut Option<EditingField>,

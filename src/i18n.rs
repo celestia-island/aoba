@@ -15,7 +15,6 @@ derive_struct! {
             com_ports: String = "com_ports".to_string(),
             details: String = "details".to_string(),
             no_com_ports: String = "no_com_ports".to_string(),
-            help_short: String = "help_short".to_string(),
             auto_on: String = "auto_on".to_string(),
             auto_off: String = "auto_off".to_string(),
             last: String = "last".to_string(),
@@ -38,7 +37,6 @@ derive_struct! {
             scan_none: String = "scan_none".to_string(),
             scan_raw_header: String = "scan_raw_header".to_string(),
             scan_truncated_suffix: String = "scan_truncated_suffix".to_string(),
-            scan_quick_hint: String = "scan_quick_hint".to_string(),
         },
 
         about: {
@@ -58,7 +56,6 @@ derive_struct! {
 
             press_c_clear: String = "press_c_clear".to_string(),
             press_c_confirm: String = "press_c_confirm".to_string(),
-            press_m_switch_protocol: String = "press_m_switch_protocol".to_string(),
             press_enter_toggle: String = "press_enter_toggle".to_string(),
             press_enter_select: String = "press_enter_select".to_string(),
             press_enter_enable: String = "press_enter_enable".to_string(),

@@ -204,6 +204,13 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::ModbusLogStatus) -> Ve
     hints
 }
 
+/// Global hints for Log page.
+pub fn global_hints(app: &Status) -> Vec<String> {
+    // Reuse the page bottom hints implementation which contains the relevant commands.
+    let snap = app.snapshot_modbus_log();
+    page_bottom_hints(app, &snap)
+}
+
 /// Handle input for log panel. Sends commands via UiToCore.
 pub fn handle_input(
     key: crossterm::event::KeyEvent,
