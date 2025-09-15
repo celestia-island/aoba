@@ -83,7 +83,7 @@ pub struct RegisterEntry {
     pub values: Vec<u16>,          // Register values
 }
 
-// SubpageForm removed — type intentionally deleted to simplify status types.
+// SubpageForm type intentionally deleted to simplify status types.
 // If any functionality relied on SubpageForm, consider replacing it with
 // a smaller, focused structure in another module or in the UI layer.
 
