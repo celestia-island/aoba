@@ -4,6 +4,7 @@ use crate::{
     i18n::lang,
     protocol::status::types::{self, Status},
 };
+use unicode_width::UnicodeWidthStr;
 
 pub fn render_bottom(f: &mut Frame, area: Rect, app: &mut Status) {
     render_bottom_readonly(f, area, app);
@@ -48,28 +49,45 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
     // Normal (non-error) bottom rendering
     let help_block = help_block.style(Style::default().bg(Color::Gray).fg(Color::White));
 
-    // If a subpage is active, render two parallel hint lines: page-specific above and global below.
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    );
-    if subpage_active {
-        // When a confirmation prompt is pending (e.g., clearing logs), render three rows:
-        // [confirmation row - yellow bg] [page hints] [global hints]
-        // Determine whether a log-clear confirmation is pending from the currently
-        // selected port's transient state (per-port), not the old global `temporarily`.
-        let mut port_log_clear_pending = false;
-        if let types::Page::ModbusLog { selected_port } = app.page {
-            if let Some(port_name) = app.ports.order.get(selected_port) {
-                if let Some(pdata) = app.ports.map.get(port_name) {
-                    port_log_clear_pending = pdata.log_clear_pending;
-                }
+    // Determine if a per-port log-clear confirmation is pending (keeps legacy behavior).
+    let mut port_log_clear_pending = false;
+    if let types::Page::ModbusLog { selected_port } = app.page {
+        if let Some(port_name) = app.ports.order.get(selected_port) {
+            if let Some(pdata) = app.ports.map.get(port_name) {
+                port_log_clear_pending = pdata.log_clear_pending;
             }
         }
-        if port_log_clear_pending {
+    }
+
+    // Obtain page-provided hints arrays and let them drive rendering decisions.
+    // Support multi-line hints: split any hint string on '\n' to produce logical rows.
+    let raw_page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
+    let raw_global_hints = crate::tui::ui::pages::global_hints_for_app(app);
+
+    // Expand hints into individual rows by splitting on newlines inside each fragment.
+    let mut page_rows: Vec<String> = Vec::new();
+    for s in raw_page_hints.iter() {
+        for line in s.split('\n') {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                page_rows.push(trimmed.to_string());
+            }
+        }
+    }
+    let mut global_rows: Vec<String> = Vec::new();
+    for s in raw_global_hints.iter() {
+        for line in s.split('\n') {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                global_rows.push(trimmed.to_string());
+            }
+        }
+    }
+
+    if port_log_clear_pending {
+        // Prefer to show three rows when possible: confirmation, page hints, global hints.
+        let avail = area.height as usize;
+        if avail >= 3 {
             let rows = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .margin(0)
@@ -94,13 +112,13 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
             f.render_widget(confirm_para, rows[0]);
 
             // Page-specific hints (middle)
-            let page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
-            render_hints(f, rows[1], page_hints.iter().map(|s| s.as_str()));
+            render_hints(f, rows[1], page_rows.iter().map(|s| s.as_str()));
 
             // Global hints (bottom-most)
-            let global_hints = crate::tui::ui::pages::global_hints_for_app(app);
-            render_hints(f, rows[2], global_hints.iter().map(|s| s.as_str()));
-        } else {
+            render_hints(f, rows[2], global_rows.iter().map(|s| s.as_str()));
+            return;
+        } else if avail == 2 {
+            // Render confirmation + collapsed hints line
             let rows = ratatui::layout::Layout::default()
                 .direction(ratatui::layout::Direction::Vertical)
                 .margin(0)
@@ -110,24 +128,140 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
                 ])
                 .split(area);
 
-            // Page-specific hints (above)
-            let page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
-            render_hints(f, rows[0], page_hints.iter().map(|s| s.as_str()));
+            let confirm_block = Block::default().style(
+                Style::default()
+                    .bg(Color::Yellow)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD),
+            );
+            let confirm_text = lang().hotkeys.press_c_confirm.as_str();
+            let confirm_para = Paragraph::new(confirm_text)
+                .block(confirm_block)
+                .alignment(Alignment::Center);
+            f.render_widget(confirm_para, rows[0]);
 
-            // Global hints (bottom-most)
-            let global_hints = crate::tui::ui::pages::global_hints_for_app(app);
-            render_hints(f, rows[1], global_hints.iter().map(|s| s.as_str()));
+            // collapse remaining hints into one line
+            let mut combined: Vec<String> = Vec::new();
+            combined.extend(page_rows.clone());
+            combined.extend(global_rows.clone());
+            render_hints(f, rows[1], combined.iter().map(|s| s.as_str()));
+            return;
+        } else if avail == 1 {
+            // Only show confirmation row (we have no room for hints)
+            let block = Block::default().style(
+                Style::default()
+                    .bg(Color::Yellow)
+                    .fg(Color::Black)
+                    .add_modifier(Modifier::BOLD),
+            );
+            let text = lang().hotkeys.press_c_confirm.as_str();
+            let para = Paragraph::new(text)
+                .block(block)
+                .alignment(Alignment::Center);
+            f.render_widget(para, area);
+            return;
+        } else {
+            return; // no space
         }
-    } else {
-        // Single-line bottom hints when not in a subpage
-        let hints = crate::tui::ui::pages::bottom_hints_for_app(app);
-        let text = format_hints(hints.iter().map(|s| s.as_str()));
+    }
+
+    // Simplified decision tree using sequential checks:
+    // 1) nothing to show, 2) only page hints, 3) only global hints, 4) both -> two rows.
+    // Determine how many rows we can display
+    let avail_rows = area.height as usize;
+    if avail_rows == 0 {
+        return;
+    }
+
+    // If we can render all rows individually, we usually do so. However, to
+    // follow a "minimum-occupied-rows" policy we first try to pack page and
+    // global hints into fewer rows when it makes sense (e.g. both fit in one
+    // line width) to avoid leaving an extra empty-looking row.
+    let total_needed = page_rows.len() + global_rows.len();
+    if avail_rows >= total_needed && total_needed > 0 {
+        // Prepare joined forms for simple packing checks
+        let page_joined = format_hints(page_rows.iter().map(|s| s.as_str()));
+        let global_joined = format_hints(global_rows.iter().map(|s| s.as_str()));
+
+        // If everything can fit into a single line, render as one row to be
+        // minimally occupying. We measure by character width compared to
+        // available columns; this is a heuristic (doesn't account for full
+        // grapheme widths) but is sufficient for the typical ascii hints.
+        let combined = if !page_joined.is_empty() {
+            if !global_joined.is_empty() {
+                format!("{}{}{}", page_joined, "    ", global_joined)
+            } else {
+                page_joined.clone()
+            }
+        } else {
+            global_joined.clone()
+        };
+
+        if !combined.is_empty() && (UnicodeWidthStr::width(combined.as_str()) as u16) <= area.width
+        {
+            // Single-line fit: render one centered hint row
+            let help = Paragraph::new(combined)
+                .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true })
+                .block(help_block);
+            f.render_widget(help, area);
+            return;
+        }
+
+        // Otherwise fall back to rendering each row individually (page rows
+        // first, then global rows) since there's room for them.
+        let mut constraints: Vec<ratatui::layout::Constraint> = Vec::new();
+        for _ in 0..total_needed {
+            constraints.push(ratatui::layout::Constraint::Length(1));
+        }
+        let rows = ratatui::layout::Layout::default()
+            .direction(ratatui::layout::Direction::Vertical)
+            .margin(0)
+            .constraints(constraints.as_slice())
+            .split(area);
+
+        let mut idx = 0usize;
+        for pr in page_rows.iter() {
+            render_hints(f, rows[idx], std::iter::once(pr.as_str()));
+            idx += 1;
+        }
+        for gr in global_rows.iter() {
+            render_hints(f, rows[idx], std::iter::once(gr.as_str()));
+            idx += 1;
+        }
+        return;
+    }
+
+    // If we don't have enough rows, collapse to at most two rows:
+    // - if avail_rows == 1: join all rows into a single line
+    // - if avail_rows >= 2: render two joined rows: page-joined and global-joined
+    if avail_rows == 1 {
+        let mut all: Vec<String> = Vec::new();
+        all.extend(page_rows.clone());
+        all.extend(global_rows.clone());
+        let text = format_hints(all.iter().map(|s| s.as_str()));
         let help = Paragraph::new(text)
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true })
             .block(help_block);
         f.render_widget(help, area);
+        return;
     }
+
+    // avail_rows >= 2 but less than total_needed: render two joined rows
+    let rows = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .margin(0)
+        .constraints([
+            ratatui::layout::Constraint::Length(1),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .split(area);
+
+    let page_joined = format_hints(page_rows.iter().map(|s| s.as_str()));
+    let global_joined = format_hints(global_rows.iter().map(|s| s.as_str()));
+    render_hints(f, rows[0], std::iter::once(page_joined.as_str()));
+    render_hints(f, rows[1], std::iter::once(global_joined.as_str()));
 }
 
 /// Join hint fragments into a single string.
