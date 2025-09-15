@@ -1,9 +1,11 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use anyhow::{anyhow, Result};
 use std::{
     sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
+
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     protocol::status::types::{self, Status},
@@ -61,24 +63,36 @@ pub fn map_key(code: KeyCode) -> Action {
 }
 
 /// Spawn the input handling thread that processes keyboard and mouse events
-pub fn spawn_input_thread(bus: Bus, app: Arc<RwLock<Status>>) {
+pub fn spawn_input_thread(bus: Bus, app: Arc<RwLock<Status>>, thr_tx: flume::Sender<Result<()>>) {
     thread::spawn(move || {
-        loop {
-            // Poll for input
-            if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
-                if let Ok(ev) = crossterm::event::read() {
-                    if handle_event(ev, &bus, &app) {
-                        break; // Quit was requested
+        let res = (|| -> Result<()> {
+            loop {
+                // Poll for input
+                if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
+                    if let Ok(ev) = crossterm::event::read() {
+                        match handle_event(ev, &bus, &app) {
+                            Ok(should_quit) => {
+                                if should_quit {
+                                    break; // Quit was requested
+                                }
+                            }
+                            Err(e) => {
+                                // Propagate error to caller/watcher
+                                return Err(e);
+                            }
+                        }
                     }
                 }
             }
-        }
+            Ok(())
+        })();
+        let _ = thr_tx.send(res);
     });
 }
 
 /// Handle a single input event (keyboard or mouse)
 /// Returns true if quit was requested
-fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>>) -> bool {
+fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<bool> {
     // Support both Key and Mouse scroll events. Map Mouse ScrollUp/Down to
     // synthesized KeyEvent Up/Down so existing key handlers can be reused.
     let mut key_opt: Option<KeyEvent> = None;
@@ -91,8 +105,8 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
                     .contains(crossterm::event::KeyModifiers::CONTROL)
                 && matches!(k.code, KeyCode::Char('c'))
             {
-                let _ = bus.ui_tx.send(UiToCore::Quit);
-                return true;
+                bus.ui_tx.send(UiToCore::Quit).map_err(|e| anyhow!(e))?;
+                return Ok(true);
             }
             key_opt = Some(k);
         }
@@ -140,14 +154,14 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
         return handle_key_event(key, bus, app);
     }
 
-    false
+    Ok(false)
 }
 
 /// Handle a keyboard event
 /// Returns true if quit was requested
-fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> bool {
+fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<bool> {
     if key.kind != crossterm::event::KeyEventKind::Press {
-        return false; // Ignore non-initial key press (repeat / release)
+        return Ok(false); // Ignore non-initial key press (repeat / release)
     }
 
     // Handle global quit with Ctrl+C
@@ -156,28 +170,31 @@ fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> bool
         .contains(crossterm::event::KeyModifiers::CONTROL)
     {
         if let KeyCode::Char('c') = key.code {
-            let _ = bus.ui_tx.send(UiToCore::Quit);
-            return true;
+            bus.ui_tx.send(UiToCore::Quit).map_err(|e| anyhow!(e))?;
+            return Ok(true);
         }
     }
 
     // Route input to appropriate page handler based on current Status.page.
     if let Ok(snapshot) = crate::protocol::status::read_status(app, |s| Ok(s.clone())) {
         // Let the page-level handler decide whether it consumes the key.
-        let consumed = crate::tui::ui::pages::handle_input_in_page(key, &snapshot, bus, app);
-
-        if !consumed {
-            // Page didn't consume the key: check global mappings/actions
-            let action = map_key(key.code);
-            if let Action::None = action {
-                // No global mapping; nothing to do.
-            } else {
-                handle_global_action(action, bus, app, &snapshot);
+        match crate::tui::ui::pages::handle_input_in_page(key, &snapshot, bus, app) {
+            Ok(consumed) => {
+                if !consumed {
+                    // Page didn't consume the key: check global mappings/actions
+                    let action = map_key(key.code);
+                    if let Action::None = action {
+                        // No global mapping; nothing to do.
+                    } else {
+                        handle_global_action(action, bus, app, &snapshot);
+                    }
+                }
             }
+            Err(e) => return Err(e),
         }
     }
 
-    false
+    Ok(false)
 }
 
 /// Derive the current selection index from the page state
@@ -210,7 +227,8 @@ fn handle_global_action(action: Action, bus: &Bus, app: &Arc<RwLock<Status>>, sn
                 snapshot,
                 bus,
                 app,
-            );
+            )
+            .ok();
         }
         _ => {
             // Most actions are now handled by individual pages

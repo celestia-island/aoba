@@ -62,82 +62,89 @@ pub fn start() -> Result<()> {
     let (ui_tx, ui_rx) = flume::unbounded::<UiToCore>(); // ui -> core
     let bus = Bus::new(core_rx.clone(), ui_tx.clone());
 
+    // Thread exit/reporting channel: threads send their Result<()> here when they exit
+    let (thr_tx, thr_rx) = flume::unbounded::<Result<()>>();
+
     // Thread 1: Core processing thread - handles UiToCore and CoreToUi communication
     {
         use crate::protocol::tty::available_ports_enriched;
         use chrono::Local;
         let _app_clone = Arc::clone(&app);
         let core_tx_clone = core_tx.clone();
+        let thr_tx_clone_for_core = thr_tx.clone();
         thread::spawn(move || {
-            let mut polling_enabled = true;
-            let scan_interval = Duration::from_secs(30); // Reduced from 2s to 30s
-            let mut last_scan = std::time::Instant::now() - scan_interval;
-            let mut scan_in_progress = false; // Track if scan is currently running
+            let res = (|| -> Result<()> {
+                let mut polling_enabled = true;
+                let scan_interval = Duration::from_secs(30); // Reduced from 2s to 30s
+                let mut last_scan = std::time::Instant::now() - scan_interval;
+                let mut scan_in_progress = false; // Track if scan is currently running
 
-            let do_scan = |app_ref: &Arc<RwLock<Status>>, scan_in_progress: &mut bool| -> bool {
-                // Return early if scan already in progress
-                if *scan_in_progress {
-                    log::debug!("[CORE] Scan already in progress, skipping");
-                    return false;
-                }
-
-                *scan_in_progress = true;
-
-                // Set busy indicator
-                let _ = write_status(app_ref, |s| {
-                    s.temporarily.busy.busy = true;
-                    Ok(())
-                });
-
-                let ports = available_ports_enriched();
-                let scan_text = ports
-                    .iter()
-                    .map(|(info, extra)| format!("{} {:?}", info.port_name, extra))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-
-                let _ = write_status(app_ref, |s| {
-                    s.ports.order.clear();
-                    s.ports.map.clear();
-                    for (info, extra) in ports.iter() {
-                        let pd = PortData {
-                            port_name: info.port_name.clone(),
-                            port_type: format!("{:?}", info.port_type),
-                            info: Some(info.clone()),
-                            extra: extra.clone(),
-                            state: PortState::Free,
-                            handle: None,
-                            runtime: None,
-                            ..Default::default()
-                        };
-
-                        s.ports.order.push(info.port_name.clone());
-                        s.ports.map.insert(info.port_name.clone(), pd);
+                let do_scan = |app_ref: &Arc<RwLock<Status>>,
+                               scan_in_progress: &mut bool|
+                 -> bool {
+                    // Return early if scan already in progress
+                    if *scan_in_progress {
+                        log::debug!("[CORE] Scan already in progress, skipping");
+                        return false;
                     }
 
-                    s.temporarily.scan.last_scan_time = Some(Local::now());
-                    s.temporarily.scan.last_scan_info = scan_text.clone();
-                    // Clear busy indicator after scan completes
-                    s.temporarily.busy.busy = false;
-                    Ok(())
-                });
+                    *scan_in_progress = true;
 
-                *scan_in_progress = false;
-                // After adding ports to status, spawn per-port runtime listeners.
-                if let Ok(snapshot) =
-                    crate::protocol::status::read_status(app_ref, |s| Ok(s.clone()))
-                {
-                    for port_name in snapshot.ports.order.iter() {
-                        if let Some(pd) = snapshot.ports.map.get(port_name) {
-                            if let Some(runtime) = pd.runtime.as_ref() {
-                                // Spawn a listener thread for this runtime's evt_rx.
-                                let evt_rx = runtime.evt_rx.clone();
-                                let app_clone3 = Arc::clone(app_ref);
-                                let port_name_clone = port_name.clone();
-                                thread::spawn(move || {
-                                    const MAX_LOGS: usize = 2000;
-                                    while let Ok(evt) = evt_rx.recv() {
-                                        match evt {
+                    // Set busy indicator
+                    let _ = write_status(app_ref, |s| {
+                        s.temporarily.busy.busy = true;
+                        Ok(())
+                    });
+
+                    let ports = available_ports_enriched();
+                    let scan_text = ports
+                        .iter()
+                        .map(|(info, extra)| format!("{} {:?}", info.port_name, extra))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    let _ = write_status(app_ref, |s| {
+                        s.ports.order.clear();
+                        s.ports.map.clear();
+                        for (info, extra) in ports.iter() {
+                            let pd = PortData {
+                                port_name: info.port_name.clone(),
+                                port_type: format!("{:?}", info.port_type),
+                                info: Some(info.clone()),
+                                extra: extra.clone(),
+                                state: PortState::Free,
+                                handle: None,
+                                runtime: None,
+                                ..Default::default()
+                            };
+
+                            s.ports.order.push(info.port_name.clone());
+                            s.ports.map.insert(info.port_name.clone(), pd);
+                        }
+
+                        s.temporarily.scan.last_scan_time = Some(Local::now());
+                        s.temporarily.scan.last_scan_info = scan_text.clone();
+                        // Clear busy indicator after scan completes
+                        s.temporarily.busy.busy = false;
+                        Ok(())
+                    });
+
+                    *scan_in_progress = false;
+                    // After adding ports to status, spawn per-port runtime listeners.
+                    if let Ok(snapshot) =
+                        crate::protocol::status::read_status(app_ref, |s| Ok(s.clone()))
+                    {
+                        for port_name in snapshot.ports.order.iter() {
+                            if let Some(pd) = snapshot.ports.map.get(port_name) {
+                                if let Some(runtime) = pd.runtime.as_ref() {
+                                    // Spawn a listener thread for this runtime's evt_rx.
+                                    let evt_rx = runtime.evt_rx.clone();
+                                    let app_clone3 = Arc::clone(app_ref);
+                                    let port_name_clone = port_name.clone();
+                                    thread::spawn(move || {
+                                        const MAX_LOGS: usize = 2000;
+                                        while let Ok(evt) = evt_rx.recv() {
+                                            match evt {
                                             crate::protocol::runtime::RuntimeEvent::FrameReceived(b)
                                             | crate::protocol::runtime::RuntimeEvent::FrameSent(b) => {
                                                 let now = chrono::Local::now();
@@ -164,75 +171,75 @@ pub fn start() -> Result<()> {
                                             }
                                             _ => {}
                                         }
-                                    }
-                                });
+                                        }
+                                    });
+                                }
                             }
                         }
                     }
-                }
-                let _ = core_tx_clone.send(CoreToUi::Refreshed);
-                true
-            };
+                    let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                    true
+                };
 
-            loop {
-                // Drain UI -> core messages
-                while let Ok(msg) = ui_rx.try_recv() {
-                    match msg {
-                        UiToCore::Quit => {
-                            log::info!("[CORE] Received quit signal");
-                            // Notify UI to quit and then exit core thread
-                            let _ = core_tx_clone.send(CoreToUi::Quit);
-                            return;
-                        }
-                        UiToCore::Refresh => {
-                            log::debug!("[CORE] immediate Refresh requested");
-                            if do_scan(&_app_clone, &mut scan_in_progress) {
-                                last_scan = std::time::Instant::now();
-                            } else {
-                                log::debug!("[CORE] immediate Refresh skipped because a scan is already running");
+                loop {
+                    // Drain UI -> core messages
+                    while let Ok(msg) = ui_rx.try_recv() {
+                        match msg {
+                            UiToCore::Quit => {
+                                log::info!("[CORE] Received quit signal");
+                                // Notify UI to quit and then exit core thread
+                                let _ = core_tx_clone.send(CoreToUi::Quit);
+                                return Ok(());
                             }
-                        }
-                        UiToCore::PausePolling => {
-                            polling_enabled = false;
-                            let _ = core_tx_clone.send(CoreToUi::Refreshed);
-                        }
-                        UiToCore::ResumePolling => {
-                            polling_enabled = true;
-                            let _ = core_tx_clone.send(CoreToUi::Refreshed);
-                        }
-                        UiToCore::ToggleRuntime(port_name) => {
-                            log::info!("[CORE] ToggleRuntime requested for {port_name}");
-                            use types::port::PortState;
+                            UiToCore::Refresh => {
+                                log::debug!("[CORE] immediate Refresh requested");
+                                if do_scan(&_app_clone, &mut scan_in_progress) {
+                                    last_scan = std::time::Instant::now();
+                                } else {
+                                    log::debug!("[CORE] immediate Refresh skipped because a scan is already running");
+                                }
+                            }
+                            UiToCore::PausePolling => {
+                                polling_enabled = false;
+                                let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                            }
+                            UiToCore::ResumePolling => {
+                                polling_enabled = true;
+                                let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                            }
+                            UiToCore::ToggleRuntime(port_name) => {
+                                log::info!("[CORE] ToggleRuntime requested for {port_name}");
+                                use types::port::PortState;
 
-                            // Step 1: extract any existing runtime handle (clone) so we can stop it
-                            let existing_rt =
-                                crate::protocol::status::read_status(&_app_clone, |s| {
-                                    if let Some(pd) = s.ports.map.get(&port_name) {
-                                        Ok(pd.runtime.clone())
-                                    } else {
-                                        Ok(None)
-                                    }
-                                })
-                                .unwrap_or(None);
+                                // Step 1: extract any existing runtime handle (clone) so we can stop it
+                                let existing_rt =
+                                    crate::protocol::status::read_status(&_app_clone, |s| {
+                                        if let Some(pd) = s.ports.map.get(&port_name) {
+                                            Ok(pd.runtime.clone())
+                                        } else {
+                                            Ok(None)
+                                        }
+                                    })
+                                    .unwrap_or(None);
 
-                            if let Some(rt) = existing_rt {
-                                // Clear runtime reference in Status under write lock quickly
-                                let _ = write_status(&_app_clone, |s| {
-                                    if let Some(pd) = s.ports.map.get_mut(&port_name) {
-                                        pd.runtime = None;
-                                        pd.state = PortState::Free;
-                                    }
-                                    Ok(())
-                                });
+                                if let Some(rt) = existing_rt {
+                                    // Clear runtime reference in Status under write lock quickly
+                                    let _ = write_status(&_app_clone, |s| {
+                                        if let Some(pd) = s.ports.map.get_mut(&port_name) {
+                                            pd.runtime = None;
+                                            pd.state = PortState::Free;
+                                        }
+                                        Ok(())
+                                    });
 
-                                // Send stop outside of the write lock and wait briefly for the runtime to acknowledge
-                                let _ = rt
-                                    .cmd_tx
-                                    .send(crate::protocol::runtime::RuntimeCommand::Stop);
-                                // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
-                                let mut stopped = false;
-                                for _ in 0..10 {
-                                    match rt
+                                    // Send stop outside of the write lock and wait briefly for the runtime to acknowledge
+                                    let _ = rt
+                                        .cmd_tx
+                                        .send(crate::protocol::runtime::RuntimeCommand::Stop);
+                                    // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
+                                    let mut stopped = false;
+                                    for _ in 0..10 {
+                                        match rt
                                         .evt_rx
                                         .recv_timeout(std::time::Duration::from_millis(100))
                                     {
@@ -248,101 +255,104 @@ pub fn start() -> Result<()> {
                                             // timed out waiting this interval - continue waiting
                                         }
                                     }
-                                }
-                                if !stopped {
-                                    log::warn!("[CORE] ToggleRuntime: stop did not emit Stopped event within timeout for {port_name}");
-                                }
-
-                                let _ = core_tx_clone.send(CoreToUi::Refreshed);
-                                continue;
-                            }
-
-                            // No runtime currently: attempt to spawn with a retry loop outside of any write lock
-                            let cfg = crate::protocol::runtime::SerialConfig::default();
-                            let mut spawn_err: Option<anyhow::Error> = None;
-                            let mut handle_opt: Option<
-                                crate::protocol::runtime::PortRuntimeHandle,
-                            > = None;
-                            const MAX_RETRIES: usize = 8;
-                            for attempt in 0..MAX_RETRIES {
-                                match crate::protocol::runtime::PortRuntimeHandle::spawn(
-                                    port_name.clone(),
-                                    cfg.clone(),
-                                ) {
-                                    Ok(h) => {
-                                        handle_opt = Some(h);
-                                        break;
                                     }
-                                    Err(e) => {
-                                        spawn_err = Some(e);
-                                        // If not last attempt, wait a bit and retry; this allows the OS to release the port
-                                        if attempt + 1 < MAX_RETRIES {
-                                            // Slightly longer backoff on first attempts
-                                            let wait_ms = if attempt < 2 { 200 } else { 100 };
-                                            std::thread::sleep(std::time::Duration::from_millis(
-                                                wait_ms,
-                                            ));
-                                            continue;
+                                    if !stopped {
+                                        log::warn!("[CORE] ToggleRuntime: stop did not emit Stopped event within timeout for {port_name}");
+                                    }
+
+                                    let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                                    continue;
+                                }
+
+                                // No runtime currently: attempt to spawn with a retry loop outside of any write lock
+                                let cfg = crate::protocol::runtime::SerialConfig::default();
+                                let mut spawn_err: Option<anyhow::Error> = None;
+                                let mut handle_opt: Option<
+                                    crate::protocol::runtime::PortRuntimeHandle,
+                                > = None;
+                                const MAX_RETRIES: usize = 8;
+                                for attempt in 0..MAX_RETRIES {
+                                    match crate::protocol::runtime::PortRuntimeHandle::spawn(
+                                        port_name.clone(),
+                                        cfg.clone(),
+                                    ) {
+                                        Ok(h) => {
+                                            handle_opt = Some(h);
+                                            break;
+                                        }
+                                        Err(e) => {
+                                            spawn_err = Some(e);
+                                            // If not last attempt, wait a bit and retry; this allows the OS to release the port
+                                            if attempt + 1 < MAX_RETRIES {
+                                                // Slightly longer backoff on first attempts
+                                                let wait_ms = if attempt < 2 { 200 } else { 100 };
+                                                std::thread::sleep(
+                                                    std::time::Duration::from_millis(wait_ms),
+                                                );
+                                                continue;
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            if let Some(handle) = handle_opt {
-                                // Clone handle for insertion under write lock to avoid moving
-                                let handle_for_write = handle.clone();
-                                // Write handle into status under write lock
-                                let _ = write_status(&_app_clone, |s| {
-                                    if let Some(pd) = s.ports.map.get_mut(&port_name) {
-                                        pd.runtime = Some(handle_for_write.clone());
-                                        pd.state = PortState::OccupiedByThis;
-                                    }
-                                    Ok(())
-                                });
-                            } else if let Some(e) = spawn_err {
-                                // All attempts failed: set transient error for UI
-                                let _ = write_status(&_app_clone, |s| {
-                                    s.temporarily.error = Some(types::ErrorInfo {
-                                        message: format!("failed to start runtime: {e}"),
-                                        timestamp: chrono::Local::now(),
+                                if let Some(handle) = handle_opt {
+                                    // Clone handle for insertion under write lock to avoid moving
+                                    let handle_for_write = handle.clone();
+                                    // Write handle into status under write lock
+                                    let _ = write_status(&_app_clone, |s| {
+                                        if let Some(pd) = s.ports.map.get_mut(&port_name) {
+                                            pd.runtime = Some(handle_for_write.clone());
+                                            pd.state = PortState::OccupiedByThis;
+                                        }
+                                        Ok(())
                                     });
-                                    Ok(())
-                                });
-                            }
+                                } else if let Some(e) = spawn_err {
+                                    // All attempts failed: set transient error for UI
+                                    let _ = write_status(&_app_clone, |s| {
+                                        s.temporarily.error = Some(types::ErrorInfo {
+                                            message: format!("failed to start runtime: {e}"),
+                                            timestamp: chrono::Local::now(),
+                                        });
+                                        Ok(())
+                                    });
+                                }
 
-                            let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                                let _ = core_tx_clone.send(CoreToUi::Refreshed);
+                            }
                         }
                     }
-                }
 
-                if polling_enabled && last_scan.elapsed() >= scan_interval {
-                    if do_scan(&_app_clone, &mut scan_in_progress) {
-                        last_scan = std::time::Instant::now();
-                    } else {
-                        log::debug!(
-                            "[CORE] scheduled scan skipped because a scan is already running"
-                        );
+                    if polling_enabled && last_scan.elapsed() >= scan_interval {
+                        if do_scan(&_app_clone, &mut scan_in_progress) {
+                            last_scan = std::time::Instant::now();
+                        } else {
+                            log::debug!(
+                                "[CORE] scheduled scan skipped because a scan is already running"
+                            );
+                        }
                     }
+
+                    // Update spinner frame for busy indicator animation
+                    let _ = write_status(&_app_clone, |s| {
+                        s.temporarily.busy.spinner_frame =
+                            s.temporarily.busy.spinner_frame.wrapping_add(1);
+                        Ok(())
+                    });
+
+                    let _ = core_tx_clone.send(CoreToUi::Tick);
+                    thread::sleep(Duration::from_millis(50));
                 }
-
-                // Update spinner frame for busy indicator animation
-                let _ = write_status(&_app_clone, |s| {
-                    s.temporarily.busy.spinner_frame =
-                        s.temporarily.busy.spinner_frame.wrapping_add(1);
-                    Ok(())
-                });
-
-                let _ = core_tx_clone.send(CoreToUi::Tick);
-                thread::sleep(Duration::from_millis(50));
-            }
+            })();
+            let _ = thr_tx_clone_for_core.send(res);
         });
     }
 
     // Thread 2: Input handling thread - processes keyboard input
-    input::spawn_input_thread(bus.clone(), Arc::clone(&app));
+    input::spawn_input_thread(bus.clone(), Arc::clone(&app), thr_tx.clone());
 
-    // Thread 3: UI rendering thread - handles rendering based on Status
-    let res = run_rendering_loop(&mut terminal, Arc::clone(&app), bus);
+    // Thread 3: UI rendering loop - handles rendering based on Status
+    // Pass thr_rx so rendering loop can monitor other thread exits.
+    let res = run_rendering_loop(&mut terminal, Arc::clone(&app), bus, thr_rx);
 
     // Restore terminal
     let mut stdout = io::stdout();
@@ -360,8 +370,20 @@ fn run_rendering_loop(
     terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
     app: Arc<RwLock<Status>>,
     bus: crate::tui::utils::bus::Bus,
+    thr_rx: flume::Receiver<Result<()>>,
 ) -> Result<()> {
     loop {
+        // Check whether any watched thread reported an error or exit
+        if let Ok(res) = thr_rx.try_recv() {
+            if let Err(e) = res {
+                eprintln!("thread exited with error: {:#}", e);
+                return Err(e);
+            } else {
+                // thread exited successfully - treat as fatal and exit
+                log::info!("a monitored thread exited cleanly; shutting down");
+                return Ok(());
+            }
+        }
         // Wait for core signals with timeout
         let should_quit = match bus.core_rx.recv_timeout(Duration::from_millis(100)) {
             Ok(CoreToUi::Tick) => {
