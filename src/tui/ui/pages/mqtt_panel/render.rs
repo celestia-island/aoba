@@ -2,7 +2,7 @@ use ratatui::{prelude::*, text::Line};
 
 use crate::{
     protocol::status::types::{self, Status},
-    tui::{ui::components::render_boxed_paragraph, utils::bus::Bus},
+    tui::{ui::components::render_boxed_paragraph},
 };
 
 /// Render the MQTT panel. Only reads from Status, does not mutate.
@@ -39,23 +39,4 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
 pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::EntryStatus) -> Vec<String> {
     let hints: Vec<String> = vec!["MQTT not implemented".to_string()];
     hints
-}
-
-/// Handle input for MQTT panel. Sends commands via UiToCore.
-pub fn handle_input(
-    _key: crossterm::event::KeyEvent,
-    bus: &Bus,
-    _snap: &types::ui::EntryStatus,
-) -> bool {
-    use crossterm::event::KeyCode as KC;
-
-    match _key.code {
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
-            // Basic navigation
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-            true
-        }
-        // No direct Esc handling here; map_key returns LeavePage so routing layer will handle navigation.
-        _ => false,
-    }
 }

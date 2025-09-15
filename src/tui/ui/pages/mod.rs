@@ -5,6 +5,7 @@ pub mod log_panel;
 pub mod modbus_panel;
 pub mod mqtt_panel;
 
+use anyhow::{anyhow, Result};
 use std::sync::{Arc, RwLock};
 
 use crossterm::event::KeyEvent;
@@ -13,7 +14,6 @@ use ratatui::prelude::*;
 // AppMode and SubpageTab are not used directly in this module; derive from Page when needed
 use crate::{
     protocol::status::types::{self, Status},
-    tui::input::Action,
     tui::utils::bus::Bus,
 };
 
@@ -81,74 +81,10 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
 /// Return global bottom hints that should appear on the bottom-most line regardless
 /// Of which subpage is active. This keeps page-specific hints separate (they can
 /// Be shown on an extra line above).
-pub fn global_hints_for_app(app: &Status) -> Vec<String> {
+pub fn global_hints_for_app(_app: &Status) -> Vec<String> {
     // Return global-only hints (bottom-most line). Pages provide their own
     // page-specific hints via `bottom_hints_for_app` which are shown above.
     vec![lang().hotkeys.hint_esc_return_home.as_str().to_string()]
-}
-
-/// Allow the active page to map a KeyEvent to a high-level Action when the global
-/// Key mapping returns no action. This was previously used to translate keys to
-/// Actions, but pages now handle KeyEvent directly via `handle_input_in_page`.
-pub fn map_key_in_page(_key: KeyEvent, _app: &Status) -> Option<Action> {
-    None
-}
-
-/// Route a KeyEvent to the active subpage input handler.
-/// Returns true if the subpage consumed the event and no further handling should occur.
-pub fn handle_input_in_subpage(
-    key: KeyEvent,
-    app: &Status,
-    bus: &Bus,
-    app_arc: &Arc<RwLock<types::Status>>,
-) -> bool {
-    use crossterm::event::KeyCode as KC;
-
-    // Always let 'q' bubble up to the top-level quit handler (don't consume it here).
-    if let KC::Char('q') | KC::Char('Q') = key.code {
-        return false;
-    }
-
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    );
-    if subpage_active {
-        // If About page variant is active, route directly to about::handle_input.
-        if let types::Page::About { .. } = app.page {
-            // If about::handle_input consumes the key, we're done. Otherwise,
-            // as a defensive fallback, pressing Esc will always return to Entry.
-            let snap = app.snapshot_about();
-            let consumed = about::handle_input(key, app, bus, app_arc, &snap);
-            if consumed {
-                return true;
-            }
-            if let KC::Esc = key.code {
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
-                    s.page = types::Page::Entry { cursor: None };
-                    Ok(())
-                });
-                let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-                return true;
-            }
-            // fallthrough to other handlers if not consumed
-        }
-        match app.page {
-            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
-                let snap = app.snapshot_modbus_config();
-                return config_panel::handle_input(key, app, bus, app_arc, &snap);
-            }
-            types::Page::ModbusLog { .. } => {
-                let snap = app.snapshot_modbus_log();
-                return log_panel::handle_input(key, app, bus, app_arc, &snap);
-            }
-            _ => {}
-        }
-    }
-    false
 }
 
 /// Handle input for the currently active page (including entry when no subpage active).
@@ -158,20 +94,65 @@ pub fn handle_input_in_page(
     app: &Status,
     bus: &Bus,
     app_arc: &Arc<RwLock<types::Status>>,
-) -> bool {
+) -> Result<bool> {
     // If a subpage is active, delegate to existing subpage handlers (which already
     // consume keys like 'q' for About etc.). When no subpage is active, delegate to
     // the entry page raw handler so it can process non-global keys.
+    // Consider About as active either when the page variant is About OR when
+    // the special virtual About entry is selected in the Entry list. This
+    // ensures full-screen About (selected via virtual entry) receives input.
+    let about_idx = app.ports.order.len().saturating_add(2);
+    let sel = derive_selection(app);
     let subpage_active = matches!(
         app.page,
         types::Page::ModbusConfig { .. }
             | types::Page::ModbusDashboard { .. }
             | types::Page::ModbusLog { .. }
             | types::Page::About { .. }
-    );
+    ) || sel == about_idx;
     if subpage_active {
-        // Reuse existing subpage input routing which handles About specially.
-        return handle_input_in_subpage(key, app, bus, app_arc);
+        use crossterm::event::KeyCode as KC;
+
+        // Always let 'q' bubble up to the top-level quit handler (don't consume it here).
+        if let KC::Char('q') | KC::Char('Q') = key.code {
+            return Ok(false);
+        }
+
+        // If About is active (either variant or selected virtual entry), route
+        // directly to about::handle_input. If it doesn't consume the key,
+        // pressing Esc will still return to Entry as a defensive fallback.
+        if sel == about_idx || matches!(app.page, types::Page::About { .. }) {
+            let snap = app.snapshot_about();
+            let consumed = about::handle_input(key, app, bus, app_arc, &snap)?;
+            if consumed {
+                return Ok(true);
+            }
+            if let KC::Esc = key.code {
+                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                    s.page = types::Page::Entry { cursor: None };
+                    Ok(())
+                });
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|e| anyhow!(e))?;
+                return Ok(true);
+            }
+            // fallthrough to other handlers if not consumed
+        }
+
+        match app.page {
+            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
+                let snap = app.snapshot_modbus_config();
+                let consumed = config_panel::handle_input(key, app, bus, app_arc, &snap)?;
+                return Ok(consumed);
+            }
+            types::Page::ModbusLog { .. } => {
+                let snap = app.snapshot_modbus_log();
+                let consumed = log_panel::handle_input(key, app, bus, app_arc, &snap)?;
+                return Ok(consumed);
+            }
+            _ => {}
+        }
     }
 
     // No subpage active: let entry page have a chance to consume the key.
