@@ -79,10 +79,10 @@ pub fn render_kv_panel(
         types::Page::ModbusDashboard { selected_port, .. }
         | types::Page::ModbusConfig { selected_port, .. }
         | types::Page::ModbusLog { selected_port, .. } => *selected_port,
-        types::Page::Entry { cursor } => match cursor {
-            Some(types::ui::EntryCursor::Com { idx }) => *idx,
-            _ => 0usize,
-        },
+        types::Page::Entry {
+            cursor: Some(types::ui::EntryCursor::Com { idx }),
+            ..
+        } => *idx,
         _ => 0usize,
     };
 
@@ -107,7 +107,7 @@ pub fn render_kv_panel(
             values.push(pd.extra.guid.clone().unwrap_or_default());
             // USB label: show VID:PID if present
             let usb_label = match (pd.extra.vid, pd.extra.pid) {
-                (Some(vid), Some(pid)) => format!("{:04x}:{:04x}", vid, pid),
+                (Some(vid), Some(pid)) => format!("{vid:04x}:{pid:04x}"),
                 _ => String::new(),
             };
             values.push(usb_label);
@@ -130,7 +130,7 @@ pub fn render_kv_panel(
     }
 
     for (l, v) in labels.into_iter().zip(values.into_iter()) {
-        let txt = format!("{:20} {}", l, v);
+        let txt = format!("{l:20} {v}");
         items.push(ListItem::new(txt));
     }
 
@@ -168,11 +168,16 @@ pub fn render_kv_panel(
 }
 
 pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusConfigStatus) -> Vec<String> {
-    let hints: Vec<String> = vec![
+    // Build hints: second-last is move + Enter-edit, last is Esc return home.
+
+    // Use single space between hints to match other pages that place each hint
+    // as separate strings or use single-space separators when combined.
+    // Return page-specific hints as separate entries so the bottom renderer
+    // joins them with the project's standard separator (four spaces).
+    vec![
         lang().hotkeys.hint_move_vertical.as_str().to_string(),
-        lang().hotkeys.press_enter_enable.as_str().to_string(),
-    ];
-    hints
+        lang().hotkeys.press_enter_modify.as_str().to_string(),
+    ]
 }
 
 /// Global hints for Modbus config/dashboard pages.
@@ -302,40 +307,37 @@ pub fn handle_input(
                                 let val = config_edit_buffer.clone();
                                 match *config_edit_field_index {
                                     0 => pd.port_name = val,
-                                    1 => match val.parse::<u32>() {
-                                        Ok(v) => {
+                                    1 => {
+                                        if let Ok(v) = val.parse::<u32>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 rt.current_cfg.baud = v;
                                             }
                                         }
-                                        Err(_) => {}
-                                    },
-                                    2 => match val.parse::<u8>() {
-                                        Ok(v) => {
+                                    }
+                                    2 => {
+                                        if let Ok(v) = val.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
-                                                rt.current_cfg.data_bits = v as u8;
+                                                rt.current_cfg.data_bits = v;
                                             }
                                         }
-                                        Err(_) => {}
-                                    },
+                                    }
                                     3 => {
                                         if let Some(rt) = pd.runtime.as_mut() {
                                             rt.current_cfg.parity = match val.as_str() {
                                                 "None" | "none" => serialport::Parity::None,
                                                 "Odd" | "odd" => serialport::Parity::Odd,
                                                 "Even" | "even" => serialport::Parity::Even,
-                                                _ => rt.current_cfg.parity.clone(),
+                                                _ => rt.current_cfg.parity,
                                             }
                                         }
                                     }
-                                    4 => match val.parse::<u8>() {
-                                        Ok(v) => {
+                                    4 => {
+                                        if let Ok(v) = val.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
-                                                rt.current_cfg.stop_bits = v as u8;
+                                                rt.current_cfg.stop_bits = v;
                                             }
                                         }
-                                        Err(_) => {}
-                                    },
+                                    }
                                     5 => pd.port_type = val,
                                     6 => {
                                         pd.extra.guid =
@@ -456,7 +458,7 @@ pub fn handle_input(
                             5 => pd.port_type.clone(),
                             6 => pd.extra.guid.clone().unwrap_or_default(),
                             7 => match (pd.extra.vid, pd.extra.pid) {
-                                (Some(vid), Some(pid)) => format!("{:04x}:{:04x}", vid, pid),
+                                (Some(vid), Some(pid)) => format!("{vid:04x}:{pid:04x}"),
                                 _ => String::new(),
                             },
                             8 => pd.extra.serial.clone().unwrap_or_default(),
