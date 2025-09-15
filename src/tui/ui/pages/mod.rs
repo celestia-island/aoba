@@ -17,6 +17,8 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
+use crate::i18n::lang;
+
 // Helper: derive the current selection index from `page` so callers
 // don't rely on transient `temporarily.selected`.
 fn derive_selection(app: &Status) -> usize {
@@ -73,35 +75,16 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
     }
     // Default to entry hints when no subpage
     let entry_snap = app.snapshot_entry();
-    let hints = entry::page_bottom_hints(app, &entry_snap);
-    hints
+    entry::page_bottom_hints(app, &entry_snap)
 }
 
 /// Return global bottom hints that should appear on the bottom-most line regardless
 /// Of which subpage is active. This keeps page-specific hints separate (they can
 /// Be shown on an extra line above).
 pub fn global_hints_for_app(app: &Status) -> Vec<String> {
-    // Produce global hints by delegating to each page's `page_bottom_hints`,
-    // but perform the snapshotting here in the parent so child modules only
-    // implement rendering of hints for a given snapshot.
-    match &app.page {
-        types::Page::Entry { .. } => {
-            let snap = app.snapshot_entry();
-            entry::page_bottom_hints(app, &snap)
-        }
-        types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
-            let snap = app.snapshot_modbus_config();
-            config_panel::page_bottom_hints(app, &snap)
-        }
-        types::Page::ModbusLog { .. } => {
-            let snap = app.snapshot_modbus_log();
-            log_panel::page_bottom_hints(app, &snap)
-        }
-        types::Page::About { .. } => {
-            let snap = app.snapshot_about();
-            about::page_bottom_hints(app, &snap)
-        }
-    }
+    // Return global-only hints (bottom-most line). Pages provide their own
+    // page-specific hints via `bottom_hints_for_app` which are shown above.
+    vec![lang().hotkeys.hint_esc_return_home.as_str().to_string()]
 }
 
 /// Allow the active page to map a KeyEvent to a high-level Action when the global

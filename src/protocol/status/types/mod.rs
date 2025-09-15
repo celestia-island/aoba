@@ -71,7 +71,7 @@ impl Status {
             } => ModbusDashboardStatus {
                 selected_port: *selected_port,
                 cursor: *cursor,
-                editing_field: editing_field.clone(),
+                editing_field: *editing_field,
                 input_buffer: input_buffer.clone(),
                 edit_choice_index: *edit_choice_index,
                 edit_confirmed: *edit_confirmed,
