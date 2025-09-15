@@ -28,8 +28,6 @@ impl SpecialEntry {
         match self {
             SpecialEntry::Refresh => lang().index.refresh_action.clone(),
             SpecialEntry::ManualSpecify => lang().index.manual_specify_label.clone(),
-            // Note: manual_refresh_port and create_virtual_port keys exist in i18n but
-            // these menu items were removed per user request.
             SpecialEntry::About => lang().index.about_label.clone(),
         }
     }
@@ -58,6 +56,13 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<St
         hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
     hints
+}
+
+/// Return global hints for Entry when active as a full page.
+pub fn global_hints(app: &Status) -> Vec<String> {
+    // For Entry, reuse page-specific bottom hints which are appropriate.
+    let entry_snap = app.snapshot_entry();
+    page_bottom_hints(app, &entry_snap)
 }
 
 /// Handle input for entry page. Processes navigation and page actions.
@@ -204,8 +209,11 @@ fn handle_enter_page(
         } else {
             // Selection points into special entries (Refresh, ManualSpecify, About)
             let rel = sel.saturating_sub(ports_len);
-            // If About (third special entry) is selected -> open About page
-            if rel == 2 {
+            if rel == 0 {
+                // Refresh action selected -> trigger immediate refresh
+                let _ = bus.ui_tx.send(UiToCore::Refresh);
+            } else if rel == 2 {
+                // If About (third special entry) is selected -> open About page
                 let _ = write_status(app_arc, |s| {
                     s.page = types::Page::About { view_offset: 0 };
                     Ok(())
@@ -442,11 +450,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
                 // Refresh action item: show last scan summary
                 let mut lines: Vec<Line> = Vec::new();
                 lines.push(Line::from(lang().index.refresh_action.as_str()));
-                // Quick scan hint
-                lines.push(Line::from(Span::styled(
-                    lang().index.scan_quick_hint.as_str(),
-                    Style::default().fg(Color::LightBlue),
-                )));
+                // Quick scan hint was simplified; Enter triggers refresh.
                 if let Some(ts) = app.temporarily.scan.last_scan_time {
                     lines.push(Line::from(format!(
                         "{} {}",
@@ -597,18 +601,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
                 status_text.to_string(),
                 Some(status_style),
             ));
-            // Current per-port application mode (ModBus / MQTT)
-            if matches!(selected_state, PortState::OccupiedByThis) {
-                let mode_label = match app.temporarily.modals.mode_selector.selector {
-                    types::ui::AppMode::Modbus => lang().protocol.common.mode_modbus.as_str(),
-                    types::ui::AppMode::Mqtt => lang().protocol.common.mode_mqtt.as_str(),
-                };
-                pairs.push((
-                    lang().protocol.common.label_mode.as_str().to_string(),
-                    mode_label.to_string(),
-                    None,
-                ));
-            }
+            // Application mode is unified; no per-port mode selector shown.
 
             // Mode always unified; hide previous master / slave mode line.
 
@@ -683,5 +676,5 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
     };
     f.render_widget(content, right);
 
-    // Mode selector removed (unified ModBus RTU) – overlay no longer rendered.
+    // Mode selector overlay is not rendered.
 }
