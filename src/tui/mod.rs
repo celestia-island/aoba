@@ -70,10 +70,25 @@ pub fn start() -> Result<()> {
         let core_tx_clone = core_tx.clone();
         thread::spawn(move || {
             let mut polling_enabled = true;
-            let scan_interval = Duration::from_secs(2);
+            let scan_interval = Duration::from_secs(30); // Reduced from 2s to 30s
             let mut last_scan = std::time::Instant::now() - scan_interval;
+            let mut scan_in_progress = false; // Track if scan is currently running
 
-            let do_scan = |app_ref: &Arc<RwLock<Status>>| {
+            let do_scan = |app_ref: &Arc<RwLock<Status>>, scan_in_progress: &mut bool| {
+                // Return early if scan already in progress
+                if *scan_in_progress {
+                    log::debug!("[CORE] Scan already in progress, skipping");
+                    return;
+                }
+                
+                *scan_in_progress = true;
+                
+                // Set busy indicator
+                let _ = write_status(app_ref, |s| {
+                    s.temporarily.busy.busy = true;
+                    Ok(())
+                });
+                
                 let ports = available_ports_enriched();
                 let scan_text = ports
                     .iter()
@@ -102,8 +117,12 @@ pub fn start() -> Result<()> {
 
                     s.temporarily.scan.last_scan_time = Some(Local::now());
                     s.temporarily.scan.last_scan_info = scan_text.clone();
+                    // Clear busy indicator after scan completes
+                    s.temporarily.busy.busy = false;
                     Ok(())
                 });
+                
+                *scan_in_progress = false;
                 // After adding ports to status, spawn per-port runtime listeners.
                 if let Ok(snapshot) =
                     crate::protocol::status::read_status(app_ref, |s| Ok(s.clone()))
@@ -166,7 +185,7 @@ pub fn start() -> Result<()> {
                         }
                         UiToCore::Refresh => {
                             log::debug!("[CORE] immediate Refresh requested");
-                            do_scan(&_app_clone);
+                            do_scan(&_app_clone, &mut scan_in_progress);
                             last_scan = std::time::Instant::now();
                         }
                         UiToCore::PausePolling => {
@@ -293,9 +312,15 @@ pub fn start() -> Result<()> {
                 }
 
                 if polling_enabled && last_scan.elapsed() >= scan_interval {
-                    do_scan(&_app_clone);
+                    do_scan(&_app_clone, &mut scan_in_progress);
                     last_scan = std::time::Instant::now();
                 }
+
+                // Update spinner frame for busy indicator animation
+                let _ = write_status(&_app_clone, |s| {
+                    s.temporarily.busy.spinner_frame = s.temporarily.busy.spinner_frame.wrapping_add(1);
+                    Ok(())
+                });
 
                 let _ = core_tx_clone.send(CoreToUi::Tick);
                 thread::sleep(Duration::from_millis(50));

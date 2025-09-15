@@ -204,8 +204,11 @@ fn handle_enter_page(
         } else {
             // Selection points into special entries (Refresh, ManualSpecify, About)
             let rel = sel.saturating_sub(ports_len);
-            // If About (third special entry) is selected -> open About page
-            if rel == 2 {
+            if rel == 0 {
+                // Refresh action selected -> trigger immediate refresh
+                let _ = bus.ui_tx.send(UiToCore::Refresh);
+            } else if rel == 2 {
+                // If About (third special entry) is selected -> open About page
                 let _ = write_status(app_arc, |s| {
                     s.page = types::Page::About { view_offset: 0 };
                     Ok(())
