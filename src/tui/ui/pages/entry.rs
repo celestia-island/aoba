@@ -58,6 +58,13 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<St
     hints
 }
 
+/// Return global hints for Entry when active as a full page.
+pub fn global_hints(app: &Status) -> Vec<String> {
+    // For Entry, reuse page-specific bottom hints which are appropriate.
+    let entry_snap = app.snapshot_entry();
+    page_bottom_hints(app, &entry_snap)
+}
+
 /// Handle input for entry page. Processes navigation and page actions.
 /// Now handles its own navigation instead of delegating to global handlers.
 pub fn handle_input(

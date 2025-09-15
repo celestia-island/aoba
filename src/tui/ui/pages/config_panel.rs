@@ -175,6 +175,13 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusConfigStatus) -
     hints
 }
 
+/// Global hints for Modbus config/dashboard pages.
+pub fn global_hints(app: &Status) -> Vec<String> {
+    // Reuse page bottom hints; this keeps global hints consistent with page-level hints.
+    let snap = app.snapshot_modbus_config();
+    page_bottom_hints(app, &snap)
+}
+
 /// Handle input for config panel. Sends commands via UiToCore.
 pub fn handle_input(
     key: crossterm::event::KeyEvent,
