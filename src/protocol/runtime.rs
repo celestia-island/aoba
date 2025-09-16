@@ -2,7 +2,6 @@ use anyhow::Result;
 use flume::{Receiver, Sender};
 use std::{
     sync::{Arc, Mutex},
-    thread,
     time::{Duration, Instant},
 };
 
@@ -65,6 +64,7 @@ pub struct PortRuntimeHandle {
     pub evt_rx: Receiver<RuntimeEvent>,
     pub current_cfg: SerialConfig,
     pub shared_serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
+    pub thread_handle: Arc<Mutex<Option<std::thread::JoinHandle<Result<()>>>>>,
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -86,12 +86,16 @@ impl PortRuntimeHandle {
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
-        thread::spawn(move || run_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx));
+
+        let handle = std::thread::spawn(move || {
+            boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
+        });
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
             shared_serial: serial,
+            thread_handle: Arc::new(Mutex::new(Some(handle))),
         })
     }
 
@@ -104,59 +108,83 @@ impl PortRuntimeHandle {
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
-        thread::spawn(move || run_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx));
+
+        let handle = std::thread::spawn(move || {
+            boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
+        });
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
             shared_serial: serial,
+            thread_handle: Arc::new(Mutex::new(Some(handle))),
         })
     }
 }
 
-fn run_loop(
+impl Drop for PortRuntimeHandle {
+    fn drop(&mut self) {
+        if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
+            log::warn!("PortRuntimeHandle stop command send error: {:?}", err);
+        }
+
+        if let Ok(mut thread) = self.thread_handle.lock() {
+            if let Some(thread) = thread.take() {
+                if let Err(err) = thread.join() {
+                    log::warn!("PortRuntimeHandle thread join error: {:?}", err);
+                }
+            }
+        } else {
+            log::warn!("PortRuntimeHandle failed to lock thread_handle for join");
+        }
+    }
+}
+
+/// Boot the serial port I/O loop
+/// Must be started in a separate thread, otherwise it will block the main thread
+fn boot_serial_loop(
     serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     port_name: String,
     initial: SerialConfig,
     cmd_rx: Receiver<RuntimeCommand>,
     evt_tx: Sender<RuntimeEvent>,
-) {
+) -> Result<()> {
     let mut gap = compute_gap(&initial);
     let mut assembling: Vec<u8> = Vec::with_capacity(256);
     let mut last_byte: Option<Instant> = None;
+
     loop {
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 RuntimeCommand::Reconfigure(new_cfg) => {
                     if let Err(e) = reopen_serial(&serial, &port_name, &new_cfg) {
-                        let _ =
-                            evt_tx.send(RuntimeEvent::Error(format!("reconfigure failed: {e}")));
+                        evt_tx.send(RuntimeEvent::Error(format!("Reconfigure failed: {e}")))?;
                     } else {
                         gap = compute_gap(&new_cfg);
-                        let _ = evt_tx.send(RuntimeEvent::Reconfigured(new_cfg));
+                        evt_tx.send(RuntimeEvent::Reconfigured(new_cfg))?;
                     }
                 }
                 RuntimeCommand::Write(bytes) => {
                     let mut ok = false;
-                    if let Ok(mut g) = serial.lock() {
+                    if let Ok(mut serial) = serial.lock() {
                         use std::io::Write;
-                        if g.write_all(&bytes).is_ok() && g.flush().is_ok() {
+                        if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
                             ok = true;
                         }
                     }
                     if ok {
-                        let _ = evt_tx.send(RuntimeEvent::FrameSent(bytes.into()));
+                        evt_tx.send(RuntimeEvent::FrameSent(bytes.into()))?;
                     }
                 }
                 RuntimeCommand::Stop => {
-                    let _ = evt_tx.send(RuntimeEvent::Stopped);
-                    return;
+                    evt_tx.send(RuntimeEvent::Stopped)?;
+                    return Ok(());
                 }
             }
         }
         if let Some(t) = last_byte {
             if !assembling.is_empty() && t.elapsed() >= gap {
-                finalize_buffer(&mut assembling, &evt_tx);
+                finalize_buffer(&mut assembling, &evt_tx)?;
                 assembling.clear();
                 last_byte = None;
             }
@@ -169,7 +197,7 @@ fn run_loop(
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
                     if assembling.len() > 768 {
-                        finalize_buffer(&mut assembling, &evt_tx);
+                        finalize_buffer(&mut assembling, &evt_tx)?;
                         assembling.clear();
                         last_byte = None;
                     }
@@ -177,11 +205,11 @@ fn run_loop(
                 Ok(_) => {}
                 Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
                 Err(e) => {
-                    let _ = evt_tx.send(RuntimeEvent::Error(format!("read error: {e}")));
+                    evt_tx.send(RuntimeEvent::Error(format!("read error: {e}")))?;
                 }
             }
         }
-        thread::sleep(Duration::from_millis(2));
+        std::thread::sleep(Duration::from_millis(2));
     }
 }
 
@@ -314,7 +342,7 @@ fn finalize_residual(res: &mut Vec<u8>, out: &mut Vec<bytes::Bytes>) {
     }
 }
 
-fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) {
+fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> {
     let mut frames = Vec::new();
     finalize_residual(buf, &mut frames);
     if frames.is_empty() {
@@ -327,10 +355,12 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) {
             log::debug!("finalize: no frame len={} hex={}", buf.len(), hex);
         }
     } else {
-        for f in frames {
-            let _ = evt.send(RuntimeEvent::FrameReceived(f));
+        for frame in frames {
+            evt.send(RuntimeEvent::FrameReceived(frame))?;
         }
     }
+
+    Ok(())
 }
 
 fn compute_gap(cfg: &SerialConfig) -> Duration {
@@ -358,8 +388,8 @@ fn reopen_serial(
     let builder = serialport::new(port, cfg.baud).timeout(Duration::from_millis(200));
     let builder = cfg.apply_builder(builder);
     let new_handle = builder.open()?;
-    if let Ok(mut g) = shared.lock() {
-        *g = new_handle;
+    if let Ok(mut handle) = shared.lock() {
+        *handle = new_handle;
     }
     Ok(())
 }
