@@ -2,21 +2,19 @@ use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::Borders,
-    widgets::{Block, Paragraph},
+    widgets::{Block, Borders, Paragraph},
 };
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
+    i18n::lang,
     protocol::status::types::{self, port::PortData, port::PortState, ui::SpecialEntry, Status},
 };
 
-use crate::i18n::lang;
-
-pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<String> {
-    let mut hints: Vec<String> = Vec::new();
-    hints.push(crate::i18n::lang().hotkeys.hint_move_vertical.as_str().to_string());
-    hints.push(crate::i18n::lang().hotkeys.hint_enter_subpage.as_str().to_string());
+pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<Vec<String>> {
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    rows.push(vec![lang().hotkeys.hint_move_vertical.as_str().to_string()]);
+    rows.push(vec![lang().hotkeys.hint_enter_subpage.as_str().to_string()]);
 
     let in_subpage_editing = false;
     let subpage_active = matches!(
@@ -28,14 +26,18 @@ pub fn page_bottom_hints(app: &Status, _snap: &types::ui::EntryStatus) -> Vec<St
     );
     let can_quit = !subpage_active && !in_subpage_editing;
     if can_quit {
-        hints.push(crate::i18n::lang().hotkeys.press_q_quit.as_str().to_string());
+        rows.push(vec![lang().hotkeys.press_q_quit.as_str().to_string()]);
     }
-    hints
-}
-
-pub fn global_hints(app: &Status) -> Vec<String> {
-    let entry_snap = app.snapshot_entry();
-    page_bottom_hints(app, &entry_snap)
+    {
+        let mut base = vec![
+            vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
+            vec![lang().hotkeys.hint_enter_subpage.as_str().to_string()],
+        ];
+        if !subpage_active && !in_subpage_editing {
+            base.push(vec![lang().hotkeys.press_q_quit.as_str().to_string()]);
+        }
+        base
+    }
 }
 
 /// Helper function to derive selection from page state (entry page specific)
@@ -73,9 +75,9 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
     let selection = match &app.page {
         types::Page::Entry { cursor } => match cursor {
             Some(types::ui::EntryCursor::Com { idx }) => *idx,
-            Some(types::ui::EntryCursor::About) => app.ports.order.len().saturating_add(2),
             Some(types::ui::EntryCursor::Refresh) => app.ports.order.len(),
             Some(types::ui::EntryCursor::CreateVirtual) => app.ports.order.len().saturating_add(1),
+            Some(types::ui::EntryCursor::About) => app.ports.order.len().saturating_add(2),
             None => 0usize,
         },
         types::Page::ModbusDashboard { selected_port, .. }
@@ -202,6 +204,7 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
         .borders(Borders::ALL)
         .title(Span::raw(format!(" {}", lang().index.details.as_str())));
 
+    // FIXME: Not all branches are implemented yet.
     let content = if app.ports.order.is_empty() {
         Paragraph::new(lang().index.no_com_ports.as_str()).block(content_block)
     } else {
@@ -226,7 +229,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
                     lines.push(Line::from(lang().index.scan_raw_header.as_str()));
                     for l in app.temporarily.scan.last_scan_info.lines().take(100) {
                         if l.starts_with("ERROR:") {
-                            lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
+                            lines
+                                .push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
                         } else {
                             lines.push(Line::from(l));
                         }
@@ -243,9 +247,15 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
             } else if rel == 1 {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
             } else if rel == 2 {
-                let about_snap = app.snapshot_about();
-                crate::tui::ui::pages::about::render(f, right, app, &about_snap);
-                return;
+                // let about_snap = match &app.page {
+                //     types::Page::About { view_offset } => types::ui::AboutStatus {
+                //         view_offset: *view_offset,
+                //     },
+                //     other => panic!("Expected About page for inline render, found: {:?}", other),
+                // };
+                // crate::tui::ui::pages::about::render(f, right, app, &about_snap);
+                // return;
+                Paragraph::new("TODO").block(content_block)
             } else {
                 Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block)
             }
@@ -316,16 +326,32 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
                     extra.vid.unwrap_or(0),
                     extra.pid.unwrap_or(0)
                 );
-                pairs.push((lang().protocol.common.label_usb.as_str().into(), vid_pid, None));
+                pairs.push((
+                    lang().protocol.common.label_usb.as_str().into(),
+                    vid_pid,
+                    None,
+                ));
             }
             if let Some(sn) = extra.serial.as_ref() {
-                pairs.push((lang().protocol.common.label_serial.as_str().into(), sn.clone(), None));
+                pairs.push((
+                    lang().protocol.common.label_serial.as_str().into(),
+                    sn.clone(),
+                    None,
+                ));
             }
             if let Some(m) = extra.manufacturer.as_ref() {
-                pairs.push((lang().protocol.common.label_manufacturer.as_str().into(), m.clone(), None));
+                pairs.push((
+                    lang().protocol.common.label_manufacturer.as_str().into(),
+                    m.clone(),
+                    None,
+                ));
             }
             if let Some(prod) = extra.product.as_ref() {
-                pairs.push((lang().protocol.common.label_product.as_str().into(), prod.clone(), None));
+                pairs.push((
+                    lang().protocol.common.label_product.as_str().into(),
+                    prod.clone(),
+                    None,
+                ));
             }
             pairs.push((
                 lang().protocol.common.label_status.as_str().to_string(),
@@ -343,10 +369,26 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
                         serialport::Parity::Odd => lang().protocol.common.parity_odd.clone(),
                     };
                     let stop = cfg.stop_bits.to_string();
-                    pairs.push((lang().protocol.common.label_baud.as_str().to_string(), baud, None));
-                    pairs.push((lang().protocol.common.label_data_bits.as_str().to_string(), data_bits, None));
-                    pairs.push((lang().protocol.common.label_parity.as_str().to_string(), parity, None));
-                    pairs.push((lang().protocol.common.label_stop_bits.as_str().to_string(), stop, None));
+                    pairs.push((
+                        lang().protocol.common.label_baud.as_str().to_string(),
+                        baud,
+                        None,
+                    ));
+                    pairs.push((
+                        lang().protocol.common.label_data_bits.as_str().to_string(),
+                        data_bits,
+                        None,
+                    ));
+                    pairs.push((
+                        lang().protocol.common.label_parity.as_str().to_string(),
+                        parity,
+                        None,
+                    ));
+                    pairs.push((
+                        lang().protocol.common.label_stop_bits.as_str().to_string(),
+                        stop,
+                        None,
+                    ));
                 }
             }
 
@@ -362,10 +404,19 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
                 let fill = max_label_w.saturating_sub(lbl_w);
                 let padded_label = format!("{indent}{}{}", lbl, " ".repeat(fill));
                 let spacer = " ".repeat(5);
-                let label_span = Span::styled(padded_label, Style::default().add_modifier(Modifier::BOLD));
+                let label_span =
+                    Span::styled(padded_label, Style::default().add_modifier(Modifier::BOLD));
                 match maybe_style {
-                    Some(s) => info_lines.push(Line::from(vec![label_span, Span::raw(spacer), Span::styled(val.to_string(), s)])),
-                    None => info_lines.push(Line::from(vec![label_span, Span::raw(spacer), Span::raw(val.to_string())])),
+                    Some(s) => info_lines.push(Line::from(vec![
+                        label_span,
+                        Span::raw(spacer),
+                        Span::styled(val.to_string(), s),
+                    ])),
+                    None => info_lines.push(Line::from(vec![
+                        label_span,
+                        Span::raw(spacer),
+                        Span::raw(val.to_string()),
+                    ])),
                 }
             }
 

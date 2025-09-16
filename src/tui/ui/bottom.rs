@@ -41,8 +41,10 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
         // Delegate construction of bottom hints to page layer so behavior is consistent.
         let hints = crate::tui::ui::pages::bottom_hints_for_app(app);
         let hint_rect = rows[1];
-        // Use the unified renderer for hints
-        render_hints(f, hint_rect, hints.iter().map(|s| s.as_str()));
+        // Flatten the first provided page row into a single string for the
+        // error hint line and render it.
+        let first_row = hints.get(0).map(|r| r.join("    ")).unwrap_or_default();
+        render_hints(f, hint_rect, std::iter::once(first_row.as_str()));
         return;
     }
 
@@ -59,28 +61,18 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
         }
     }
 
-    // Obtain page-provided hints arrays and let them drive rendering decisions.
-    // Support multi-line hints: split any hint string on '\n' to produce logical rows.
-    let raw_page_hints = crate::tui::ui::pages::bottom_hints_for_app(app);
-    let raw_global_hints = crate::tui::ui::pages::global_hints_for_app(app);
+    // Obtain page-provided hints as rows of hint fragments. Each inner Vec<String>
+    // represents one visual row containing multiple hint fragments (groups).
+    let page_rows_grouped = crate::tui::ui::pages::bottom_hints_for_app(app);
 
-    // Expand hints into individual rows by splitting on newlines inside each fragment.
+    // Build a simple Vec<String> where each element corresponds to a visual
+    // row by joining fragments within that row using the project's separator.
     let mut page_rows: Vec<String> = Vec::new();
-    for s in raw_page_hints.iter() {
-        for line in s.split('\n') {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                page_rows.push(trimmed.to_string());
-            }
-        }
-    }
-    let mut global_rows: Vec<String> = Vec::new();
-    for s in raw_global_hints.iter() {
-        for line in s.split('\n') {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                global_rows.push(trimmed.to_string());
-            }
+    for row in page_rows_grouped.iter() {
+        let joined = format_hints(row.iter().map(|s| s.as_str()));
+        let trimmed = joined.trim();
+        if !trimmed.is_empty() {
+            page_rows.push(trimmed.to_string());
         }
     }
 
@@ -112,10 +104,14 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
             f.render_widget(confirm_para, rows[0]);
 
             // Page-specific hints (middle)
-            render_hints(f, rows[1], page_rows.iter().map(|s| s.as_str()));
+            if !page_rows.is_empty() {
+                render_hints(f, rows[1], std::iter::once(page_rows[0].as_str()));
+            }
 
-            // Global hints (bottom-most)
-            render_hints(f, rows[2], global_rows.iter().map(|s| s.as_str()));
+            // If page provides a second row, render it in the bottom-most slot.
+            if page_rows.len() > 1 {
+                render_hints(f, rows[2], std::iter::once(page_rows[1].as_str()));
+            }
             return;
         } else if avail == 2 {
             // Render confirmation + collapsed hints line
@@ -140,10 +136,9 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
                 .alignment(Alignment::Center);
             f.render_widget(confirm_para, rows[0]);
 
-            // collapse remaining hints into one line
+            // collapse remaining page rows into one line
             let mut combined: Vec<String> = Vec::new();
             combined.extend(page_rows.clone());
-            combined.extend(global_rows.clone());
             render_hints(f, rows[1], combined.iter().map(|s| s.as_str()));
             return;
         } else if avail == 1 {
@@ -173,33 +168,13 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
         return;
     }
 
-    // If we can render all rows individually, we usually do so. However, to
-    // follow a "minimum-occupied-rows" policy we first try to pack page and
-    // global hints into fewer rows when it makes sense (e.g. both fit in one
-    // line width) to avoid leaving an extra empty-looking row.
-    let total_needed = page_rows.len() + global_rows.len();
+    // If we can render all page-provided rows individually, do so.
+    let total_needed = page_rows.len();
     if avail_rows >= total_needed && total_needed > 0 {
-        // Prepare joined forms for simple packing checks
-        let page_joined = format_hints(page_rows.iter().map(|s| s.as_str()));
-        let global_joined = format_hints(global_rows.iter().map(|s| s.as_str()));
-
-        // If everything can fit into a single line, render as one row to be
-        // minimally occupying. We measure by character width compared to
-        // available columns; this is a heuristic (doesn't account for full
-        // grapheme widths) but is sufficient for the typical ascii hints.
-        let combined = if !page_joined.is_empty() {
-            if !global_joined.is_empty() {
-                format!("{}{}{}", page_joined, "    ", global_joined)
-            } else {
-                page_joined.clone()
-            }
-        } else {
-            global_joined.clone()
-        };
-
+        // Try to fit everything into a single line if possible
+        let combined = page_rows.join("    ");
         if !combined.is_empty() && (UnicodeWidthStr::width(combined.as_str()) as u16) <= area.width
         {
-            // Single-line fit: render one centered hint row
             let help = Paragraph::new(combined)
                 .alignment(Alignment::Center)
                 .wrap(Wrap { trim: true })
@@ -208,8 +183,7 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
             return;
         }
 
-        // Otherwise fall back to rendering each row individually (page rows
-        // first, then global rows) since there's room for them.
+        // Otherwise render each row individually
         let mut constraints: Vec<ratatui::layout::Constraint> = Vec::new();
         for _ in 0..total_needed {
             constraints.push(ratatui::layout::Constraint::Length(1));
@@ -220,14 +194,8 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
             .constraints(constraints.as_slice())
             .split(area);
 
-        let mut idx = 0usize;
-        for pr in page_rows.iter() {
+        for (idx, pr) in page_rows.iter().enumerate() {
             render_hints(f, rows[idx], std::iter::once(pr.as_str()));
-            idx += 1;
-        }
-        for gr in global_rows.iter() {
-            render_hints(f, rows[idx], std::iter::once(gr.as_str()));
-            idx += 1;
         }
         return;
     }
@@ -238,7 +206,6 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
     if avail_rows == 1 {
         let mut all: Vec<String> = Vec::new();
         all.extend(page_rows.clone());
-        all.extend(global_rows.clone());
         let text = format_hints(all.iter().map(|s| s.as_str()));
         let help = Paragraph::new(text)
             .alignment(Alignment::Center)
@@ -258,10 +225,18 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
         ])
         .split(area);
 
-    let page_joined = format_hints(page_rows.iter().map(|s| s.as_str()));
-    let global_joined = format_hints(global_rows.iter().map(|s| s.as_str()));
-    render_hints(f, rows[0], std::iter::once(page_joined.as_str()));
-    render_hints(f, rows[1], std::iter::once(global_joined.as_str()));
+    // Render up to two rows: top is first page row, bottom is second or the
+    // joined remainder of page rows.
+    let page_joined_top = page_rows.get(0).cloned().unwrap_or_default();
+    let page_joined_bottom = if page_rows.len() > 1 {
+        page_rows[1].clone()
+    } else if page_rows.len() > 1 {
+        page_rows[1..].join("    ")
+    } else {
+        String::new()
+    };
+    render_hints(f, rows[0], std::iter::once(page_joined_top.as_str()));
+    render_hints(f, rows[1], std::iter::once(page_joined_bottom.as_str()));
 }
 
 /// Join hint fragments into a single string.
