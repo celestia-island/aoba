@@ -1,9 +1,11 @@
 pub mod types;
 pub mod state_manager;
+pub mod test;
 
 mod util;
 pub use util::*;
 pub use state_manager::*;
+pub use test::*;
 
 use anyhow::{anyhow, Result};
 use std::sync::{Arc, RwLock};
