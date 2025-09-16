@@ -105,16 +105,20 @@ pub fn handle_move_next(app: &Status, cursor: types::ui::EntryCursor) -> Result<
 
 /// Compatibility wrapper used by pages/mod.rs which expects signature:
 /// fn handle_input(key: KeyEvent, app: &Status, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
-pub fn handle_input(
-    key: crossterm::event::KeyEvent,
-    app: &Status,
-    bus: &Bus,
-    snap: &types::ui::EntryStatus,
-) -> Result<()> {
+pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             // move selection up in Entry page
-            handle_move_prev(app, snap.cursor.unwrap_or(EntryCursor::Refresh))?;
+            handle_move_prev(
+                app,
+                read_status(|s| {
+                    if let types::Page::Entry { cursor } = &s.page {
+                        Ok(cursor.unwrap_or(EntryCursor::Refresh))
+                    } else {
+                        Ok(EntryCursor::Refresh)
+                    }
+                })?,
+            )?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
@@ -122,7 +126,16 @@ pub fn handle_input(
         }
         KeyCode::Down | KeyCode::Char('j') => {
             // move selection down
-            handle_move_next(app, snap.cursor.unwrap_or(EntryCursor::Refresh))?;
+            handle_move_next(
+                app,
+                read_status(|s| {
+                    if let types::Page::Entry { cursor } = &s.page {
+                        Ok(cursor.unwrap_or(EntryCursor::Refresh))
+                    } else {
+                        Ok(EntryCursor::Refresh)
+                    }
+                })?,
+            )?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
@@ -131,7 +144,15 @@ pub fn handle_input(
         KeyCode::Enter => {
             // Enter a page or take action depending on selection
 
-            if snap.cursor.is_none() {
+            let cursor = read_status(|s| {
+                if let types::Page::Entry { cursor } = &s.page {
+                    Ok(cursor.clone())
+                } else {
+                    Ok(None)
+                }
+            })?;
+
+            if cursor.is_none() {
                 // Give a default value for cursor
                 if app.ports.map.is_empty() {
                     write_status(|s| {
@@ -150,7 +171,7 @@ pub fn handle_input(
                 }
             }
 
-            match snap.cursor {
+            match cursor {
                 Some(types::ui::EntryCursor::Com { idx }) => write_status(|s| {
                     s.page = Page::ModbusConfig {
                         selected_port: idx,
