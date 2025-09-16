@@ -3,12 +3,7 @@ use crate::tui::utils::bus::Bus;
 use anyhow::{anyhow, Result};
 
 /// Handle input for log panel. Sends commands via UiToCore.
-pub fn handle_input(
-    key: crossterm::event::KeyEvent,
-    app: &Status,
-    bus: &Bus,
-    _snap: &types::ui::ModbusLogStatus,
-) -> Result<()> {
+pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
     use crossterm::event::KeyCode as KC;
 
     match key.code {

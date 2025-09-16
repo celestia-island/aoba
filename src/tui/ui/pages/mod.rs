@@ -3,7 +3,6 @@ pub mod config_panel;
 pub mod entry;
 pub mod log_panel;
 pub mod modbus_panel;
-pub mod mqtt_panel;
 
 use ratatui::prelude::*;
 

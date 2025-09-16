@@ -11,12 +11,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 
 /// Handle input for about page. Sends navigation commands via UiToCore.
-pub fn handle_input(
-    key: crossterm::event::KeyEvent,
-    _app: &Status,
-    bus: &Bus,
-    _snap: &types::ui::AboutStatus,
-) -> Result<()> {
+pub fn handle_input(key: crossterm::event::KeyEvent, _app: &Status, bus: &Bus) -> Result<()> {
     // Build the full lines snapshot to determine bounds for scrolling.
     let mut full_lines: Vec<ratatui::text::Line> = Vec::new();
     let h = crate::tui::ui::pages::about::render::init_about_cache();
