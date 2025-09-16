@@ -141,28 +141,23 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         // Route by exact page variant and construct the page snapshot inline.
         match &snapshot.page {
             types::Page::Entry { .. } => {
-                let entry_snap = types::ui::EntryStatus::from(&snapshot.page);
-                pages::entry::handle_input(key, &snapshot, bus, &entry_snap)?;
+                pages::entry::handle_input(key, &snapshot, bus)?;
                 return Ok(());
             }
             types::Page::About { .. } => {
-                let snap_about = types::ui::AboutStatus::from(&snapshot.page);
-                pages::about::handle_input(key, &snapshot, bus, &snap_about)?;
+                pages::about::handle_input(key, &snapshot, bus)?;
                 return Ok(());
             }
             types::Page::ModbusConfig { .. } => {
-                let snap = types::ui::ModbusConfigStatus::from(&snapshot.page);
-                pages::config_panel::handle_input(key, &snapshot, bus, &snap)?;
+                pages::config_panel::handle_input(key, &snapshot, bus)?;
                 return Ok(());
             }
             types::Page::ModbusDashboard { .. } => {
-                let snap = types::ui::ModbusDashboardStatus::from(&snapshot.page);
-                pages::modbus_panel::input::handle_input(key, &snapshot, bus, &snap)?;
+                pages::modbus_panel::input::handle_input(key, &snapshot, bus)?;
                 return Ok(());
             }
             types::Page::ModbusLog { .. } => {
-                let snap = types::ui::ModbusLogStatus::from(&snapshot.page);
-                pages::log_panel::handle_input(key, &snapshot, bus, &snap)?;
+                pages::log_panel::handle_input(key, &snapshot, bus)?;
                 return Ok(());
             }
         }

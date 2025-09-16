@@ -7,12 +7,7 @@ use crate::{
 };
 
 /// Handle input for config panel. Sends commands via UiToCore.
-pub fn handle_input(
-    key: crossterm::event::KeyEvent,
-    app: &Status,
-    bus: &Bus,
-    _snap: &types::ui::ModbusConfigStatus,
-) -> Result<()> {
+pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
     use crossterm::event::KeyCode as KC;
     // Derive selected row in panel (same logic as render_kv_panel)
     let mut selected_row: usize = 0usize;
