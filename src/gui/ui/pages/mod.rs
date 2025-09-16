@@ -1,4 +1,3 @@
-
 use eframe::{egui::Context, Frame};
 
 use crate::tui::utils::bus::Bus;

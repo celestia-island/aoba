@@ -39,7 +39,7 @@ pub fn start() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let app = Arc::new(RwLock::new(Status::default()));
-    
+
     // Initialize the global status
     init_status(app.clone())?;
 
@@ -128,9 +128,7 @@ pub fn start() -> Result<()> {
 
                     *scan_in_progress = false;
                     // After adding ports to status, spawn per-port runtime listeners.
-                    if let Ok(snapshot) =
-                        crate::protocol::status::read_status(|s| Ok(s.clone()))
-                    {
+                    if let Ok(snapshot) = crate::protocol::status::read_status(|s| Ok(s.clone())) {
                         for port_name in snapshot.ports.order.iter() {
                             if let Some(pd) = snapshot.ports.map.get(port_name) {
                                 if let Some(runtime) = pd.runtime.as_ref() {
@@ -208,15 +206,14 @@ pub fn start() -> Result<()> {
                                 use types::port::PortState;
 
                                 // Step 1: extract any existing runtime handle (clone) so we can stop it
-                                let existing_rt =
-                                    crate::protocol::status::read_status(|s| {
-                                        if let Some(pd) = s.ports.map.get(&port_name) {
-                                            Ok(pd.runtime.clone())
-                                        } else {
-                                            Ok(None)
-                                        }
-                                    })
-                                    .unwrap_or(None);
+                                let existing_rt = crate::protocol::status::read_status(|s| {
+                                    if let Some(pd) = s.ports.map.get(&port_name) {
+                                        Ok(pd.runtime.clone())
+                                    } else {
+                                        Ok(None)
+                                    }
+                                })
+                                .unwrap_or(None);
 
                                 if let Some(rt) = existing_rt {
                                     // Clear runtime reference in Status under write lock quickly

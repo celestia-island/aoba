@@ -1,8 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::{
-    thread,
-    time::Duration,
-};
+use std::{thread, time::Duration};
 
 use crossterm::event::{KeyCode, KeyEvent};
 

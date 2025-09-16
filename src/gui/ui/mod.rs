@@ -2,7 +2,6 @@ pub mod components;
 pub mod pages;
 pub mod status;
 
-
 use eframe::{egui::Context, Frame};
 use egui::TopBottomPanel;
 

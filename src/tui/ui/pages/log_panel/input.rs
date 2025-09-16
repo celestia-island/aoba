@@ -34,7 +34,7 @@ pub fn handle_input(
             handle_clear_logs(bus, app);
             Ok(())
         }
-    _ => Ok(()),
+        _ => Ok(()),
     }
 }
 
@@ -52,10 +52,7 @@ fn handle_leave_page(bus: &Bus) {
 }
 
 /// Handle toggling follow mode for logs
-fn handle_toggle_follow(
-    bus: &Bus,
-    app: &Status,
-) {
+fn handle_toggle_follow(bus: &Bus, app: &Status) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 
@@ -74,10 +71,7 @@ fn handle_toggle_follow(
 }
 
 /// Handle clearing logs for the current port
-fn handle_clear_logs(
-    bus: &Bus,
-    app: &Status,
-) {
+fn handle_clear_logs(bus: &Bus, app: &Status) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 

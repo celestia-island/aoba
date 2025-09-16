@@ -52,7 +52,7 @@ impl GuiApp {
         init_font::replace_fonts(&cc.egui_ctx);
 
         let status = Arc::new(RwLock::new(Status::default()));
-        
+
         // Initialize the global status
         if let Err(e) = init_status(status.clone()) {
             log::error!("Failed to initialize global status: {}", e);

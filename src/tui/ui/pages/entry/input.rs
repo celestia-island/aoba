@@ -11,10 +11,7 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-pub fn handle_move_prev(
-    app: &Status,
-    cursor: types::ui::EntryCursor,
-) -> Result<()> {
+pub fn handle_move_prev(app: &Status, cursor: types::ui::EntryCursor) -> Result<()> {
     match cursor {
         types::ui::EntryCursor::Com { idx } => {
             let prev = idx.saturating_sub(1);
@@ -64,10 +61,7 @@ pub fn handle_move_prev(
     Ok(())
 }
 
-pub fn handle_move_next(
-    app: &Status,
-    cursor: types::ui::EntryCursor,
-) -> Result<()> {
+pub fn handle_move_next(app: &Status, cursor: types::ui::EntryCursor) -> Result<()> {
     match cursor {
         types::ui::EntryCursor::Com { idx } => {
             let next = idx.saturating_add(1);
@@ -201,10 +195,7 @@ pub fn handle_input(
 }
 
 /// Handle mouse events for About page (scroll wheel). Return true when consumed.
-pub fn handle_mouse(
-    me: crossterm::event::MouseEvent,
-    _bus: &Bus,
-) -> Result<()> {
+pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
     match me.kind {
         MouseEventKind::ScrollUp => {
             handle_move_prev(

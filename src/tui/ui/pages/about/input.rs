@@ -1,5 +1,3 @@
-
-
 use crossterm::event::{KeyCode, MouseEventKind};
 
 use crate::{
@@ -113,10 +111,7 @@ pub fn handle_input(
 }
 
 /// Handle mouse events for About page (scroll wheel). Return true when consumed.
-pub fn handle_mouse(
-    me: crossterm::event::MouseEvent,
-    _bus: &Bus,
-) -> Result<()> {
+pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
     match me.kind {
         MouseEventKind::ScrollUp => {
             write_status(|s| {
