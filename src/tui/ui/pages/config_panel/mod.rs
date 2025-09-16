@@ -2,11 +2,11 @@
 // This mirrors the earlier shim in `config_panel.rs` so the module can live
 // inside the `config_panel/` directory.
 
-pub mod render;
 pub mod input;
+pub mod render;
 
 // Re-export commonly used symbols so external call sites that referenced
 // `pages::config_panel::render` and `pages::config_panel::handle_input`
 // remain valid without changes.
-pub use render::{global_hints, page_bottom_hints, render, render_kv_panel};
 pub use input::handle_input;
+pub use render::{page_bottom_hints, render, render_kv_panel};

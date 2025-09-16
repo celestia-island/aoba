@@ -49,11 +49,14 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
     render_boxed_paragraph(f, area, lines[first_visible..end].to_vec(), None);
 }
 
-pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusDashboardStatus) -> Vec<String> {
-    let hints: Vec<String> = vec![
-        lang().hotkeys.hint_move_vertical.as_str().to_string(),
-        "Enter: Edit".to_string(),
-        "Del: Delete".to_string(),
-    ];
-    hints
+pub fn page_bottom_hints(
+    _app: &Status,
+    _snap: &types::ui::ModbusDashboardStatus,
+) -> Vec<Vec<String>> {
+    {
+        vec![
+            vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
+            vec!["Enter: Edit".to_string(), "Del: Delete".to_string()],
+        ]
+    }
 }

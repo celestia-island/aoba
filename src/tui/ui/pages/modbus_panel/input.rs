@@ -9,7 +9,7 @@ pub fn handle_input(
     bus: &Bus,
     app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
     _snap: &types::ui::ModbusDashboardStatus,
-) -> Result<bool> {
+) -> Result<()> {
     use crossterm::event::KeyCode as KC;
 
     match key.code {
@@ -18,14 +18,14 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Left | KC::Right => {
             // Horizontal navigation within fields
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Esc => {
             // If dashboard has nested edit state in Status (e.g. editing_field or master_field_editing),
@@ -54,11 +54,11 @@ pub fn handle_input(
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
-                Ok(true)
+                Ok(())
             } else {
                 // No nested edit active: leave dashboard
                 handle_leave_page(bus, app_arc);
-                Ok(true)
+                Ok(())
             }
         }
         KC::Enter => {
@@ -66,30 +66,30 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Delete | KC::Char('x') => {
             // Delete entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Char('n') => {
             // New entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Tab => {
             // Tab switching
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        _ => Ok(false),
+        _ => Ok(()),
     }
 }
 

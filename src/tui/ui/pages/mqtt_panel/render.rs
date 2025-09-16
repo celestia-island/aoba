@@ -2,7 +2,7 @@ use ratatui::{prelude::*, text::Line};
 
 use crate::{
     protocol::status::types::{self, Status},
-    tui::{ui::components::render_boxed_paragraph},
+    tui::ui::components::render_boxed_paragraph,
 };
 
 /// Render the MQTT panel. Only reads from Status, does not mutate.
@@ -36,7 +36,6 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::EntryS
     render_boxed_paragraph(f, area, lines, None);
 }
 
-pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::EntryStatus) -> Vec<String> {
-    let hints: Vec<String> = vec!["MQTT not implemented".to_string()];
-    hints
+pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::EntryStatus) -> Vec<Vec<String>> {
+    vec![vec!["MQTT not implemented".to_string()]]
 }

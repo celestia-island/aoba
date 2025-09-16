@@ -15,7 +15,7 @@ pub fn handle_input(
     bus: &Bus,
     app_arc: &Arc<RwLock<types::Status>>,
     _snap: &types::ui::ModbusConfigStatus,
-) -> Result<bool> {
+) -> Result<()> {
     use crossterm::event::KeyCode as KC;
     // Derive selected row in panel (same logic as render_kv_panel)
     let mut selected_row: usize = 0usize;
@@ -58,7 +58,7 @@ pub fn handle_input(
                     }
                     Ok(())
                 });
-                Ok(true)
+                Ok(())
             }
             KC::Backspace => {
                 let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -76,7 +76,7 @@ pub fn handle_input(
                     }
                     Ok(())
                 });
-                Ok(true)
+                Ok(())
             }
             KC::Left => {
                 let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -91,7 +91,7 @@ pub fn handle_input(
                     }
                     Ok(())
                 });
-                Ok(true)
+                Ok(())
             }
             KC::Right => {
                 let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -108,7 +108,7 @@ pub fn handle_input(
                     }
                     Ok(())
                 });
-                Ok(true)
+                Ok(())
             }
             KC::Enter => {
                 // Commit edit: write buffer back to PortData field
@@ -193,7 +193,7 @@ pub fn handle_input(
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
-                Ok(true)
+                Ok(())
             }
             KC::Esc => {
                 // Cancel edit
@@ -218,9 +218,9 @@ pub fn handle_input(
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
-                Ok(true)
+                Ok(())
             }
-            _ => Ok(false),
+            _ => Ok(()),
         }
     } else {
         // Not in edit mode: handle navigation and enter/e to begin editing
@@ -250,7 +250,7 @@ pub fn handle_input(
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
-                Ok(true)
+                Ok(())
             }
             KC::Enter | KC::Char('e') => {
                 // Begin edit for selected row if a real port exists at selection
@@ -321,13 +321,13 @@ pub fn handle_input(
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::Refresh)
                         .map_err(|e| anyhow!(e))?;
-                    Ok(true)
+                    Ok(())
                 } else {
                     // No port under selection: just refresh
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::Refresh)
                         .map_err(|e| anyhow!(e))?;
-                    Ok(true)
+                    Ok(())
                 }
             }
             KC::Esc => {
@@ -340,9 +340,9 @@ pub fn handle_input(
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
-                Ok(true)
+                Ok(())
             }
-            _ => Ok(false),
+            _ => Ok(()),
         }
     }
 }

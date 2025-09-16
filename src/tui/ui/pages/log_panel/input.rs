@@ -9,7 +9,7 @@ pub fn handle_input(
     bus: &Bus,
     app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
     _snap: &types::ui::ModbusLogStatus,
-) -> Result<bool> {
+) -> Result<()> {
     use crossterm::event::KeyCode as KC;
 
     match key.code {
@@ -18,24 +18,24 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Esc | KC::Char('h') => {
             // Leave page - go back to entry
             handle_leave_page(bus, app_arc);
-            Ok(true)
+            Ok(())
         }
         KC::Char('f') => {
             // Toggle follow mode
             handle_toggle_follow(bus, app_arc, app);
-            Ok(true)
+            Ok(())
         }
         KC::Char('c') => {
             // Clear logs
             handle_clear_logs(bus, app_arc, app);
-            Ok(true)
+            Ok(())
         }
-        _ => Ok(false),
+    _ => Ok(()),
     }
 }
 

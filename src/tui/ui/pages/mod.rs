@@ -5,19 +5,12 @@ pub mod log_panel;
 pub mod modbus_panel;
 pub mod mqtt_panel;
 
-use anyhow::{anyhow, Result};
-use std::sync::{Arc, RwLock};
-
-use crossterm::event::KeyEvent;
 use ratatui::prelude::*;
 
 // AppMode and SubpageTab are not used directly in this module; derive from Page when needed
-use crate::{
-    protocol::status::types::{self, Status},
-    tui::utils::bus::Bus,
-};
+use crate::protocol::status::types::{self, Status};
 
-use crate::i18n::lang;
+// removed unused import `lang`
 
 // Helper: derive the current selection index from `page` so callers
 // don't rely on transient `temporarily.selected`.
@@ -38,7 +31,8 @@ fn derive_selection(app: &Status) -> usize {
 }
 
 /// Return page-provided bottom hints for the current app state.
-pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
+/// Now returns a Vec of rows, where each row is a Vec of hint fragments.
+pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
     // Derive subpage activity and which tab from `page`.
     let subpage_active = matches!(
         app.page,
@@ -52,113 +46,95 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<String> {
         let about_idx = app.ports.order.len().saturating_add(2);
         let sel = derive_selection(app);
         if sel == about_idx {
-            let snap = app.snapshot_about();
-            return about::page_bottom_hints(app, &snap);
+            // Extract AboutStatus directly from app.page
+            match &app.page {
+                types::Page::About { view_offset } => {
+                    let snap = types::ui::AboutStatus {
+                        view_offset: *view_offset,
+                    };
+                    return about::page_bottom_hints(app, &snap);
+                }
+                other => panic!("Expected About page for bottom hints, found: {:?}", other),
+            }
         }
 
         // Dispatch based on current_page variant. For ModbusDashboard/Config use Modbus body hints
         match app.page {
-            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
-                let snap = app.snapshot_modbus_config();
-                return config_panel::page_bottom_hints(app, &snap);
+            types::Page::ModbusConfig { .. } => match &app.page {
+                types::Page::ModbusConfig {
+                    selected_port,
+                    edit_active,
+                    edit_port,
+                    edit_field_index,
+                    edit_field_key,
+                    edit_buffer,
+                    edit_cursor_pos,
+                    ..
+                } => {
+                    let snap = types::ui::ModbusConfigStatus {
+                        selected_port: *selected_port,
+                        edit_active: *edit_active,
+                        edit_port: edit_port.clone(),
+                        edit_field_index: *edit_field_index,
+                        edit_field_key: edit_field_key.clone(),
+                        edit_buffer: edit_buffer.clone(),
+                        edit_cursor_pos: *edit_cursor_pos,
+                    };
+                    return config_panel::page_bottom_hints(app, &snap);
+                }
+                other => panic!("Expected ModbusConfig for bottom hints, found: {:?}", other),
+            },
+            types::Page::ModbusDashboard { .. } => {
+                match &app.page {
+                    types::Page::ModbusDashboard { selected_port, .. } => {
+                        // Construct a ModbusConfigStatus using dashboard's selected_port and defaults
+                        let snap = types::ui::ModbusConfigStatus {
+                            selected_port: *selected_port,
+                            edit_active: false,
+                            edit_port: None,
+                            edit_field_index: 0,
+                            edit_field_key: None,
+                            edit_buffer: String::new(),
+                            edit_cursor_pos: 0,
+                        };
+                        return config_panel::page_bottom_hints(app, &snap);
+                    }
+                    other => panic!(
+                        "Expected ModbusDashboard for bottom hints, found: {:?}",
+                        other
+                    ),
+                }
             }
-            types::Page::ModbusLog { .. } => {
-                let snap = app.snapshot_modbus_log();
-                return log_panel::page_bottom_hints(app, &snap);
-            }
-            types::Page::About { .. } => {
-                let snap = app.snapshot_about();
-                return about::page_bottom_hints(app, &snap);
-            }
+            types::Page::ModbusLog { .. } => match &app.page {
+                types::Page::ModbusLog { selected_port } => {
+                    let snap = types::ui::ModbusLogStatus {
+                        selected_port: *selected_port,
+                    };
+                    return log_panel::page_bottom_hints(app, &snap);
+                }
+                other => panic!(
+                    "Expected ModbusLog page for bottom hints, found: {:?}",
+                    other
+                ),
+            },
             _ => {}
         }
     }
     // Default to entry hints when no subpage
-    let entry_snap = app.snapshot_entry();
-    entry::page_bottom_hints(app, &entry_snap)
-}
-
-/// Return global bottom hints that should appear on the bottom-most line regardless
-/// Of which subpage is active. This keeps page-specific hints separate (they can
-/// Be shown on an extra line above).
-pub fn global_hints_for_app(_app: &Status) -> Vec<String> {
-    // Return global-only hints (bottom-most line). Pages provide their own
-    // page-specific hints via `bottom_hints_for_app` which are shown above.
-    vec![lang().hotkeys.hint_esc_return_home.as_str().to_string()]
+    match &app.page {
+        types::Page::Entry { cursor } => {
+            let entry_snap = types::ui::EntryStatus { cursor: *cursor };
+            entry::page_bottom_hints(app, &entry_snap)
+        }
+        other => panic!("Expected Entry page for bottom hints, found: {:?}", other),
+    }
 }
 
 /// Handle input for the currently active page (including entry when no subpage active).
 /// Returns true if the page consumed the key event.
-pub fn handle_input_in_page(
-    key: KeyEvent,
-    app: &Status,
-    bus: &Bus,
-    app_arc: &Arc<RwLock<types::Status>>,
-) -> Result<bool> {
-    // If a subpage is active, delegate to existing subpage handlers (which already
-    // consume keys like 'q' for About etc.). When no subpage is active, delegate to
-    // the entry page raw handler so it can process non-global keys.
-    // Consider About as active either when the page variant is About OR when
-    // the special virtual About entry is selected in the Entry list. This
-    // ensures full-screen About (selected via virtual entry) receives input.
-    let about_idx = app.ports.order.len().saturating_add(2);
-    let sel = derive_selection(app);
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    ) || sel == about_idx;
-    if subpage_active {
-        use crossterm::event::KeyCode as KC;
-
-        // Always let 'q' bubble up to the top-level quit handler (don't consume it here).
-        if let KC::Char('q') | KC::Char('Q') = key.code {
-            return Ok(false);
-        }
-
-        // If About is active (either variant or selected virtual entry), route
-        // directly to about::handle_input. If it doesn't consume the key,
-        // pressing Esc will still return to Entry as a defensive fallback.
-        if sel == about_idx || matches!(app.page, types::Page::About { .. }) {
-            let snap = app.snapshot_about();
-            let consumed = about::handle_input(key, app, bus, app_arc, &snap)?;
-            if consumed {
-                return Ok(true);
-            }
-            if let KC::Esc = key.code {
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
-                    s.page = types::Page::Entry { cursor: None };
-                    Ok(())
-                });
-                bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|e| anyhow!(e))?;
-                return Ok(true);
-            }
-            // fallthrough to other handlers if not consumed
-        }
-
-        match app.page {
-            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
-                let snap = app.snapshot_modbus_config();
-                let consumed = config_panel::handle_input(key, app, bus, app_arc, &snap)?;
-                return Ok(consumed);
-            }
-            types::Page::ModbusLog { .. } => {
-                let snap = app.snapshot_modbus_log();
-                let consumed = log_panel::handle_input(key, app, bus, app_arc, &snap)?;
-                return Ok(consumed);
-            }
-            _ => {}
-        }
-    }
-
-    // No subpage active: let entry page have a chance to consume the key.
-    let entry_snap = app.snapshot_entry();
-    entry::handle_input(key, app, bus, app_arc, &entry_snap)
-}
+// Note: input dispatching has been centralized in `tui::input::handle_key_event`.
+// Page modules only expose their individual handlers (entry::handle_input,
+// about::handle_input, etc.).
 
 /// Render the appropriate page based on the current app state.
 /// This function only reads from Status and renders - no mutations allowed.
@@ -176,30 +152,96 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
         let about_idx = app.ports.order.len().saturating_add(2);
         let sel = derive_selection(app);
         if sel == about_idx {
-            let snap = app.snapshot_about();
-            about::render(f, area, app, &snap);
-            return;
+            match &app.page {
+                types::Page::About { view_offset } => {
+                    let snap = types::ui::AboutStatus {
+                        view_offset: *view_offset,
+                    };
+                    about::render(f, area, app, &snap);
+                    return;
+                }
+                other => panic!("Expected About page for render, found: {:?}", other),
+            }
         }
         match app.page {
             types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. } => {
-                let snap = app.snapshot_modbus_config();
-                config_panel::render(f, area, app, None, &snap)
+                match &app.page {
+                    types::Page::ModbusConfig {
+                        selected_port,
+                        edit_active,
+                        edit_port,
+                        edit_field_index,
+                        edit_field_key,
+                        edit_buffer,
+                        edit_cursor_pos,
+                        ..
+                    } => {
+                        let snap = types::ui::ModbusConfigStatus {
+                            selected_port: *selected_port,
+                            edit_active: *edit_active,
+                            edit_port: edit_port.clone(),
+                            edit_field_index: *edit_field_index,
+                            edit_field_key: edit_field_key.clone(),
+                            edit_buffer: edit_buffer.clone(),
+                            edit_cursor_pos: *edit_cursor_pos,
+                        };
+                        config_panel::render(f, area, app, None, &snap)
+                    }
+                    types::Page::ModbusDashboard { selected_port, .. } => {
+                        // Dashboard reuses config panel; build a ModbusConfigStatus with defaults
+                        let snap = types::ui::ModbusConfigStatus {
+                            selected_port: *selected_port,
+                            edit_active: false,
+                            edit_port: None,
+                            edit_field_index: 0,
+                            edit_field_key: None,
+                            edit_buffer: String::new(),
+                            edit_cursor_pos: 0,
+                        };
+                        config_panel::render(f, area, app, None, &snap)
+                    }
+                    other => panic!(
+                        "Expected ModbusConfig or ModbusDashboard for render, found: {:?}",
+                        other
+                    ),
+                }
             }
-            types::Page::ModbusLog { .. } => {
-                let snap = app.snapshot_modbus_log();
-                log_panel::render(f, area, app, &snap)
-            }
-            types::Page::About { .. } => {
-                let snap = app.snapshot_about();
-                about::render(f, area, app, &snap)
-            }
-            _ => {
-                let entry_snap = app.snapshot_entry();
-                entry::render(f, area, app, &entry_snap)
-            }
+            types::Page::ModbusLog { .. } => match &app.page {
+                types::Page::ModbusLog { selected_port } => {
+                    let snap = types::ui::ModbusLogStatus {
+                        selected_port: *selected_port,
+                    };
+                    log_panel::render(f, area, app, &snap)
+                }
+                other => panic!("Expected ModbusLog for render, found: {:?}", other),
+            },
+            types::Page::About { .. } => match &app.page {
+                types::Page::About { view_offset } => {
+                    let snap = types::ui::AboutStatus {
+                        view_offset: *view_offset,
+                    };
+                    about::render(f, area, app, &snap)
+                }
+                other => panic!("Expected About for render, found: {:?}", other),
+            },
+            _ => match &app.page {
+                types::Page::Entry { cursor } => {
+                    let entry_snap = types::ui::EntryStatus { cursor: *cursor };
+                    entry::render(f, area, app, &entry_snap)
+                }
+                other => panic!("Expected Entry for render, found: {:?}", other),
+            },
         }
     } else {
-        let entry_snap = app.snapshot_entry();
-        entry::render(f, area, app, &entry_snap);
+        match &app.page {
+            types::Page::Entry { cursor } => {
+                let entry_snap = types::ui::EntryStatus { cursor: *cursor };
+                entry::render(f, area, app, &entry_snap);
+            }
+            other => panic!(
+                "Expected Entry page when rendering panels, found: {:?}",
+                other
+            ),
+        }
     }
 }
