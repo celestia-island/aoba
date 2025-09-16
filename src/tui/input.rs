@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use std::{
-    sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
@@ -10,7 +9,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::{
     protocol::status::{
         read_status,
-        types::{self, Status},
+        types::{self},
     },
     tui::{
         ui::pages,
@@ -66,7 +65,7 @@ pub fn map_key(code: KeyCode) -> Action {
 }
 
 /// Spawn the input handling thread that processes keyboard and mouse events
-pub fn spawn_input_thread(bus: Bus, app: Arc<RwLock<Status>>, thr_tx: flume::Sender<Result<()>>) {
+pub fn spawn_input_thread(bus: Bus, thr_tx: flume::Sender<Result<()>>) {
     thread::spawn(move || {
         let res = (|| -> Result<()> {
             loop {
@@ -77,7 +76,7 @@ pub fn spawn_input_thread(bus: Bus, app: Arc<RwLock<Status>>, thr_tx: flume::Sen
                     if let Ok(ev) = crossterm::event::read() {
                         // handle_event now returns Result<()> and performs any quit
                         // signaling itself. Propagate errors, otherwise continue.
-                        handle_event(ev, &bus, &app)?;
+                        handle_event(ev, &bus)?;
                     }
                 }
             }
@@ -87,7 +86,7 @@ pub fn spawn_input_thread(bus: Bus, app: Arc<RwLock<Status>>, thr_tx: flume::Sen
 }
 
 /// Handle a single input event (keyboard or mouse)
-fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<()> {
+fn handle_event(ev: crossterm::event::Event, bus: &Bus) -> Result<()> {
     // Support both Key and Mouse scroll events. Map Mouse ScrollUp/Down to
     // synthesized KeyEvent Up/Down so existing key handlers can be reused.
 
@@ -104,14 +103,14 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
                 return Ok(());
             }
 
-            handle_key_event(key, bus, app)?;
+            handle_key_event(key, bus)?;
         }
-        crossterm::event::Event::Mouse(event) => match read_status(app, |s| Ok(s.page.clone())) {
+        crossterm::event::Event::Mouse(event) => match read_status(|s| Ok(s.page.clone())) {
             Ok(types::Page::Entry { .. }) => {
-                pages::entry::input::handle_mouse(event, bus, app)?;
+                pages::entry::input::handle_mouse(event, bus)?;
             }
             Ok(types::Page::About { .. }) => {
-                pages::about::handle_mouse(event, bus, app)?;
+                pages::about::handle_mouse(event, bus)?;
             }
             _ => {}
         },
@@ -122,7 +121,7 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>
 }
 
 /// Handle a keyboard event
-fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<()> {
+fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
     if key.kind != crossterm::event::KeyEventKind::Press {
         return Ok(()); // Ignore non-initial key press (repeat / release)
     }
@@ -139,34 +138,34 @@ fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> Resu
     }
 
     // Route input to appropriate page handler based on current Status.page.
-    if let Ok(snapshot) = read_status(app, |s| Ok(s.clone())) {
+    if let Ok(snapshot) = read_status(|s| Ok(s.clone())) {
         use crate::tui::ui::pages;
 
         // Route by exact page variant and construct the page snapshot inline.
         match &snapshot.page {
             types::Page::Entry { .. } => {
                 let entry_snap = types::ui::EntryStatus::from(&snapshot.page);
-                pages::entry::handle_input(key, &snapshot, bus, app, &entry_snap)?;
+                pages::entry::handle_input(key, &snapshot, bus, &entry_snap)?;
                 return Ok(());
             }
             types::Page::About { .. } => {
                 let snap_about = types::ui::AboutStatus::from(&snapshot.page);
-                pages::about::handle_input(key, &snapshot, bus, app, &snap_about)?;
+                pages::about::handle_input(key, &snapshot, bus, &snap_about)?;
                 return Ok(());
             }
             types::Page::ModbusConfig { .. } => {
                 let snap = types::ui::ModbusConfigStatus::from(&snapshot.page);
-                pages::config_panel::handle_input(key, &snapshot, bus, app, &snap)?;
+                pages::config_panel::handle_input(key, &snapshot, bus, &snap)?;
                 return Ok(());
             }
             types::Page::ModbusDashboard { .. } => {
                 let snap = types::ui::ModbusDashboardStatus::from(&snapshot.page);
-                pages::modbus_panel::input::handle_input(key, &snapshot, bus, app, &snap)?;
+                pages::modbus_panel::input::handle_input(key, &snapshot, bus, &snap)?;
                 return Ok(());
             }
             types::Page::ModbusLog { .. } => {
                 let snap = types::ui::ModbusLogStatus::from(&snapshot.page);
-                pages::log_panel::handle_input(key, &snapshot, bus, app, &snap)?;
+                pages::log_panel::handle_input(key, &snapshot, bus, &snap)?;
                 return Ok(());
             }
         }

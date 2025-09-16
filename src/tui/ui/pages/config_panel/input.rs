@@ -1,4 +1,3 @@
-use std::sync::{Arc, RwLock};
 
 use anyhow::{anyhow, Result};
 
@@ -13,7 +12,6 @@ pub fn handle_input(
     key: crossterm::event::KeyEvent,
     app: &Status,
     bus: &Bus,
-    app_arc: &Arc<RwLock<types::Status>>,
     _snap: &types::ui::ModbusConfigStatus,
 ) -> Result<()> {
     use crossterm::event::KeyCode as KC;
@@ -45,7 +43,7 @@ pub fn handle_input(
         // We are editing a field: handle text input and control keys
         match key.code {
             KC::Char(c) => {
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -61,7 +59,7 @@ pub fn handle_input(
                 Ok(())
             }
             KC::Backspace => {
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -79,7 +77,7 @@ pub fn handle_input(
                 Ok(())
             }
             KC::Left => {
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
@@ -94,7 +92,7 @@ pub fn handle_input(
                 Ok(())
             }
             KC::Right => {
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -112,7 +110,7 @@ pub fn handle_input(
             }
             KC::Enter => {
                 // Commit edit: write buffer back to PortData field
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_active: config_edit_active,
                         edit_port: config_edit_port,
@@ -197,7 +195,7 @@ pub fn handle_input(
             }
             KC::Esc => {
                 // Cancel edit
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_active: config_edit_active,
                         edit_port: config_edit_port,
@@ -227,7 +225,7 @@ pub fn handle_input(
         match key.code {
             KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
                 // Update selected_port inside Page::ModbusConfig under write lock
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig { selected_port, .. } = &mut s.page {
                         // Move selection by delta based on key
                         match key.code {
@@ -298,7 +296,7 @@ pub fn handle_input(
                         String::new()
                     };
 
-                    let _ = crate::protocol::status::write_status(app_arc, |s| {
+                    let _ = crate::protocol::status::write_status(|s| {
                         if let types::Page::ModbusConfig {
                             edit_active: config_edit_active,
                             edit_port: config_edit_port,
@@ -333,7 +331,7 @@ pub fn handle_input(
             KC::Esc => {
                 // If we reach here we are not in per-field edit mode (in_edit == false)
                 // so Esc should return the user to the main entry page.
-                let _ = crate::protocol::status::write_status(app_arc, |s| {
+                let _ = crate::protocol::status::write_status(|s| {
                     s.page = types::Page::Entry { cursor: None };
                     Ok(())
                 });

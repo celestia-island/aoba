@@ -14,6 +14,7 @@ use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
     protocol::status::{
+        init_status,
         types::{
             self,
             port::{PortData, PortLogEntry, PortState},
@@ -38,9 +39,12 @@ pub fn start() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let app = Arc::new(RwLock::new(Status::default()));
+    
+    // Initialize the global status
+    init_status(app.clone())?;
 
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
-        let _ = write_status(&app, |g| {
+        let _ = write_status(|g| {
             ui_error_set(
                 g,
                 Some((
@@ -74,9 +78,7 @@ pub fn start() -> Result<()> {
                 let mut last_scan = std::time::Instant::now() - scan_interval;
                 let mut scan_in_progress = false; // Track if scan is currently running
 
-                let do_scan = |app_ref: &Arc<RwLock<Status>>,
-                               scan_in_progress: &mut bool|
-                 -> bool {
+                let do_scan = |scan_in_progress: &mut bool| -> bool {
                     // Return early if scan already in progress
                     if *scan_in_progress {
                         log::debug!("[CORE] Scan already in progress, skipping");
@@ -86,7 +88,7 @@ pub fn start() -> Result<()> {
                     *scan_in_progress = true;
 
                     // Set busy indicator
-                    let _ = write_status(app_ref, |s| {
+                    let _ = write_status(|s| {
                         s.temporarily.busy.busy = true;
                         Ok(())
                     });
@@ -98,7 +100,7 @@ pub fn start() -> Result<()> {
                         .collect::<Vec<_>>()
                         .join("\n");
 
-                    let _ = write_status(app_ref, |s| {
+                    let _ = write_status(|s| {
                         s.ports.order.clear();
                         s.ports.map.clear();
                         for (info, extra) in ports.iter() {
@@ -127,14 +129,13 @@ pub fn start() -> Result<()> {
                     *scan_in_progress = false;
                     // After adding ports to status, spawn per-port runtime listeners.
                     if let Ok(snapshot) =
-                        crate::protocol::status::read_status(app_ref, |s| Ok(s.clone()))
+                        crate::protocol::status::read_status(|s| Ok(s.clone()))
                     {
                         for port_name in snapshot.ports.order.iter() {
                             if let Some(pd) = snapshot.ports.map.get(port_name) {
                                 if let Some(runtime) = pd.runtime.as_ref() {
                                     // Spawn a listener thread for this runtime's evt_rx.
                                     let evt_rx = runtime.evt_rx.clone();
-                                    let app_clone3 = Arc::clone(app_ref);
                                     let port_name_clone = port_name.clone();
                                     thread::spawn(move || {
                                         const MAX_LOGS: usize = 2000;
@@ -150,7 +151,7 @@ pub fn start() -> Result<()> {
                                                     raw,
                                                     parsed,
                                                 };
-                                                let _ = write_status(&app_clone3, |s| {
+                                                let _ = write_status(|s| {
                                                     if let Some(pdata) = s.ports.map.get_mut(&port_name_clone) {
                                                         pdata.logs.push(entry.clone());
                                                         if pdata.logs.len() > MAX_LOGS {
@@ -188,7 +189,7 @@ pub fn start() -> Result<()> {
                             }
                             UiToCore::Refresh => {
                                 log::debug!("[CORE] immediate Refresh requested");
-                                if do_scan(&_app_clone, &mut scan_in_progress) {
+                                if do_scan(&mut scan_in_progress) {
                                     last_scan = std::time::Instant::now();
                                 } else {
                                     log::debug!("[CORE] immediate Refresh skipped because a scan is already running");
@@ -208,7 +209,7 @@ pub fn start() -> Result<()> {
 
                                 // Step 1: extract any existing runtime handle (clone) so we can stop it
                                 let existing_rt =
-                                    crate::protocol::status::read_status(&_app_clone, |s| {
+                                    crate::protocol::status::read_status(|s| {
                                         if let Some(pd) = s.ports.map.get(&port_name) {
                                             Ok(pd.runtime.clone())
                                         } else {
@@ -219,7 +220,7 @@ pub fn start() -> Result<()> {
 
                                 if let Some(rt) = existing_rt {
                                     // Clear runtime reference in Status under write lock quickly
-                                    let _ = write_status(&_app_clone, |s| {
+                                    let _ = write_status(|s| {
                                         if let Some(pd) = s.ports.map.get_mut(&port_name) {
                                             pd.runtime = None;
                                             pd.state = PortState::Free;
@@ -294,7 +295,7 @@ pub fn start() -> Result<()> {
                                     // Clone handle for insertion under write lock to avoid moving
                                     let handle_for_write = handle.clone();
                                     // Write handle into status under write lock
-                                    let _ = write_status(&_app_clone, |s| {
+                                    let _ = write_status(|s| {
                                         if let Some(pd) = s.ports.map.get_mut(&port_name) {
                                             pd.runtime = Some(handle_for_write.clone());
                                             pd.state = PortState::OccupiedByThis;
@@ -303,7 +304,7 @@ pub fn start() -> Result<()> {
                                     });
                                 } else if let Some(e) = spawn_err {
                                     // All attempts failed: set transient error for UI
-                                    let _ = write_status(&_app_clone, |s| {
+                                    let _ = write_status(|s| {
                                         s.temporarily.error = Some(types::ErrorInfo {
                                             message: format!("failed to start runtime: {e}"),
                                             timestamp: chrono::Local::now(),
@@ -318,7 +319,7 @@ pub fn start() -> Result<()> {
                     }
 
                     if polling_enabled && last_scan.elapsed() >= scan_interval {
-                        if do_scan(&_app_clone, &mut scan_in_progress) {
+                        if do_scan(&mut scan_in_progress) {
                             last_scan = std::time::Instant::now();
                         } else {
                             log::debug!(
@@ -328,7 +329,7 @@ pub fn start() -> Result<()> {
                     }
 
                     // Update spinner frame for busy indicator animation
-                    let _ = write_status(&_app_clone, |s| {
+                    let _ = write_status(|s| {
                         s.temporarily.busy.spinner_frame =
                             s.temporarily.busy.spinner_frame.wrapping_add(1);
                         Ok(())
@@ -343,11 +344,11 @@ pub fn start() -> Result<()> {
     }
 
     // Thread 2: Input handling thread - processes keyboard input
-    input::spawn_input_thread(bus.clone(), Arc::clone(&app), thr_tx.clone());
+    input::spawn_input_thread(bus.clone(), thr_tx.clone());
 
     // Thread 3: UI rendering loop - handles rendering based on Status
     // Pass thr_rx so rendering loop can monitor other thread exits.
-    let res = run_rendering_loop(&mut terminal, Arc::clone(&app), bus, thr_rx);
+    let res = run_rendering_loop(&mut terminal, bus, thr_rx);
 
     // Restore terminal
     let mut stdout = io::stdout();
@@ -363,7 +364,6 @@ pub fn start() -> Result<()> {
 
 fn run_rendering_loop(
     terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
-    app: Arc<RwLock<Status>>,
     bus: crate::tui::utils::bus::Bus,
     thr_rx: flume::Receiver<Result<()>>,
 ) -> Result<()> {
@@ -413,7 +413,7 @@ fn run_rendering_loop(
 
         // Render UI - only read from Status. Use read_status to clone snapshot and
         // render from that to avoid holding the lock while rendering.
-        if let Ok(snapshot) = crate::protocol::status::read_status(&app, |s| Ok(s.clone())) {
+        if let Ok(snapshot) = crate::protocol::status::read_status(|s| Ok(s.clone())) {
             terminal.draw(|f| {
                 render_ui_readonly(f, &snapshot);
             })?;
