@@ -7,7 +7,6 @@ pub fn handle_input(
     key: crossterm::event::KeyEvent,
     app: &Status,
     bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
     _snap: &types::ui::ModbusLogStatus,
 ) -> Result<()> {
     use crossterm::event::KeyCode as KC;
@@ -22,29 +21,29 @@ pub fn handle_input(
         }
         KC::Esc | KC::Char('h') => {
             // Leave page - go back to entry
-            handle_leave_page(bus, app_arc);
+            handle_leave_page(bus);
             Ok(())
         }
         KC::Char('f') => {
             // Toggle follow mode
-            handle_toggle_follow(bus, app_arc, app);
+            handle_toggle_follow(bus, app);
             Ok(())
         }
         KC::Char('c') => {
             // Clear logs
-            handle_clear_logs(bus, app_arc, app);
+            handle_clear_logs(bus, app);
             Ok(())
         }
-    _ => Ok(()),
+        _ => Ok(()),
     }
 }
 
 /// Handle leaving the log panel back to entry page
-fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
+fn handle_leave_page(bus: &Bus) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 
-    let _ = write_status(app_arc, |s| {
+    let _ = write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
         Ok(())
@@ -53,17 +52,13 @@ fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types
 }
 
 /// Handle toggling follow mode for logs
-fn handle_toggle_follow(
-    bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    app: &Status,
-) {
+fn handle_toggle_follow(bus: &Bus, app: &Status) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 
     // Toggle the auto-scroll flag for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
-        let _ = write_status(app_arc, |s| {
+        let _ = write_status(|s| {
             if let Some(port_name) = s.ports.order.get(*selected_port) {
                 if let Some(port_data) = s.ports.map.get_mut(port_name) {
                     port_data.log_auto_scroll = !port_data.log_auto_scroll;
@@ -76,17 +71,13 @@ fn handle_toggle_follow(
 }
 
 /// Handle clearing logs for the current port
-fn handle_clear_logs(
-    bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
-    app: &Status,
-) {
+fn handle_clear_logs(bus: &Bus, app: &Status) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 
     // Clear logs for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
-        let _ = write_status(app_arc, |s| {
+        let _ = write_status(|s| {
             if let Some(port_name) = s.ports.order.get(*selected_port) {
                 if let Some(port_data) = s.ports.map.get_mut(port_name) {
                     port_data.logs.clear();

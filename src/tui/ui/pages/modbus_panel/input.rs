@@ -7,7 +7,6 @@ pub fn handle_input(
     key: crossterm::event::KeyEvent,
     _app: &Status,
     bus: &Bus,
-    app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>,
     _snap: &types::ui::ModbusDashboardStatus,
 ) -> Result<()> {
     use crossterm::event::KeyCode as KC;
@@ -32,7 +31,7 @@ pub fn handle_input(
             // prefer to cancel those first. Otherwise leave to entry page.
             use crate::protocol::status::write_status;
             let mut cancelled = false;
-            let _ = write_status(app_arc, |s| {
+            let _ = write_status(|s| {
                 if let types::Page::ModbusDashboard {
                     editing_field,
                     master_field_editing,
@@ -57,7 +56,7 @@ pub fn handle_input(
                 Ok(())
             } else {
                 // No nested edit active: leave dashboard
-                handle_leave_page(bus, app_arc);
+                handle_leave_page(bus);
                 Ok(())
             }
         }
@@ -94,11 +93,11 @@ pub fn handle_input(
 }
 
 /// Handle leaving the modbus dashboard back to entry page
-fn handle_leave_page(bus: &Bus, app_arc: &std::sync::Arc<std::sync::RwLock<types::Status>>) {
+fn handle_leave_page(bus: &Bus) {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 
-    let _ = write_status(app_arc, |s| {
+    let _ = write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
         Ok(())

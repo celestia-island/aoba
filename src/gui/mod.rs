@@ -13,7 +13,7 @@ use eframe::{self, egui};
 use egui::{vec2, IconData};
 
 use crate::{
-    protocol::status::types::Status,
+    protocol::status::{init_status, types::Status},
     tui::utils::bus::{Bus, CoreToUi, UiToCore},
 };
 
@@ -44,7 +44,6 @@ pub fn start() -> Result<()> {
 }
 
 pub struct GuiApp {
-    status: Arc<RwLock<Status>>,
     bus: Bus,
 }
 
@@ -53,6 +52,11 @@ impl GuiApp {
         init_font::replace_fonts(&cc.egui_ctx);
 
         let status = Arc::new(RwLock::new(Status::default()));
+
+        // Initialize the global status
+        if let Err(e) = init_status(status.clone()) {
+            log::error!("Failed to initialize global status: {}", e);
+        }
 
         // Create channels and a simple core-like thread for demo handling of Refresh/Quit.
         let (core_tx, core_rx) = flume::unbounded::<CoreToUi>();
@@ -87,13 +91,13 @@ impl GuiApp {
             thread::sleep(Duration::from_millis(50));
         });
 
-        Self { status, bus }
+        Self { bus }
     }
 }
 
 impl eframe::App for GuiApp {
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         // Delegate to centralized UI renderer (title + breadcrumb + pages + status)
-        crate::gui::ui::render_ui(ctx, frame, &self.status, &self.bus);
+        crate::gui::ui::render_ui(ctx, frame, &self.bus);
     }
 }
