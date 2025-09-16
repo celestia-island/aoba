@@ -1,9 +1,12 @@
 use std::sync::{Arc, RwLock};
 
-use crossterm::event::KeyCode as KC;
+use crossterm::event::{KeyCode, MouseEventKind};
 
 use crate::{
-    protocol::status::types::{self, Status},
+    protocol::status::{
+        types::{self, Status},
+        write_status,
+    },
     tui::utils::bus::Bus,
 };
 
@@ -16,7 +19,7 @@ pub fn handle_input(
     bus: &Bus,
     app_arc: &Arc<RwLock<types::Status>>,
     _snap: &types::ui::AboutStatus,
-) -> Result<bool> {
+) -> Result<()> {
     // Build the full lines snapshot to determine bounds for scrolling.
     let mut full_lines: Vec<ratatui::text::Line> = Vec::new();
     let h = crate::tui::ui::pages::about::render::init_about_cache();
@@ -30,129 +33,113 @@ pub fn handle_input(
     let total = full_lines.len();
 
     match key.code {
-        KC::Up | KC::Char('k') => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+        KeyCode::Up | KeyCode::Char('k') => {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     if *view_offset > 0 {
                         *view_offset = view_offset.saturating_sub(1);
                     }
                 }
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        KC::Down | KC::Char('j') => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+        KeyCode::Down | KeyCode::Char('j') => {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_add(1);
                 }
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        KC::PageUp => {
+        KeyCode::PageUp => {
             let page = 10usize;
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_sub(page);
                 }
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        KC::PageDown => {
+        KeyCode::PageDown => {
             let page = 10usize;
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_add(page);
                 }
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        KC::Home => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+        KeyCode::Home => {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = 0;
                 }
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        KC::End => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+        KeyCode::End | KeyCode::Esc => {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = total.saturating_sub(1);
                 }
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        KC::Esc => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
-                s.page = types::Page::Entry { cursor: None };
-                Ok(())
-            });
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
-            Ok(true)
-        }
-        _ => Ok(false),
+        _ => Ok(()),
     }
 }
 
 /// Handle mouse events for About page (scroll wheel). Return true when consumed.
 pub fn handle_mouse(
     me: crossterm::event::MouseEvent,
-    _app: &Status,
-    bus: &Bus,
+    _bus: &Bus,
     app_arc: &Arc<RwLock<types::Status>>,
-    _snap: &types::ui::AboutStatus,
-) -> bool {
-    use crossterm::event::MouseEventKind as MEK;
-
+) -> Result<()> {
     match me.kind {
-        MEK::ScrollUp => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+        MouseEventKind::ScrollUp => {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     if *view_offset > 0 {
                         *view_offset = view_offset.saturating_sub(1);
                     }
                 }
                 Ok(())
-            });
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-            true
+            })?;
+            Ok(())
         }
-        MEK::ScrollDown => {
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+        MouseEventKind::ScrollDown => {
+            write_status(app_arc, |s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_add(1);
                 }
                 Ok(())
-            });
-            let _ = bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh);
-            true
+            })?;
+            Ok(())
         }
-        _ => false,
+        _ => Ok(()),
     }
 }

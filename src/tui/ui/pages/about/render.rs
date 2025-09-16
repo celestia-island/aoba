@@ -134,20 +134,18 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<AboutCache>> {
 }
 
 // Return bottom hints for about page (same as entry, but no extras)
-pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::AboutStatus) -> Vec<String> {
-    Vec::new()
-}
-
-/// Global hints for About page.
-pub fn global_hints(_app: &Status) -> Vec<String> {
-    // Only provide a back hint for About page.
-    vec![crate::i18n::lang().hotkeys.hint_back_list.as_str().to_string()]
+pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::AboutStatus) -> Vec<Vec<String>> {
+    vec![vec![crate::i18n::lang()
+        .hotkeys
+        .hint_back_list
+        .as_str()
+        .to_string()]]
 }
 
 /// Render about content on right panel. Reads Cargo.toml at repo root and shows package and deps.
 /// Render the about details (label/value pairs) into lines. This can be used both for
 /// the entry preview and the full about subpage.
-pub(crate) fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static>> {
+pub fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
     if !app_snapshot.ready {
         lines.push(Line::from("Loading about information..."));
@@ -165,10 +163,18 @@ pub(crate) fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static
         base_pairs.push((crate::i18n::lang().about.version.clone(), ver.clone(), None));
     }
     if let Some(auth) = &app_snapshot.authors {
-        base_pairs.push((crate::i18n::lang().about.authors.clone(), auth.clone(), None));
+        base_pairs.push((
+            crate::i18n::lang().about.authors.clone(),
+            auth.clone(),
+            None,
+        ));
     }
     if let Some(repo) = &app_snapshot.repo {
-        base_pairs.push((crate::i18n::lang().about.repository.clone(), repo.clone(), None));
+        base_pairs.push((
+            crate::i18n::lang().about.repository.clone(),
+            repo.clone(),
+            None,
+        ));
     }
     if let Some(lic) = &app_snapshot.license {
         base_pairs.push((crate::i18n::lang().about.license.clone(), lic.clone(), None));
@@ -274,7 +280,11 @@ pub fn render(f: &mut Frame, area: Rect, _app: &Status, snap: &types::ui::AboutS
         let bar_y = area.y + 1;
         let bar_h = area.height.saturating_sub(2);
         let denom = (total.saturating_sub(inner_height)) as f32;
-        let ratio = if denom > 0. { first_visible as f32 / denom } else { 0. };
+        let ratio = if denom > 0. {
+            first_visible as f32 / denom
+        } else {
+            0.
+        };
         let thumb = bar_y + ((ratio * (bar_h.saturating_sub(1) as f32)).round() as u16);
         for i in 0..bar_h {
             let ch = if bar_y + i == thumb { '█' } else { '│' };

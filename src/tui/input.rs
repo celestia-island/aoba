@@ -8,9 +8,12 @@ use std::{
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::types::{self, Status},
+    protocol::status::{
+        read_status,
+        types::{self, Status},
+    },
     tui::{
-        ui::pages::about,
+        ui::pages,
         utils::bus::{Bus, UiToCore},
     },
 };
@@ -67,101 +70,61 @@ pub fn spawn_input_thread(bus: Bus, app: Arc<RwLock<Status>>, thr_tx: flume::Sen
     thread::spawn(move || {
         let res = (|| -> Result<()> {
             loop {
-                // Poll for input
+                // Poll for input. Keep this loop tight and avoid toggling mouse
+                // capture here — constantly enabling/disabling mouse capture
+                // interferes with terminal selection and adds latency.
                 if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
                     if let Ok(ev) = crossterm::event::read() {
-                        match handle_event(ev, &bus, &app) {
-                            Ok(should_quit) => {
-                                if should_quit {
-                                    break; // Quit was requested
-                                }
-                            }
-                            Err(e) => {
-                                // Propagate error to caller/watcher
-                                return Err(e);
-                            }
-                        }
+                        // handle_event now returns Result<()> and performs any quit
+                        // signaling itself. Propagate errors, otherwise continue.
+                        handle_event(ev, &bus, &app)?;
                     }
                 }
             }
-            Ok(())
         })();
         let _ = thr_tx.send(res);
     });
 }
 
 /// Handle a single input event (keyboard or mouse)
-/// Returns true if quit was requested
-fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<bool> {
+fn handle_event(ev: crossterm::event::Event, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<()> {
     // Support both Key and Mouse scroll events. Map Mouse ScrollUp/Down to
     // synthesized KeyEvent Up/Down so existing key handlers can be reused.
-    let mut key_opt: Option<KeyEvent> = None;
 
     match ev {
-        crossterm::event::Event::Key(k) => {
+        crossterm::event::Event::Key(key) => {
             // Early catch for Ctrl+C at the top-level so the app can exit immediately.
-            if k.kind == crossterm::event::KeyEventKind::Press
-                && k.modifiers
+            if key.kind == crossterm::event::KeyEventKind::Press
+                && key
+                    .modifiers
                     .contains(crossterm::event::KeyModifiers::CONTROL)
-                && matches!(k.code, KeyCode::Char('c'))
+                && matches!(key.code, KeyCode::Char('c'))
             {
                 bus.ui_tx.send(UiToCore::Quit).map_err(|e| anyhow!(e))?;
-                return Ok(true);
-            }
-            key_opt = Some(k);
-        }
-        crossterm::event::Event::Mouse(me) => {
-            // First: if About page is active, let it consume the mouse scroll.
-            let mut consumed_by_page = false;
-            if let Ok(snapshot) = crate::protocol::status::read_status(app, |s| Ok(s.clone())) {
-                // Check if About is active (either selected virtual entry or full page)
-                let about_idx = snapshot.ports.order.len().saturating_add(2);
-                let sel = derive_selection(&snapshot);
-
-                if sel == about_idx {
-                    // Snapshot for about page input
-                    let snap_about = snapshot.snapshot_about();
-                    consumed_by_page = about::handle_mouse(me, &snapshot, bus, app, &snap_about);
-                }
+                return Ok(());
             }
 
-            if consumed_by_page {
-                // Page consumed the mouse event; do not map to a key
-            } else {
-                // Fallback: map scroll to Up/Down key events for global handling
-                use crossterm::event::MouseEventKind as MEK;
-                match me.kind {
-                    MEK::ScrollUp => {
-                        key_opt = Some(KeyEvent::new(
-                            KeyCode::Up,
-                            crossterm::event::KeyModifiers::NONE,
-                        ));
-                    }
-                    MEK::ScrollDown => {
-                        key_opt = Some(KeyEvent::new(
-                            KeyCode::Down,
-                            crossterm::event::KeyModifiers::NONE,
-                        ));
-                    }
-                    _ => {}
-                }
-            }
+            handle_key_event(key, bus, app)?;
         }
+        crossterm::event::Event::Mouse(event) => match read_status(app, |s| Ok(s.page.clone())) {
+            Ok(types::Page::Entry { .. }) => {
+                pages::entry::input::handle_mouse(event, bus, app)?;
+            }
+            Ok(types::Page::About { .. }) => {
+                pages::about::handle_mouse(event, bus, app)?;
+            }
+            _ => {}
+        },
         _ => {}
     }
 
-    if let Some(key) = key_opt {
-        return handle_key_event(key, bus, app);
-    }
-
-    Ok(false)
+    Ok(())
 }
 
 /// Handle a keyboard event
-/// Returns true if quit was requested
-fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<bool> {
+fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> Result<()> {
     if key.kind != crossterm::event::KeyEventKind::Press {
-        return Ok(false); // Ignore non-initial key press (repeat / release)
+        return Ok(()); // Ignore non-initial key press (repeat / release)
     }
 
     // Handle global quit with Ctrl+C
@@ -171,69 +134,43 @@ fn handle_key_event(key: KeyEvent, bus: &Bus, app: &Arc<RwLock<Status>>) -> Resu
     {
         if let KeyCode::Char('c') = key.code {
             bus.ui_tx.send(UiToCore::Quit).map_err(|e| anyhow!(e))?;
-            return Ok(true);
+            return Ok(());
         }
     }
 
     // Route input to appropriate page handler based on current Status.page.
-    if let Ok(snapshot) = crate::protocol::status::read_status(app, |s| Ok(s.clone())) {
-        // Let the page-level handler decide whether it consumes the key.
-        match crate::tui::ui::pages::handle_input_in_page(key, &snapshot, bus, app) {
-            Ok(consumed) => {
-                if !consumed {
-                    // Page didn't consume the key: check global mappings/actions
-                    let action = map_key(key.code);
-                    if let Action::None = action {
-                        // No global mapping; nothing to do.
-                    } else {
-                        handle_global_action(action, bus, app, &snapshot);
-                    }
-                }
+    if let Ok(snapshot) = read_status(app, |s| Ok(s.clone())) {
+        use crate::tui::ui::pages;
+
+        // Route by exact page variant and construct the page snapshot inline.
+        match &snapshot.page {
+            types::Page::Entry { .. } => {
+                let entry_snap = types::ui::EntryStatus::from(&snapshot.page);
+                pages::entry::handle_input(key, &snapshot, bus, app, &entry_snap)?;
+                return Ok(());
             }
-            Err(e) => return Err(e),
+            types::Page::About { .. } => {
+                let snap_about = types::ui::AboutStatus::from(&snapshot.page);
+                pages::about::handle_input(key, &snapshot, bus, app, &snap_about)?;
+                return Ok(());
+            }
+            types::Page::ModbusConfig { .. } => {
+                let snap = types::ui::ModbusConfigStatus::from(&snapshot.page);
+                pages::config_panel::handle_input(key, &snapshot, bus, app, &snap)?;
+                return Ok(());
+            }
+            types::Page::ModbusDashboard { .. } => {
+                let snap = types::ui::ModbusDashboardStatus::from(&snapshot.page);
+                pages::modbus_panel::input::handle_input(key, &snapshot, bus, app, &snap)?;
+                return Ok(());
+            }
+            types::Page::ModbusLog { .. } => {
+                let snap = types::ui::ModbusLogStatus::from(&snapshot.page);
+                pages::log_panel::handle_input(key, &snapshot, bus, app, &snap)?;
+                return Ok(());
+            }
         }
     }
 
-    Ok(false)
-}
-
-/// Derive the current selection index from the page state
-fn derive_selection(app: &Status) -> usize {
-    match &app.page {
-        types::Page::Entry { cursor } => match cursor {
-            Some(types::ui::EntryCursor::Com { idx }) => *idx,
-            Some(types::ui::EntryCursor::Refresh) => app.ports.order.len(),
-            Some(types::ui::EntryCursor::CreateVirtual) => app.ports.order.len().saturating_add(1),
-            Some(types::ui::EntryCursor::About) => app.ports.order.len().saturating_add(2),
-            None => 0usize,
-        },
-        types::Page::ModbusDashboard { selected_port, .. }
-        | types::Page::ModbusConfig { selected_port, .. }
-        | types::Page::ModbusLog { selected_port, .. } => *selected_port,
-        types::Page::About { .. } => app.ports.order.len().saturating_add(2),
-    }
-}
-
-/// Handle global actions that affect the entire application
-fn handle_global_action(action: Action, bus: &Bus, app: &Arc<RwLock<Status>>, snapshot: &Status) {
-    match action {
-        Action::Quit => {
-            let _ = bus.ui_tx.send(UiToCore::Quit);
-        }
-        Action::None => {
-            // If global mapping didn't handle it, try page-level handlers
-            let _ = crate::tui::ui::pages::handle_input_in_page(
-                KeyEvent::new(KeyCode::Null, crossterm::event::KeyModifiers::NONE),
-                snapshot,
-                bus,
-                app,
-            )
-            .ok();
-        }
-        _ => {
-            // Most actions are now handled by individual pages
-            // If we reach here, it means the page didn't consume the action
-            // This is expected for page-specific actions
-        }
-    }
+    Ok(())
 }
