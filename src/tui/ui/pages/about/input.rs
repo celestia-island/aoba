@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use crossterm::event::{KeyCode, MouseEventKind};
 
 use crate::{
@@ -17,7 +15,6 @@ pub fn handle_input(
     key: crossterm::event::KeyEvent,
     _app: &Status,
     bus: &Bus,
-    app_arc: &Arc<RwLock<types::Status>>,
     _snap: &types::ui::AboutStatus,
 ) -> Result<()> {
     // Build the full lines snapshot to determine bounds for scrolling.
@@ -34,7 +31,7 @@ pub fn handle_input(
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     if *view_offset > 0 {
                         *view_offset = view_offset.saturating_sub(1);
@@ -48,7 +45,7 @@ pub fn handle_input(
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_add(1);
                 }
@@ -61,7 +58,7 @@ pub fn handle_input(
         }
         KeyCode::PageUp => {
             let page = 10usize;
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_sub(page);
                 }
@@ -74,7 +71,7 @@ pub fn handle_input(
         }
         KeyCode::PageDown => {
             let page = 10usize;
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_add(page);
                 }
@@ -86,7 +83,7 @@ pub fn handle_input(
             Ok(())
         }
         KeyCode::Home => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = 0;
                 }
@@ -98,7 +95,7 @@ pub fn handle_input(
             Ok(())
         }
         KeyCode::End | KeyCode::Esc => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = total.saturating_sub(1);
                 }
@@ -114,14 +111,10 @@ pub fn handle_input(
 }
 
 /// Handle mouse events for About page (scroll wheel). Return true when consumed.
-pub fn handle_mouse(
-    me: crossterm::event::MouseEvent,
-    _bus: &Bus,
-    app_arc: &Arc<RwLock<types::Status>>,
-) -> Result<()> {
+pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
     match me.kind {
         MouseEventKind::ScrollUp => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     if *view_offset > 0 {
                         *view_offset = view_offset.saturating_sub(1);
@@ -132,7 +125,7 @@ pub fn handle_mouse(
             Ok(())
         }
         MouseEventKind::ScrollDown => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 if let types::Page::About { view_offset } = &mut s.page {
                     *view_offset = view_offset.saturating_add(1);
                 }
