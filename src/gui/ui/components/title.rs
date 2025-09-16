@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::sync::{Arc, RwLock};
 
 use eframe::egui;
 use egui::{Align, Align2, Button, ColorImage, FontId, Layout, TextureOptions, Ui, Vec2};
@@ -12,7 +11,7 @@ use crate::{
 /// Render a single-row breadcrumb (no big heading). Layout is left-to-right
 /// with small gaps on left/right. Each level is styled as a button; only the
 /// first level (Home / app name) is clickable. '>' is used as separator.
-pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<types::Status>>) -> Result<()> {
+pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
     let desired_h = 32.0f32;
     let avail_w = ui.available_width();
     let size = Vec2::new(avail_w, desired_h);
@@ -62,7 +61,7 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<types::Status>>) -> Resul
                 .add_sized(Vec2::new(home_w, 24.), Button::new(home_label).small())
                 .clicked()
             {
-                write_status(inner, |g| {
+                write_status(|g| {
                     g.page = types::Page::Entry { cursor: None };
                     Ok(())
                 })
@@ -83,7 +82,7 @@ pub fn render_title_ui(ui: &mut Ui, inner: &Arc<RwLock<types::Status>>) -> Resul
             ui.add_space(4.);
 
             // Level 2: Page name (auto-sized)
-            if let Ok((label, maybe_port)) = read_status(inner, |g| {
+            if let Ok((label, maybe_port)) = read_status(|g| {
                 let subpage_active = matches!(
                     g.page,
                     types::Page::ModbusConfig { .. }

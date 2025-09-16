@@ -25,7 +25,6 @@ pub(crate) struct AboutCache {
     license: Option<String>,
     deps: Vec<(String, String)>,
     license_map: HashMap<String, String>,
-    ready: bool,
     err: Option<String>,
 }
 
@@ -120,11 +119,9 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<AboutCache>> {
                     }
                 }
             }
-            cache.ready = true;
         }
         Err(e) => {
             cache.err = Some(format!("Error parsing about_cache.toml: {e}"));
-            cache.ready = true;
         }
     }
 
@@ -147,10 +144,6 @@ pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::AboutStatus) -> Vec<V
 /// the entry preview and the full about subpage.
 pub fn render_about_details(app_snapshot: AboutCache) -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
-    if !app_snapshot.ready {
-        lines.push(Line::from("Loading about information..."));
-        return lines;
-    }
     // Welcome paragraph (localized)
     let mut out: Vec<Line> = Vec::new();
     out.push(Line::from(crate::i18n::lang().about.welcome.clone()));

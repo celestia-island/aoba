@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, RwLock};
 
 use crossterm::event::{KeyCode, MouseEventKind};
 
@@ -12,15 +11,11 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-pub fn handle_move_prev(
-    app: &Status,
-    app_arc: &Arc<RwLock<Status>>,
-    cursor: types::ui::EntryCursor,
-) -> Result<()> {
+pub fn handle_move_prev(app: &Status, cursor: types::ui::EntryCursor) -> Result<()> {
     match cursor {
         types::ui::EntryCursor::Com { idx } => {
             let prev = idx.saturating_sub(1);
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 s.page = Page::Entry {
                     cursor: Some(types::ui::EntryCursor::Com { idx: prev }),
                 };
@@ -30,14 +25,14 @@ pub fn handle_move_prev(
         types::ui::EntryCursor::Refresh => {
             let prev = app.ports.map.len() - 1;
             if app.ports.map.is_empty() {
-                write_status(app_arc, |s| {
+                write_status(|s| {
                     s.page = Page::Entry {
                         cursor: Some(types::ui::EntryCursor::Refresh),
                     };
                     Ok(())
                 })?;
             } else {
-                write_status(app_arc, |s| {
+                write_status(|s| {
                     s.page = Page::Entry {
                         cursor: Some(types::ui::EntryCursor::Com { idx: prev }),
                     };
@@ -46,7 +41,7 @@ pub fn handle_move_prev(
             }
         }
         types::ui::EntryCursor::CreateVirtual => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 s.page = Page::Entry {
                     cursor: Some(types::ui::EntryCursor::Refresh),
                 };
@@ -54,7 +49,7 @@ pub fn handle_move_prev(
             })?;
         }
         types::ui::EntryCursor::About => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 s.page = Page::Entry {
                     cursor: Some(types::ui::EntryCursor::About),
                 };
@@ -66,23 +61,19 @@ pub fn handle_move_prev(
     Ok(())
 }
 
-pub fn handle_move_next(
-    app: &Status,
-    app_arc: &Arc<RwLock<Status>>,
-    cursor: types::ui::EntryCursor,
-) -> Result<()> {
+pub fn handle_move_next(app: &Status, cursor: types::ui::EntryCursor) -> Result<()> {
     match cursor {
         types::ui::EntryCursor::Com { idx } => {
             let next = idx.saturating_add(1);
             if next >= app.ports.map.len() {
-                write_status(app_arc, |s| {
+                write_status(|s| {
                     s.page = Page::Entry {
                         cursor: Some(types::ui::EntryCursor::Refresh),
                     };
                     Ok(())
                 })?;
             } else {
-                write_status(app_arc, |s| {
+                write_status(|s| {
                     s.page = Page::Entry {
                         cursor: Some(types::ui::EntryCursor::Com { idx: next }),
                     };
@@ -91,7 +82,7 @@ pub fn handle_move_next(
             }
         }
         types::ui::EntryCursor::Refresh => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 s.page = Page::Entry {
                     cursor: Some(types::ui::EntryCursor::CreateVirtual),
                 };
@@ -99,7 +90,7 @@ pub fn handle_move_next(
             })?;
         }
         types::ui::EntryCursor::CreateVirtual => {
-            write_status(app_arc, |s| {
+            write_status(|s| {
                 s.page = Page::Entry {
                     cursor: Some(types::ui::EntryCursor::About),
                 };
@@ -113,18 +104,17 @@ pub fn handle_move_next(
 }
 
 /// Compatibility wrapper used by pages/mod.rs which expects signature:
-/// fn handle_input(key: KeyEvent, app: &Status, bus: &Bus, app_arc: &Arc<RwLock<Status>>, snap: &types::ui::EntryStatus) -> bool
+/// fn handle_input(key: KeyEvent, app: &Status, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
 pub fn handle_input(
     key: crossterm::event::KeyEvent,
     app: &Status,
     bus: &Bus,
-    app_arc: &Arc<RwLock<Status>>,
     snap: &types::ui::EntryStatus,
 ) -> Result<()> {
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             // move selection up in Entry page
-            handle_move_prev(app, app_arc, snap.cursor.unwrap_or(EntryCursor::Refresh))?;
+            handle_move_prev(app, snap.cursor.unwrap_or(EntryCursor::Refresh))?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
@@ -132,7 +122,7 @@ pub fn handle_input(
         }
         KeyCode::Down | KeyCode::Char('j') => {
             // move selection down
-            handle_move_next(app, app_arc, snap.cursor.unwrap_or(EntryCursor::Refresh))?;
+            handle_move_next(app, snap.cursor.unwrap_or(EntryCursor::Refresh))?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
@@ -144,14 +134,14 @@ pub fn handle_input(
             if snap.cursor.is_none() {
                 // Give a default value for cursor
                 if app.ports.map.is_empty() {
-                    write_status(app_arc, |s| {
+                    write_status(|s| {
                         s.page = Page::Entry {
                             cursor: Some(types::ui::EntryCursor::Refresh),
                         };
                         Ok(())
                     })?;
                 } else {
-                    write_status(app_arc, |s| {
+                    write_status(|s| {
                         s.page = Page::Entry {
                             cursor: Some(types::ui::EntryCursor::Com { idx: 0 }),
                         };
@@ -161,7 +151,7 @@ pub fn handle_input(
             }
 
             match snap.cursor {
-                Some(types::ui::EntryCursor::Com { idx }) => write_status(app_arc, |s| {
+                Some(types::ui::EntryCursor::Com { idx }) => write_status(|s| {
                     s.page = Page::ModbusConfig {
                         selected_port: idx,
                         edit_active: false,
@@ -181,7 +171,7 @@ pub fn handle_input(
                 Some(types::ui::EntryCursor::CreateVirtual) => {
                     // TODO: implement virtual port creation
                 }
-                Some(types::ui::EntryCursor::About) => write_status(app_arc, |s| {
+                Some(types::ui::EntryCursor::About) => write_status(|s| {
                     s.page = Page::About { view_offset: 0 };
                     Ok(())
                 })?,
@@ -191,7 +181,7 @@ pub fn handle_input(
         }
         KeyCode::Esc => {
             // Escape returns to top-level entry cursor cleared (or quit handled by caller)
-            let _ = crate::protocol::status::write_status(app_arc, |s| {
+            let _ = crate::protocol::status::write_status(|s| {
                 s.page = types::Page::Entry { cursor: None };
                 Ok(())
             });
@@ -205,24 +195,18 @@ pub fn handle_input(
 }
 
 /// Handle mouse events for About page (scroll wheel). Return true when consumed.
-pub fn handle_mouse(
-    me: crossterm::event::MouseEvent,
-    _bus: &Bus,
-    app_arc: &Arc<RwLock<types::Status>>,
-) -> Result<()> {
+pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
     match me.kind {
         MouseEventKind::ScrollUp => {
             handle_move_prev(
-                &read_status(app_arc, |s| Ok(s.clone()))?,
-                app_arc,
+                &read_status(|s| Ok(s.clone()))?,
                 types::ui::EntryCursor::Refresh,
             )?;
             Ok(())
         }
         MouseEventKind::ScrollDown => {
             handle_move_next(
-                &read_status(app_arc, |s| Ok(s.clone()))?,
-                app_arc,
+                &read_status(|s| Ok(s.clone()))?,
                 types::ui::EntryCursor::Refresh,
             )?;
             Ok(())
