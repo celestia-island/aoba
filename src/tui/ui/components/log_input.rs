@@ -5,11 +5,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::{
-    i18n::lang,
-    protocol::status::types::Status,
-    protocol::status::types::ui::InputMode,
-};
+use crate::{i18n::lang, protocol::status::types::ui::InputMode, protocol::status::types::Status};
 
 /// Render a small input area showing current mode and buffer. Height expected to be small (3 lines).
 pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {

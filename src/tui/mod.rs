@@ -33,17 +33,12 @@ pub fn start() -> Result<()> {
     // Setup terminal
     let mut stdout = io::stdout();
     crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(
-        stdout,
-        crossterm::terminal::EnterAlternateScreen,
-        crossterm::event::EnableMouseCapture
-    )?;
+    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(&mut stdout);
     let mut terminal = Terminal::new(backend)?;
 
     let app = Arc::new(RwLock::new(Status::default()));
 
-    // For manual testing: if AOBA_TUI_FORCE_ERROR is set, pre-populate an error to display
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
         let _ = write_status(&app, |g| {
             ui_error_set(
