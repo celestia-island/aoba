@@ -137,7 +137,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
     }
 
     // Prepare a block with a small progress indicator in the title: " {selected}/{total}"
-    let sel_display = if total_groups == 0 { 0 } else { port_log_selected + 1 };
+    let sel_display = if total_groups == 0 {
+        0
+    } else {
+        port_log_selected + 1
+    };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if port_log_auto_scroll {
         lang().tabs.log.hint_follow_on.as_str()
@@ -153,7 +157,11 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
         title_text,
         Style::default()
             .add_modifier(Modifier::BOLD)
-            .fg(if port_log_auto_scroll { Color::Green } else { Color::Blue }),
+            .fg(if port_log_auto_scroll {
+                Color::Green
+            } else {
+                Color::Blue
+            }),
     );
 
     let log_block = Block::default()
@@ -173,27 +181,26 @@ pub fn render(f: &mut Frame, area: Rect, app: &Status, _snap: &types::ui::Modbus
     f.render_widget(input_para, chunks[1]);
 }
 
-pub fn page_bottom_hints(app: &Status, _snap: &types::ui::ModbusLogStatus) -> Vec<String> {
-    let mut hints: Vec<String> = Vec::new();
-    hints.push(lang().hotkeys.hint_move_vertical.as_str().to_string());
-    hints.push("f: Toggle follow".to_string());
-    hints.push("c: Clear logs".to_string());
+pub fn page_bottom_hints(app: &Status, _snap: &types::ui::ModbusLogStatus) -> Vec<Vec<String>> {
+    {
+        let in_subpage_editing = false;
+        let subpage_active = matches!(
+            app.page,
+            types::Page::ModbusConfig { .. }
+                | types::Page::ModbusDashboard { .. }
+                | types::Page::ModbusLog { .. }
+                | types::Page::About { .. }
+        );
 
-    // Append quit hint only when allowed (mirror global rule)
-    // Core no longer stores SubpageForm; assume not editing in core state.
-    let in_subpage_editing = false;
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    );
-    let can_quit = !subpage_active && !in_subpage_editing;
-    if can_quit {
-        hints.push(lang().hotkeys.press_q_quit.as_str().to_string());
+        let mut base = vec![
+            vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
+            vec!["f: Toggle follow".to_string(), "c: Clear logs".to_string()],
+        ];
+        if !subpage_active && !in_subpage_editing {
+            base.push(vec![lang().hotkeys.press_q_quit.as_str().to_string()]);
+        }
+        base
     }
-    hints
 }
 
 /// Global hints for Log page.
@@ -201,4 +208,7 @@ pub fn global_hints(app: &Status) -> Vec<String> {
     // Reuse the page bottom hints implementation which contains the relevant commands.
     let snap = app.snapshot_modbus_log();
     page_bottom_hints(app, &snap)
+        .into_iter()
+        .map(|row| row.join("    "))
+        .collect()
 }

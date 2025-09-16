@@ -16,7 +16,7 @@ pub fn handle_input(
     bus: &Bus,
     app_arc: &Arc<RwLock<types::Status>>,
     _snap: &types::ui::AboutStatus,
-) -> Result<bool> {
+) -> Result<()> {
     // Build the full lines snapshot to determine bounds for scrolling.
     let mut full_lines: Vec<ratatui::text::Line> = Vec::new();
     let h = crate::tui::ui::pages::about::render::init_about_cache();
@@ -42,7 +42,7 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Down | KC::Char('j') => {
             let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -54,7 +54,7 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::PageUp => {
             let page = 10usize;
@@ -67,7 +67,7 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::PageDown => {
             let page = 10usize;
@@ -80,7 +80,7 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Home => {
             let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -92,7 +92,7 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::End => {
             let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -104,7 +104,7 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Esc => {
             let _ = crate::protocol::status::write_status(app_arc, |s| {
@@ -114,9 +114,9 @@ pub fn handle_input(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        _ => Ok(false),
+        _ => Ok(()),
     }
 }
 

@@ -163,17 +163,14 @@ pub fn render_kv_panel(
     f.render_stateful_widget(list, area, &mut state);
 }
 
-pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusConfigStatus) -> Vec<String> {
-    // Build hints: second-last is move + Enter-edit, last is Esc return home.
-
-    // Use single space between hints to match other pages that place each hint
-    // as separate strings or use single-space separators when combined.
-    // Return page-specific hints as separate entries so the bottom renderer
-    // joins them with the project's standard separator (four spaces).
-    vec![
-        lang().hotkeys.hint_move_vertical.as_str().to_string(),
-        lang().hotkeys.press_enter_modify.as_str().to_string(),
-    ]
+pub fn page_bottom_hints(_app: &Status, _snap: &types::ui::ModbusConfigStatus) -> Vec<Vec<String>> {
+    // Inline block to build and return rows consistently
+    {
+        vec![
+            vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
+            vec![lang().hotkeys.press_enter_modify.as_str().to_string()],
+        ]
+    }
 }
 
 /// Global hints for Modbus config/dashboard pages.
@@ -181,4 +178,7 @@ pub fn global_hints(app: &Status) -> Vec<String> {
     // Reuse page bottom hints; this keeps global hints consistent with page-level hints.
     let snap = app.snapshot_modbus_config();
     page_bottom_hints(app, &snap)
+        .into_iter()
+        .map(|row| row.join("    "))
+        .collect()
 }

@@ -72,8 +72,41 @@ pub fn handle_input_dispatch(
     bus: &Bus,
     app_arc: &Arc<RwLock<Status>>,
     _snap: &types::ui::EntryStatus,
-) -> Result<bool> {
+) -> Result<()> {
     use crossterm::event::KeyCode as KC;
+    // First, allow page-specific handlers to be invoked when a subpage is active
+    // or when the virtual About entry is selected. This keeps all page-specific
+    // input handling centralized here as requested.
+
+    // Derive selection and page context
+    let sel = super::super::derive_selection(app);
+    let about_idx = app.ports.order.len().saturating_add(2);
+
+    // If About is active (full page) or About virtual entry is selected,
+    // forward non-navigation keys to about::handle_input so it can handle
+    // scrolling and Esc. The handler now returns Result<()> and performs
+    // its own state mutations and refreshes.
+    if sel == about_idx || matches!(app.page, types::Page::About { .. }) {
+        let snap = app.snapshot_about();
+        crate::tui::ui::pages::about::handle_input(key, app, bus, app_arc, &snap)?;
+        // fall through to handle Enter/Esc as possible global actions below
+    }
+
+    // If Modbus subpages are active, forward to their handlers
+    if matches!(
+        app.page,
+        types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. }
+    ) {
+        let snap = app.snapshot_modbus_config();
+        crate::tui::ui::pages::config_panel::handle_input(key, app, bus, app_arc, &snap)?;
+        // fallthrough
+    }
+
+    if matches!(app.page, types::Page::ModbusLog { .. }) {
+        let snap = app.snapshot_modbus_log();
+        crate::tui::ui::pages::log_panel::handle_input(key, app, bus, app_arc, &snap)?;
+        // fallthrough
+    }
 
     match key.code {
         KC::Up | KC::Char('k') => {
@@ -93,7 +126,7 @@ pub fn handle_input_dispatch(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Down | KC::Char('j') => {
             // move selection down
@@ -112,11 +145,10 @@ pub fn handle_input_dispatch(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
         KC::Enter => {
             // Enter a page or take action depending on selection
-            let sel = super::super::derive_selection(app);
             let special_base = app.ports.order.len();
             if sel < special_base {
                 // Enter into ModbusDashboard for selected port
@@ -142,7 +174,7 @@ pub fn handle_input_dispatch(
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
-                Ok(true)
+                Ok(())
             } else {
                 // Handle special entries
                 let rel = sel - special_base;
@@ -152,14 +184,14 @@ pub fn handle_input_dispatch(
                         bus.ui_tx
                             .send(crate::tui::utils::bus::UiToCore::Refresh)
                             .map_err(|e| anyhow!(e))?;
-                        Ok(true)
+                        Ok(())
                     }
                     1 => {
                         // Manual specify - open some dialog; for now no-op
-                        Ok(true)
+                        Ok(())
                     }
                     2 => {
-                        // About: enter About page
+                        // About: enter About page (already forwarded earlier for non-Enter keys)
                         let _ = crate::protocol::status::write_status(app_arc, |s| {
                             s.page = types::Page::About { view_offset: 0 };
                             Ok(())
@@ -167,9 +199,9 @@ pub fn handle_input_dispatch(
                         bus.ui_tx
                             .send(crate::tui::utils::bus::UiToCore::Refresh)
                             .map_err(|e| anyhow!(e))?;
-                        Ok(true)
+                        Ok(())
                     }
-                    _ => Ok(false),
+                    _ => Ok(()),
                 }
             }
         }
@@ -182,8 +214,8 @@ pub fn handle_input_dispatch(
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
-            Ok(true)
+            Ok(())
         }
-        _ => Ok(false),
+        _ => Ok(()),
     }
 }
