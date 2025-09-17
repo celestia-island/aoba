@@ -70,15 +70,6 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
                     edit_cursor_pos,
                     ..
                 } => {
-                    let snap = types::ui::ModbusConfigStatus {
-                        selected_port: *selected_port,
-                        edit_active: *edit_active,
-                        edit_port: edit_port.clone(),
-                        edit_field_index: *edit_field_index,
-                        edit_field_key: edit_field_key.clone(),
-                        edit_buffer: edit_buffer.clone(),
-                        edit_cursor_pos: *edit_cursor_pos,
-                    };
                     return config_panel::page_bottom_hints();
                 }
                 other => panic!("Expected ModbusConfig for bottom hints, found: {:?}", other),
@@ -86,16 +77,6 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
             types::Page::ModbusDashboard { .. } => {
                 match &app.page {
                     types::Page::ModbusDashboard { selected_port, .. } => {
-                        // Construct a ModbusConfigStatus using dashboard's selected_port and defaults
-                        let snap = types::ui::ModbusConfigStatus {
-                            selected_port: *selected_port,
-                            edit_active: false,
-                            edit_port: None,
-                            edit_field_index: 0,
-                            edit_field_key: None,
-                            edit_buffer: String::new(),
-                            edit_cursor_pos: 0,
-                        };
                         return config_panel::page_bottom_hints();
                     }
                     other => panic!(
@@ -106,9 +87,6 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
             }
             types::Page::ModbusLog { .. } => match &app.page {
                 types::Page::ModbusLog { selected_port } => {
-                    let snap = types::ui::ModbusLogStatus {
-                        selected_port: *selected_port,
-                    };
                     return log_panel::page_bottom_hints();
                 }
                 other => panic!(
@@ -122,7 +100,6 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
     // Default to entry hints when no subpage
     match &app.page {
         types::Page::Entry { cursor } => {
-            let entry_snap = types::ui::EntryStatus { cursor: *cursor };
             entry::page_bottom_hints()
         }
         other => panic!("Expected Entry page for bottom hints, found: {:?}", other),
@@ -153,9 +130,6 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
         if sel == about_idx {
             match &app.page {
                 types::Page::About { view_offset } => {
-                    let snap = types::ui::AboutStatus {
-                        view_offset: *view_offset,
-                    };
                     let _ = about::render(f, area);
                     return;
                 }
@@ -175,28 +149,9 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
                         edit_cursor_pos,
                         ..
                     } => {
-                        let snap = types::ui::ModbusConfigStatus {
-                            selected_port: *selected_port,
-                            edit_active: *edit_active,
-                            edit_port: edit_port.clone(),
-                            edit_field_index: *edit_field_index,
-                            edit_field_key: edit_field_key.clone(),
-                            edit_buffer: edit_buffer.clone(),
-                            edit_cursor_pos: *edit_cursor_pos,
-                        };
                         let _ = config_panel::render(f, area, None);
                     }
                     types::Page::ModbusDashboard { selected_port, .. } => {
-                        // Dashboard reuses config panel; build a ModbusConfigStatus with defaults
-                        let snap = types::ui::ModbusConfigStatus {
-                            selected_port: *selected_port,
-                            edit_active: false,
-                            edit_port: None,
-                            edit_field_index: 0,
-                            edit_field_key: None,
-                            edit_buffer: String::new(),
-                            edit_cursor_pos: 0,
-                        };
                         let _ = config_panel::render(f, area, None);
                     }
                     other => panic!(
@@ -207,25 +162,18 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
             }
             types::Page::ModbusLog { .. } => match &app.page {
                 types::Page::ModbusLog { selected_port } => {
-                    let snap = types::ui::ModbusLogStatus {
-                        selected_port: *selected_port,
-                    };
                     let _ = log_panel::render(f, area);
                 }
                 other => panic!("Expected ModbusLog for render, found: {:?}", other),
             },
             types::Page::About { .. } => match &app.page {
                 types::Page::About { view_offset } => {
-                    let snap = types::ui::AboutStatus {
-                        view_offset: *view_offset,
-                    };
                     let _ = about::render(f, area);
                 }
                 other => panic!("Expected About for render, found: {:?}", other),
             },
             _ => match &app.page {
                 types::Page::Entry { cursor } => {
-                    let entry_snap = types::ui::EntryStatus { cursor: *cursor };
                     let _ = entry::render(f, area);
                 }
                 other => panic!("Expected Entry for render, found: {:?}", other),
@@ -234,7 +182,6 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
     } else {
         match &app.page {
             types::Page::Entry { cursor } => {
-                let entry_snap = types::ui::EntryStatus { cursor: *cursor };
                 let _ = entry::render(f, area);
             }
             other => panic!(
