@@ -1,106 +1,48 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use crate::{
     protocol::status::{types, write_status},
     tui::{
-        ui::pages::about::components::{
-            about_cache_error, init_about_cache, render_about_page_manifest_lines,
-        },
+        ui::pages::about::components::{about_scroll_down, about_scroll_up},
         utils::bus::Bus,
     },
 };
 
 /// Handle input for about page. Sends navigation commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
-    // Build the full lines snapshot to determine bounds for scrolling.
-    let mut full_lines: Vec<ratatui::text::Line> = Vec::new();
-    let content = init_about_cache();
-    if let Ok(g) = content.lock() {
-        full_lines = render_about_page_manifest_lines(g.clone());
-        if let Some(e) = about_cache_error(&content) {
-            full_lines.push(ratatui::text::Line::from(format!("Note: {e}")));
-        }
-    }
-
-    let total = full_lines.len();
+    const PAGE_SIZE: usize = 10;
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    if *view_offset > 0 {
-                        *view_offset = view_offset.saturating_sub(1);
-                    }
-                }
-                Ok(())
-            })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+            about_scroll_up(1)?;
+            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    *view_offset = view_offset.saturating_add(1);
-                }
-                Ok(())
-            })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+            about_scroll_down(1)?;
+            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::PageUp => {
-            let page = 10usize;
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    *view_offset = view_offset.saturating_sub(page);
-                }
-                Ok(())
-            })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+            about_scroll_up(PAGE_SIZE)?;
+            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::PageDown => {
-            let page = 10usize;
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    *view_offset = view_offset.saturating_add(page);
-                }
-                Ok(())
-            })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+            about_scroll_down(PAGE_SIZE)?;
+            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
-        KeyCode::Home => {
+        KeyCode::Esc => {
             write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    *view_offset = 0;
-                }
+                s.page = types::Page::Entry {
+                    cursor: Some(types::ui::EntryCursor::About),
+                };
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
-            Ok(())
-        }
-        KeyCode::End | KeyCode::Esc => {
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    *view_offset = total.saturating_sub(1);
-                }
-                Ok(())
-            })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         _ => Ok(()),
@@ -111,23 +53,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
     match me.kind {
         MouseEventKind::ScrollUp => {
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    if *view_offset > 0 {
-                        *view_offset = view_offset.saturating_sub(1);
-                    }
-                }
-                Ok(())
-            })?;
+            about_scroll_up(1)?;
             Ok(())
         }
         MouseEventKind::ScrollDown => {
-            write_status(|s| {
-                if let types::Page::About { view_offset } = &mut s.page {
-                    *view_offset = view_offset.saturating_add(1);
-                }
-                Ok(())
-            })?;
+            about_scroll_down(1)?;
             Ok(())
         }
         _ => Ok(()),

@@ -20,7 +20,6 @@ pub struct RepoManifest {
     pub license: Option<String>,
     pub deps: Vec<(String, String)>,
     pub license_map: HashMap<String, String>,
-    pub err: Option<String>,
 }
 
 static ABOUT_CACHE: OnceLock<Arc<Mutex<RepoManifest>>> = OnceLock::new();
@@ -115,8 +114,8 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
                 }
             }
         }
-        Err(e) => {
-            cache.err = Some(format!("Error parsing about_cache.toml: {e}"));
+        Err(err) => {
+            log::error!("Failed to parse about_cache.toml: {err}");
         }
     }
 
@@ -195,10 +194,30 @@ pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Vec<Line<
     out
 }
 
-/// Return any parse error message from the about cache, if present.
-pub(crate) fn about_cache_error(arc: &Arc<Mutex<RepoManifest>>) -> Option<String> {
-    if let Ok(g) = arc.lock() {
-        return g.err.clone();
-    }
-    None
+use anyhow::Result;
+
+use crate::protocol::status::{types, write_status};
+
+/// Scroll the About page view offset up by `amount` (saturating at 0).
+pub fn about_scroll_up(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::About { view_offset } = &mut s.page {
+            if *view_offset > 0 {
+                *view_offset = view_offset.saturating_sub(amount);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the About page view offset down by `amount`.
+pub fn about_scroll_down(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::About { view_offset } = &mut s.page {
+            *view_offset = view_offset.saturating_add(amount);
+        }
+        Ok(())
+    })?;
+    Ok(())
 }
