@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use crossterm::event::{KeyCode, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use crate::{
     protocol::status::{
@@ -105,12 +105,15 @@ pub fn handle_move_next(app: &Status, cursor: types::ui::EntryCursor) -> Result<
 
 /// Compatibility wrapper used by pages/mod.rs which expects signature:
 /// fn handle_input(key: KeyEvent, app: &Status, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
-pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    // Snapshot previously provided by caller as `app`
+    let app = read_status(|s| Ok(s.clone()))?;
+
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             // move selection up in Entry page
             handle_move_prev(
-                app,
+                &app,
                 read_status(|s| {
                     if let types::Page::Entry { cursor } = &s.page {
                         Ok(cursor.unwrap_or(EntryCursor::Refresh))
@@ -127,7 +130,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
         KeyCode::Down | KeyCode::Char('j') => {
             // move selection down
             handle_move_next(
-                app,
+                &app,
                 read_status(|s| {
                     if let types::Page::Entry { cursor } = &s.page {
                         Ok(cursor.unwrap_or(EntryCursor::Refresh))
