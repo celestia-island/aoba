@@ -51,7 +51,7 @@ pub fn handle_move_prev(app: &Status, cursor: types::ui::EntryCursor) -> Result<
         types::ui::EntryCursor::About => {
             write_status(|s| {
                 s.page = Page::Entry {
-                    cursor: Some(types::ui::EntryCursor::About),
+                    cursor: Some(types::ui::EntryCursor::CreateVirtual),
                 };
                 Ok(())
             })?;
