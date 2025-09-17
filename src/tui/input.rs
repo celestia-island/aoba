@@ -4,10 +4,7 @@ use std::{thread, time::Duration};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{
-        read_status,
-        types::{self},
-    },
+    protocol::status::{read_status, types},
     tui::{
         ui::pages,
         utils::bus::{Bus, UiToCore},
@@ -141,23 +138,23 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         // Route by exact page variant and construct the page snapshot inline.
         match &snapshot.page {
             types::Page::Entry { .. } => {
-                pages::entry::handle_input(key, &snapshot, bus)?;
+                pages::entry::handle_input(key, bus)?;
                 return Ok(());
             }
             types::Page::About { .. } => {
-                pages::about::handle_input(key, &snapshot, bus)?;
+                pages::about::handle_input(key, bus)?;
                 return Ok(());
             }
             types::Page::ModbusConfig { .. } => {
-                pages::config_panel::handle_input(key, &snapshot, bus)?;
+                pages::config_panel::handle_input(key, bus)?;
                 return Ok(());
             }
             types::Page::ModbusDashboard { .. } => {
-                pages::modbus_panel::input::handle_input(key, &snapshot, bus)?;
+                pages::modbus_panel::input::handle_input(key, bus)?;
                 return Ok(());
             }
             types::Page::ModbusLog { .. } => {
-                pages::log_panel::handle_input(key, &snapshot, bus)?;
+                pages::log_panel::handle_input(key, bus)?;
                 return Ok(());
             }
         }

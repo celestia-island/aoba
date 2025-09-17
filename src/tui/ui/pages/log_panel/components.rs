@@ -14,7 +14,9 @@ use crate::{
 };
 
 /// Extract log data from current page state
-pub fn extract_log_data(app: &Status) -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
+pub fn extract_log_data(
+    app: &Status,
+) -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
     match &app.page {
         types::Page::ModbusLog { selected_port, .. } => {
             if let Some(port_name) = app.ports.order.get(*selected_port) {

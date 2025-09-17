@@ -1,14 +1,19 @@
 use anyhow::{anyhow, Result};
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::types::{self, Status},
+    protocol::status::{
+        read_status,
+        types::{self, Status},
+    },
     tui::utils::bus::Bus,
 };
 
 /// Handle input for log panel. Sends commands via UiToCore.
-pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    // Snapshot previously provided by caller as `app`
+    let snapshot = read_status(|s| Ok(s.clone()))?;
     match key.code {
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation commands within the log
@@ -24,12 +29,12 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
         }
         KeyCode::Char('f') => {
             // Toggle follow mode
-            handle_toggle_follow(bus, app);
+            handle_toggle_follow(bus, &snapshot);
             Ok(())
         }
         KeyCode::Char('c') => {
             // Clear logs
-            handle_clear_logs(bus, app);
+            handle_clear_logs(bus, &snapshot);
             Ok(())
         }
         _ => Ok(()),

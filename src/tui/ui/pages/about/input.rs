@@ -1,12 +1,9 @@
 use anyhow::{anyhow, Result};
 
-use crossterm::event::{KeyCode, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use crate::{
-    protocol::status::{
-        types::{self, Status},
-        write_status,
-    },
+    protocol::status::{types, write_status},
     tui::{
         ui::pages::about::components::{
             about_cache_error, init_about_cache, render_about_page_manifest_lines,
@@ -16,7 +13,7 @@ use crate::{
 };
 
 /// Handle input for about page. Sends navigation commands via UiToCore.
-pub fn handle_input(key: crossterm::event::KeyEvent, _app: &Status, bus: &Bus) -> Result<()> {
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Build the full lines snapshot to determine bounds for scrolling.
     let mut full_lines: Vec<ratatui::text::Line> = Vec::new();
     let content = init_about_cache();

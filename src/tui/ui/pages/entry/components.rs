@@ -33,7 +33,7 @@ pub fn render_ports_list(f: &mut Frame, area: Rect, app: &Status, selection: usi
     let width = area.width as usize;
     let mut lines: Vec<Line> = Vec::new();
     let default_pd = PortData::default();
-    
+
     for (i, name) in app.ports.order.iter().enumerate() {
         let p = app.ports.map.get(name).unwrap_or(&default_pd);
         let name = p.port_name.clone();
@@ -191,8 +191,7 @@ fn render_special_entry_content(
             lines.push(Line::from(lang().index.scan_raw_header.as_str()));
             for l in app.temporarily.scan.last_scan_info.lines().take(100) {
                 if l.starts_with("ERROR:") {
-                    lines
-                        .push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
+                    lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
                 } else {
                     lines.push(Line::from(l));
                 }
@@ -208,14 +207,16 @@ fn render_special_entry_content(
         let content = Paragraph::new(lines).block(content_block);
         f.render_widget(content, area);
     } else if rel == 1 {
-        let content = Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block);
+        let content =
+            Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block);
         f.render_widget(content, area);
     } else if rel == 2 {
         // About page preview - simplified for now
         let content = Paragraph::new("About (TODO: implement preview)").block(content_block);
         f.render_widget(content, area);
     } else {
-        let content = Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block);
+        let content =
+            Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block);
         f.render_widget(content, area);
     }
 }

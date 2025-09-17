@@ -1,20 +1,19 @@
 use anyhow::{anyhow, Result};
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
-    protocol::status::types::{self, Status},
+    protocol::status::{read_status, types},
     tui::utils::bus::Bus,
 };
 
 /// Handle input for config panel. Sends commands via UiToCore.
-pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    // Create a snapshot of the current status (previously passed as `app`)
+    let snapshot = read_status(|s| Ok(s.clone()))?;
     // Derive selected row in panel (same logic as render_kv_panel)
-    let mut selected_row: usize = 0usize;
-    if let Some(sel) = Some(super::components::derive_selection(app)) {
-        selected_row = sel;
-    }
+    let selected_row = super::components::derive_selection(&snapshot);
 
     // Determine number of fields shown in panel
     let labels_count = {
@@ -29,7 +28,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
     if let types::Page::ModbusConfig {
         edit_active: config_edit_active,
         ..
-    } = &app.page
+    } = &snapshot.page
     {
         in_edit = *config_edit_active;
     }
@@ -249,9 +248,9 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                 // Begin edit for selected row if a real port exists at selection
                 // Determine selected port name from app snapshot
                 let sel_idx = selected_row.min(labels_count.saturating_sub(1));
-                if let Some(port_name) = app.ports.order.get(sel_idx) {
+                if let Some(port_name) = snapshot.ports.order.get(sel_idx) {
                     // Initialize config_edit in Status
-                    let init_buf = if let Some(pd) = app.ports.map.get(port_name) {
+                    let init_buf = if let Some(pd) = snapshot.ports.map.get(port_name) {
                         // Determine value to prefill based on sel_idx (same mapping as render)
                         let pre = match sel_idx {
                             0 => pd.port_name.clone(),

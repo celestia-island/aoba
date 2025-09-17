@@ -1,14 +1,11 @@
 use anyhow::{anyhow, Result};
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{
-    protocol::status::types::{self, Status},
-    tui::utils::bus::Bus,
-};
+use crate::{protocol::status::types, tui::utils::bus::Bus};
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
-pub fn handle_input(key: crossterm::event::KeyEvent, _app: &Status, bus: &Bus) -> Result<()> {
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation within the dashboard

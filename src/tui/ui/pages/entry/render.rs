@@ -4,7 +4,9 @@ use ratatui::prelude::*;
 use crate::{
     i18n::lang,
     protocol::status::{read_status, types},
-    tui::ui::pages::entry::components::{derive_selection_from_page, render_details_panel, render_ports_list},
+    tui::ui::pages::entry::components::{
+        derive_selection_from_page, render_details_panel, render_ports_list,
+    },
 };
 
 pub fn page_bottom_hints() -> Vec<Vec<String>> {
@@ -17,7 +19,7 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
                 | types::Page::ModbusLog { .. }
                 | types::Page::About { .. }
         );
-        
+
         let mut base = vec![
             vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
             vec![lang().hotkeys.hint_enter_subpage.as_str().to_string()],
@@ -26,7 +28,8 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
             base.push(vec![lang().hotkeys.press_q_quit.as_str().to_string()]);
         }
         Ok(base)
-    }).unwrap_or_else(|_| vec![])
+    })
+    .unwrap_or_else(|_| vec![])
 }
 
 /// Render the entry page. Only reads from Status, does not mutate.
@@ -53,7 +56,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
         // RIGHT: content details
         render_details_panel(frame, right, app, selection);
-        
+
         Ok(())
     })?;
 

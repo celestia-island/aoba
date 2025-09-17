@@ -23,17 +23,15 @@ pub fn render(frame: &mut Frame, area: Rect, style: Option<Style>) -> Result<()>
             render_simplified_content(frame, area, style);
             return Ok(());
         }
-        
+
         // Render KV panel when subpage active
         let snap = extract_config_snapshot(app);
         render_kv_panel(frame, area, app, &snap);
-        
+
         // Render simplified content fallback
         render_simplified_content(frame, area, style);
         Ok(())
     })?;
-    
+
     Ok(())
 }
-
-
