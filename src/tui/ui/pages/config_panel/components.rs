@@ -14,6 +14,14 @@ use crate::{
 
 /// Generate lines for a two-column key/value list for common serial settings and a few modbus fields.
 /// Returns a vector of rendered lines without handling outer frame rendering.
+/// 
+/// The right-side values use StyledSpanKind::Text which allows external control over:
+/// - TextState::Normal - default appearance
+/// - TextState::Selected - green highlighting (hover)
+/// - TextState::Chosen - yellow highlighting  
+/// - TextState::Editing - yellow + bold (active editing)
+/// 
+/// To control individual value states, modify the StyledSpanKind::Text parameters below.
 pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
     // Use read_status to access current Status snapshot and build list of kv pairs
     crate::protocol::status::read_status(|app| {
