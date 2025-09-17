@@ -48,10 +48,10 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
             // Extract AboutStatus directly from app.page
             match &app.page {
                 types::Page::About { view_offset } => {
-                    let snap = types::ui::AboutStatus {
+                    let _snap = types::ui::AboutStatus {
                         view_offset: *view_offset,
                     };
-                    return about::page_bottom_hints(app, &snap);
+                    return about::page_bottom_hints();
                 }
                 other => panic!("Expected About page for bottom hints, found: {:?}", other),
             }
@@ -79,7 +79,7 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
                         edit_buffer: edit_buffer.clone(),
                         edit_cursor_pos: *edit_cursor_pos,
                     };
-                    return config_panel::page_bottom_hints(app, &snap);
+                    return config_panel::page_bottom_hints();
                 }
                 other => panic!("Expected ModbusConfig for bottom hints, found: {:?}", other),
             },
@@ -96,7 +96,7 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
                             edit_buffer: String::new(),
                             edit_cursor_pos: 0,
                         };
-                        return config_panel::page_bottom_hints(app, &snap);
+                        return config_panel::page_bottom_hints();
                     }
                     other => panic!(
                         "Expected ModbusDashboard for bottom hints, found: {:?}",
@@ -109,7 +109,7 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
                     let snap = types::ui::ModbusLogStatus {
                         selected_port: *selected_port,
                     };
-                    return log_panel::page_bottom_hints(app, &snap);
+                    return log_panel::page_bottom_hints();
                 }
                 other => panic!(
                     "Expected ModbusLog page for bottom hints, found: {:?}",
@@ -123,7 +123,7 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
     match &app.page {
         types::Page::Entry { cursor } => {
             let entry_snap = types::ui::EntryStatus { cursor: *cursor };
-            entry::page_bottom_hints(app, &entry_snap)
+            entry::page_bottom_hints()
         }
         other => panic!("Expected Entry page for bottom hints, found: {:?}", other),
     }
@@ -156,7 +156,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
                     let snap = types::ui::AboutStatus {
                         view_offset: *view_offset,
                     };
-                    about::render(f, area, app, &snap);
+                    let _ = about::render(f, area);
                     return;
                 }
                 other => panic!("Expected About page for render, found: {:?}", other),
@@ -184,7 +184,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
                             edit_buffer: edit_buffer.clone(),
                             edit_cursor_pos: *edit_cursor_pos,
                         };
-                        config_panel::render(f, area, app, None, &snap)
+                        let _ = config_panel::render(f, area, None);
                     }
                     types::Page::ModbusDashboard { selected_port, .. } => {
                         // Dashboard reuses config panel; build a ModbusConfigStatus with defaults
@@ -197,7 +197,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
                             edit_buffer: String::new(),
                             edit_cursor_pos: 0,
                         };
-                        config_panel::render(f, area, app, None, &snap)
+                        let _ = config_panel::render(f, area, None);
                     }
                     other => panic!(
                         "Expected ModbusConfig or ModbusDashboard for render, found: {:?}",
@@ -210,7 +210,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
                     let snap = types::ui::ModbusLogStatus {
                         selected_port: *selected_port,
                     };
-                    log_panel::render(f, area, app, &snap)
+                    let _ = log_panel::render(f, area);
                 }
                 other => panic!("Expected ModbusLog for render, found: {:?}", other),
             },
@@ -219,14 +219,14 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
                     let snap = types::ui::AboutStatus {
                         view_offset: *view_offset,
                     };
-                    about::render(f, area, app, &snap)
+                    let _ = about::render(f, area);
                 }
                 other => panic!("Expected About for render, found: {:?}", other),
             },
             _ => match &app.page {
                 types::Page::Entry { cursor } => {
                     let entry_snap = types::ui::EntryStatus { cursor: *cursor };
-                    entry::render(f, area, app, &entry_snap)
+                    let _ = entry::render(f, area);
                 }
                 other => panic!("Expected Entry for render, found: {:?}", other),
             },
@@ -235,7 +235,7 @@ pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
         match &app.page {
             types::Page::Entry { cursor } => {
                 let entry_snap = types::ui::EntryStatus { cursor: *cursor };
-                entry::render(f, area, app, &entry_snap);
+                let _ = entry::render(f, area);
             }
             other => panic!(
                 "Expected Entry page when rendering panels, found: {:?}",

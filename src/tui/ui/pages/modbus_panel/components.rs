@@ -1,0 +1,73 @@
+use std::cmp::min;
+
+use ratatui::{prelude::*, text::Line};
+
+use crate::{
+    i18n::lang,
+    protocol::status::types::{self, Status},
+    tui::ui::components::render_boxed_paragraph,
+};
+
+/// Check if a subpage is currently active for modbus panel
+pub fn is_subpage_active(app: &Status) -> bool {
+    matches!(
+        app.page,
+        types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. }
+    )
+}
+
+/// Generate status lines for modbus panel display
+pub fn generate_modbus_status_lines(app: &Status) -> Vec<Line<'static>> {
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Simple display of ModBus status
+    lines.push(Line::from("ModBus Panel"));
+    lines.push(Line::from(""));
+
+    if is_subpage_active(app) {
+        lines.push(Line::from(
+            "Subpage form present (details moved to UI layer)",
+        ));
+    } else {
+        lines.push(Line::from("No form data available"));
+    }
+
+    lines
+}
+
+/// Calculate scrolling parameters for the modbus panel
+pub fn calculate_scroll_params(lines: &[Line], area: Rect, cursor_line: usize) -> (usize, usize) {
+    // Calculate visible area for scrolling
+    let inner_height = area.height.saturating_sub(2) as usize;
+
+    let mut first_visible = 0;
+    if cursor_line >= inner_height {
+        first_visible = cursor_line + 1 - inner_height;
+    }
+
+    let total = lines.len();
+    let last_start = total.saturating_sub(inner_height);
+    if first_visible > last_start {
+        first_visible = last_start;
+    }
+    let end = min(total, first_visible + inner_height);
+
+    (first_visible, end)
+}
+
+/// Render the modbus panel content with scrolling
+pub fn render_modbus_content(f: &mut Frame, area: Rect, lines: Vec<Line>) {
+    // Core no longer stores SubpageForm; default cursor to 0 for rendering purposes.
+    let cursor_line = 0;
+    let (first_visible, end) = calculate_scroll_params(&lines, area, cursor_line);
+
+    render_boxed_paragraph(f, area, lines[first_visible..end].to_vec(), None);
+}
+
+/// Get bottom hints for modbus panel
+pub fn get_modbus_bottom_hints() -> Vec<Vec<String>> {
+    vec![
+        vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
+        vec!["Enter: Edit".to_string(), "Del: Delete".to_string()],
+    ]
+}
