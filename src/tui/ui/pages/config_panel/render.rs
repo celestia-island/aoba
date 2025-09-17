@@ -3,7 +3,6 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::types,
     tui::ui::{
         components::render_boxed_paragraph, pages::config_panel::components::render_kv_lines,
     },
@@ -17,7 +16,7 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
 }
 
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
-    let content = render_kv_lines(frame, area)?;
+    let content = render_kv_lines()?;
     render_boxed_paragraph(frame, area, content, 0);
 
     Ok(())

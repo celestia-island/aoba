@@ -2,17 +2,21 @@ use anyhow::Result;
 
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, List, ListItem, ListState},
+    text::Line,
+    style::Modifier,
 };
 
-use crate::{i18n::lang, protocol::status::types};
+use crate::{
+    i18n::lang, 
+    protocol::status::types,
+    tui::ui::components::styled_label::{StyledSpanKind, styled_spans, TextState},
+};
 
-/// Render a two-column key/value list for common serial settings and a few modbus fields.
-pub fn render_kv_lines(frame: &mut Frame, area: Rect) -> Result<Vec<Line<'static>>> {
+/// Generate lines for a two-column key/value list for common serial settings and a few modbus fields.
+/// Returns a vector of rendered lines without handling outer frame rendering.
+pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
     // Use read_status to access current Status snapshot and build list of kv pairs
     crate::protocol::status::read_status(|app| {
-        // Build list of kv pairs: left label from i18n, right value from Status (first port if exists)
-        let mut items: Vec<ListItem> = Vec::new();
         let labels = vec![
             lang().protocol.common.label_port.clone(),
             lang().protocol.common.label_baud.clone(),
@@ -82,46 +86,47 @@ pub fn render_kv_lines(frame: &mut Frame, area: Rect) -> Result<Vec<Line<'static
                 values.push("??".to_string()); // global_interval placeholder ms
                 values.push("??".to_string()); // global_timeout placeholder ms
                 values.push("??".to_string()); // refresh_rate placeholder
+            } else {
+                for _ in 0..labels.len() {
+                    values.push(String::new());
+                }
+            }
+        } else {
+            for _ in 0..labels.len() {
+                values.push(String::new());
             }
         }
 
-        for (l, v) in labels.into_iter().zip(values.into_iter()) {
-            let txt = format!("{l:20} {v}");
-            items.push(ListItem::new(txt));
+        // Build lines using StyledSpanKind for values
+        let mut lines: Vec<Line<'static>> = Vec::new();
+        
+        // Calculate max label width for alignment
+        let max_label_width = labels.iter()
+            .map(|l| l.len())
+            .max()
+            .unwrap_or(0);
+
+        for (label, value) in labels.into_iter().zip(values.into_iter()) {
+            // Create left-aligned label span (bold)
+            let label_span = Span::styled(
+                format!("{:width$}", label, width = max_label_width),
+                Style::default().add_modifier(Modifier::BOLD)
+            );
+            
+            // Create value span using StyledSpanKind::Text
+            let value_spans = styled_spans(StyledSpanKind::Text {
+                text: &value,
+                state: TextState::Normal,
+                bold: false,
+            });
+
+            // Build the line with label, spacing, and value
+            let mut line_spans = vec![label_span, Span::raw("  ")];
+            line_spans.extend(value_spans);
+            
+            lines.push(Line::from(line_spans));
         }
 
-        use ratatui::style::{Modifier, Style};
-
-        // Determine selected row to highlight: use global selection derived from page
-        // so the panel reflects the app's current selection (entry list or subpage selected_port).
-        let mut selected_row: usize = 0usize;
-        if let Some(sel) = Some(derive_global_selection(app)) {
-            selected_row = sel;
-        }
-        if items.is_empty() {
-            selected_row = 0usize;
-        } else if selected_row >= items.len() {
-            selected_row = items.len().saturating_sub(1);
-        }
-
-        let mut state = ListState::default();
-        if !items.is_empty() {
-            state.select(Some(selected_row));
-        }
-
-        let list = List::new(items)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title(lang().protocol.modbus.label_modbus_settings.clone()),
-            )
-            .highlight_symbol("> ")
-            .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
-
-        frame.render_stateful_widget(list, area, &mut state);
-
-        Ok(())
-    })?;
-
-    Ok(vec![])
+        Ok(lines)
+    })
 }
