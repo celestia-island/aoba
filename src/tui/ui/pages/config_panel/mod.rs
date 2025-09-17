@@ -2,6 +2,7 @@
 // This mirrors the earlier shim in `config_panel.rs` so the module can live
 // inside the `config_panel/` directory.
 
+pub mod components;
 pub mod input;
 pub mod render;
 
@@ -9,4 +10,4 @@ pub mod render;
 // `pages::config_panel::render` and `pages::config_panel::handle_input`
 // remain valid without changes.
 pub use input::handle_input;
-pub use render::{page_bottom_hints, render, render_kv_panel};
+pub use render::{page_bottom_hints, render};
