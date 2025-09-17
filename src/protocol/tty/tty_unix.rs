@@ -95,7 +95,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
     let mut seen: HashSet<String> = HashSet::new();
     let mut unique: Vec<SerialPortInfo> = Vec::new();
 
-    for mut p in raw_ports.into_iter() {
+    for p in raw_ports.into_iter() {
         let base = match p.port_name.rsplit('/').next() {
             Some(b) => b.to_lowercase(),
             None => p.port_name.to_lowercase(),

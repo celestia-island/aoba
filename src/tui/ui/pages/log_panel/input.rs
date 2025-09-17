@@ -1,32 +1,40 @@
-use crate::protocol::status::types::{self, Status};
-use crate::tui::utils::bus::Bus;
 use anyhow::{anyhow, Result};
 
-/// Handle input for log panel. Sends commands via UiToCore.
-pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
-    use crossterm::event::KeyCode as KC;
+use crossterm::event::{KeyCode, KeyEvent};
 
+use crate::{
+    protocol::status::{
+        read_status,
+        types::{self, Status},
+    },
+    tui::utils::bus::Bus,
+};
+
+/// Handle input for log panel. Sends commands via UiToCore.
+pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    // Snapshot previously provided by caller as `app`
+    let snapshot = read_status(|s| Ok(s.clone()))?;
     match key.code {
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
+        KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation commands within the log
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
             Ok(())
         }
-        KC::Esc | KC::Char('h') => {
+        KeyCode::Esc | KeyCode::Char('h') => {
             // Leave page - go back to entry
             handle_leave_page(bus);
             Ok(())
         }
-        KC::Char('f') => {
+        KeyCode::Char('f') => {
             // Toggle follow mode
-            handle_toggle_follow(bus, app);
+            handle_toggle_follow(bus, &snapshot);
             Ok(())
         }
-        KC::Char('c') => {
+        KeyCode::Char('c') => {
             // Clear logs
-            handle_clear_logs(bus, app);
+            handle_clear_logs(bus, &snapshot);
             Ok(())
         }
         _ => Ok(()),
