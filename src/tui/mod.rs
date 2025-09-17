@@ -44,7 +44,7 @@ pub fn start() -> Result<()> {
     init_status(app.clone())?;
 
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
-        let _ = write_status(|g| {
+        write_status(|g| {
             ui_error_set(
                 g,
                 Some((
@@ -53,7 +53,7 @@ pub fn start() -> Result<()> {
                 )),
             );
             Ok(())
-        });
+        })?;
     }
 
     // Create channels for three-thread architecture
@@ -378,27 +378,14 @@ fn run_rendering_loop(
         }
         // Wait for core signals with timeout
         let should_quit = match bus.core_rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(CoreToUi::Tick) => {
-                // Redraw on tick
-                false
-            }
-            Ok(CoreToUi::Refreshed) => {
+            Ok(CoreToUi::Tick)
+            | Ok(CoreToUi::Refreshed)
+            | Ok(CoreToUi::Error)
+            | Err(flume::RecvTimeoutError::Timeout) => {
                 // Redraw on refresh
                 false
             }
-            Ok(CoreToUi::Error) => {
-                // Redraw on error
-                false
-            }
-            Ok(CoreToUi::Quit) => {
-                // Core requested quit; terminate rendering loop
-                true
-            }
-            Err(flume::RecvTimeoutError::Timeout) => {
-                // Continue rendering loop on timeout
-                false
-            }
-            Err(flume::RecvTimeoutError::Disconnected) => {
+            _ => {
                 // Core thread died, exit
                 true
             }
@@ -412,7 +399,7 @@ fn run_rendering_loop(
         // render from that to avoid holding the lock while rendering.
         if let Ok(snapshot) = crate::protocol::status::read_status(|s| Ok(s.clone())) {
             terminal.draw(|f| {
-                render_ui_readonly(f, &snapshot);
+                let _ = render_ui_readonly(f, &snapshot);
             })?;
         }
     }
@@ -422,8 +409,8 @@ fn run_rendering_loop(
 }
 
 /// Render UI function that only reads from Status (immutable reference)
-fn render_ui_readonly(f: &mut Frame, app: &Status) {
-    let area = f.area();
+fn render_ui_readonly(frame: &mut Frame, app: &Status) -> Result<()> {
+    let area = frame.area();
     let subpage_active = matches!(
         app.page,
         types::Page::ModbusConfig { .. }
@@ -447,7 +434,9 @@ fn render_ui_readonly(f: &mut Frame, app: &Status) {
         .split(area);
 
     // Use the new pages module for rendering
-    crate::tui::ui::title::render_title_readonly(f, main_chunks[0], app);
-    crate::tui::ui::pages::render_panels(f, main_chunks[1], app);
-    crate::tui::ui::bottom::render_bottom_readonly(f, main_chunks[2], app);
+    crate::tui::ui::title::render_title_readonly(frame, main_chunks[0], app);
+    crate::tui::ui::pages::render_panels(frame, main_chunks[1])?;
+    crate::tui::ui::bottom::render_bottom_readonly(frame, main_chunks[2], app);
+
+    Ok(())
 }

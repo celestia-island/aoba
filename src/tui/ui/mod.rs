@@ -7,8 +7,8 @@ use ratatui::prelude::*;
 
 use crate::protocol::status::types::{self, Status};
 
-pub fn render_ui(f: &mut Frame, app: &mut Status) {
-    let area = f.area();
+pub fn render_ui(frame: &mut Frame, app: &mut Status) {
+    let area = frame.area();
     let subpage_active = matches!(
         app.page,
         types::Page::ModbusConfig { .. }
@@ -31,9 +31,9 @@ pub fn render_ui(f: &mut Frame, app: &mut Status) {
         ])
         .split(area);
 
-    title::render_title(f, main_chunks[0], app);
-    pages::render_panels(f, main_chunks[1], app);
-    bottom::render_bottom(f, main_chunks[2], app);
+    title::render_title(frame, main_chunks[0], app);
+    pages::render_panels(frame, main_chunks[1]);
+    bottom::render_bottom(frame, main_chunks[2], app);
 
     // Mode selector overlay is not rendered here.
 }

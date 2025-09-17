@@ -8,31 +8,27 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{
-    i18n::lang,
-    protocol::status::types::{self, Status},
-};
+use crate::{i18n::lang, protocol::status::types};
 
 /// Extract log data from current page state
-pub fn extract_log_data(
-    app: &Status,
-) -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
-    match &app.page {
+pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
+    crate::protocol::status::read_status(|s| match &s.page {
         types::Page::ModbusLog { selected_port, .. } => {
-            if let Some(port_name) = app.ports.order.get(*selected_port) {
-                let pd = app.ports.map.get(port_name).cloned().unwrap_or_default();
-                Some((
+            if let Some(port_name) = s.ports.order.get(*selected_port) {
+                let pd = s.ports.map.get(port_name).cloned().unwrap_or_default();
+                Ok(Some((
                     pd.logs.clone(),
                     pd.log_selected,
                     pd.log_view_offset,
                     pd.log_auto_scroll,
-                ))
+                )))
             } else {
-                None
+                Ok(None)
             }
         }
-        _ => None,
-    }
+        _ => Ok(None),
+    })
+    .ok()?
 }
 
 /// Render the main log display area
@@ -193,12 +189,18 @@ pub fn is_in_subpage_editing() -> bool {
 }
 
 /// Check if a subpage is currently active
-pub fn is_subpage_active(app: &Status) -> bool {
-    matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    )
+pub fn is_subpage_active() -> bool {
+    if let Ok(v) = crate::protocol::status::read_status(|app| {
+        Ok(matches!(
+            app.page,
+            types::Page::ModbusConfig { .. }
+                | types::Page::ModbusDashboard { .. }
+                | types::Page::ModbusLog { .. }
+                | types::Page::About { .. }
+        ))
+    }) {
+        v
+    } else {
+        false
+    }
 }

@@ -23,7 +23,7 @@ pub fn handle_move_prev(app: &Status, cursor: types::ui::EntryCursor) -> Result<
             })?;
         }
         types::ui::EntryCursor::Refresh => {
-            let prev = app.ports.map.len() - 1;
+            let prev = app.ports.map.len().saturating_sub(1);
             if app.ports.map.is_empty() {
                 write_status(|s| {
                     s.page = Page::Entry {
@@ -179,11 +179,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.page = Page::ModbusConfig {
                         selected_port: idx,
                         edit_active: false,
-                        edit_port: None,
-                        edit_field_index: 0,
-                        edit_field_key: None,
-                        edit_buffer: String::new(),
+                        edit_cursor: 0,
                         edit_cursor_pos: 0,
+                        edit_buffer: String::new(),
                     };
                     Ok(())
                 })?,
