@@ -1,5 +1,7 @@
 use anyhow::{anyhow, Result};
 
+use crossterm::event::KeyCode;
+
 use crate::{
     i18n::lang,
     protocol::status::types::{self, Status},
@@ -8,10 +10,9 @@ use crate::{
 
 /// Handle input for config panel. Sends commands via UiToCore.
 pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) -> Result<()> {
-    use crossterm::event::KeyCode as KC;
     // Derive selected row in panel (same logic as render_kv_panel)
     let mut selected_row: usize = 0usize;
-    if let Some(sel) = Some(super::super::derive_selection(app)) {
+    if let Some(sel) = Some(super::components::derive_selection(app)) {
         selected_row = sel;
     }
 
@@ -36,7 +37,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
     if in_edit {
         // We are editing a field: handle text input and control keys
         match key.code {
-            KC::Char(c) => {
+            KeyCode::Char(c) => {
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
@@ -52,7 +53,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                 });
                 Ok(())
             }
-            KC::Backspace => {
+            KeyCode::Backspace => {
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
@@ -70,7 +71,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                 });
                 Ok(())
             }
-            KC::Left => {
+            KeyCode::Left => {
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -85,7 +86,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                 });
                 Ok(())
             }
-            KC::Right => {
+            KeyCode::Right => {
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
@@ -102,7 +103,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                 });
                 Ok(())
             }
-            KC::Enter => {
+            KeyCode::Enter => {
                 // Commit edit: write buffer back to PortData field
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
@@ -187,7 +188,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                     .map_err(|e| anyhow!(e))?;
                 Ok(())
             }
-            KC::Esc => {
+            KeyCode::Esc => {
                 // Cancel edit
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
@@ -217,18 +218,18 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
     } else {
         // Not in edit mode: handle navigation and enter/e to begin editing
         match key.code {
-            KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
+            KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Update selected_port inside Page::ModbusConfig under write lock
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig { selected_port, .. } = &mut s.page {
                         // Move selection by delta based on key
                         match key.code {
-                            KC::Up | KC::Char('k') => {
+                            KeyCode::Up | KeyCode::Char('k') => {
                                 if *selected_port > 0 {
                                     *selected_port = selected_port.saturating_sub(1);
                                 }
                             }
-                            KC::Down | KC::Char('j') => {
+                            KeyCode::Down | KeyCode::Char('j') => {
                                 let max = s.ports.order.len().saturating_sub(1);
                                 if *selected_port < max {
                                     *selected_port += 1;
@@ -244,7 +245,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                     .map_err(|e| anyhow!(e))?;
                 Ok(())
             }
-            KC::Enter | KC::Char('e') => {
+            KeyCode::Enter | KeyCode::Char('e') => {
                 // Begin edit for selected row if a real port exists at selection
                 // Determine selected port name from app snapshot
                 let sel_idx = selected_row.min(labels_count.saturating_sub(1));
@@ -322,7 +323,7 @@ pub fn handle_input(key: crossterm::event::KeyEvent, app: &Status, bus: &Bus) ->
                     Ok(())
                 }
             }
-            KC::Esc => {
+            KeyCode::Esc => {
                 // If we reach here we are not in per-field edit mode (in_edit == false)
                 // so Esc should return the user to the main entry page.
                 let _ = crate::protocol::status::write_status(|s| {

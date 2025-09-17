@@ -1,27 +1,30 @@
-use crate::protocol::status::types::{self, Status};
-use crate::tui::utils::bus::Bus;
 use anyhow::{anyhow, Result};
+
+use crossterm::event::KeyCode;
+
+use crate::{
+    protocol::status::types::{self, Status},
+    tui::utils::bus::Bus,
+};
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: crossterm::event::KeyEvent, _app: &Status, bus: &Bus) -> Result<()> {
-    use crossterm::event::KeyCode as KC;
-
     match key.code {
-        KC::Up | KC::Down | KC::Char('k') | KC::Char('j') => {
+        KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation within the dashboard
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
             Ok(())
         }
-        KC::Left | KC::Right => {
+        KeyCode::Left | KeyCode::Right => {
             // Horizontal navigation within fields
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
             Ok(())
         }
-        KC::Esc => {
+        KeyCode::Esc => {
             // If dashboard has nested edit state in Status (e.g. editing_field or master_field_editing),
             // prefer to cancel those first. Otherwise leave to entry page.
             use crate::protocol::status::write_status;
@@ -55,28 +58,28 @@ pub fn handle_input(key: crossterm::event::KeyEvent, _app: &Status, bus: &Bus) -
                 Ok(())
             }
         }
-        KC::Enter => {
+        KeyCode::Enter => {
             // Edit entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
             Ok(())
         }
-        KC::Delete | KC::Char('x') => {
+        KeyCode::Delete | KeyCode::Char('x') => {
             // Delete entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
             Ok(())
         }
-        KC::Char('n') => {
+        KeyCode::Char('n') => {
             // New entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
             Ok(())
         }
-        KC::Tab => {
+        KeyCode::Tab => {
             // Tab switching
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)

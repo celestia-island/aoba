@@ -192,3 +192,20 @@ pub fn render_simplified_content(f: &mut Frame, area: Rect, style: Option<Style>
     )];
     render_boxed_paragraph(f, area, lines, style);
 }
+
+/// Derive current selection index from full app Status.
+pub(crate) fn derive_selection(app: &Status) -> usize {
+    match &app.page {
+        types::Page::Entry { cursor } => match cursor {
+            Some(types::ui::EntryCursor::Com { idx }) => *idx,
+            Some(types::ui::EntryCursor::About) => app.ports.order.len().saturating_add(2),
+            Some(types::ui::EntryCursor::Refresh) => app.ports.order.len(),
+            Some(types::ui::EntryCursor::CreateVirtual) => app.ports.order.len().saturating_add(1),
+            None => 0usize,
+        },
+        types::Page::ModbusDashboard { selected_port, .. }
+        | types::Page::ModbusConfig { selected_port, .. }
+        | types::Page::ModbusLog { selected_port, .. } => *selected_port,
+        _ => 0usize,
+    }
+}
