@@ -243,45 +243,50 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
 }
 
 /// Get content lines for refresh entry
-fn get_refresh_content() -> Vec<Line> {
-    if let Ok(lines) = read_status(|app| {
-        let mut lines: Vec<Line> = Vec::new();
+fn get_refresh_content() -> Vec<Line<'static>> {
+    if let Ok((ts_opt, last_scan_info_clone)) = read_status(|app| {
+        let ts = app
+            .temporarily
+            .scan
+            .last_scan_time
+            .map(|t| t.format("%Y-%m-%d %H:%M:%S").to_string());
+        let info = app.temporarily.scan.last_scan_info.clone();
+        Ok((ts, info))
+    }) {
+        let mut lines: Vec<Line<'static>> = Vec::new();
 
-        // First line: last refresh time (no title)
-        if let Some(ts) = app.temporarily.scan.last_scan_time {
+        if let Some(ts_str) = ts_opt {
             lines.push(Line::from(format!(
                 "{} {}",
                 lang().index.scan_last_header.as_str(),
-                ts.format("%Y-%m-%d %H:%M:%S")
+                ts_str
             )));
         } else {
             lines.push(Line::from(lang().index.scan_none.as_str()));
         }
 
-        // Empty line separator
-        lines.push(Line::from(""));
+        lines.push(Line::from(Span::raw("")));
 
-        // Raw port information - only show what exists, don't show "none" for missing fields
-        if !app.temporarily.scan.last_scan_info.is_empty() {
-            for l in app.temporarily.scan.last_scan_info.lines().take(100) {
+        if !last_scan_info_clone.is_empty() {
+            for l in last_scan_info_clone.lines().take(100) {
                 if l.starts_with("ERROR:") {
-                    lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
+                    lines.push(Line::from(Span::styled(
+                        l.to_string(),
+                        Style::default().fg(Color::Red),
+                    )));
                 } else if !l.trim().is_empty() {
-                    // Only add non-empty lines
-                    lines.push(Line::from(l));
+                    lines.push(Line::from(l.to_string()));
                 }
             }
-            if app.temporarily.scan.last_scan_info.len() > 100 {
+            if last_scan_info_clone.len() > 100 {
                 lines.push(Line::from(format!(
                     "... ({} {})",
-                    app.temporarily.scan.last_scan_info.len() - 100,
+                    last_scan_info_clone.len() - 100,
                     lang().index.scan_truncated_suffix.as_str()
                 )));
             }
         }
 
-        Ok(lines)
-    }) {
         lines
     } else {
         vec![Line::from(lang().index.scan_none.as_str())]
@@ -289,22 +294,29 @@ fn get_refresh_content() -> Vec<Line> {
 }
 
 /// Get content lines for manual specify entry
-fn get_manual_specify_content() -> Vec<Line> {
+fn get_manual_specify_content() -> Vec<Line<'static>> {
     vec![Line::from(lang().index.manual_specify_label.as_str())]
 }
 
 /// Get content lines for about preview entry
-fn get_about_preview_content() -> Vec<Line> {
+fn get_about_preview_content() -> Vec<Line<'static>> {
     let about_cache = init_about_cache();
-    if let Ok(cache) = about_cache.lock() {
-        render_about_page_manifest_lines(cache.clone())
-    } else {
-        vec![Line::from("About (failed to load content)")]
-    }
+    // Limit the lifetime of the MutexGuard by scoping the lock and cloning the data.
+    let snapshot = {
+        match about_cache.lock() {
+            Ok(cache) => cache.clone(),
+            Err(_) => return vec![Line::from("About (failed to load content)")],
+        }
+    };
+
+    render_about_page_manifest_lines(snapshot)
 }
 
 /// Get content lines for a specific port
-fn get_port_details_content(_port_index: usize, port_data: Option<&PortData>) -> Vec<Line> {
+fn get_port_details_content(
+    _port_index: usize,
+    port_data: Option<&PortData>,
+) -> Vec<Line<'static>> {
     let mut info_lines: Vec<Line> = Vec::new();
 
     if let Some(p) = port_data {
