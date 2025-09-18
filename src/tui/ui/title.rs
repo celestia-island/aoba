@@ -40,65 +40,72 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
 
     // Breadcrumb text (center area)
     let breadcrumb_text = match &app.page {
-        // 主页：AOBA标题
-        types::Page::Entry { .. } => {
-            lang().index.title.as_str().to_string()
-        },
-        
-        // 端口配置页面：AOBA标题 > COMx
+        // Entry page: AOBA title
+        types::Page::Entry { .. } => lang().index.title.as_str().to_string(),
+
+        // Port configuration page: AOBA title > COMx
         types::Page::ModbusConfig { selected_port, .. } => {
             let port_name = if *selected_port < app.ports.order.len() {
                 let name = &app.ports.order[*selected_port];
-                app.ports.map.get(name)
+                app.ports
+                    .map
+                    .get(name)
                     .map(|p| p.port_name.clone())
                     .unwrap_or_else(|| format!("COM{}", selected_port))
             } else {
                 format!("COM{}", selected_port)
             };
             format!("{} > {}", lang().index.title.as_str(), port_name)
-        },
-        
-        // Modbus 主/从站配置：AOBA标题 > COMx > Modbus
+        }
+
+        // Modbus master/slave configuration: AOBA title > COMx > Modbus
         types::Page::ModbusDashboard { selected_port, .. } => {
             let port_name = if *selected_port < app.ports.order.len() {
                 let name = &app.ports.order[*selected_port];
-                app.ports.map.get(name)
+                app.ports
+                    .map
+                    .get(name)
                     .map(|p| p.port_name.clone())
                     .unwrap_or_else(|| format!("COM{}", selected_port))
             } else {
                 format!("COM{}", selected_port)
             };
-            format!("{} > {} > {}", 
-                lang().index.title.as_str(), 
+            format!(
+                "{} > {} > {}",
+                lang().index.title.as_str(),
                 port_name,
                 lang().protocol.modbus.label_modbus_settings.as_str()
             )
-        },
-        
-        // 手动调试日志：AOBA标题 > COMx > 通信日志
+        }
+
+        // Manual debug log: AOBA title > COMx > Communication Log
         types::Page::ModbusLog { selected_port, .. } => {
             let port_name = if *selected_port < app.ports.order.len() {
                 let name = &app.ports.order[*selected_port];
-                app.ports.map.get(name)
+                app.ports
+                    .map
+                    .get(name)
                     .map(|p| p.port_name.clone())
                     .unwrap_or_else(|| format!("COM{}", selected_port))
             } else {
                 format!("COM{}", selected_port)
             };
-            format!("{} > {} > {}", 
-                lang().index.title.as_str(), 
+            format!(
+                "{} > {} > {}",
+                lang().index.title.as_str(),
                 port_name,
                 lang().tabs.tab_log.as_str()
             )
-        },
-        
-        // About 页面：AOBA标题 > 关于
+        }
+
+        // About page: AOBA title > About
         types::Page::About { .. } => {
-            format!("{} > {}", 
+            format!(
+                "{} > {}",
                 lang().index.title.as_str(),
                 lang().about.name.as_str()
             )
-        },
+        }
     };
 
     let title_para = Paragraph::new(breadcrumb_text)

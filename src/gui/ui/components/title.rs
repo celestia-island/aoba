@@ -31,7 +31,9 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                         let spinner_chars = ['◜', '◝', '◞', '◟'];
                         let ch = spinner_chars[(frame as usize) % spinner_chars.len()];
                         ui.add_space(4.);
-                        let spinner_rect = ui.allocate_exact_size(Vec2::new(16., 24.), egui::Sense::hover()).0;
+                        let spinner_rect = ui
+                            .allocate_exact_size(Vec2::new(16., 24.), egui::Sense::hover())
+                            .0;
                         ui.painter().text(
                             spinner_rect.center(),
                             Align2::CENTER_CENTER,
@@ -48,7 +50,7 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
             ui.add_space(4.);
 
             // Breadcrumb implementation
-            // Level 1: AOBA标题 (clickable, goes to home)
+            // Level 1: AOBA title (clickable, goes to home)
             let app_title = lang().index.title.as_str();
             let app_w = (app_title.chars().count() * 8 + 8) as f32;
             if ui
@@ -65,10 +67,12 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
             // Build breadcrumb path based on current page
             if let Ok(breadcrumb_info) = read_status(|g| {
                 match &g.page {
-                    // 主页：只显示 AOBA标题（已显示）
-                    types::Page::Entry { .. } => Ok((None::<String>, None::<String>, None::<String>)),
-                    
-                    // 端口配置页面：AOBA标题 > COMx
+                    // Entry page: only show AOBA title (already shown)
+                    types::Page::Entry { .. } => {
+                        Ok((None::<String>, None::<String>, None::<String>))
+                    }
+
+                    // Port configuration page: AOBA title > COMx
                     types::Page::ModbusConfig { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
@@ -77,9 +81,9 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                             None
                         };
                         Ok((port_name, None::<String>, None::<String>))
-                    },
-                    
-                    // Modbus 主/从站配置：AOBA标题 > COMx > Modbus
+                    }
+
+                    // Modbus master/slave configuration: AOBA title > COMx > Modbus
                     types::Page::ModbusDashboard { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
@@ -87,11 +91,16 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                         } else {
                             None
                         };
-                        let modbus_label = lang().protocol.modbus.label_modbus_settings.as_str().to_string();
+                        let modbus_label = lang()
+                            .protocol
+                            .modbus
+                            .label_modbus_settings
+                            .as_str()
+                            .to_string();
                         Ok((port_name, Some(modbus_label), None::<String>))
-                    },
-                    
-                    // 手动调试日志：AOBA标题 > COMx > 通信日志
+                    }
+
+                    // Manual debug log: AOBA title > COMx > Communication Log
                     types::Page::ModbusLog { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
@@ -101,21 +110,23 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                         };
                         let log_label = lang().tabs.tab_log.as_str().to_string();
                         Ok((port_name, Some(log_label), None::<String>))
-                    },
-                    
-                    // About 页面：AOBA标题 > 关于
+                    }
+
+                    // About page: AOBA title > About
                     types::Page::About { .. } => {
                         let about_label = lang().about.name.as_str().to_string();
                         Ok((None::<String>, Some(about_label), None::<String>))
-                    },
+                    }
                 }
             }) {
                 let (port_name, secondary_label, _tertiary_label) = breadcrumb_info;
-                
+
                 // Level 2: COMx (port name) if present
                 if let Some(port) = port_name {
                     ui.add_space(4.);
-                    let sep_rect = ui.allocate_exact_size(Vec2::new(12., 24.), egui::Sense::hover()).0;
+                    let sep_rect = ui
+                        .allocate_exact_size(Vec2::new(12., 24.), egui::Sense::hover())
+                        .0;
                     ui.painter().text(
                         sep_rect.center(),
                         Align2::CENTER_CENTER,
@@ -127,11 +138,13 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     let port_w = (port.chars().count() * 8 + 8) as f32;
                     ui.add_sized(Vec2::new(port_w, 24.), Button::new(port).small());
                 }
-                
-                // Level 3: Secondary label (Modbus, 通信日志, etc.) if present
+
+                // Level 3: Secondary label (Modbus, communication log, etc.) if present
                 if let Some(label) = secondary_label {
                     ui.add_space(4.);
-                    let sep_rect = ui.allocate_exact_size(Vec2::new(12., 24.), egui::Sense::hover()).0;
+                    let sep_rect = ui
+                        .allocate_exact_size(Vec2::new(12., 24.), egui::Sense::hover())
+                        .0;
                     ui.painter().text(
                         sep_rect.center(),
                         Align2::CENTER_CENTER,
