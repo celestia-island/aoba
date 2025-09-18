@@ -222,7 +222,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
         let title_block = Block::default()
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {} ", title)));
-        
+
         render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), true);
     } else {
         // Error fallback
@@ -230,7 +230,15 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {} ", lang().index.details.as_str())));
         let content_lines = vec![Line::from("Error loading content")];
-        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), false);
+        render_boxed_paragraph(
+            frame,
+            area,
+            content_lines,
+            0,
+            None,
+            Some(title_block),
+            false,
+        );
     }
 }
 
@@ -238,7 +246,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
 fn get_refresh_content() -> Vec<Line> {
     if let Ok(lines) = read_status(|app| {
         let mut lines: Vec<Line> = Vec::new();
-        
+
         // First line: last refresh time (no title)
         if let Some(ts) = app.temporarily.scan.last_scan_time {
             lines.push(Line::from(format!(
@@ -249,10 +257,10 @@ fn get_refresh_content() -> Vec<Line> {
         } else {
             lines.push(Line::from(lang().index.scan_none.as_str()));
         }
-        
+
         // Empty line separator
         lines.push(Line::from(""));
-        
+
         // Raw port information - only show what exists, don't show "none" for missing fields
         if !app.temporarily.scan.last_scan_info.is_empty() {
             for l in app.temporarily.scan.last_scan_info.lines().take(100) {
@@ -271,7 +279,7 @@ fn get_refresh_content() -> Vec<Line> {
                 )));
             }
         }
-        
+
         Ok(lines)
     }) {
         lines
@@ -298,7 +306,7 @@ fn get_about_preview_content() -> Vec<Line> {
 /// Get content lines for a specific port
 fn get_port_details_content(_port_index: usize, port_data: Option<&PortData>) -> Vec<Line> {
     let mut info_lines: Vec<Line> = Vec::new();
-    
+
     if let Some(p) = port_data {
         // Port status and basic info
         let status_style = match p.state {
@@ -320,91 +328,100 @@ fn get_port_details_content(_port_index: usize, port_data: Option<&PortData>) ->
         // Basic port information
         info_lines.push(Line::from(vec![
             Span::styled("Port: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(p.port_name.clone())
+            Span::raw(p.port_name.clone()),
         ]));
-        
+
         if !p.port_type.is_empty() {
             info_lines.push(Line::from(vec![
                 Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(p.port_type.clone())
+                Span::raw(p.port_type.clone()),
             ]));
         }
 
         info_lines.push(Line::from(vec![
             Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(status_text, status_style)
+            Span::styled(status_text, status_style),
         ]));
 
         // Show runtime configuration if port is active
         if let Some(runtime) = &p.runtime {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled("Configuration:", Style::default().add_modifier(Modifier::BOLD))));
-            
+            info_lines.push(Line::from(Span::styled(
+                "Configuration:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )));
+
             let cfg = &runtime.current_cfg;
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Baud Rate: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.baud.to_string())
+                Span::raw(cfg.baud.to_string()),
             ]));
-            
+
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Data Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.data_bits.to_string())
+                Span::raw(cfg.data_bits.to_string()),
             ]));
-            
+
             let parity_str = match cfg.parity {
                 serialport::Parity::None => "None",
-                serialport::Parity::Even => "Even", 
+                serialport::Parity::Even => "Even",
                 serialport::Parity::Odd => "Odd",
             };
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Parity: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(parity_str)
+                Span::raw(parity_str),
             ]));
-            
+
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Stop Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.stop_bits.to_string())
+                Span::raw(cfg.stop_bits.to_string()),
             ]));
         }
 
         // USB/Hardware information if available
         if p.extra.vid.is_some() || p.extra.pid.is_some() {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled("Hardware:", Style::default().add_modifier(Modifier::BOLD))));
-            
+            info_lines.push(Line::from(Span::styled(
+                "Hardware:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )));
+
             if let (Some(vid), Some(pid)) = (p.extra.vid, p.extra.pid) {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("VID:PID: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(format!("{:04x}:{:04x}", vid, pid))
+                    Span::raw(format!("{:04x}:{:04x}", vid, pid)),
                 ]));
             }
-            
+
             if let Some(serial) = &p.extra.serial {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Serial: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(serial.clone())
+                    Span::raw(serial.clone()),
                 ]));
             }
-            
+
             if let Some(manufacturer) = &p.extra.manufacturer {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled("Manufacturer: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(manufacturer.clone())
+                    Span::styled(
+                        "Manufacturer: ",
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(manufacturer.clone()),
                 ]));
             }
-            
+
             if let Some(product) = &p.extra.product {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Product: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(product.clone())
+                    Span::raw(product.clone()),
                 ]));
             }
         }
@@ -412,31 +429,45 @@ fn get_port_details_content(_port_index: usize, port_data: Option<&PortData>) ->
         // Log statistics
         if !p.logs.is_empty() {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled("Logging:", Style::default().add_modifier(Modifier::BOLD))));
-            
+            info_lines.push(Line::from(Span::styled(
+                "Logging:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )));
+
             let total_logs = p.logs.len();
-            let send_count = p.logs.iter().filter(|log| log.raw.contains("Send") || log.raw.contains("TX")).count();
-            let recv_count = p.logs.iter().filter(|log| log.raw.contains("Recv") || log.raw.contains("RX")).count();
-            
+            let send_count = p
+                .logs
+                .iter()
+                .filter(|log| log.raw.contains("Send") || log.raw.contains("TX"))
+                .count();
+            let recv_count = p
+                .logs
+                .iter()
+                .filter(|log| log.raw.contains("Recv") || log.raw.contains("RX"))
+                .count();
+
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled("Total Entries: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(total_logs.to_string())
+                Span::styled(
+                    "Total Entries: ",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(total_logs.to_string()),
             ]));
-            
+
             if send_count > 0 {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Sent: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green))
+                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green)),
                 ]));
             }
-            
+
             if recv_count > 0 {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Received: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow))
+                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow)),
                 ]));
             }
         }
@@ -446,4 +477,3 @@ fn get_port_details_content(_port_index: usize, port_data: Option<&PortData>) ->
 
     info_lines
 }
-
