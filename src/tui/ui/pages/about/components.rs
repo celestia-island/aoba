@@ -13,11 +13,11 @@ use crate::{i18n::lang, tui::ui::components::kv_pairs_to_lines};
 
 #[derive(Default, Clone)]
 pub struct RepoManifest {
-    pub full_name: Option<String>,
-    pub version: Option<String>,
-    pub authors: Option<String>,
-    pub repo: Option<String>,
-    pub license: Option<String>,
+    pub full_name: String,
+    pub version: String,
+    pub authors: String,
+    pub repo: String,
+    pub license: String,
     pub deps: Vec<(String, String)>,
     pub license_map: HashMap<String, String>,
 }
@@ -40,10 +40,10 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
             // package section
             if let Some(pkg) = val.get("package") {
                 if let Some(n) = pkg.get("name").and_then(|v| v.as_str()) {
-                    cache.full_name = Some(n.to_string());
+                    cache.full_name = n.to_string();
                 }
                 if let Some(ver) = pkg.get("version").and_then(|v| v.as_str()) {
-                    cache.version = Some(ver.to_string());
+                    cache.version = ver.to_string();
                 }
                 if let Some(a) = pkg.get("authors").and_then(|v| v.as_array()) {
                     let auth_str = a
@@ -51,15 +51,13 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
                         .filter_map(|v| v.as_str())
                         .collect::<Vec<_>>()
                         .join(", ");
-                    if !auth_str.is_empty() {
-                        cache.authors = Some(auth_str);
-                    }
+                    cache.authors = auth_str;
                 }
                 if let Some(repo) = pkg.get("repository").and_then(|v| v.as_str()) {
-                    cache.repo = Some(repo.to_string());
+                    cache.repo = repo.to_string();
                 }
                 if let Some(lic) = pkg.get("license").and_then(|v| v.as_str()) {
-                    cache.license = Some(lic.to_string());
+                    cache.license = lic.to_string();
                 }
             }
 
@@ -131,29 +129,20 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
 /// Render the about details (label/value pairs) into lines. This can be used both for
 /// the entry preview and the full about subpage.
 pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Vec<Line<'static>> {
-    // Welcome paragraph (localized)
     let mut out: Vec<Line> = Vec::new();
+
     out.push(Line::from(lang().about.welcome.clone()));
-    // Add a blank line after welcome paragraph for spacing
     out.push(Line::from(Span::raw("")));
 
-    // Base info labels use i18n (skip Name; welcome covers it)
-    let mut base_pairs: Vec<(String, String, Option<ratatui::style::Style>)> = Vec::new();
-    if let Some(ver) = &app_snapshot.version {
-        base_pairs.push((lang().about.version.clone(), ver.clone(), None));
-    }
-    if let Some(auth) = &app_snapshot.authors {
-        base_pairs.push((lang().about.authors.clone(), auth.clone(), None));
-    }
-    if let Some(repo) = &app_snapshot.repo {
-        base_pairs.push((lang().about.repository.clone(), repo.clone(), None));
-    }
-    if let Some(lic) = &app_snapshot.license {
-        base_pairs.push((lang().about.license.clone(), lic.clone(), None));
-    }
+    let mut base_pairs: Vec<(String, String)> = Vec::new();
+
+    base_pairs.push((lang().about.version.clone(), app_snapshot.version.clone()));
+    base_pairs.push((lang().about.authors.clone(), app_snapshot.authors.clone()));
+    base_pairs.push((lang().about.repository.clone(), app_snapshot.repo.clone()));
+    base_pairs.push((lang().about.license.clone(), app_snapshot.license.clone()));
 
     // Render base pairs first
-    let mut base_kv_lines = kv_pairs_to_lines(&base_pairs, "  ", 5);
+    let mut base_kv_lines = kv_pairs_to_lines(&base_pairs, 5);
     out.append(&mut base_kv_lines);
 
     // Then render dependencies header + dependency items (if any)

@@ -33,15 +33,6 @@ impl SpecialEntry {
     }
 }
 
-/// TextState is a small helper enum used by UI components for styling decisions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TextState {
-    Normal,
-    Selected,
-    Chosen,
-    Editing,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputMode {
     #[default]

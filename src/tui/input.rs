@@ -93,7 +93,7 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus) -> Result<()> {
                     .contains(crossterm::event::KeyModifiers::CONTROL)
                 && matches!(key.code, KeyCode::Char('c'))
             {
-                bus.ui_tx.send(UiToCore::Quit).map_err(|e| anyhow!(e))?;
+                bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
                 return Ok(());
             }
 
@@ -126,7 +126,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         .contains(crossterm::event::KeyModifiers::CONTROL)
     {
         if let KeyCode::Char('c') = key.code {
-            bus.ui_tx.send(UiToCore::Quit).map_err(|e| anyhow!(e))?;
+            bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
             return Ok(());
         }
     }

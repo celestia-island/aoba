@@ -2,29 +2,32 @@ use std::cmp::min;
 
 use ratatui::{prelude::*, text::Line};
 
-use crate::{
-    i18n::lang,
-    protocol::status::types::{self, Status},
-    tui::ui::components::render_boxed_paragraph,
-};
+use crate::{i18n::lang, protocol::status::types, tui::ui::components::render_boxed_paragraph};
 
 /// Check if a subpage is currently active for modbus panel
-pub fn is_subpage_active(app: &Status) -> bool {
-    matches!(
-        app.page,
-        types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. }
-    )
+pub fn is_subpage_active() -> bool {
+    // Read status and determine subpage active
+    if let Ok(active) = crate::protocol::status::read_status(|app| {
+        Ok(matches!(
+            app.page,
+            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. }
+        ))
+    }) {
+        active
+    } else {
+        false
+    }
 }
 
 /// Generate status lines for modbus panel display
-pub fn generate_modbus_status_lines(app: &Status) -> Vec<Line<'static>> {
+pub fn generate_modbus_status_lines() -> Vec<Line<'static>> {
     let mut lines: Vec<Line> = Vec::new();
 
     // Simple display of ModBus status
     lines.push(Line::from("ModBus Panel"));
     lines.push(Line::from(""));
 
-    if is_subpage_active(app) {
+    if is_subpage_active() {
         lines.push(Line::from(
             "Subpage form present (details moved to UI layer)",
         ));
@@ -56,12 +59,12 @@ pub fn calculate_scroll_params(lines: &[Line], area: Rect, cursor_line: usize) -
 }
 
 /// Render the modbus panel content with scrolling
-pub fn render_modbus_content(f: &mut Frame, area: Rect, lines: Vec<Line>) {
+pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
     // Core no longer stores SubpageForm; default cursor to 0 for rendering purposes.
     let cursor_line = 0;
     let (first_visible, end) = calculate_scroll_params(&lines, area, cursor_line);
 
-    render_boxed_paragraph(f, area, lines[first_visible..end].to_vec(), None);
+    render_boxed_paragraph(frame, area, lines[first_visible..end].to_vec(), 0);
 }
 
 /// Get bottom hints for modbus panel

@@ -1,0 +1,181 @@
+use ratatui::{
+    style::{Color, Modifier, Style},
+    text::Span,
+};
+
+/// TextState is a small helper enum used by UI components for styling decisions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TextState {
+    Normal,
+    Selected,
+    Chosen,
+    Editing,
+}
+
+/// Produce spans for a left/right selector rendered as: `< [label] >`.
+/// When `hovered` use green; when `editing` use yellow+bold.
+pub fn selector_spans(base_prefix: &str, label: &str, state: TextState) -> Vec<Span<'static>> {
+    // Always render selector as left/right arrows: `< [label] >`.
+    // Color mapping:
+    // - Normal: default (no color)
+    // - Selected: green (hover)
+    // - Chosen / Editing: yellow (active)
+    // Editing additionally is bold for the middle label.
+    let edge_style = match state {
+        TextState::Selected => Style::default().fg(Color::Green),
+        TextState::Editing | TextState::Chosen => Style::default().fg(Color::Yellow),
+        TextState::Normal => Style::default(),
+    };
+    let mid_style = match state {
+        TextState::Editing => Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD),
+        TextState::Chosen => Style::default().fg(Color::Yellow),
+        TextState::Selected => Style::default().fg(Color::Green),
+        TextState::Normal => Style::default(),
+    };
+    vec![
+        Span::raw(base_prefix.to_string()),
+        Span::styled("< ", edge_style),
+        Span::styled(format!("[{label}]"), mid_style),
+        Span::styled(" >", edge_style),
+    ]
+}
+
+/// Produce spans for an input-style display rendered as: `> [buffer] <` with surrounding base_prefix
+/// Included as raw text. `hovered` and `editing` affect colors/weight.
+pub fn input_spans(
+    base_prefix: &str,
+    buffer: &str,
+    hovered: bool,
+    editing: bool,
+    with_prefix: bool,
+) -> Vec<Span<'static>> {
+    // Outer arrows should be yellow when editing, green when hovered, otherwise default.
+    let outer_style = if editing {
+        Style::default().fg(Color::Yellow)
+    } else if hovered {
+        Style::default().fg(Color::Green)
+    } else {
+        Style::default()
+    };
+    let inner_style = if editing {
+        Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD)
+    } else if hovered {
+        Style::default().fg(Color::Green)
+    } else {
+        Style::default()
+    };
+    let buf = if buffer.is_empty() { "_" } else { buffer };
+    let mut out = Vec::new();
+    if with_prefix {
+        out.push(Span::raw(base_prefix.to_string()));
+    }
+    out.push(Span::styled("> ", outer_style));
+    out.push(Span::styled(format!("[{buf}]"), inner_style));
+    out.push(Span::styled(" <", outer_style));
+    out
+}
+
+/// Helper to produce prefix "> " and index span like "#n" with consistent styling.
+pub fn prefix_and_index_spans(idx: usize, selected: bool, chosen: bool) -> Vec<Span<'static>> {
+    let normal = Style::default();
+    let browse = Style::default().fg(Color::Green);
+    let chosen_style = Style::default().fg(Color::Yellow);
+    let prefix_style = if selected {
+        if chosen {
+            chosen_style
+        } else {
+            browse
+        }
+    } else {
+        normal
+    };
+    let mut out: Vec<Span> = Vec::new();
+    if selected {
+        out.push(Span::styled("> ", prefix_style));
+    }
+    out.push(Span::styled(format!("#{}", idx + 1), prefix_style));
+    out
+}
+
+/// Generic helper to produce a styled Span for a text with selection/editing semantics.
+/// - `selected` maps to green (hover)
+/// - `editing` maps to yellow + bold
+/// - `bold` forces bold for non-editing cases
+pub fn styled_text(text: &str, state: TextState, bold: bool) -> Span<'static> {
+    let mut style = Style::default();
+    match state {
+        TextState::Editing => {
+            style = style.fg(Color::Yellow).add_modifier(Modifier::BOLD);
+        }
+        TextState::Chosen => {
+            style = style.fg(Color::Yellow);
+        }
+        TextState::Selected => {
+            style = style.fg(Color::Green);
+            if bold {
+                style = style.add_modifier(Modifier::BOLD);
+            }
+        }
+        TextState::Normal => {
+            if bold {
+                style = style.add_modifier(Modifier::BOLD);
+            }
+        }
+    }
+    Span::styled(text.to_string(), style)
+}
+
+/// Unified kind for producing Span sequences. This lets callers use one helper instead of
+/// Multiple similarly-named helpers. Keep variants small and expressive.
+pub enum StyledSpanKind<'a> {
+    Selector {
+        base_prefix: &'a str,
+        label: &'a str,
+        state: TextState,
+    },
+    Input {
+        base_prefix: &'a str,
+        buffer: &'a str,
+        hovered: bool,
+        editing: bool,
+        with_prefix: bool,
+    },
+    PrefixIndex {
+        idx: usize,
+        selected: bool,
+        chosen: bool,
+    },
+    Text {
+        text: &'a str,
+        state: TextState,
+        bold: bool,
+    },
+}
+
+/// Central dispatcher: produce the appropriate spans for a StyledSpanKind.
+pub fn styled_spans(kind: StyledSpanKind<'_>) -> Vec<Span<'static>> {
+    match kind {
+        StyledSpanKind::Selector {
+            base_prefix,
+            label,
+            state,
+        } => selector_spans(base_prefix, label, state),
+        StyledSpanKind::Input {
+            base_prefix,
+            buffer,
+            hovered,
+            editing,
+            with_prefix,
+        } => input_spans(base_prefix, buffer, hovered, editing, with_prefix),
+        StyledSpanKind::PrefixIndex {
+            idx,
+            selected,
+            chosen,
+        } => prefix_and_index_spans(idx, selected, chosen),
+        StyledSpanKind::Text { text, state, bold } => vec![styled_text(text, state, bold)],
+    }
+}
