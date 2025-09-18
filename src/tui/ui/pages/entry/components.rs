@@ -145,15 +145,9 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 /// Render the right details panel content using consistent render_boxed_paragraph approach
 pub fn render_details_panel(frame: &mut Frame, area: Rect) {
     // Check if subpage is active first
-    if let Ok(subpage_active) = read_status(|app| {
-        Ok(matches!(
-            app.page,
-            types::Page::ModbusConfig { .. }
-                | types::Page::ModbusDashboard { .. }
-                | types::Page::ModbusLog { .. }
-                | types::Page::About { .. }
-        ))
-    }) {
+    if let Ok(subpage_active) =
+        read_status(|app| Ok(!matches!(app.page, types::Page::Entry { .. })))
+    {
         if subpage_active {
             return;
         }
@@ -223,7 +217,16 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {} ", title)));
 
-        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), true, false);
+        render_boxed_paragraph(
+            frame,
+            area,
+            content_lines,
+            0,
+            None,
+            Some(title_block),
+            true,
+            false,
+        );
     } else {
         // Error fallback
         let title_block = Block::default()

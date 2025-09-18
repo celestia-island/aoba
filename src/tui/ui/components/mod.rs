@@ -4,7 +4,6 @@ pub mod log_input;
 pub mod styled_label;
 
 use ratatui::{
-    prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
 };

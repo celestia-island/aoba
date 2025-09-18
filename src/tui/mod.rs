@@ -3,6 +3,7 @@ pub mod ui;
 pub mod utils;
 
 use anyhow::Result;
+use chrono::Local;
 use std::{
     io::{self, Stdout},
     sync::{Arc, RwLock},
@@ -13,14 +14,17 @@ use std::{
 use ratatui::{backend::CrosstermBackend, prelude::*};
 
 use crate::{
-    protocol::status::{
-        init_status,
-        types::{
-            self,
-            port::{PortData, PortLogEntry, PortState},
-            Status,
+    protocol::{
+        status::{
+            init_status,
+            types::{
+                self,
+                port::{PortData, PortLogEntry, PortState},
+                Status,
+            },
+            write_status,
         },
-        write_status,
+        tty::available_ports_enriched,
     },
     tui::{
         ui::components::error_msg::ui_error_set,
@@ -66,9 +70,6 @@ pub fn start() -> Result<()> {
 
     // Thread 1: Core processing thread - handles UiToCore and CoreToUi communication
     {
-        use crate::protocol::tty::available_ports_enriched;
-        use chrono::Local;
-        let _app_clone = Arc::clone(&app);
         let core_tx_clone = core_tx.clone();
         let thr_tx_clone_for_core = thr_tx.clone();
         thread::spawn(move || {
@@ -273,8 +274,8 @@ pub fn start() -> Result<()> {
                                             handle_opt = Some(h);
                                             break;
                                         }
-                                        Err(e) => {
-                                            spawn_err = Some(e);
+                                        Err(err) => {
+                                            spawn_err = Some(err);
                                             // If not last attempt, wait a bit and retry; this allows the OS to release the port
                                             if attempt + 1 < MAX_RETRIES {
                                                 // Slightly longer backoff on first attempts
@@ -367,9 +368,9 @@ fn run_rendering_loop(
     loop {
         // Check whether any watched thread reported an error or exit
         if let Ok(res) = thr_rx.try_recv() {
-            if let Err(e) = res {
-                eprintln!("thread exited with error: {:#}", e);
-                return Err(e);
+            if let Err(err) = res {
+                eprintln!("thread exited with error: {:#}", err);
+                return Err(err);
             } else {
                 // thread exited successfully - treat as fatal and exit
                 log::info!("a monitored thread exited cleanly; shutting down");

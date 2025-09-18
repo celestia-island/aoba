@@ -9,9 +9,6 @@ use crate::{
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
-    // Create a snapshot of the current status
-    let snapshot = read_status(|s| Ok(s.clone()))?;
-
     match key.code {
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation within the dashboard
@@ -31,7 +28,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // If dashboard has nested edit state in Status (e.g. editing_field or master_field_editing),
             // prefer to cancel those first. Otherwise leave to entry page.
             let mut cancelled = false;
-            let _ = write_status(|s| {
+            write_status(|s| {
                 if let types::Page::ModbusDashboard {
                     editing_field,
                     master_field_editing,
