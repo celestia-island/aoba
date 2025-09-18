@@ -20,8 +20,8 @@ derive_struct! {
             Entry {
                 cursor?: crate::protocol::status::types::ui::EntryCursor,
             },
-            ConfigPanel {
-                cursor: crate::protocol::status::types::ui::ConfigPanelCursor = crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
+            ModbusConfig {
+                selected_port: usize,
 
                 edit_active: bool = false,
                 edit_cursor: crate::protocol::status::types::ui::ConfigPanelCursor = crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
@@ -29,8 +29,9 @@ derive_struct! {
                 edit_buffer: String = String::new(),
             },
             ModbusDashboard {
-                cursor: crate::protocol::status::types::ui::ModbusDashboardCursor = crate::protocol::status::types::ui::ModbusDashboardCursor::FirstItem,
+                selected_port: usize,
 
+                cursor: usize,
                 editing_field?: crate::protocol::status::types::modbus::EditingField,
                 input_buffer: String,
                 edit_choice_index: Option<usize>,
@@ -45,8 +46,8 @@ derive_struct! {
                 poll_round_index: usize,
                 in_flight_reg_index: Option<usize>,
             },
-            LogPanel {
-                cursor: crate::protocol::status::types::ui::LogPanelCursor = crate::protocol::status::types::ui::LogPanelCursor::FirstItem,
+            ModbusLog {
+                selected_port: usize,
             },
             About {
                 view_offset: usize,
