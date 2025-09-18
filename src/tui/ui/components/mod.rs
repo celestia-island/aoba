@@ -30,15 +30,9 @@ pub fn styled_title_span(label: &str, selected: bool, editing: bool) -> Span<'st
     Span::styled(label.to_string(), title_style)
 }
 
-/// Render a boxed paragraph. Accepts a list of lines, a target rect, and an optional style for the
-/// Paragraph content. The block will use all borders by default.
-pub fn render_boxed_paragraph(frame: &mut Frame, area: Rect, content: Vec<Line>, offset: usize) {
-    render_boxed_paragraph_with_block(frame, area, content, offset, None);
-}
-
-/// Render a boxed paragraph with optional custom block. When block is provided, uses it instead
-/// of creating a default bordered block. When title is provided and block is None, creates a 4:6 layout.
-pub fn render_boxed_paragraph_with_title(
+/// Render a boxed paragraph. Accepts a list of lines, a target rect, and an optional title.
+/// When title is provided, creates a 4:6 layout with title on left (40%) and content on right (60%).
+pub fn render_boxed_paragraph(
     frame: &mut Frame, 
     area: Rect, 
     content: Vec<Line>, 
@@ -77,18 +71,7 @@ pub fn render_boxed_paragraph_with_title(
     }
 }
 
-/// Render a boxed paragraph with optional custom block.
-pub fn render_boxed_paragraph_with_block(
-    frame: &mut Frame, 
-    area: Rect, 
-    content: Vec<Line>, 
-    offset: usize,
-    custom_block: Option<Block<'_>>
-) {
-    render_content_area(frame, area, content, offset, custom_block, false);
-}
-
-/// Render a boxed paragraph with optional custom block and wrapping support.
+/// Render a boxed paragraph with custom block and wrapping support.
 pub fn render_boxed_paragraph_with_block_and_wrap(
     frame: &mut Frame, 
     area: Rect, 
