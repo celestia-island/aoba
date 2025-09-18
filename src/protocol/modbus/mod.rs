@@ -11,13 +11,14 @@ mod slave_discrete_inputs;
 mod slave_holdings;
 mod slave_inputs;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use chrono::Duration;
 use flume::{Receiver, Sender};
 
 use rmodbus::{
     client::ModbusRequest,
+    consts::ModbusFunction,
     server::{storage::ModbusStorageSmall, ModbusFrame},
     ModbusProto,
 };
@@ -112,48 +113,54 @@ pub fn boot_modbus_slave_service(
 
     // Detect duplicated payload repetitions (e.g. data body repeated twice or three times)
     // and trim to a single copy, fixing byte count & CRC. Applies to standard read functions 0x01..x04.
-    fn trim_duplicate_payload(func: u8, frame: &mut Vec<u8>) -> bool {
+    fn trim_duplicate_payload(func: u8, frame: &mut Vec<u8>) -> Result<()> {
         if frame.len() < 5 {
-            // minimal: sid func bc data crc1 crc2
-            return false;
+            // Need at least id, func, byte count, one data byte, crc
+            return Err(anyhow!("Frame too short to trim duplicates"));
         }
         match func {
             0x01..=0x04 => {}
-            _ => return false,
+            _ => return Err(anyhow!("Unsupported function code")),
         }
         let original = frame.clone();
         let (byte_count_idx, data_start) = (2usize, 3usize);
         if frame.len() < data_start + 1 + 2 {
-            // need at least one data byte + crc
-            return false;
+            // Need at least one data byte + crc
+            return Err(anyhow!("Frame too short to trim duplicates"));
         }
         let reported_bc = frame[byte_count_idx] as usize;
-        // data segment excluding crc
+
+        // Data segment excluding crc
         if frame.len() < data_start + reported_bc + 2 {
-            return false;
+            return Err(anyhow!("Frame too short to trim duplicates"));
         }
-        let data_total = frame.len() - data_start - 2; // actual data bytes present
+        let data_total = frame.len() - data_start - 2; // Actual data bytes present
         if data_total == reported_bc {
-            return false;
-        } // already consistent
-          // Check if data_total is an integer multiple of reported_bc (2x or 3x)
+            // already consistent
+            return Ok(());
+        }
+
+        // Check if data_total is an integer multiple of reported_bc (2x or 3x)
         if reported_bc == 0 || data_total % reported_bc != 0 {
-            return false;
+            return Err(anyhow!("Frame too short to trim duplicates"));
         }
         let mult = data_total / reported_bc;
         if mult <= 1 || mult > 3 {
-            return false;
+            return Err(anyhow!("Frame too short to trim duplicates"));
         }
+
         // Verify repetition segments identical
         let first = &frame[data_start..data_start + reported_bc];
         for i in 1..mult {
             if &frame[data_start + i * reported_bc..data_start + (i + 1) * reported_bc] != first {
-                return false;
+                return Err(anyhow!("Frame too short to trim duplicates"));
             }
         }
+
         // Trim to single copy
         frame.truncate(data_start + reported_bc); // keep header + one copy data
-                                                  // Recompute CRC
+
+        // Recompute CRC
         let crc = crc16_modbus(&frame[..]);
         frame.push((crc & 0xFF) as u8);
         frame.push((crc >> 8) as u8);
@@ -164,7 +171,7 @@ pub fn boot_modbus_slave_service(
             original.len(),
             frame.len()
         );
-        true
+        Ok(())
     }
 
     while let Ok(request) = request_receiver.recv() {
@@ -181,7 +188,7 @@ pub fn boot_modbus_slave_service(
         frame.parse()?;
 
         match frame.func {
-            0x01 => {
+            ModbusFunction::GetCoils => {
                 // Coils
                 if let Ok(Some(ret)) = build_slave_coils_response(&mut frame, &mut context) {
                     log::info!(
@@ -192,7 +199,7 @@ pub fn boot_modbus_slave_service(
                             .join(" ")
                     );
                     let mut ret = ret; // make mutable for trimming
-                    let _ = trim_duplicate_payload(0x01, &mut ret);
+                    trim_duplicate_payload(0x01, &mut ret)?;
                     let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x01), suppressing extra send.");
@@ -204,7 +211,7 @@ pub fn boot_modbus_slave_service(
                     log::warn!("Failed to parse slave coils");
                 }
             }
-            0x02 => {
+            ModbusFunction::GetDiscretes => {
                 // Discrete Inputs
                 if let Ok(Some(ret)) =
                     build_slave_discrete_inputs_response(&mut frame, &mut context)
@@ -217,7 +224,7 @@ pub fn boot_modbus_slave_service(
                             .join(" ")
                     );
                     let mut ret = ret;
-                    let _ = trim_duplicate_payload(0x02, &mut ret);
+                    trim_duplicate_payload(0x02, &mut ret)?;
                     let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x02), suppressing extra send.");
@@ -229,7 +236,7 @@ pub fn boot_modbus_slave_service(
                     log::warn!("Failed to parse slave discrete inputs");
                 }
             }
-            0x03 => {
+            ModbusFunction::GetHoldings => {
                 // Holding Registers
                 if let Ok(Some(ret)) = build_slave_holdings_response(&mut frame, &mut context) {
                     log::info!(
@@ -240,7 +247,7 @@ pub fn boot_modbus_slave_service(
                             .join(" ")
                     );
                     let mut ret = ret;
-                    let _ = trim_duplicate_payload(0x03, &mut ret);
+                    trim_duplicate_payload(0x03, &mut ret)?;
                     let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x03), suppressing extra send.");
@@ -252,7 +259,7 @@ pub fn boot_modbus_slave_service(
                     log::warn!("Failed to parse slave holdings");
                 }
             }
-            0x04 => {
+            ModbusFunction::GetInputs => {
                 // Input Registers
                 if let Ok(Some(ret)) = build_slave_inputs_response(&mut frame, &mut context) {
                     log::info!(
@@ -263,7 +270,7 @@ pub fn boot_modbus_slave_service(
                             .join(" ")
                     );
                     let mut ret = ret;
-                    let _ = trim_duplicate_payload(0x04, &mut ret);
+                    trim_duplicate_payload(0x04, &mut ret)?;
                     let duplicate = last_response.as_ref().map(|v| v == &ret).unwrap_or(false);
                     if duplicate {
                         log::warn!("Detected immediate duplicate response (func=0x04), suppressing extra send.");
@@ -276,7 +283,7 @@ pub fn boot_modbus_slave_service(
                 }
             }
             _ => {
-                log::warn!("Unsupported function code: {}", frame.func);
+                log::warn!("Unsupported function code: {:?}", frame.func);
             }
         }
     }

@@ -54,7 +54,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     render_ports_list(frame, left, selection);
 
     // RIGHT: content details
-    render_details_panel(frame, right, selection);
+    render_details_panel(frame, right);
 
     Ok(())
 }
