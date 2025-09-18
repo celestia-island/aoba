@@ -12,14 +12,9 @@ use crate::{
 pub fn derive_selection(app: &types::Status) -> usize {
     // For config panel, we need to determine which field is currently selected
     match &app.page {
-        types::Page::ModbusConfig { edit_cursor, edit_active, .. } => {
-            if *edit_active {
-                *edit_cursor
-            } else {
-                // Use a more sophisticated selection tracking when navigation is implemented
-                // For now, return 0 (first field)
-                0
-            }
+        types::Page::ModbusConfig { edit_cursor, .. } => {
+            // edit_cursor tracks both navigation and editing state
+            *edit_cursor
         }
         _ => 0usize,
     }

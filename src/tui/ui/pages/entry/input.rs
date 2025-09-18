@@ -155,7 +155,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
             })?;
 
-            if cursor.is_none() {
+            let final_cursor = if cursor.is_none() {
                 // Give a default value for cursor
                 if app.ports.map.is_empty() {
                     write_status(|s| {
@@ -164,6 +164,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         Ok(())
                     })?;
+                    Some(types::ui::EntryCursor::Refresh)
                 } else {
                     write_status(|s| {
                         s.page = Page::Entry {
@@ -171,10 +172,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         Ok(())
                     })?;
+                    Some(types::ui::EntryCursor::Com { idx: 0 })
                 }
-            }
+            } else {
+                cursor
+            };
 
-            match cursor {
+            match final_cursor {
                 Some(types::ui::EntryCursor::Com { idx }) => write_status(|s| {
                     s.page = Page::ModbusConfig {
                         selected_port: idx,
