@@ -2,11 +2,7 @@ use anyhow::Result;
 
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
-use crate::{
-    i18n::lang,
-    protocol::status::types,
-    tui::ui::components::styled_label::styled_spans,
-};
+use crate::{i18n::lang, protocol::status::types, tui::ui::components::styled_label::styled_spans};
 
 /// Derive selection index for config panel from current page state
 pub fn derive_selection(app: &types::Status) -> usize {
@@ -32,7 +28,7 @@ pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
     // Use read_status to access current Status snapshot
     crate::protocol::status::read_status(|app| {
         let mut lines: Vec<Line<'static>> = Vec::new();
-        
+
         // Get the currently selected port
         let sel_idx = match &app.page {
             types::Page::ModbusDashboard { selected_port, .. }
@@ -54,13 +50,13 @@ pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
 
         // Determine current row selection for styling
         let current_selection = derive_selection(app);
-        
+
         // GROUP 1: Port control and protocol selection
         render_group1_lines(&mut lines, port_data, current_selection)?;
-        
+
         // Empty line between groups
         lines.push(Line::from(vec![Span::raw("")]));
-        
+
         // GROUP 2: Serial parameters
         render_group2_lines(&mut lines, port_data, current_selection)?;
 
@@ -94,9 +90,14 @@ fn render_group1_lines(
         crate::tui::ui::components::styled_label::TextState::Normal
     };
 
-    lines.push(create_kv_line(&enable_label, &enable_value, enable_state, false)?);
+    lines.push(create_kv_line(
+        &enable_label,
+        &enable_value,
+        enable_state,
+        false,
+    )?);
 
-    // 2. Communication Protocol selector (row 1)  
+    // 2. Communication Protocol selector (row 1)
     let protocol_label = lang().protocol.common.protocol_selection.clone();
     let protocol_value = lang().protocol.common.mode_modbus.clone(); // Default to Modbus for now
 
@@ -106,7 +107,12 @@ fn render_group1_lines(
         crate::tui::ui::components::styled_label::TextState::Normal
     };
 
-    lines.push(create_kv_line(&protocol_label, &protocol_value, protocol_state, true)?);
+    lines.push(create_kv_line(
+        &protocol_label,
+        &protocol_value,
+        protocol_state,
+        true,
+    )?);
 
     Ok(())
 }
@@ -119,16 +125,16 @@ fn render_group2_lines(
 ) -> Result<()> {
     // Define the serial parameter labels and extract values
     let serial_labels = vec![
-        lang().protocol.common.label_baud.clone(),       // row 3
-        lang().protocol.common.label_data_bits.clone(),  // row 4  
-        lang().protocol.common.label_parity.clone(),     // row 5
-        lang().protocol.common.label_stop_bits.clone(),  // row 6
+        lang().protocol.common.label_baud.clone(),      // row 3
+        lang().protocol.common.label_data_bits.clone(), // row 4
+        lang().protocol.common.label_parity.clone(),    // row 5
+        lang().protocol.common.label_stop_bits.clone(), // row 6
     ];
 
     for (idx, label) in serial_labels.iter().enumerate() {
         let row_idx = idx + 3; // Starting from row 3 (after group 1 + empty line)
         let value = get_serial_param_value(port_data, idx);
-        
+
         let state = if current_selection == row_idx {
             crate::tui::ui::components::styled_label::TextState::Selected
         } else {
@@ -157,18 +163,22 @@ fn create_kv_line(
     // Create value spans using styled_spans
     let value_spans = if is_selector {
         // Use selector-style spans for protocol selection
-        styled_spans(crate::tui::ui::components::styled_label::StyledSpanKind::Selector {
-            base_prefix: "",
-            label: value,
-            state,
-        })
+        styled_spans(
+            crate::tui::ui::components::styled_label::StyledSpanKind::Selector {
+                base_prefix: "",
+                label: value,
+                state,
+            },
+        )
     } else {
         // Use simple text spans for other values
-        styled_spans(crate::tui::ui::components::styled_label::StyledSpanKind::Text {
-            text: value,
-            state,
-            bold: false,
-        })
+        styled_spans(
+            crate::tui::ui::components::styled_label::StyledSpanKind::Text {
+                text: value,
+                state,
+                bold: false,
+            },
+        )
     };
 
     // Build the line with label and value

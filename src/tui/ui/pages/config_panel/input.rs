@@ -237,7 +237,7 @@ fn handle_field_navigation(key_code: KeyCode, navigable_fields: &[usize]) -> Res
                 .iter()
                 .position(|&field| field == *edit_cursor)
                 .unwrap_or(0);
-            
+
             match key_code {
                 KeyCode::Up | KeyCode::Char('k') => {
                     if current_pos > 0 {
@@ -287,7 +287,8 @@ fn handle_port_toggle(snapshot: &types::Status, bus: &Bus) -> Result<()> {
                         // For now, just update the state (this should be moved to core logic)
                         write_status(|s| {
                             if let Some(port_data) = s.ports.map.get_mut(port_name) {
-                                port_data.state = crate::protocol::status::types::port::PortState::OccupiedByThis;
+                                port_data.state =
+                                    crate::protocol::status::types::port::PortState::OccupiedByThis;
                             }
                             Ok(())
                         })?;
@@ -296,7 +297,8 @@ fn handle_port_toggle(snapshot: &types::Status, bus: &Bus) -> Result<()> {
                         // Port is occupied by us, disable it
                         write_status(|s| {
                             if let Some(port_data) = s.ports.map.get_mut(port_name) {
-                                port_data.state = crate::protocol::status::types::port::PortState::Free;
+                                port_data.state =
+                                    crate::protocol::status::types::port::PortState::Free;
                             }
                             Ok(())
                         })?;
@@ -315,7 +317,7 @@ fn handle_port_toggle(snapshot: &types::Status, bus: &Bus) -> Result<()> {
             }
         }
     }
-    
+
     bus.ui_tx
         .send(crate::tui::utils::bus::UiToCore::Refresh)
         .map_err(|err| anyhow!(err))?;
@@ -346,12 +348,12 @@ fn handle_protocol_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()>
             };
             Ok(())
         })?;
-        
+
         bus.ui_tx
             .send(crate::tui::utils::bus::UiToCore::Refresh)
             .map_err(|err| anyhow!(err))?;
     }
-    
+
     Ok(())
 }
 
@@ -362,7 +364,7 @@ fn handle_parameter_edit(snapshot: &types::Status, selected_row: usize, bus: &Bu
             if let Some(pd) = snapshot.ports.map.get(port_name) {
                 // Get initial value for the field being edited
                 let init_buf = get_field_initial_value(pd, selected_row);
-                
+
                 write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_active,
@@ -379,7 +381,7 @@ fn handle_parameter_edit(snapshot: &types::Status, selected_row: usize, bus: &Bu
                     }
                     Ok(())
                 })?;
-                
+
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|err| anyhow!(err))?;
