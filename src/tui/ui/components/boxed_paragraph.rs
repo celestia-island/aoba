@@ -65,7 +65,7 @@ fn render_content_area(
     wrap: bool,
 ) {
     let content_len = content.len();
-    let content_len = content_len - (area.height / 2) as usize;
+    let content_len = content_len.saturating_sub((area.height / 2) as usize);
     let offset = std::cmp::min(offset, content_len.saturating_sub(1));
 
     let block = custom_block.unwrap_or_else(|| {
