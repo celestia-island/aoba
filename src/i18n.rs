@@ -200,11 +200,11 @@ static LOCALE: OnceCell<String> = OnceCell::new();
 
 fn parse_toml_to_lang(content: &str) -> Lang {
     match toml::from_str::<Lang>(content) {
-        Ok(l) => l,
-        Err(e) => {
+        Ok(data) => data,
+        Err(err) => {
             log::warn!(
                 "i18n: failed to parse toml: {}\ncontent preview: {}",
-                e,
+                err,
                 &content.chars().take(200).collect::<String>()
             );
             // Fallback: return the default Lang (keys as values)

@@ -157,8 +157,8 @@ fn boot_serial_loop(
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 RuntimeCommand::Reconfigure(new_cfg) => {
-                    if let Err(e) = reopen_serial(&serial, &port_name, &new_cfg) {
-                        evt_tx.send(RuntimeEvent::Error(format!("Reconfigure failed: {e}")))?;
+                    if let Err(err) = reopen_serial(&serial, &port_name, &new_cfg) {
+                        evt_tx.send(RuntimeEvent::Error(format!("Reconfigure failed: {err}")))?;
                     } else {
                         gap = compute_gap(&new_cfg);
                         evt_tx.send(RuntimeEvent::Reconfigured(new_cfg))?;
@@ -203,9 +203,9 @@ fn boot_serial_loop(
                     }
                 }
                 Ok(_) => {}
-                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
-                Err(e) => {
-                    evt_tx.send(RuntimeEvent::Error(format!("read error: {e}")))?;
+                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => {}
+                Err(err) => {
+                    evt_tx.send(RuntimeEvent::Error(format!("read error: {err}")))?;
                 }
             }
         }

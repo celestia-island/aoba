@@ -315,8 +315,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // If we reach here we are not in per-field edit mode (in_edit == false)
                 // so Esc should return the user to the main entry page.
                 // Preserve the cursor position based on the selected port.
-                let cursor = if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page {
-                    Some(types::ui::EntryCursor::Com { idx: *selected_port })
+                let cursor = if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page
+                {
+                    Some(types::ui::EntryCursor::Com {
+                        idx: *selected_port,
+                    })
                 } else {
                     None
                 };

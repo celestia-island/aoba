@@ -46,7 +46,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 fn handle_leave_page(bus: &Bus) -> Result<()> {
     let cursor = read_status(|s| {
         if let types::Page::ModbusLog { selected_port, .. } = &s.page {
-            Ok(Some(types::ui::EntryCursor::Com { idx: *selected_port }))
+            Ok(Some(types::ui::EntryCursor::Com {
+                idx: *selected_port,
+            }))
         } else {
             Ok(None)
         }

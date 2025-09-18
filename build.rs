@@ -1,3 +1,4 @@
+use anyhow::Result;
 use semver::Version;
 use serde_json::Value as JsonValue;
 use std::{
@@ -7,7 +8,7 @@ use std::{
 };
 use toml::value::{Table, Value as TomlValue};
 
-fn main() {
+fn main() -> Result<()> {
     // Build a TOML table as cache
     let mut out_tbl: Table = Table::new();
 
@@ -156,8 +157,10 @@ fn main() {
 
     // write to res/about_cache.toml
     let toml_val = TomlValue::Table(out_tbl);
-    if let Ok(s) = toml::to_string_pretty(&toml_val) {
-        let _ = fs::create_dir_all("res");
-        let _ = fs::write("res/about_cache.toml", s);
+    if let Ok(content) = toml::to_string_pretty(&toml_val) {
+        fs::create_dir_all("res")?;
+        fs::write("res/about_cache.toml", content)?;
     }
+
+    Ok(())
 }

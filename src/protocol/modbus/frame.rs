@@ -39,8 +39,8 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                         log::debug!("serial read chunk={chunk_hex} collected={so_far}");
                     }
                 }
-                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => break,
-                Err(e) => return Err(e),
+                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => break,
+                Err(err) => return Err(err),
             }
         }
         Ok(())

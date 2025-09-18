@@ -197,7 +197,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.page = Page::About { view_offset: 0 };
                     Ok(())
                 })?,
-                None => unreachable!("Entry cursor should have been initialized before reaching this point"),
+                None => unreachable!(
+                    "Entry cursor should have been initialized before reaching this point"
+                ),
             }
             Ok(())
         }

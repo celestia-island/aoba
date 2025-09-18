@@ -13,10 +13,7 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
     // Horizontal layout: left (spinner + breadcrumb) + right (reserved)
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Min(10),
-            Constraint::Length(2),
-        ])
+        .constraints([Constraint::Min(10), Constraint::Length(2)])
         .split(area);
 
     // Background bar
@@ -27,7 +24,7 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
 
     // Build breadcrumb text with spinner at the beginning
     let mut breadcrumb_text = String::new();
-    
+
     // Add spinner if busy (2 spaces from left)
     breadcrumb_text.push_str("  ");
     if app.temporarily.busy.busy {
@@ -106,7 +103,7 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
             )
         }
     };
-    
+
     breadcrumb_text.push_str(&page_breadcrumb);
 
     let title_para = Paragraph::new(breadcrumb_text)

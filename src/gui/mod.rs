@@ -54,8 +54,8 @@ impl GuiApp {
         let status = Arc::new(RwLock::new(Status::default()));
 
         // Initialize the global status
-        if let Err(e) = init_status(status.clone()) {
-            log::error!("Failed to initialize global status: {}", e);
+        if let Err(err) = init_status(status.clone()) {
+            log::error!("Failed to initialize global status: {}", err);
         }
 
         // Create channels and a simple core-like thread for demo handling of Refresh/Quit.
