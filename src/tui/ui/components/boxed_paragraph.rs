@@ -33,7 +33,7 @@ pub fn render_boxed_paragraph(
     let mut block = Block::default()
         .borders(Borders::ALL)
         .padding(Padding::left(1));
-    
+
     if let Some(title_text) = title {
         block = block.title(format!(" {} ", title_text));
     }
