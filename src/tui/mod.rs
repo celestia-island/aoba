@@ -399,7 +399,7 @@ fn run_rendering_loop(
         // render from that to avoid holding the lock while rendering.
         if let Ok(snapshot) = crate::protocol::status::read_status(|s| Ok(s.clone())) {
             terminal.draw(|f| {
-                let _ = render_ui_readonly(f, &snapshot);
+                let _ = render_ui(f, &snapshot);
             })?;
         }
     }
@@ -409,7 +409,7 @@ fn run_rendering_loop(
 }
 
 /// Render UI function that only reads from Status (immutable reference)
-fn render_ui_readonly(frame: &mut Frame, app: &Status) -> Result<()> {
+fn render_ui(frame: &mut Frame, app: &Status) -> Result<()> {
     let area = frame.area();
     let subpage_active = matches!(
         app.page,
