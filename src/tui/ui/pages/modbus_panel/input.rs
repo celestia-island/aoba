@@ -56,7 +56,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             } else {
                 // No nested edit active: leave dashboard
-                handle_leave_page(bus, &snapshot)?;
+                handle_leave_page(bus)?;
                 Ok(())
             }
         }
@@ -93,14 +93,16 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the modbus dashboard back to entry page
-fn handle_leave_page(bus: &Bus, app: &types::Status) -> Result<()> {
+fn handle_leave_page(bus: &Bus) -> Result<()> {
     use crate::tui::utils::bus::UiToCore;
 
-    let cursor = if let types::Page::ModbusDashboard { selected_port, .. } = &app.page {
-        Some(types::ui::EntryCursor::Com { idx: *selected_port })
-    } else {
-        None
-    };
+    let cursor = read_status(|s| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &s.page {
+            Ok(Some(types::ui::EntryCursor::Com { idx: *selected_port }))
+        } else {
+            Ok(None)
+        }
+    })?;
     write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor };
