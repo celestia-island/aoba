@@ -59,6 +59,12 @@ pub fn render_kv_lines_with_indicators() -> Result<Vec<Line<'static>>> {
         // GROUP 2: Serial parameters
         render_group2_with_indicators(&mut lines, port_data, current_selection)?;
 
+        // Empty line between groups
+        lines.push(Line::from(vec![Span::raw("")]));
+
+        // GROUP 3: Communication log
+        render_group3_with_indicators(&mut lines, current_selection)?;
+
         Ok(lines)
     })
 }
@@ -92,12 +98,11 @@ fn render_group1_with_indicators(
     let mode_selected = current_selection == types::ui::ConfigPanelCursor::ProtocolMode;
     lines.push(create_config_line(&mode_label, &mode_value, mode_selected, true)?);
 
-    // 3. Protocol Config navigation (split from the old combined field)
-    let config_label = lang().protocol.common.configure_protocol.clone();
-    let config_value = format!("< {} >", lang().protocol.common.mode_modbus);
-
+    // 3. Protocol Config navigation (hyperlink-style: no label, just action text)
+    let config_value = lang().protocol.common.enter_modbus_config.clone(); // Default to Modbus for now
+    
     let config_selected = current_selection == types::ui::ConfigPanelCursor::ProtocolConfig;
-    lines.push(create_config_line(&config_label, &config_value, config_selected, true)?);
+    lines.push(create_config_line("", &config_value, config_selected, false)?); // Empty label for hyperlink style
 
     Ok(())
 }
@@ -125,33 +130,52 @@ fn render_group2_with_indicators(
     Ok(())
 }
 
-/// Create a config line with 4:1:5 layout (label:indicator:value) 
+/// Create a config line with dynamic spacing between label and value using unicode-width
 fn create_config_line(
     label: &str,
     value: &str,
     selected: bool,
     is_selector: bool,
 ) -> Result<Line<'static>> {
-    // Calculate widths for 4:1:5 ratio based on typical terminal width
-    let label_width = 20;  // ~40% of 50 chars
-    let indicator_width = 2;  // ~10% of 50 chars  
-    let _value_width = 25;  // ~50% of 50 chars
-
-    // Create label span (bold, fixed width)
-    let label_span = Span::styled(
-        format!("{:<width$}", label, width = label_width),
-        Style::default().add_modifier(Modifier::BOLD),
-    );
-
-    // Create indicator span (">" if selected, space if not)
+    use unicode_width::UnicodeWidthStr;
+    
+    // Calculate the width of the label accurately accounting for Unicode
+    let label_width = UnicodeWidthStr::width(label);
+    
+    // Create spans
+    let mut line_spans = Vec::new();
+    
+    // Add label if not empty (for hyperlink-style entries, label will be empty)
+    if !label.is_empty() {
+        let label_span = Span::styled(
+            label.to_string(),
+            Style::default().add_modifier(Modifier::BOLD),
+        );
+        line_spans.push(label_span);
+        
+        // Calculate dynamic spacing to align values properly
+        // Target alignment: labels should take ~40% of width, values start at ~45%
+        let target_label_width = 20; // Target column width for alignment
+        let padding_needed = if label_width < target_label_width {
+            target_label_width - label_width + 2 // +2 for spacing
+        } else {
+            2 // Minimum spacing
+        };
+        
+        // Add spacing
+        line_spans.push(Span::raw(" ".repeat(padding_needed)));
+    }
+    
+    // Add focus indicator
     let indicator_span = if selected {
         Span::styled(
-            format!("{:>width$}", ">", width = indicator_width),
+            "> ".to_string(),
             Style::default().fg(Color::Green),
         )
     } else {
-        Span::raw(format!("{:width$}", "", width = indicator_width))
+        Span::raw("  ".to_string()) // Two spaces for alignment
     };
+    line_spans.push(indicator_span);
 
     // Create value spans using styled_spans
     let value_spans = if is_selector {
@@ -180,8 +204,7 @@ fn create_config_line(
         )
     };
 
-    // Build the line with label, indicator, and value
-    let mut line_spans = vec![label_span, indicator_span];
+    // Add value spans
     line_spans.extend(value_spans);
 
     Ok(Line::from(line_spans))
@@ -213,6 +236,20 @@ fn get_serial_param_value_by_cursor(
     } else {
         "??".to_string()
     }
+}
+
+/// Render Group 3: Communication log access (hyperlink-style)
+fn render_group3_with_indicators(
+    lines: &mut Vec<Line<'static>>,
+    current_selection: types::ui::ConfigPanelCursor,
+) -> Result<()> {
+    // Single hyperlink-style item: no label, just the action text
+    let log_value = lang().protocol.common.view_communication_log.clone();
+    
+    let log_selected = current_selection == types::ui::ConfigPanelCursor::ViewCommunicationLog;
+    lines.push(create_config_line("", &log_value, log_selected, false)?); // Empty label for hyperlink style
+
+    Ok(())
 }
 
 

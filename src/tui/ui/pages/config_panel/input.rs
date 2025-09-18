@@ -277,6 +277,10 @@ fn handle_enter_key(snapshot: &types::Status, selected_cursor: types::ui::Config
             // Serial parameter fields - enter edit mode
             handle_parameter_edit(snapshot, selected_cursor, bus)
         }
+        types::ui::ConfigPanelCursor::ViewCommunicationLog => {
+            // View communication log - navigate to log panel
+            handle_log_navigation(snapshot, bus)
+        }
     }
 }
 
@@ -491,4 +495,22 @@ fn get_field_initial_value_by_cursor(
         }
         _ => String::new(),
     }
+}
+
+/// Handle navigation to communication log panel
+fn handle_log_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()> {
+    if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page {
+        write_status(|s| {
+            s.page = types::Page::ModbusLog {
+                selected_port: *selected_port,
+            };
+            Ok(())
+        })?;
+
+        bus.ui_tx
+            .send(crate::tui::utils::bus::UiToCore::Refresh)
+            .map_err(|err| anyhow!(err))?;
+    }
+
+    Ok(())
 }

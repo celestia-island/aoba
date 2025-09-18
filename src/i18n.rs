@@ -73,6 +73,7 @@ derive_struct! {
             hint_switch_tab: String = "hint_switch_tab".to_string(),
             hint_move_vertical: String = "hint_move_vertical".to_string(),
             hint_move_with_panels: String = "hint_move_with_panels".to_string(),
+            hint_switch_options: String = "hint_switch_options".to_string(),
 
             hint_master_enter_edit: String = "hint_master_enter_edit".to_string(),
             hint_master_editing: String = "hint_master_editing".to_string(),
@@ -144,6 +145,9 @@ derive_struct! {
                 protocol_selection: String = "protocol_selection".to_string(),
                 protocol_mode: String = "protocol_mode".to_string(),
                 configure_protocol: String = "configure_protocol".to_string(),
+                view_communication_log: String = "view_communication_log".to_string(),
+                enter_modbus_config: String = "enter_modbus_config".to_string(),
+                enter_mqtt_config: String = "enter_mqtt_config".to_string(),
                 port_enabled: String = "port_enabled".to_string(),
                 port_disabled: String = "port_disabled".to_string(),
                 mode_modbus: String = "mode_modbus".to_string(),

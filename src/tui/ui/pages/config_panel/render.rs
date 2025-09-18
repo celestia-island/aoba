@@ -13,7 +13,7 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
     vec![
         vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
         vec![lang().hotkeys.press_enter_modify.as_str().to_string()],
-        vec!["Press ← / h or → / l to switch options".to_string()], // TODO: Add to i18n
+        vec![lang().hotkeys.hint_switch_options.as_str().to_string()],
     ]
 }
 

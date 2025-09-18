@@ -86,6 +86,8 @@ pub enum ConfigPanelCursor {
     Parity,
     /// Stop bits setting
     StopBits,
+    /// View communication log
+    ViewCommunicationLog,
 }
 
 impl ConfigPanelCursor {
@@ -99,6 +101,7 @@ impl ConfigPanelCursor {
             ConfigPanelCursor::DataBits,
             ConfigPanelCursor::Parity,
             ConfigPanelCursor::StopBits,
+            ConfigPanelCursor::ViewCommunicationLog,
         ]
     }
 
@@ -132,6 +135,104 @@ impl ConfigPanelCursor {
     /// Convert from index for compatibility with existing code
     pub fn from_index(index: usize) -> Self {
         Self::all().get(index).copied().unwrap_or(ConfigPanelCursor::EnablePort)
+    }
+}
+
+/// ModbusDashboardCursor describes the cursor/selection in the modbus dashboard
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModbusDashboardCursor {
+    /// First item in dashboard
+    FirstItem,
+    // Add more variants as needed for the dashboard
+}
+
+impl ModbusDashboardCursor {
+    /// Get all cursor variants in order
+    pub const fn all() -> &'static [ModbusDashboardCursor] {
+        &[
+            ModbusDashboardCursor::FirstItem,
+        ]
+    }
+
+    /// Move to the previous cursor position
+    pub fn prev(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx > 0 {
+            all[current_idx - 1]
+        } else {
+            all[all.len() - 1] // Wrap to last
+        }
+    }
+
+    /// Move to the next cursor position
+    pub fn next(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx < all.len() - 1 {
+            all[current_idx + 1]
+        } else {
+            all[0] // Wrap to first
+        }
+    }
+
+    /// Convert to index for compatibility with existing code
+    pub fn to_index(self) -> usize {
+        Self::all().iter().position(|&c| c == self).unwrap_or(0)
+    }
+
+    /// Convert from index for compatibility with existing code
+    pub fn from_index(index: usize) -> Self {
+        Self::all().get(index).copied().unwrap_or(ModbusDashboardCursor::FirstItem)
+    }
+}
+
+/// LogPanelCursor describes the cursor/selection in the log panel
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LogPanelCursor {
+    /// First item in log panel
+    FirstItem,
+    // Add more variants as needed for the log panel
+}
+
+impl LogPanelCursor {
+    /// Get all cursor variants in order
+    pub const fn all() -> &'static [LogPanelCursor] {
+        &[
+            LogPanelCursor::FirstItem,
+        ]
+    }
+
+    /// Move to the previous cursor position
+    pub fn prev(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx > 0 {
+            all[current_idx - 1]
+        } else {
+            all[all.len() - 1] // Wrap to last
+        }
+    }
+
+    /// Move to the next cursor position
+    pub fn next(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx < all.len() - 1 {
+            all[current_idx + 1]
+        } else {
+            all[0] // Wrap to first
+        }
+    }
+
+    /// Convert to index for compatibility with existing code
+    pub fn to_index(self) -> usize {
+        Self::all().iter().position(|&c| c == self).unwrap_or(0)
+    }
+
+    /// Convert from index for compatibility with existing code
+    pub fn from_index(index: usize) -> Self {
+        Self::all().get(index).copied().unwrap_or(LogPanelCursor::FirstItem)
     }
 }
 
