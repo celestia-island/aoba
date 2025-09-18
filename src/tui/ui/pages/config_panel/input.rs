@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
+    protocol::status::{read_status, types, write_status},
     tui::utils::bus::Bus,
 };
 
@@ -37,7 +37,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         // We are editing a field: handle text input and control keys
         match key.code {
             KeyCode::Char(c) => {
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -49,11 +49,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         *config_edit_cursor_pos = pos + 1;
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Backspace => {
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -67,11 +67,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Left => {
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
@@ -82,11 +82,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Right => {
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -99,26 +99,25 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Enter => {
                 // Commit edit: write buffer back to PortData field
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig {
+                        selected_port,
                         edit_active: config_edit_active,
-                        edit_port: config_edit_port,
-                        edit_field_index: config_edit_field_index,
-                        edit_field_key: config_edit_field_key,
+                        edit_cursor: config_edit_cursor,
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
                     } = &mut s.page
                     {
-                        if let Some(port_name) = config_edit_port.clone() {
-                            if let Some(pd) = s.ports.map.get_mut(&port_name) {
+                        if let Some(port_name) = s.ports.order.get(*selected_port) {
+                            if let Some(pd) = s.ports.map.get_mut(port_name) {
                                 let val = config_edit_buffer.clone();
-                                match *config_edit_field_index {
+                                match *config_edit_cursor {
                                     0 => pd.port_name = val,
                                     1 => {
                                         if let Ok(v) = val.parse::<u32>() {
@@ -175,41 +174,35 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                         // Exit edit mode and clear buffer
                         *config_edit_active = false;
-                        *config_edit_port = None;
-                        *config_edit_field_key = None;
                         config_edit_buffer.clear();
                         *config_edit_cursor_pos = 0;
                     }
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|e| anyhow!(e))?;
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Esc => {
                 // Cancel edit
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_active: config_edit_active,
-                        edit_port: config_edit_port,
-                        edit_field_key: config_edit_field_key,
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
                     } = &mut s.page
                     {
                         *config_edit_active = false;
-                        *config_edit_port = None;
-                        *config_edit_field_key = None;
                         config_edit_buffer.clear();
                         *config_edit_cursor_pos = 0;
                     }
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|e| anyhow!(e))?;
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             _ => Ok(()),
@@ -219,7 +212,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         match key.code {
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Update selected_port inside Page::ModbusConfig under write lock
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     if let types::Page::ModbusConfig { selected_port, .. } = &mut s.page {
                         // Move selection by delta based on key
                         match key.code {
@@ -238,10 +231,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|e| anyhow!(e))?;
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Enter | KeyCode::Char('e') => {
@@ -290,48 +283,44 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         String::new()
                     };
 
-                    let _ = crate::protocol::status::write_status(|s| {
+                    write_status(|s| {
                         if let types::Page::ModbusConfig {
                             edit_active: config_edit_active,
-                            edit_port: config_edit_port,
-                            edit_field_index: config_edit_field_index,
-                            edit_field_key: config_edit_field_key,
+                            edit_cursor: config_edit_cursor,
                             edit_buffer: config_edit_buffer,
                             edit_cursor_pos: config_edit_cursor_pos,
                             ..
                         } = &mut s.page
                         {
                             *config_edit_active = true;
-                            *config_edit_port = Some(port_name.clone());
-                            *config_edit_field_index = sel_idx;
-                            *config_edit_field_key = None;
+                            *config_edit_cursor = selected_row;
                             *config_edit_buffer = init_buf.clone();
                             *config_edit_cursor_pos = init_buf.len();
                         }
                         Ok(())
-                    });
+                    })?;
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::Refresh)
-                        .map_err(|e| anyhow!(e))?;
+                        .map_err(|err| anyhow!(err))?;
                     Ok(())
                 } else {
                     // No port under selection: just refresh
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::Refresh)
-                        .map_err(|e| anyhow!(e))?;
+                        .map_err(|err| anyhow!(err))?;
                     Ok(())
                 }
             }
             KeyCode::Esc => {
                 // If we reach here we are not in per-field edit mode (in_edit == false)
                 // so Esc should return the user to the main entry page.
-                let _ = crate::protocol::status::write_status(|s| {
+                write_status(|s| {
                     s.page = types::Page::Entry { cursor: None };
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|e| anyhow!(e))?;
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             _ => Ok(()),

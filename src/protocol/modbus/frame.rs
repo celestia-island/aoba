@@ -54,7 +54,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
     // in a way that appears to reorder bytes from the caller's perspective.
     let mut guard = usbtty
         .lock()
-        .map_err(|e| anyhow!("Failed to lock USBTTY port: {}", e))?;
+        .map_err(|err| anyhow!("Failed to lock USBTTY port: {}", err))?;
 
     // Step 1: read minimal 2 bytes (slave id + function)
     while collected.len() < 2 {

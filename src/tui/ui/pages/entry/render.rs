@@ -47,18 +47,14 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let left = chunks[0];
     let right = chunks[1];
 
-    read_status(|app| {
-        // Derive current selection index from page
-        let selection = derive_selection_from_page(&app.page, &app.ports.order);
+    // Components read status internally now; just derive selection and call them
+    let selection = read_status(|app| Ok(derive_selection_from_page(&app.page, &app.ports.order)))?;
 
-        // LEFT: ports list
-        render_ports_list(frame, left, app, selection);
+    // LEFT: ports list
+    render_ports_list(frame, left, selection);
 
-        // RIGHT: content details
-        render_details_panel(frame, right, app, selection);
-
-        Ok(())
-    })?;
+    // RIGHT: content details
+    render_details_panel(frame, right, selection);
 
     Ok(())
 }
