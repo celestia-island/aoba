@@ -8,8 +8,17 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::types::{self, port::PortData, port::PortState, ui::SpecialEntry},
-    tui::ui::components::{render_boxed_paragraph_with_block, render_boxed_paragraph_with_block_and_wrap},
+    protocol::status::{
+        read_status,
+        types::{
+            self,
+            port::{PortData, PortState},
+            ui::SpecialEntry,
+        },
+    },
+    tui::ui::components::{
+        render_boxed_paragraph_with_block, render_boxed_paragraph_with_block_and_wrap,
+    },
 };
 
 /// Helper function to derive selection from page state (entry page specific)
@@ -31,8 +40,7 @@ pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) ->
 
 /// Render the left ports list panel
 pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
-    // Use read_status to access Status snapshot
-    if crate::protocol::status::read_status(|s| {
+    if read_status(|s| {
         let width = area.width as usize;
         let mut lines: Vec<Line> = Vec::new();
         let default_pd = PortData::default();
@@ -139,7 +147,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 
 /// Render the right details panel content
 pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
-    if let Ok(()) = crate::protocol::status::read_status(|app| {
+    if let Ok(()) = read_status(|app| {
         let selected_state = if selection < app.ports.order.len() {
             let name = &app.ports.order[selection];
             app.ports
@@ -195,7 +203,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
 fn render_special_entry_content(f: &mut Frame, area: Rect, rel: usize, content_block: Block) {
     if rel == 0 {
         // Build using Status accessed via read_status
-        if let Ok(()) = crate::protocol::status::read_status(|app| {
+        if let Ok(()) = read_status(|app| {
             let mut lines: Vec<Line> = Vec::new();
             lines.push(Line::from(lang().index.refresh_action.as_str()));
             if let Some(ts) = app.temporarily.scan.last_scan_time {
@@ -254,7 +262,7 @@ fn render_port_details(
     selected_state: PortState,
     content_block: Block,
 ) {
-    if let Ok(()) = crate::protocol::status::read_status(|app| {
+    if let Ok(()) = read_status(|app| {
         let port_name = app.ports.order.get(selection).cloned().unwrap_or_default();
         let default_pd = PortData::default();
         let p = app.ports.map.get(&port_name).unwrap_or(&default_pd);
@@ -414,7 +422,14 @@ fn render_port_details(
             }
         }
 
-        render_boxed_paragraph_with_block_and_wrap(f, area, info_lines, 0, Some(content_block), true);
+        render_boxed_paragraph_with_block_and_wrap(
+            f,
+            area,
+            info_lines,
+            0,
+            Some(content_block),
+            true,
+        );
         Ok(())
     }) {
     } else {
