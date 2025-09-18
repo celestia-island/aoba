@@ -24,11 +24,9 @@ derive_struct! {
                 selected_port: usize,
 
                 edit_active: bool = false,
-                edit_port?: String,
-                edit_field_index: usize = 0,
-                edit_field_key?: String,
-                edit_buffer: String = String::new(),
+                edit_cursor: usize = 0,
                 edit_cursor_pos: usize = 0,
+                edit_buffer: String = String::new(),
             },
             ModbusDashboard {
                 selected_port: usize,

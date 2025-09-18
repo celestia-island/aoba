@@ -2,7 +2,10 @@ use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{protocol::status::types, tui::utils::bus::Bus};
+use crate::{
+    protocol::status::{types, write_status},
+    tui::utils::bus::Bus,
+};
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -11,20 +14,19 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Navigation within the dashboard
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Right => {
             // Horizontal navigation within fields
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Esc => {
             // If dashboard has nested edit state in Status (e.g. editing_field or master_field_editing),
             // prefer to cancel those first. Otherwise leave to entry page.
-            use crate::protocol::status::write_status;
             let mut cancelled = false;
             let _ = write_status(|s| {
                 if let types::Page::ModbusDashboard {
@@ -43,15 +45,15 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     }
                 }
                 Ok(())
-            });
+            })?;
             if cancelled {
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|e| anyhow!(e))?;
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             } else {
                 // No nested edit active: leave dashboard
-                handle_leave_page(bus);
+                handle_leave_page(bus)?;
                 Ok(())
             }
         }
@@ -59,28 +61,28 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Edit entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Delete | KeyCode::Char('x') => {
             // Delete entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Char('n') => {
             // New entry
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Tab => {
             // Tab switching
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         _ => Ok(()),
@@ -88,14 +90,16 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the modbus dashboard back to entry page
-fn handle_leave_page(bus: &Bus) {
-    use crate::protocol::status::write_status;
+fn handle_leave_page(bus: &Bus) -> Result<()> {
     use crate::tui::utils::bus::UiToCore;
 
-    let _ = write_status(|s| {
+    write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
         Ok(())
-    });
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
+    })?;
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
+    Ok(())
 }

@@ -6,8 +6,9 @@ use crate::{
     protocol::status::{
         read_status,
         types::{self, Status},
+        write_status,
     },
-    tui::utils::bus::Bus,
+    tui::utils::bus::{Bus, UiToCore},
 };
 
 /// Handle input for log panel. Sends commands via UiToCore.
@@ -19,22 +20,22 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Navigation commands within the log
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Esc | KeyCode::Char('h') => {
             // Leave page - go back to entry
-            handle_leave_page(bus);
+            handle_leave_page(bus)?;
             Ok(())
         }
         KeyCode::Char('f') => {
             // Toggle follow mode
-            handle_toggle_follow(bus, &snapshot);
+            handle_toggle_follow(bus, &snapshot)?;
             Ok(())
         }
         KeyCode::Char('c') => {
             // Clear logs
-            handle_clear_logs(bus, &snapshot);
+            handle_clear_logs(bus, &snapshot)?;
             Ok(())
         }
         _ => Ok(()),
@@ -42,45 +43,42 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the log panel back to entry page
-fn handle_leave_page(bus: &Bus) {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
-    let _ = write_status(|s| {
+fn handle_leave_page(bus: &Bus) -> Result<()> {
+    write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
         Ok(())
-    });
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
+    })?;
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
+    Ok(())
 }
 
 /// Handle toggling follow mode for logs
-fn handle_toggle_follow(bus: &Bus, app: &Status) {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
+fn handle_toggle_follow(bus: &Bus, app: &Status) -> Result<()> {
     // Toggle the auto-scroll flag for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
-        let _ = write_status(|s| {
+        write_status(|s| {
             if let Some(port_name) = s.ports.order.get(*selected_port) {
                 if let Some(port_data) = s.ports.map.get_mut(port_name) {
                     port_data.log_auto_scroll = !port_data.log_auto_scroll;
                 }
             }
             Ok(())
-        });
+        })?;
     }
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
+    Ok(())
 }
 
 /// Handle clearing logs for the current port
-fn handle_clear_logs(bus: &Bus, app: &Status) {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
+fn handle_clear_logs(bus: &Bus, app: &Status) -> Result<()> {
     // Clear logs for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
-        let _ = write_status(|s| {
+        write_status(|s| {
             if let Some(port_name) = s.ports.order.get(*selected_port) {
                 if let Some(port_data) = s.ports.map.get_mut(port_name) {
                     port_data.logs.clear();
@@ -88,7 +86,10 @@ fn handle_clear_logs(bus: &Bus, app: &Status) {
                 }
             }
             Ok(())
-        });
+        })?;
     }
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
+    Ok(())
 }
