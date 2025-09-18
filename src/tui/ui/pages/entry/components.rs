@@ -142,124 +142,103 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 }
 
 /// Render the right details panel content
+/// Render the right details panel content using consistent render_boxed_paragraph approach
 pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
-    if let Ok(()) = read_status(|app| {
-        let subpage_active = matches!(
+    // Check if subpage is active first
+    if let Ok(subpage_active) = read_status(|app| {
+        Ok(matches!(
             app.page,
             types::Page::ModbusConfig { .. }
                 | types::Page::ModbusDashboard { .. }
                 | types::Page::ModbusLog { .. }
                 | types::Page::About { .. }
-        );
+        ))
+    }) {
         if subpage_active {
-            return Ok(());
+            return;
         }
+    }
 
-        let content_block = Block::default()
-            .borders(Borders::ALL)
-            .title(Span::raw(format!(" {}", lang().index.details.as_str())));
-
+    // Get content lines based on page state
+    if let Ok((content_lines, title)) = read_status(|app| {
         if app.ports.order.is_empty() {
-            let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-            render_boxed_paragraph(
-                frame,
-                area,
-                content_lines,
-                0,
-                None,
-                Some(content_block),
-                false,
-            );
-        } else {
-            // Use cursor to determine what to render
-            if let types::Page::Entry { cursor } = &app.page {
-                match cursor {
-                    Some(EntryCursor::Com { idx }) => {
-                        if *idx < app.ports.order.len() {
-                            let port_name = &app.ports.order[*idx];
-                            let port_data = app.ports.map.get(port_name);
-                            render_port_details(frame, area, *idx, port_data, content_block);
-                        } else {
-                            let content_lines = vec![Line::from("Invalid port selection")];
-                            render_boxed_paragraph(
-                                frame,
-                                area,
-                                content_lines,
-                                0,
-                                None,
-                                Some(content_block),
-                                false,
-                            );
-                        }
-                    }
-                    Some(EntryCursor::Refresh) => {
-                        render_refresh_content(frame, area, content_block);
-                    }
-                    Some(EntryCursor::CreateVirtual) => {
-                        render_manual_specify_content(frame, area, content_block);
-                    }
-                    Some(EntryCursor::About) => {
-                        render_about_preview_content(frame, area);
-                    }
-                    None => {
-                        // Default to first port if available
-                        if !app.ports.order.is_empty() {
-                            let port_name = &app.ports.order[0];
-                            let port_data = app.ports.map.get(port_name);
-                            render_port_details(frame, area, 0, port_data, content_block);
-                        } else {
-                            let content_lines =
-                                vec![Line::from(lang().index.no_com_ports.as_str())];
-                            render_boxed_paragraph(
-                                frame,
-                                area,
-                                content_lines,
-                                0,
-                                None,
-                                Some(content_block),
-                                false,
-                            );
-                        }
+            // No ports available
+            Ok((
+                vec![Line::from(lang().index.no_com_ports.as_str())],
+                lang().index.details.as_str().to_string(),
+            ))
+        } else if let types::Page::Entry { cursor } = &app.page {
+            // Match on cursor to determine content
+            match cursor {
+                Some(EntryCursor::Com { idx }) => {
+                    if *idx < app.ports.order.len() {
+                        let port_name = &app.ports.order[*idx];
+                        let port_data = app.ports.map.get(port_name);
+                        let lines = get_port_details_content(*idx, port_data);
+                        Ok((lines, lang().index.details.as_str().to_string()))
+                    } else {
+                        Ok((
+                            vec![Line::from("Invalid port selection")],
+                            lang().index.details.as_str().to_string(),
+                        ))
                     }
                 }
-            } else {
-                // Fallback for non-entry pages
-                let content_lines = vec![Line::from("Entry page required")];
-                render_boxed_paragraph(
-                    frame,
-                    area,
-                    content_lines,
-                    0,
-                    None,
-                    Some(content_block),
-                    false,
-                );
+                Some(EntryCursor::Refresh) => {
+                    let lines = get_refresh_content();
+                    Ok((lines, lang().index.details.as_str().to_string()))
+                }
+                Some(EntryCursor::CreateVirtual) => {
+                    let lines = get_manual_specify_content();
+                    Ok((lines, lang().index.details.as_str().to_string()))
+                }
+                Some(EntryCursor::About) => {
+                    let lines = get_about_preview_content();
+                    Ok((lines, lang().index.details.as_str().to_string()))
+                }
+                None => {
+                    // Default to first port if available
+                    if !app.ports.order.is_empty() {
+                        let port_name = &app.ports.order[0];
+                        let port_data = app.ports.map.get(port_name);
+                        let lines = get_port_details_content(0, port_data);
+                        Ok((lines, lang().index.details.as_str().to_string()))
+                    } else {
+                        Ok((
+                            vec![Line::from(lang().index.no_com_ports.as_str())],
+                            lang().index.details.as_str().to_string(),
+                        ))
+                    }
+                }
             }
+        } else {
+            // Fallback for non-entry pages
+            Ok((
+                vec![Line::from("Entry page required")],
+                lang().index.details.as_str().to_string(),
+            ))
         }
-        Ok(())
     }) {
-    } else {
-        let content_block = Block::default()
+        // Create title block and render using render_boxed_paragraph consistently
+        let title_block = Block::default()
             .borders(Borders::ALL)
-            .title(Span::raw(format!(" {}", lang().index.details.as_str())));
-        let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-        render_boxed_paragraph(
-            frame,
-            area,
-            content_lines,
-            0,
-            None,
-            Some(content_block),
-            false,
-        );
+            .title(Span::raw(format!(" {} ", title)));
+        
+        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), true);
+    } else {
+        // Error fallback
+        let title_block = Block::default()
+            .borders(Borders::ALL)
+            .title(Span::raw(format!(" {} ", lang().index.details.as_str())));
+        let content_lines = vec![Line::from("Error loading content")];
+        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), false);
     }
 }
 
-/// Render content for refresh special entry
-fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
-    if let Ok(()) = read_status(|app| {
+/// Get content lines for refresh entry
+fn get_refresh_content() -> Vec<Line> {
+    if let Ok(lines) = read_status(|app| {
         let mut lines: Vec<Line> = Vec::new();
-
+        
         // First line: last refresh time (no title)
         if let Some(ts) = app.temporarily.scan.last_scan_time {
             lines.push(Line::from(format!(
@@ -270,10 +249,10 @@ fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
         } else {
             lines.push(Line::from(lang().index.scan_none.as_str()));
         }
-
+        
         // Empty line separator
         lines.push(Line::from(""));
-
+        
         // Raw port information - only show what exists, don't show "none" for missing fields
         if !app.temporarily.scan.last_scan_info.is_empty() {
             for l in app.temporarily.scan.last_scan_info.lines().take(100) {
@@ -292,46 +271,34 @@ fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
                 )));
             }
         }
-
-        render_boxed_paragraph(f, area, lines, 0, None, Some(content_block.clone()), false);
-        Ok(())
+        
+        Ok(lines)
     }) {
+        lines
     } else {
-        let content_lines = vec![Line::from(lang().index.scan_none.as_str())];
-        render_boxed_paragraph(f, area, content_lines, 0, None, Some(content_block), false);
+        vec![Line::from(lang().index.scan_none.as_str())]
     }
 }
 
-/// Render content for manual specify special entry
-fn render_manual_specify_content(f: &mut Frame, area: Rect, content_block: Block) {
-    let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
-    render_boxed_paragraph(f, area, content_lines, 0, None, Some(content_block), false);
+/// Get content lines for manual specify entry
+fn get_manual_specify_content() -> Vec<Line> {
+    vec![Line::from(lang().index.manual_specify_label.as_str())]
 }
 
-/// Render content for about special entry (preview)
-fn render_about_preview_content(f: &mut Frame, area: Rect) {
+/// Get content lines for about preview entry
+fn get_about_preview_content() -> Vec<Line> {
     let about_cache = init_about_cache();
     if let Ok(cache) = about_cache.lock() {
-        let content_lines = render_about_page_manifest_lines(cache.clone());
-        // Render without title since we're already inside a titled panel
-        render_boxed_paragraph(f, area, content_lines, 0, None, None, false);
+        render_about_page_manifest_lines(cache.clone())
     } else {
-        let content_lines = vec![Line::from("About (failed to load content)")];
-        render_boxed_paragraph(f, area, content_lines, 0, None, None, false);
-    };
+        vec![Line::from("About (failed to load content)")]
+    }
 }
 
-/// Render detailed information for a specific port
-/// Render enhanced detailed information for a specific port
-fn render_port_details(
-    f: &mut Frame,
-    area: Rect,
-    port_index: usize,
-    port_data: Option<&PortData>,
-    content_block: Block,
-) {
+/// Get content lines for a specific port
+fn get_port_details_content(_port_index: usize, port_data: Option<&PortData>) -> Vec<Line> {
     let mut info_lines: Vec<Line> = Vec::new();
-
+    
     if let Some(p) = port_data {
         // Port status and basic info
         let status_style = match p.state {
@@ -353,100 +320,91 @@ fn render_port_details(
         // Basic port information
         info_lines.push(Line::from(vec![
             Span::styled("Port: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(p.port_name.clone()),
+            Span::raw(p.port_name.clone())
         ]));
-
+        
         if !p.port_type.is_empty() {
             info_lines.push(Line::from(vec![
                 Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(p.port_type.clone()),
+                Span::raw(p.port_type.clone())
             ]));
         }
 
         info_lines.push(Line::from(vec![
             Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(status_text, status_style),
+            Span::styled(status_text, status_style)
         ]));
 
         // Show runtime configuration if port is active
         if let Some(runtime) = &p.runtime {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled(
-                "Configuration:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )));
-
+            info_lines.push(Line::from(Span::styled("Configuration:", Style::default().add_modifier(Modifier::BOLD))));
+            
             let cfg = &runtime.current_cfg;
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Baud Rate: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.baud.to_string()),
+                Span::raw(cfg.baud.to_string())
             ]));
-
+            
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Data Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.data_bits.to_string()),
+                Span::raw(cfg.data_bits.to_string())
             ]));
-
+            
             let parity_str = match cfg.parity {
                 serialport::Parity::None => "None",
-                serialport::Parity::Even => "Even",
+                serialport::Parity::Even => "Even", 
                 serialport::Parity::Odd => "Odd",
             };
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Parity: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(parity_str),
+                Span::raw(parity_str)
             ]));
-
+            
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Stop Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.stop_bits.to_string()),
+                Span::raw(cfg.stop_bits.to_string())
             ]));
         }
 
         // USB/Hardware information if available
         if p.extra.vid.is_some() || p.extra.pid.is_some() {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled(
-                "Hardware:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )));
-
+            info_lines.push(Line::from(Span::styled("Hardware:", Style::default().add_modifier(Modifier::BOLD))));
+            
             if let (Some(vid), Some(pid)) = (p.extra.vid, p.extra.pid) {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("VID:PID: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(format!("{:04x}:{:04x}", vid, pid)),
+                    Span::raw(format!("{:04x}:{:04x}", vid, pid))
                 ]));
             }
-
+            
             if let Some(serial) = &p.extra.serial {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Serial: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(serial.clone()),
+                    Span::raw(serial.clone())
                 ]));
             }
-
+            
             if let Some(manufacturer) = &p.extra.manufacturer {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled(
-                        "Manufacturer: ",
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(manufacturer.clone()),
+                    Span::styled("Manufacturer: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(manufacturer.clone())
                 ]));
             }
-
+            
             if let Some(product) = &p.extra.product {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Product: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(product.clone()),
+                    Span::raw(product.clone())
                 ]));
             }
         }
@@ -454,45 +412,31 @@ fn render_port_details(
         // Log statistics
         if !p.logs.is_empty() {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled(
-                "Logging:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )));
-
+            info_lines.push(Line::from(Span::styled("Logging:", Style::default().add_modifier(Modifier::BOLD))));
+            
             let total_logs = p.logs.len();
-            let send_count = p
-                .logs
-                .iter()
-                .filter(|log| log.raw.contains("Send") || log.raw.contains("TX"))
-                .count();
-            let recv_count = p
-                .logs
-                .iter()
-                .filter(|log| log.raw.contains("Recv") || log.raw.contains("RX"))
-                .count();
-
+            let send_count = p.logs.iter().filter(|log| log.raw.contains("Send") || log.raw.contains("TX")).count();
+            let recv_count = p.logs.iter().filter(|log| log.raw.contains("Recv") || log.raw.contains("RX")).count();
+            
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled(
-                    "Total Entries: ",
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(total_logs.to_string()),
+                Span::styled("Total Entries: ", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(total_logs.to_string())
             ]));
-
+            
             if send_count > 0 {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Sent: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green)),
+                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green))
                 ]));
             }
-
+            
             if recv_count > 0 {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Received: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow)),
+                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow))
                 ]));
             }
         }
@@ -500,5 +444,6 @@ fn render_port_details(
         info_lines.push(Line::from("Port data not available"));
     }
 
-    render_boxed_paragraph(f, area, info_lines, 0, None, Some(content_block), true);
+    info_lines
 }
+
