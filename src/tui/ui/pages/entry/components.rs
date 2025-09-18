@@ -177,7 +177,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
                         }
                     }
                     Some(EntryCursor::Refresh) => {
-                        render_refresh_content(frame, area, content_block, &app.temporarily);
+                        render_refresh_content(frame, area, content_block);
                     }
                     Some(EntryCursor::CreateVirtual) => {
                         render_manual_specify_content(frame, area, content_block);
@@ -215,49 +215,56 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
 }
 
 /// Render content for refresh special entry
-fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block, temp_status: &types::TempStatus) {
-    let mut lines: Vec<Line> = Vec::new();
-    
-    // First line: last refresh time (no title)
-    if let Some(ts) = temp_status.scan.last_scan_time {
-        lines.push(Line::from(format!(
-            "{} {}",
-            lang().index.scan_last_header.as_str(),
-            ts.format("%Y-%m-%d %H:%M:%S")
-        )));
-    } else {
-        lines.push(Line::from(lang().index.scan_none.as_str()));
-    }
-    
-    // Empty line separator
-    lines.push(Line::from(""));
-    
-    // Raw port information - only show what exists, don't show "none" for missing fields
-    if !temp_status.scan.last_scan_info.is_empty() {
-        for l in temp_status.scan.last_scan_info.lines().take(100) {
-            if l.starts_with("ERROR:") {
-                lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
-            } else if !l.trim().is_empty() {
-                // Only add non-empty lines
-                lines.push(Line::from(l));
+fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
+    if let Ok(()) = read_status(|app| {
+        let mut lines: Vec<Line> = Vec::new();
+        
+        // First line: last refresh time (no title)
+        if let Some(ts) = app.temporarily.scan.last_scan_time {
+            lines.push(Line::from(format!(
+                "{} {}",
+                lang().index.scan_last_header.as_str(),
+                ts.format("%Y-%m-%d %H:%M:%S")
+            )));
+        } else {
+            lines.push(Line::from(lang().index.scan_none.as_str()));
+        }
+        
+        // Empty line separator
+        lines.push(Line::from(""));
+        
+        // Raw port information - only show what exists, don't show "none" for missing fields
+        if !app.temporarily.scan.last_scan_info.is_empty() {
+            for l in app.temporarily.scan.last_scan_info.lines().take(100) {
+                if l.starts_with("ERROR:") {
+                    lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
+                } else if !l.trim().is_empty() {
+                    // Only add non-empty lines
+                    lines.push(Line::from(l));
+                }
+            }
+            if app.temporarily.scan.last_scan_info.len() > 100 {
+                lines.push(Line::from(format!(
+                    "... ({} {})",
+                    app.temporarily.scan.last_scan_info.len() - 100,
+                    lang().index.scan_truncated_suffix.as_str()
+                )));
             }
         }
-        if temp_status.scan.last_scan_info.len() > 100 {
-            lines.push(Line::from(format!(
-                "... ({} {})",
-                temp_status.scan.last_scan_info.len() - 100,
-                lang().index.scan_truncated_suffix.as_str()
-            )));
-        }
+        
+        render_boxed_paragraph(f, area, lines, 0, None, Some(content_block), false);
+        Ok(())
+    }) {
+    } else {
+        let content_lines = vec![Line::from(lang().index.scan_none.as_str())];
+        render_boxed_paragraph(f, area, content_lines, 0, None, Some(content_block), false);
     }
-    
-    render_boxed_paragraph(f, area, lines, 0, Some(content_block), false);
 }
 
 /// Render content for manual specify special entry
 fn render_manual_specify_content(f: &mut Frame, area: Rect, content_block: Block) {
     let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
-    render_boxed_paragraph(f, area, content_lines, 0, Some(content_block), false);
+    render_boxed_paragraph(f, area, content_lines, 0, None, Some(content_block), false);
 }
 
 /// Render content for about special entry (preview)
@@ -270,7 +277,7 @@ fn render_about_preview_content(f: &mut Frame, area: Rect) {
     } else {
         let content_lines = vec![Line::from("About (failed to load content)")];
         render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()), None, false);
-    }
+    };
 }
 
 /// Render detailed information for a specific port
