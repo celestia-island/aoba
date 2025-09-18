@@ -9,6 +9,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     i18n::lang,
     protocol::status::types::{self, port::PortData, port::PortState, ui::SpecialEntry},
+    tui::ui::components::{render_boxed_paragraph_with_block, render_boxed_paragraph_with_block_and_wrap},
 };
 
 /// Helper function to derive selection from page state (entry page specific)
@@ -167,9 +168,8 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
 
         // FIXME: Not all branches are implemented yet.
         if app.ports.order.is_empty() {
-            let content =
-                Paragraph::new(lang().index.no_com_ports.as_str()).block(content_block.clone());
-            frame.render_widget(content, area);
+            let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
+            render_boxed_paragraph_with_block(frame, area, content_lines, 0, Some(content_block));
         } else {
             let special_base = app.ports.order.len();
             if selection >= special_base {
@@ -183,12 +183,11 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
         Ok(())
     }) {
     } else {
-        let content = Paragraph::new(lang().index.no_com_ports.as_str()).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(Span::raw(format!(" {}", lang().index.details.as_str()))),
-        );
-        frame.render_widget(content, area);
+        let content_block = Block::default()
+            .borders(Borders::ALL)
+            .title(Span::raw(format!(" {}", lang().index.details.as_str())));
+        let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
+        render_boxed_paragraph_with_block(frame, area, content_lines, 0, Some(content_block));
     }
 }
 
@@ -227,28 +226,23 @@ fn render_special_entry_content(f: &mut Frame, area: Rect, rel: usize, content_b
                     )));
                 }
             }
-            let content = Paragraph::new(lines).block(content_block.clone());
-            f.render_widget(content, area);
+            render_boxed_paragraph_with_block(f, area, lines, 0, Some(content_block));
             Ok(())
         }) {
         } else {
-            let content =
-                Paragraph::new(lang().index.scan_none.as_str()).block(content_block.clone());
-            f.render_widget(content, area);
+            let content_lines = vec![Line::from(lang().index.scan_none.as_str())];
+            render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
         }
     } else if rel == 1 {
-        let content =
-            Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block.clone());
-        f.render_widget(content, area);
+        let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
+        render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
     } else if rel == 2 {
         // About page preview - simplified for now
-        let content =
-            Paragraph::new("About (TODO: implement preview)").block(content_block.clone());
-        f.render_widget(content, area);
+        let content_lines = vec![Line::from("About (TODO: implement preview)")];
+        render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
     } else {
-        let content =
-            Paragraph::new(lang().index.manual_specify_label.as_str()).block(content_block.clone());
-        f.render_widget(content, area);
+        let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
+        render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
     }
 }
 
@@ -420,15 +414,11 @@ fn render_port_details(
             }
         }
 
-        let content = Paragraph::new(info_lines)
-            .block(content_block.clone())
-            .wrap(ratatui::widgets::Wrap { trim: true });
-        f.render_widget(content, area);
+        render_boxed_paragraph_with_block_and_wrap(f, area, info_lines, 0, Some(content_block), true);
         Ok(())
     }) {
     } else {
-        let content =
-            Paragraph::new(lang().index.no_com_ports.as_str()).block(content_block.clone());
-        f.render_widget(content, area);
+        let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
+        render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
     }
 }
