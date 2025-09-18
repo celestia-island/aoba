@@ -25,7 +25,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc | KeyCode::Char('h') => {
             // Leave page - go back to entry
-            handle_leave_page(bus)?;
+            handle_leave_page(bus, &snapshot)?;
             Ok(())
         }
         KeyCode::Char('f') => {
@@ -43,10 +43,15 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the log panel back to entry page
-fn handle_leave_page(bus: &Bus) -> Result<()> {
+fn handle_leave_page(bus: &Bus, app: &Status) -> Result<()> {
+    let cursor = if let types::Page::ModbusLog { selected_port, .. } = &app.page {
+        Some(types::ui::EntryCursor::Com { idx: *selected_port })
+    } else {
+        None
+    };
     write_status(|s| {
         // Go back to entry page
-        s.page = types::Page::Entry { cursor: None };
+        s.page = types::Page::Entry { cursor };
         Ok(())
     })?;
     bus.ui_tx

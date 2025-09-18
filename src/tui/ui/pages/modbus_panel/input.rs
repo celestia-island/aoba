@@ -3,12 +3,15 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{types, write_status},
+    protocol::status::{read_status, types, write_status},
     tui::utils::bus::Bus,
 };
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    // Create a snapshot of the current status
+    let snapshot = read_status(|s| Ok(s.clone()))?;
+    
     match key.code {
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation within the dashboard
@@ -53,7 +56,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             } else {
                 // No nested edit active: leave dashboard
-                handle_leave_page(bus)?;
+                handle_leave_page(bus, &snapshot)?;
                 Ok(())
             }
         }
@@ -90,12 +93,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the modbus dashboard back to entry page
-fn handle_leave_page(bus: &Bus) -> Result<()> {
+fn handle_leave_page(bus: &Bus, app: &types::Status) -> Result<()> {
     use crate::tui::utils::bus::UiToCore;
 
+    let cursor = if let types::Page::ModbusDashboard { selected_port, .. } = &app.page {
+        Some(types::ui::EntryCursor::Com { idx: *selected_port })
+    } else {
+        None
+    };
     write_status(|s| {
         // Go back to entry page
-        s.page = types::Page::Entry { cursor: None };
+        s.page = types::Page::Entry { cursor };
         Ok(())
     })?;
     bus.ui_tx
