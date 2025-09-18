@@ -183,7 +183,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.page = Page::ModbusConfig {
                         selected_port: idx,
                         edit_active: false,
-                        edit_cursor: 0,
+                        edit_cursor: types::ui::ConfigPanelCursor::EnablePort,
                         edit_cursor_pos: 0,
                         edit_buffer: String::new(),
                     };

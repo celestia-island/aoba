@@ -12,16 +12,10 @@ use crate::{
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Create a snapshot of the current status (previously passed as `app`)
     let snapshot = read_status(|s| Ok(s.clone()))?;
-    // Derive selected row in panel (same logic as render_kv_panel)
-    let selected_row = super::components::derive_selection(&snapshot);
-
-    // Determine number of fields shown in panel
-    // New structure: 2 fields in group 1 + 4 fields in group 2 + 1 empty line = 7 total
-    let _field_count = 7usize; // Enable, Protocol, (empty), Baud, DataBits, Parity, StopBits
-    let navigable_fields = vec![0, 1, 3, 4, 5, 6]; // Skip the empty line at index 2
+    // Derive selected cursor in panel
+    let selected_cursor = super::components::derive_selection(&snapshot);
 
     // If currently in edit mode for this port, handle edit-specific keys
-    // New location: per-page fields are stored inside Page::ModbusConfig
     let mut in_edit = false;
     if let types::Page::ModbusConfig {
         edit_active: config_edit_active,
@@ -58,10 +52,26 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         ..
                     } = &mut s.page
                     {
-                        let pos = *config_edit_cursor_pos;
-                        if pos > 0 && pos <= config_edit_buffer.len() {
-                            config_edit_buffer.remove(pos - 1);
-                            *config_edit_cursor_pos = pos - 1;
+                        if !config_edit_buffer.is_empty() && *config_edit_cursor_pos > 0 {
+                            let pos = (*config_edit_cursor_pos - 1).min(config_edit_buffer.len());
+                            config_edit_buffer.remove(pos);
+                            *config_edit_cursor_pos = pos;
+                        }
+                    }
+                    Ok(())
+                })?;
+                Ok(())
+            }
+            KeyCode::Delete => {
+                write_status(|s| {
+                    if let types::Page::ModbusConfig {
+                        edit_buffer: config_edit_buffer,
+                        edit_cursor_pos: config_edit_cursor_pos,
+                        ..
+                    } = &mut s.page
+                    {
+                        if *config_edit_cursor_pos < config_edit_buffer.len() {
+                            config_edit_buffer.remove(*config_edit_cursor_pos);
                         }
                     }
                     Ok(())
@@ -116,24 +126,21 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             if let Some(pd) = s.ports.map.get_mut(port_name) {
                                 let val = config_edit_buffer.clone();
                                 match *config_edit_cursor {
-                                    3 => {
-                                        // Baud rate
+                                    types::ui::ConfigPanelCursor::BaudRate => {
                                         if let Ok(v) = val.parse::<u32>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 rt.current_cfg.baud = v;
                                             }
                                         }
                                     }
-                                    4 => {
-                                        // Data bits
+                                    types::ui::ConfigPanelCursor::DataBits => {
                                         if let Ok(v) = val.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 rt.current_cfg.data_bits = v;
                                             }
                                         }
                                     }
-                                    5 => {
-                                        // Parity
+                                    types::ui::ConfigPanelCursor::Parity => {
                                         if let Some(rt) = pd.runtime.as_mut() {
                                             rt.current_cfg.parity = match val.as_str() {
                                                 "None" | "none" => serialport::Parity::None,
@@ -143,15 +150,16 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                             }
                                         }
                                     }
-                                    6 => {
-                                        // Stop bits
+                                    types::ui::ConfigPanelCursor::StopBits => {
                                         if let Ok(v) = val.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 rt.current_cfg.stop_bits = v;
                                             }
                                         }
                                     }
-                                    _ => {}
+                                    _ => {
+                                        // Other cursor types don't support editing
+                                    }
                                 }
                             }
                         }
@@ -194,16 +202,33 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         // Not in edit mode: handle navigation and enter to toggle/select/edit
         match key.code {
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
-                // Navigate between fields within the config panel
-                handle_field_navigation(key.code, &navigable_fields)?;
+                // Navigate between fields using cursor system
+                write_status(|s| {
+                    if let types::Page::ModbusConfig { edit_cursor, .. } = &mut s.page {
+                        match key.code {
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                *edit_cursor = edit_cursor.prev();
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                *edit_cursor = edit_cursor.next();
+                            }
+                            _ => {}
+                        }
+                    }
+                    Ok(())
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Enter => {
-                // Handle different actions based on selected field
-                handle_enter_key(&snapshot, selected_row, bus)
+                // Handle different actions based on selected cursor
+                handle_enter_key(&snapshot, selected_cursor, bus)
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
+                // Handle left/right for option switching on selector fields
+                handle_option_switch(&snapshot, selected_cursor, key.code, bus)
             }
             KeyCode::Esc => {
                 // Return to the main entry page
@@ -229,50 +254,93 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 }
 
-/// Handle navigation between fields in the config panel
-fn handle_field_navigation(key_code: KeyCode, navigable_fields: &[usize]) -> Result<()> {
-    write_status(|s| {
-        if let types::Page::ModbusConfig { edit_cursor, .. } = &mut s.page {
-            let current_pos = navigable_fields
-                .iter()
-                .position(|&field| field == *edit_cursor)
-                .unwrap_or(0);
-
-            match key_code {
-                KeyCode::Up | KeyCode::Char('k') => {
-                    if current_pos > 0 {
-                        *edit_cursor = navigable_fields[current_pos - 1];
-                    }
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    if current_pos < navigable_fields.len() - 1 {
-                        *edit_cursor = navigable_fields[current_pos + 1];
-                    }
-                }
-                _ => {}
-            }
-        }
-        Ok(())
-    })
-}
-
-/// Handle Enter key press based on the selected field
-fn handle_enter_key(snapshot: &types::Status, selected_row: usize, bus: &Bus) -> Result<()> {
-    match selected_row {
-        0 => {
+/// Handle Enter key press based on the selected cursor
+fn handle_enter_key(snapshot: &types::Status, selected_cursor: types::ui::ConfigPanelCursor, bus: &Bus) -> Result<()> {
+    match selected_cursor {
+        types::ui::ConfigPanelCursor::EnablePort => {
             // Enable Port toggle - attempt to toggle port state
             handle_port_toggle(snapshot, bus)
         }
-        1 => {
-            // Protocol selection - navigate to the appropriate config page
+        types::ui::ConfigPanelCursor::ProtocolMode => {
+            // Protocol mode selection - could implement mode switching here
+            // For now, just do nothing or show a message
+            Ok(())
+        }
+        types::ui::ConfigPanelCursor::ProtocolConfig => {
+            // Protocol configuration - navigate to the appropriate config page
             handle_protocol_navigation(snapshot, bus)
         }
-        3..=6 => {
+        types::ui::ConfigPanelCursor::BaudRate |
+        types::ui::ConfigPanelCursor::DataBits |
+        types::ui::ConfigPanelCursor::Parity |
+        types::ui::ConfigPanelCursor::StopBits => {
             // Serial parameter fields - enter edit mode
-            handle_parameter_edit(snapshot, selected_row, bus)
+            handle_parameter_edit(snapshot, selected_cursor, bus)
         }
-        _ => Ok(()),
     }
+}
+
+/// Handle left/right key presses for option switching
+fn handle_option_switch(
+    snapshot: &types::Status,
+    selected_cursor: types::ui::ConfigPanelCursor,
+    key_code: KeyCode,
+    bus: &Bus,
+) -> Result<()> {
+    match selected_cursor {
+        types::ui::ConfigPanelCursor::ProtocolMode => {
+            // Switch between Modbus and MQTT
+            // TODO: Implement protocol mode switching
+            // For now, just refresh
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
+        types::ui::ConfigPanelCursor::Parity => {
+            // Switch between None/Odd/Even parity
+            handle_parity_switch(snapshot, key_code, bus)
+        }
+        _ => Ok(()), // Other fields don't support left/right switching
+    }
+}
+
+/// Handle parity switching with left/right keys
+fn handle_parity_switch(snapshot: &types::Status, key_code: KeyCode, bus: &Bus) -> Result<()> {
+    if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page {
+        if let Some(port_name) = snapshot.ports.order.get(*selected_port) {
+            write_status(|s| {
+                if let Some(pd) = s.ports.map.get_mut(port_name) {
+                    if let Some(rt) = pd.runtime.as_mut() {
+                        let current_parity = rt.current_cfg.parity;
+                        rt.current_cfg.parity = match key_code {
+                            KeyCode::Left | KeyCode::Char('h') => {
+                                match current_parity {
+                                    serialport::Parity::None => serialport::Parity::Even,
+                                    serialport::Parity::Odd => serialport::Parity::None,
+                                    serialport::Parity::Even => serialport::Parity::Odd,
+                                }
+                            }
+                            KeyCode::Right | KeyCode::Char('l') => {
+                                match current_parity {
+                                    serialport::Parity::None => serialport::Parity::Odd,
+                                    serialport::Parity::Odd => serialport::Parity::Even,
+                                    serialport::Parity::Even => serialport::Parity::None,
+                                }
+                            }
+                            _ => current_parity,
+                        };
+                    }
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    bus.ui_tx
+        .send(crate::tui::utils::bus::UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
+    Ok(())
 }
 
 /// Handle port enable/disable toggle with error checking
@@ -324,7 +392,7 @@ fn handle_port_toggle(snapshot: &types::Status, bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-/// Handle protocol selection navigation
+/// Handle protocol configuration navigation
 fn handle_protocol_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()> {
     // For now, always navigate to modbus panel as specified in requirements
     // Later this can be extended to support MQTT and other protocols
@@ -358,12 +426,12 @@ fn handle_protocol_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()>
 }
 
 /// Handle entering edit mode for serial parameters
-fn handle_parameter_edit(snapshot: &types::Status, selected_row: usize, bus: &Bus) -> Result<()> {
+fn handle_parameter_edit(snapshot: &types::Status, selected_cursor: types::ui::ConfigPanelCursor, bus: &Bus) -> Result<()> {
     if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page {
         if let Some(port_name) = snapshot.ports.order.get(*selected_port) {
             if let Some(pd) = snapshot.ports.map.get(port_name) {
                 // Get initial value for the field being edited
-                let init_buf = get_field_initial_value(pd, selected_row);
+                let init_buf = get_field_initial_value_by_cursor(pd, selected_cursor);
 
                 write_status(|s| {
                     if let types::Page::ModbusConfig {
@@ -375,7 +443,7 @@ fn handle_parameter_edit(snapshot: &types::Status, selected_row: usize, bus: &Bu
                     } = &mut s.page
                     {
                         *edit_active = true;
-                        *edit_cursor = selected_row;
+                        *edit_cursor = selected_cursor;
                         *edit_buffer = init_buf.clone();
                         *edit_cursor_pos = init_buf.len();
                     }
@@ -391,35 +459,31 @@ fn handle_parameter_edit(snapshot: &types::Status, selected_row: usize, bus: &Bu
     Ok(())
 }
 
-/// Get initial value for editing a specific field
-fn get_field_initial_value(
+/// Get initial value for editing a specific field by cursor type
+fn get_field_initial_value_by_cursor(
     pd: &crate::protocol::status::types::port::PortData,
-    field_index: usize,
+    cursor_type: types::ui::ConfigPanelCursor,
 ) -> String {
-    match field_index {
-        3 => {
-            // Baud rate
+    match cursor_type {
+        types::ui::ConfigPanelCursor::BaudRate => {
             pd.runtime
                 .as_ref()
                 .map(|rt| rt.current_cfg.baud.to_string())
                 .unwrap_or_else(|| "9600".to_string())
         }
-        4 => {
-            // Data bits
+        types::ui::ConfigPanelCursor::DataBits => {
             pd.runtime
                 .as_ref()
                 .map(|rt| rt.current_cfg.data_bits.to_string())
                 .unwrap_or_else(|| "8".to_string())
         }
-        5 => {
-            // Parity
+        types::ui::ConfigPanelCursor::Parity => {
             pd.runtime
                 .as_ref()
                 .map(|rt| format!("{:?}", rt.current_cfg.parity))
                 .unwrap_or_else(|| lang().protocol.common.parity_none.clone())
         }
-        6 => {
-            // Stop bits
+        types::ui::ConfigPanelCursor::StopBits => {
             pd.runtime
                 .as_ref()
                 .map(|rt| rt.current_cfg.stop_bits.to_string())

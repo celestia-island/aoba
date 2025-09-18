@@ -14,6 +14,127 @@ pub enum EntryCursor {
     About,
 }
 
+impl EntryCursor {
+    /// Move to the previous cursor position
+    pub fn prev(self) -> Self {
+        use crate::protocol::status::read_status;
+        
+        match self {
+            EntryCursor::Com { idx } => {
+                if idx > 0 {
+                    EntryCursor::Com { idx: idx - 1 }
+                } else {
+                    // Wrap to last special entry
+                    EntryCursor::About
+                }
+            }
+            EntryCursor::Refresh => {
+                // Go to last COM port if any exist
+                let max_port_idx = read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
+                if max_port_idx > 0 {
+                    EntryCursor::Com { idx: max_port_idx }
+                } else {
+                    EntryCursor::About
+                }
+            }
+            EntryCursor::CreateVirtual => EntryCursor::Refresh,
+            EntryCursor::About => EntryCursor::CreateVirtual,
+        }
+    }
+
+    /// Move to the next cursor position
+    pub fn next(self) -> Self {
+        use crate::protocol::status::read_status;
+        
+        match self {
+            EntryCursor::Com { idx } => {
+                let max_port_idx = read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
+                if idx < max_port_idx {
+                    EntryCursor::Com { idx: idx + 1 }
+                } else {
+                    EntryCursor::Refresh
+                }
+            }
+            EntryCursor::Refresh => EntryCursor::CreateVirtual,
+            EntryCursor::CreateVirtual => EntryCursor::About,
+            EntryCursor::About => {
+                // Wrap to first COM port if any exist
+                if read_status(|s| Ok(!s.ports.order.is_empty())).unwrap_or(false) {
+                    EntryCursor::Com { idx: 0 }
+                } else {
+                    EntryCursor::Refresh
+                }
+            }
+        }
+    }
+}
+
+/// ConfigPanelCursor describes the cursor/selection in the config panel
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConfigPanelCursor {
+    /// Enable/Disable port toggle
+    EnablePort,
+    /// Protocol mode selection (Modbus/MQTT)
+    ProtocolMode,
+    /// Protocol configuration navigation
+    ProtocolConfig,
+    /// Baud rate setting
+    BaudRate,
+    /// Data bits setting
+    DataBits,
+    /// Parity setting
+    Parity,
+    /// Stop bits setting
+    StopBits,
+}
+
+impl ConfigPanelCursor {
+    /// Get all cursor variants in order
+    pub const fn all() -> &'static [ConfigPanelCursor] {
+        &[
+            ConfigPanelCursor::EnablePort,
+            ConfigPanelCursor::ProtocolMode,
+            ConfigPanelCursor::ProtocolConfig,
+            ConfigPanelCursor::BaudRate,
+            ConfigPanelCursor::DataBits,
+            ConfigPanelCursor::Parity,
+            ConfigPanelCursor::StopBits,
+        ]
+    }
+
+    /// Move to the previous cursor position
+    pub fn prev(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx > 0 {
+            all[current_idx - 1]
+        } else {
+            all[all.len() - 1] // Wrap to last
+        }
+    }
+
+    /// Move to the next cursor position
+    pub fn next(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx < all.len() - 1 {
+            all[current_idx + 1]
+        } else {
+            all[0] // Wrap to first
+        }
+    }
+
+    /// Convert to index for compatibility with existing code
+    pub fn to_index(self) -> usize {
+        Self::all().iter().position(|&c| c == self).unwrap_or(0)
+    }
+
+    /// Convert from index for compatibility with existing code
+    pub fn from_index(index: usize) -> Self {
+        Self::all().get(index).copied().unwrap_or(ConfigPanelCursor::EnablePort)
+    }
+}
+
 /// Special entries that appear after the serial ports list in the Entry page.
 /// Kept as a UI enum so other UI modules can reference the same canonical variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

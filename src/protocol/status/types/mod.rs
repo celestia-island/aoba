@@ -24,7 +24,7 @@ derive_struct! {
                 selected_port: usize,
 
                 edit_active: bool = false,
-                edit_cursor: usize = 0,
+                edit_cursor: crate::protocol::status::types::ui::ConfigPanelCursor = crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
                 edit_cursor_pos: usize = 0,
                 edit_buffer: String = String::new(),
             },

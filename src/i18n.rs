@@ -142,6 +142,7 @@ derive_struct! {
                 toggle_too_fast: String = "toggle_too_fast".to_string(),
                 enable_port: String = "enable_port".to_string(),
                 protocol_selection: String = "protocol_selection".to_string(),
+                protocol_mode: String = "protocol_mode".to_string(),
                 configure_protocol: String = "configure_protocol".to_string(),
                 port_enabled: String = "port_enabled".to_string(),
                 port_disabled: String = "port_disabled".to_string(),
