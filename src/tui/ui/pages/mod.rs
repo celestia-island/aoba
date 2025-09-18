@@ -4,9 +4,14 @@ pub mod entry;
 pub mod log_panel;
 pub mod modbus_panel;
 
+use anyhow::Result;
+
 use ratatui::prelude::*;
 
-use crate::protocol::status::types::{self, Status};
+use crate::protocol::status::{
+    read_status,
+    types::{self, Status},
+};
 
 /// Return page-provided bottom hints for the current app state.
 /// Now returns a Vec of rows, where each row is a Vec of hint fragments.
@@ -22,24 +27,24 @@ pub fn bottom_hints_for_app(app: &Status) -> Vec<Vec<String>> {
 }
 
 /// Render the appropriate page based on the current app state.
-/// This function only reads from Status and renders - no mutations allowed.
-pub fn render_panels(f: &mut Frame, area: Rect, app: &Status) {
-    // Dispatch directly on the current page variant (About rendered here directly)
-    match &app.page {
-        types::Page::ModbusConfig { .. } => {
-            let _ = config_panel::render(f, area, None);
-        }
-        types::Page::ModbusDashboard { .. } => {
-            let _ = modbus_panel::render(f, area);
-        }
-        types::Page::ModbusLog { .. } => {
-            let _ = log_panel::render(f, area);
+pub fn render_panels(frame: &mut Frame, area: Rect) -> Result<()> {
+    match read_status(|app| Ok(app.page.clone()))? {
+        types::Page::Entry { .. } => {
+            entry::render(frame, area)?;
         }
         types::Page::About { .. } => {
-            let _ = about::render(f, area);
+            about::render(frame, area)?;
         }
-        types::Page::Entry { .. } => {
-            let _ = entry::render(f, area);
+        types::Page::ModbusConfig { .. } => {
+            config_panel::render(frame, area)?;
+        }
+        types::Page::ModbusDashboard { .. } => {
+            modbus_panel::render(frame, area)?;
+        }
+        types::Page::ModbusLog { .. } => {
+            log_panel::render(frame, area)?;
         }
     }
+
+    Ok(())
 }
