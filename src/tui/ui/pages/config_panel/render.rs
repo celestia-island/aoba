@@ -18,7 +18,7 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
 
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let content = render_kv_lines()?;
-    render_boxed_paragraph(frame, area, content, 0, None, None, false);
+    render_boxed_paragraph(frame, area, content, 0, None, None, false, true);
 
     Ok(())
 }

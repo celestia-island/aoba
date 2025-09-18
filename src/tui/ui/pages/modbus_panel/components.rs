@@ -75,6 +75,7 @@ pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
         None,
         None,
         false,
+        true,
     );
 }
 

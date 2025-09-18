@@ -17,6 +17,7 @@ use ratatui::{
 /// - `title`: Optional title - when provided, creates a 4:6 layout with title on left (40%) and content on right (60%)
 /// - `custom_block`: Optional custom block - when provided, uses it instead of creating a default bordered block
 /// - `wrap`: Whether to enable text wrapping
+/// - `show_scrollbar`: Whether to show the scrollbar
 pub fn render_boxed_paragraph(
     frame: &mut Frame,
     area: Rect,
@@ -25,6 +26,7 @@ pub fn render_boxed_paragraph(
     title: Option<&str>,
     custom_block: Option<Block<'_>>,
     wrap: bool,
+    show_scrollbar: bool,
 ) {
     match title {
         Some(title_text) => {
@@ -46,16 +48,16 @@ pub fn render_boxed_paragraph(
             frame.render_widget(title_para, left_area);
 
             // Render content in right area
-            render_content_area(frame, right_area, content, offset, custom_block, wrap);
+            render_content_area(frame, right_area, content, offset, custom_block, wrap, show_scrollbar);
         }
         None => {
             // Original behavior - render content in full area
-            render_content_area(frame, area, content, offset, custom_block, wrap);
+            render_content_area(frame, area, content, offset, custom_block, wrap, show_scrollbar);
         }
     }
 }
 
-/// Helper function to render the content area with scrollbar
+/// Helper function to render the content area with optional scrollbar
 fn render_content_area(
     frame: &mut Frame,
     area: Rect,
@@ -63,6 +65,7 @@ fn render_content_area(
     offset: usize,
     custom_block: Option<Block<'_>>,
     wrap: bool,
+    show_scrollbar: bool,
 ) {
     let content_len = content.len();
     let content_len = content_len.saturating_sub((area.height / 2) as usize);
@@ -83,9 +86,12 @@ fn render_content_area(
     }
 
     frame.render_widget(para, area);
-    frame.render_stateful_widget(
-        Scrollbar::new(ScrollbarOrientation::VerticalRight),
-        area,
-        &mut ScrollbarState::new(content_len).position(offset),
-    );
+    
+    if show_scrollbar {
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight),
+            area,
+            &mut ScrollbarState::new(content_len).position(offset),
+        );
+    }
 }

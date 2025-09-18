@@ -143,7 +143,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 
 /// Render the right details panel content
 /// Render the right details panel content using consistent render_boxed_paragraph approach
-pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
+pub fn render_details_panel(frame: &mut Frame, area: Rect) {
     // Check if subpage is active first
     if let Ok(subpage_active) = read_status(|app| {
         Ok(matches!(
@@ -223,7 +223,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {} ", title)));
 
-        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), true);
+        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(title_block), true, false);
     } else {
         // Error fallback
         let title_block = Block::default()
@@ -237,6 +237,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
             0,
             None,
             Some(title_block),
+            false,
             false,
         );
     }

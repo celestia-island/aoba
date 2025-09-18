@@ -27,7 +27,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
             }
         })?;
 
-        render_boxed_paragraph(frame, area, content, offset, None, None, false);
+        render_boxed_paragraph(frame, area, content, offset, None, None, false, true);
     }
 
     Ok(())
