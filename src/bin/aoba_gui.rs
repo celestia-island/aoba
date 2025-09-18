@@ -1,17 +1,21 @@
 #![windows_subsystem = "windows"]
 
-fn main() {
+use anyhow::Result;
+
+fn main() -> Result<()> {
     // GUI entrypoint: no console will be created for this binary.
     // Delegate initialization to the shared crate code.
     aoba::init_common();
-    if let Err(e) = aoba::start_gui() {
-        let _ = std::fs::write(
+    if let Err(err) = aoba::start_gui() {
+        std::fs::write(
             std::env::temp_dir().join("aoba_gui_error.log"),
-            format!("GUI start error: {e:#?}"),
-        );
+            format!("GUI start error: {err:#?}"),
+        )?;
         println!(
             "AOBA GUI failed to start, details written to {:?}",
             std::env::temp_dir().join("aoba_gui_error.log")
         );
     }
+
+    Ok(())
 }
