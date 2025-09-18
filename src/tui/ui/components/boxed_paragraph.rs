@@ -1,14 +1,14 @@
 use ratatui::{
+    layout::{Constraint, Direction, Layout},
     prelude::*,
     text::Line,
     widgets::{
         Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
     },
-    layout::{Constraint, Direction, Layout},
 };
 
 /// Render a boxed paragraph with comprehensive options.
-/// 
+///
 /// Parameters:
 /// - `frame`: The frame to render to
 /// - `area`: The area to render in
@@ -32,10 +32,7 @@ pub fn render_boxed_paragraph(
             let chunks = Layout::default()
                 .direction(Direction::Horizontal)
                 .margin(0)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(60),
-                ])
+                .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
                 .split(area);
 
             let left_area = chunks[0];

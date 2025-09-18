@@ -161,7 +161,15 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
 
         if app.ports.order.is_empty() {
             let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-            render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
+            render_boxed_paragraph(
+                frame,
+                area,
+                content_lines,
+                0,
+                None,
+                Some(content_block),
+                false,
+            );
         } else {
             // Use cursor to determine what to render
             if let types::Page::Entry { cursor } = &app.page {
@@ -173,7 +181,15 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
                             render_port_details(frame, area, *idx, port_data, content_block);
                         } else {
                             let content_lines = vec![Line::from("Invalid port selection")];
-                            render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
+                            render_boxed_paragraph(
+                                frame,
+                                area,
+                                content_lines,
+                                0,
+                                None,
+                                Some(content_block),
+                                false,
+                            );
                         }
                     }
                     Some(EntryCursor::Refresh) => {
@@ -192,15 +208,32 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
                             let port_data = app.ports.map.get(port_name);
                             render_port_details(frame, area, 0, port_data, content_block);
                         } else {
-                            let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-                            render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
+                            let content_lines =
+                                vec![Line::from(lang().index.no_com_ports.as_str())];
+                            render_boxed_paragraph(
+                                frame,
+                                area,
+                                content_lines,
+                                0,
+                                None,
+                                Some(content_block),
+                                false,
+                            );
                         }
                     }
                 }
             } else {
                 // Fallback for non-entry pages
                 let content_lines = vec![Line::from("Entry page required")];
-                render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
+                render_boxed_paragraph(
+                    frame,
+                    area,
+                    content_lines,
+                    0,
+                    None,
+                    Some(content_block),
+                    false,
+                );
             }
         }
         Ok(())
@@ -210,7 +243,15 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {}", lang().index.details.as_str())));
         let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
+        render_boxed_paragraph(
+            frame,
+            area,
+            content_lines,
+            0,
+            None,
+            Some(content_block),
+            false,
+        );
     }
 }
 
@@ -218,7 +259,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
 fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
     if let Ok(()) = read_status(|app| {
         let mut lines: Vec<Line> = Vec::new();
-        
+
         // First line: last refresh time (no title)
         if let Some(ts) = app.temporarily.scan.last_scan_time {
             lines.push(Line::from(format!(
@@ -229,10 +270,10 @@ fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
         } else {
             lines.push(Line::from(lang().index.scan_none.as_str()));
         }
-        
+
         // Empty line separator
         lines.push(Line::from(""));
-        
+
         // Raw port information - only show what exists, don't show "none" for missing fields
         if !app.temporarily.scan.last_scan_info.is_empty() {
             for l in app.temporarily.scan.last_scan_info.lines().take(100) {
@@ -251,7 +292,7 @@ fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
                 )));
             }
         }
-        
+
         render_boxed_paragraph(f, area, lines, 0, None, Some(content_block.clone()), false);
         Ok(())
     }) {
@@ -273,10 +314,26 @@ fn render_about_preview_content(f: &mut Frame, area: Rect) {
     if let Ok(cache) = about_cache.lock() {
         let content_lines = render_about_page_manifest_lines(cache.clone());
         // Use render_boxed_paragraph with title as requested
-        render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()), None, false);
+        render_boxed_paragraph(
+            f,
+            area,
+            content_lines,
+            0,
+            Some(lang().index.about_label.as_str()),
+            None,
+            false,
+        );
     } else {
         let content_lines = vec![Line::from("About (failed to load content)")];
-        render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()), None, false);
+        render_boxed_paragraph(
+            f,
+            area,
+            content_lines,
+            0,
+            Some(lang().index.about_label.as_str()),
+            None,
+            false,
+        );
     };
 }
 
@@ -290,7 +347,7 @@ fn render_port_details(
     content_block: Block,
 ) {
     let mut info_lines: Vec<Line> = Vec::new();
-    
+
     if let Some(p) = port_data {
         // Port status and basic info
         let status_style = match p.state {
@@ -312,91 +369,100 @@ fn render_port_details(
         // Basic port information
         info_lines.push(Line::from(vec![
             Span::styled("Port: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(p.port_name.clone())
+            Span::raw(p.port_name.clone()),
         ]));
-        
+
         if !p.port_type.is_empty() {
             info_lines.push(Line::from(vec![
                 Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(p.port_type.clone())
+                Span::raw(p.port_type.clone()),
             ]));
         }
 
         info_lines.push(Line::from(vec![
             Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(status_text, status_style)
+            Span::styled(status_text, status_style),
         ]));
 
         // Show runtime configuration if port is active
         if let Some(runtime) = &p.runtime {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled("Configuration:", Style::default().add_modifier(Modifier::BOLD))));
-            
+            info_lines.push(Line::from(Span::styled(
+                "Configuration:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )));
+
             let cfg = &runtime.current_cfg;
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Baud Rate: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.baud.to_string())
+                Span::raw(cfg.baud.to_string()),
             ]));
-            
+
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Data Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.data_bits.to_string())
+                Span::raw(cfg.data_bits.to_string()),
             ]));
-            
+
             let parity_str = match cfg.parity {
                 serialport::Parity::None => "None",
-                serialport::Parity::Even => "Even", 
+                serialport::Parity::Even => "Even",
                 serialport::Parity::Odd => "Odd",
             };
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Parity: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(parity_str)
+                Span::raw(parity_str),
             ]));
-            
+
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
                 Span::styled("Stop Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.stop_bits.to_string())
+                Span::raw(cfg.stop_bits.to_string()),
             ]));
         }
 
         // USB/Hardware information if available
         if p.extra.vid.is_some() || p.extra.pid.is_some() {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled("Hardware:", Style::default().add_modifier(Modifier::BOLD))));
-            
+            info_lines.push(Line::from(Span::styled(
+                "Hardware:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )));
+
             if let (Some(vid), Some(pid)) = (p.extra.vid, p.extra.pid) {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("VID:PID: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(format!("{:04x}:{:04x}", vid, pid))
+                    Span::raw(format!("{:04x}:{:04x}", vid, pid)),
                 ]));
             }
-            
+
             if let Some(serial) = &p.extra.serial {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Serial: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(serial.clone())
+                    Span::raw(serial.clone()),
                 ]));
             }
-            
+
             if let Some(manufacturer) = &p.extra.manufacturer {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
-                    Span::styled("Manufacturer: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(manufacturer.clone())
+                    Span::styled(
+                        "Manufacturer: ",
+                        Style::default().add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(manufacturer.clone()),
                 ]));
             }
-            
+
             if let Some(product) = &p.extra.product {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Product: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(product.clone())
+                    Span::raw(product.clone()),
                 ]));
             }
         }
@@ -404,31 +470,45 @@ fn render_port_details(
         // Log statistics
         if !p.logs.is_empty() {
             info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled("Logging:", Style::default().add_modifier(Modifier::BOLD))));
-            
+            info_lines.push(Line::from(Span::styled(
+                "Logging:",
+                Style::default().add_modifier(Modifier::BOLD),
+            )));
+
             let total_logs = p.logs.len();
-            let send_count = p.logs.iter().filter(|log| log.raw.contains("Send") || log.raw.contains("TX")).count();
-            let recv_count = p.logs.iter().filter(|log| log.raw.contains("Recv") || log.raw.contains("RX")).count();
-            
+            let send_count = p
+                .logs
+                .iter()
+                .filter(|log| log.raw.contains("Send") || log.raw.contains("TX"))
+                .count();
+            let recv_count = p
+                .logs
+                .iter()
+                .filter(|log| log.raw.contains("Recv") || log.raw.contains("RX"))
+                .count();
+
             info_lines.push(Line::from(vec![
                 Span::raw("  "),
-                Span::styled("Total Entries: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(total_logs.to_string())
+                Span::styled(
+                    "Total Entries: ",
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(total_logs.to_string()),
             ]));
-            
+
             if send_count > 0 {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Sent: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green))
+                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green)),
                 ]));
             }
-            
+
             if recv_count > 0 {
                 info_lines.push(Line::from(vec![
                     Span::raw("  "),
                     Span::styled("Received: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow))
+                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow)),
                 ]));
             }
         }

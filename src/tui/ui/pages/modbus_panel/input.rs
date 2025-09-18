@@ -11,7 +11,7 @@ use crate::{
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Create a snapshot of the current status
     let snapshot = read_status(|s| Ok(s.clone()))?;
-    
+
     match key.code {
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation within the dashboard
@@ -98,7 +98,9 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
 
     let cursor = read_status(|s| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &s.page {
-            Ok(Some(types::ui::EntryCursor::Com { idx: *selected_port }))
+            Ok(Some(types::ui::EntryCursor::Com {
+                idx: *selected_port,
+            }))
         } else {
             Ok(None)
         }

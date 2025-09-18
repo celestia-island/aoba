@@ -4,7 +4,8 @@ use ratatui::prelude::*;
 use crate::{
     i18n::lang,
     tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph, pages::config_panel::components::render_kv_lines,
+        components::boxed_paragraph::render_boxed_paragraph,
+        pages::config_panel::components::render_kv_lines,
     },
 };
 
