@@ -142,7 +142,6 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 }
 
 /// Render the right details panel content
-/// Render the right details panel content using consistent render_boxed_paragraph approach
 pub fn render_details_panel(frame: &mut Frame, area: Rect) {
     // Check if subpage is active first
     if let Ok(subpage_active) =
@@ -212,37 +211,11 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
             ))
         }
     }) {
-        // Create title block and render using render_boxed_paragraph consistently
-        let title_block = Block::default()
-            .borders(Borders::ALL)
-            .title(Span::raw(format!(" {} ", title)));
-
-        render_boxed_paragraph(
-            frame,
-            area,
-            content_lines,
-            0,
-            None,
-            Some(title_block),
-            true,
-            false,
-        );
+        render_boxed_paragraph(frame, area, content_lines, 0, Some(&title), true, false);
     } else {
         // Error fallback
-        let title_block = Block::default()
-            .borders(Borders::ALL)
-            .title(Span::raw(format!(" {} ", lang().index.details.as_str())));
         let content_lines = vec![Line::from("Error loading content")];
-        render_boxed_paragraph(
-            frame,
-            area,
-            content_lines,
-            0,
-            None,
-            Some(title_block),
-            false,
-            false,
-        );
+        render_boxed_paragraph(frame, area, content_lines, 0, None, false, false);
     }
 }
 

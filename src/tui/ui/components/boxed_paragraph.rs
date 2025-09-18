@@ -24,7 +24,6 @@ pub fn render_boxed_paragraph(
     content: Vec<Line>,
     offset: usize,
     title: Option<&str>,
-    custom_block: Option<Block<'_>>,
     wrap: bool,
     show_scrollbar: bool,
 ) {
@@ -48,11 +47,11 @@ pub fn render_boxed_paragraph(
             frame.render_widget(title_para, left_area);
 
             // Render content in right area
-            render_content_area(frame, right_area, content, offset, custom_block, wrap, show_scrollbar);
+            render_content_area(frame, right_area, content, offset, wrap, show_scrollbar);
         }
         None => {
             // Original behavior - render content in full area
-            render_content_area(frame, area, content, offset, custom_block, wrap, show_scrollbar);
+            render_content_area(frame, area, content, offset, wrap, show_scrollbar);
         }
     }
 }
@@ -63,7 +62,6 @@ fn render_content_area(
     area: Rect,
     content: Vec<Line>,
     offset: usize,
-    custom_block: Option<Block<'_>>,
     wrap: bool,
     show_scrollbar: bool,
 ) {
@@ -71,11 +69,9 @@ fn render_content_area(
     let content_len = content_len.saturating_sub((area.height / 2) as usize);
     let offset = std::cmp::min(offset, content_len.saturating_sub(1));
 
-    let block = custom_block.unwrap_or_else(|| {
-        Block::default()
-            .borders(Borders::ALL)
-            .padding(Padding::left(1))
-    });
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .padding(Padding::left(1));
 
     let mut para = Paragraph::new(content)
         .block(block)
@@ -86,7 +82,7 @@ fn render_content_area(
     }
 
     frame.render_widget(para, area);
-    
+
     if show_scrollbar {
         frame.render_stateful_widget(
             Scrollbar::new(ScrollbarOrientation::VerticalRight),

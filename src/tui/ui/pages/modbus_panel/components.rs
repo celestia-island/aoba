@@ -73,7 +73,6 @@ pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
         lines[first_visible..end].to_vec(),
         0,
         None,
-        None,
         false,
         true,
     );
