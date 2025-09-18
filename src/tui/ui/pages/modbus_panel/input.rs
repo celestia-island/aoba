@@ -43,7 +43,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     }
                 }
                 Ok(())
-            });
+            })?;
             if cancelled {
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
@@ -51,7 +51,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             } else {
                 // No nested edit active: leave dashboard
-                handle_leave_page(bus);
+                handle_leave_page(bus)?;
                 Ok(())
             }
         }
@@ -88,14 +88,15 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the modbus dashboard back to entry page
-fn handle_leave_page(bus: &Bus) {
+fn handle_leave_page(bus: &Bus) -> Result<()> {
     use crate::protocol::status::write_status;
     use crate::tui::utils::bus::UiToCore;
 
-    let _ = write_status(|s| {
+    write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
         Ok(())
-    });
-    let _ = bus.ui_tx.send(UiToCore::Refresh);
+    })?;
+    bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+    Ok(())
 }

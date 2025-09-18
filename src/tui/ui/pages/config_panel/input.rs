@@ -37,7 +37,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         // We are editing a field: handle text input and control keys
         match key.code {
             KeyCode::Char(c) => {
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -49,11 +49,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         *config_edit_cursor_pos = pos + 1;
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Backspace => {
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -67,11 +67,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Left => {
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
@@ -82,11 +82,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Right => {
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
@@ -99,12 +99,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 Ok(())
             }
             KeyCode::Enter => {
                 // Commit edit: write buffer back to PortData field
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         selected_port,
                         edit_active: config_edit_active,
@@ -178,7 +178,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         *config_edit_cursor_pos = 0;
                     }
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
@@ -186,7 +186,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             KeyCode::Esc => {
                 // Cancel edit
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_active: config_edit_active,
                         edit_buffer: config_edit_buffer,
@@ -199,7 +199,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         *config_edit_cursor_pos = 0;
                     }
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
@@ -212,7 +212,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         match key.code {
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Update selected_port inside Page::ModbusConfig under write lock
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig { selected_port, .. } = &mut s.page {
                         // Move selection by delta based on key
                         match key.code {
@@ -231,7 +231,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     }
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;
@@ -283,7 +283,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         String::new()
                     };
 
-                    let _ = crate::protocol::status::write_status(|s| {
+                    crate::protocol::status::write_status(|s| {
                         if let types::Page::ModbusConfig {
                             edit_active: config_edit_active,
                             edit_cursor: config_edit_cursor,
@@ -298,7 +298,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             *config_edit_cursor_pos = init_buf.len();
                         }
                         Ok(())
-                    });
+                    })?;
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::Refresh)
                         .map_err(|e| anyhow!(e))?;
@@ -314,10 +314,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::Esc => {
                 // If we reach here we are not in per-field edit mode (in_edit == false)
                 // so Esc should return the user to the main entry page.
-                let _ = crate::protocol::status::write_status(|s| {
+                crate::protocol::status::write_status(|s| {
                     s.page = types::Page::Entry { cursor: None };
                     Ok(())
-                });
+                })?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|e| anyhow!(e))?;

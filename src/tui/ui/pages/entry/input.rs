@@ -203,10 +203,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc => {
             // Escape returns to top-level entry cursor cleared (or quit handled by caller)
-            let _ = crate::protocol::status::write_status(|s| {
+            crate::protocol::status::write_status(|s| {
                 s.page = types::Page::Entry { cursor: None };
                 Ok(())
-            });
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
