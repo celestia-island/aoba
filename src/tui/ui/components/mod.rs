@@ -1,3 +1,4 @@
+pub mod boxed_paragraph;
 pub mod error_msg;
 pub mod log_input;
 pub mod styled_label;
@@ -6,10 +7,6 @@ use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
-    },
-    layout::{Constraint, Direction, Layout},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -28,87 +25,6 @@ pub fn styled_title_span(label: &str, selected: bool, editing: bool) -> Span<'st
         Style::default().add_modifier(Modifier::BOLD)
     };
     Span::styled(label.to_string(), title_style)
-}
-
-/// Render a boxed paragraph. Accepts a list of lines, a target rect, and an optional title.
-/// When title is provided, creates a 4:6 layout with title on left (40%) and content on right (60%).
-pub fn render_boxed_paragraph(
-    frame: &mut Frame, 
-    area: Rect, 
-    content: Vec<Line>, 
-    offset: usize,
-    title: Option<&str>
-) {
-    match title {
-        Some(title_text) => {
-            // Split into 4:6 layout (40% : 60%)
-            let chunks = Layout::default()
-                .direction(Direction::Horizontal)
-                .margin(0)
-                .constraints([
-                    Constraint::Percentage(40),
-                    Constraint::Percentage(60),
-                ])
-                .split(area);
-
-            let left_area = chunks[0];
-            let right_area = chunks[1];
-
-            // Render title in left area
-            let title_block = Block::default()
-                .borders(Borders::ALL)
-                .title(format!(" {} ", title_text));
-            let title_para = Paragraph::new(Vec::<Line>::new()).block(title_block);
-            frame.render_widget(title_para, left_area);
-
-            // Render content in right area
-            render_content_area(frame, right_area, content, offset, None, false);
-        }
-        None => {
-            // Original behavior - render content in full area
-            render_content_area(frame, area, content, offset, None, false);
-        }
-    }
-}
-
-/// Render a boxed paragraph with custom block and wrapping support.
-pub fn render_boxed_paragraph_with_block_and_wrap(
-    frame: &mut Frame, 
-    area: Rect, 
-    content: Vec<Line>, 
-    offset: usize,
-    custom_block: Option<Block<'_>>,
-    wrap: bool
-) {
-    render_content_area(frame, area, content, offset, custom_block, wrap);
-}
-
-/// Helper function to render the content area with scrollbar
-fn render_content_area(frame: &mut Frame, area: Rect, content: Vec<Line>, offset: usize, custom_block: Option<Block<'_>>, wrap: bool) {
-    let content_len = content.len();
-    let content_len = content_len - (area.height / 2) as usize;
-    let offset = std::cmp::min(offset, content_len.saturating_sub(1));
-
-    let block = custom_block.unwrap_or_else(|| {
-        Block::default()
-            .borders(Borders::ALL)
-            .padding(Padding::left(1))
-    });
-    
-    let mut para = Paragraph::new(content)
-        .block(block)
-        .scroll((offset as u16, 0));
-    
-    if wrap {
-        para = para.wrap(ratatui::widgets::Wrap { trim: true });
-    }
-    
-    frame.render_widget(para, area);
-    frame.render_stateful_widget(
-        Scrollbar::new(ScrollbarOrientation::VerticalRight),
-        area,
-        &mut ScrollbarState::new(content_len).position(offset),
-    );
 }
 
 /// Convert label/value pairs into aligned `Line`s. Each pair is (label, value, optional style)

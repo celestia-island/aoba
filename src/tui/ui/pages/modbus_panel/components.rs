@@ -2,7 +2,7 @@ use std::cmp::min;
 
 use ratatui::{prelude::*, text::Line};
 
-use crate::{i18n::lang, protocol::status::types, tui::ui::components::render_boxed_paragraph};
+use crate::{i18n::lang, protocol::status::types, tui::ui::components::boxed_paragraph::render_boxed_paragraph};
 
 /// Check if a subpage is currently active for modbus panel
 pub fn is_subpage_active() -> bool {
@@ -64,7 +64,7 @@ pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
     let cursor_line = 0;
     let (first_visible, end) = calculate_scroll_params(&lines, area, cursor_line);
 
-    render_boxed_paragraph(frame, area, lines[first_visible..end].to_vec(), 0);
+    render_boxed_paragraph(frame, area, lines[first_visible..end].to_vec(), 0, None, None, false);
 }
 
 /// Get bottom hints for modbus panel

@@ -17,7 +17,7 @@ use crate::{
         },
     },
     tui::ui::{
-        components::render_boxed_paragraph_with_block_and_wrap,
+        components::boxed_paragraph::render_boxed_paragraph,
         pages::about::components::{init_about_cache, render_about_page_manifest_lines},
     },
 };
@@ -161,7 +161,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
 
         if app.ports.order.is_empty() {
             let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-            render_boxed_paragraph_with_block_and_wrap(frame, area, content_lines, 0, Some(content_block), false);
+            render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
         } else {
             // Use cursor to determine what to render
             if let types::Page::Entry { cursor } = &app.page {
@@ -173,7 +173,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
                             render_port_details(frame, area, *idx, port_data, content_block);
                         } else {
                             let content_lines = vec![Line::from("Invalid port selection")];
-                            render_boxed_paragraph_with_block_and_wrap(frame, area, content_lines, 0, Some(content_block), false);
+                            render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
                         }
                     }
                     Some(EntryCursor::Refresh) => {
@@ -193,14 +193,14 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
                             render_port_details(frame, area, 0, port_data, content_block);
                         } else {
                             let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-                            render_boxed_paragraph_with_block_and_wrap(frame, area, content_lines, 0, Some(content_block), false);
+                            render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
                         }
                     }
                 }
             } else {
                 // Fallback for non-entry pages
                 let content_lines = vec![Line::from("Entry page required")];
-                render_boxed_paragraph_with_block_and_wrap(frame, area, content_lines, 0, Some(content_block), false);
+                render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
             }
         }
         Ok(())
@@ -210,7 +210,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {}", lang().index.details.as_str())));
         let content_lines = vec![Line::from(lang().index.no_com_ports.as_str())];
-        render_boxed_paragraph_with_block_and_wrap(frame, area, content_lines, 0, Some(content_block), false);
+        render_boxed_paragraph(frame, area, content_lines, 0, None, Some(content_block), false);
     }
 }
 
@@ -251,13 +251,13 @@ fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block, temp_
         }
     }
     
-    render_boxed_paragraph_with_block_and_wrap(f, area, lines, 0, Some(content_block), false);
+    render_boxed_paragraph(f, area, lines, 0, Some(content_block), false);
 }
 
 /// Render content for manual specify special entry
 fn render_manual_specify_content(f: &mut Frame, area: Rect, content_block: Block) {
     let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
-    render_boxed_paragraph_with_block_and_wrap(f, area, content_lines, 0, Some(content_block), false);
+    render_boxed_paragraph(f, area, content_lines, 0, Some(content_block), false);
 }
 
 /// Render content for about special entry (preview)
@@ -266,12 +266,10 @@ fn render_about_preview_content(f: &mut Frame, area: Rect) {
     if let Ok(cache) = about_cache.lock() {
         let content_lines = render_about_page_manifest_lines(cache.clone());
         // Use render_boxed_paragraph with title as requested
-        use crate::tui::ui::components::render_boxed_paragraph;
-        render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()));
+        render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()), None, false);
     } else {
         let content_lines = vec![Line::from("About (failed to load content)")];
-        use crate::tui::ui::components::render_boxed_paragraph;
-        render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()));
+        render_boxed_paragraph(f, area, content_lines, 0, Some(lang().index.about_label.as_str()), None, false);
     }
 }
 
@@ -431,5 +429,5 @@ fn render_port_details(
         info_lines.push(Line::from("Port data not available"));
     }
 
-    render_boxed_paragraph_with_block_and_wrap(f, area, info_lines, 0, Some(content_block), true);
+    render_boxed_paragraph(f, area, info_lines, 0, Some(content_block), true);
 }
