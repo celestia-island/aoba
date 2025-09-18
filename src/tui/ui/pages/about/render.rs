@@ -6,7 +6,7 @@ use crate::{
     i18n::lang,
     protocol::status::{read_status, types},
     tui::ui::{
-        components::render_boxed_paragraph,
+        components::render_boxed_paragraph_with_title,
         pages::about::components::{init_about_cache, render_about_page_manifest_lines},
     },
 };
@@ -27,7 +27,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
             }
         })?;
 
-        render_boxed_paragraph(frame, area, content, offset);
+        render_boxed_paragraph_with_title(frame, area, content, offset, Some(lang().index.about_label.as_str()));
     }
 
     Ok(())
