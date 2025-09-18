@@ -16,8 +16,11 @@ use crate::{
             ui::SpecialEntry,
         },
     },
-    tui::ui::components::{
-        render_boxed_paragraph_with_block, render_boxed_paragraph_with_block_and_wrap,
+    tui::ui::{
+        components::{
+            render_boxed_paragraph_with_block, render_boxed_paragraph_with_block_and_wrap,
+        },
+        pages::about::components::{init_about_cache, render_about_page_manifest_lines},
     },
 };
 
@@ -181,9 +184,25 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
         } else {
             let special_base = app.ports.order.len();
             if selection >= special_base {
-                let rel = selection - special_base;
-                // render_special_entry_content previously accepted app; it will still accept app reference
-                render_special_entry_content(frame, area, rel, content_block);
+                let special_index = selection - special_base;
+                let special_entries = SpecialEntry::all();
+                if let Some(special_entry) = special_entries.get(special_index) {
+                    match special_entry {
+                        SpecialEntry::Refresh => {
+                            render_refresh_content(frame, area, content_block);
+                        }
+                        SpecialEntry::ManualSpecify => {
+                            render_manual_specify_content(frame, area, content_block);
+                        }
+                        SpecialEntry::About => {
+                            render_about_preview_content(frame, area, content_block);
+                        }
+                    }
+                } else {
+                    // Fallback for invalid special entry selection
+                    let content_lines = vec![Line::from("Invalid selection")];
+                    render_boxed_paragraph_with_block(frame, area, content_lines, 0, Some(content_block));
+                }
             } else {
                 render_port_details(frame, area, selection, selected_state, content_block);
             }
@@ -199,57 +218,62 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
     }
 }
 
-/// Render content for special entries (refresh, manual specify, about)
-fn render_special_entry_content(f: &mut Frame, area: Rect, rel: usize, content_block: Block) {
-    if rel == 0 {
-        // Build using Status accessed via read_status
-        if let Ok(()) = read_status(|app| {
-            let mut lines: Vec<Line> = Vec::new();
-            lines.push(Line::from(lang().index.refresh_action.as_str()));
-            if let Some(ts) = app.temporarily.scan.last_scan_time {
-                lines.push(Line::from(format!(
-                    "{} {}",
-                    lang().index.scan_last_header.as_str(),
-                    ts.format("%Y-%m-%d %H:%M:%S")
-                )));
-            } else {
-                lines.push(Line::from(lang().index.scan_none.as_str()));
-            }
-            if app.temporarily.scan.last_scan_info.is_empty() {
-                lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
-            } else {
-                lines.push(Line::from(lang().index.scan_raw_header.as_str()));
-                for l in app.temporarily.scan.last_scan_info.lines().take(100) {
-                    if l.starts_with("ERROR:") {
-                        lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
-                    } else {
-                        lines.push(Line::from(l));
-                    }
-                }
-                if app.temporarily.scan.last_scan_info.len() > 100 {
-                    lines.push(Line::from(format!(
-                        "... ({} {})",
-                        app.temporarily.scan.last_scan_info.len() - 100,
-                        lang().index.scan_truncated_suffix.as_str()
-                    )));
-                }
-            }
-            render_boxed_paragraph_with_block(f, area, lines, 0, Some(content_block));
-            Ok(())
-        }) {
+/// Render content for refresh special entry
+fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
+    if let Ok(()) = read_status(|app| {
+        let mut lines: Vec<Line> = Vec::new();
+        lines.push(Line::from(lang().index.refresh_action.as_str()));
+        if let Some(ts) = app.temporarily.scan.last_scan_time {
+            lines.push(Line::from(format!(
+                "{} {}",
+                lang().index.scan_last_header.as_str(),
+                ts.format("%Y-%m-%d %H:%M:%S")
+            )));
         } else {
-            let content_lines = vec![Line::from(lang().index.scan_none.as_str())];
-            render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
+            lines.push(Line::from(lang().index.scan_none.as_str()));
         }
-    } else if rel == 1 {
-        let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
+        if app.temporarily.scan.last_scan_info.is_empty() {
+            lines.push(Line::from(format!("({})", lang().index.scan_none.as_str())));
+        } else {
+            lines.push(Line::from(lang().index.scan_raw_header.as_str()));
+            for l in app.temporarily.scan.last_scan_info.lines().take(100) {
+                if l.starts_with("ERROR:") {
+                    lines.push(Line::from(Span::styled(l, Style::default().fg(Color::Red))));
+                } else {
+                    lines.push(Line::from(l));
+                }
+            }
+            if app.temporarily.scan.last_scan_info.len() > 100 {
+                lines.push(Line::from(format!(
+                    "... ({} {})",
+                    app.temporarily.scan.last_scan_info.len() - 100,
+                    lang().index.scan_truncated_suffix.as_str()
+                )));
+            }
+        }
+        render_boxed_paragraph_with_block(f, area, lines, 0, Some(content_block));
+        Ok(())
+    }) {
+    } else {
+        let content_lines = vec![Line::from(lang().index.scan_none.as_str())];
         render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
-    } else if rel == 2 {
-        // About page preview - simplified for now
-        let content_lines = vec![Line::from("About (TODO: implement preview)")];
+    }
+}
+
+/// Render content for manual specify special entry
+fn render_manual_specify_content(f: &mut Frame, area: Rect, content_block: Block) {
+    let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
+    render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
+}
+
+/// Render content for about special entry (preview)
+fn render_about_preview_content(f: &mut Frame, area: Rect, content_block: Block) {
+    let about_cache = init_about_cache();
+    if let Ok(cache) = about_cache.lock() {
+        let content_lines = render_about_page_manifest_lines(cache.clone());
         render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
     } else {
-        let content_lines = vec![Line::from(lang().index.manual_specify_label.as_str())];
+        let content_lines = vec![Line::from("About (failed to load content)")];
         render_boxed_paragraph_with_block(f, area, content_lines, 0, Some(content_block));
     }
 }
