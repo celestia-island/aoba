@@ -142,7 +142,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 }
 
 /// Render the right details panel content
-pub fn render_details_panel(frame: &mut Frame, area: Rect, selection: usize) {
+pub fn render_details_panel(frame: &mut Frame, area: Rect, _selection: usize) {
     if let Ok(()) = read_status(|app| {
         let subpage_active = matches!(
             app.page,
@@ -252,7 +252,7 @@ fn render_refresh_content(f: &mut Frame, area: Rect, content_block: Block) {
             }
         }
         
-        render_boxed_paragraph(f, area, lines, 0, None, Some(content_block), false);
+        render_boxed_paragraph(f, area, lines, 0, None, Some(content_block.clone()), false);
         Ok(())
     }) {
     } else {
@@ -436,5 +436,5 @@ fn render_port_details(
         info_lines.push(Line::from("Port data not available"));
     }
 
-    render_boxed_paragraph(f, area, info_lines, 0, Some(content_block), true);
+    render_boxed_paragraph(f, area, info_lines, 0, None, Some(content_block), true);
 }
