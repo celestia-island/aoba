@@ -12,6 +12,20 @@ use crate::{
     tui::ui::components::styled_label::{StyledSpanKind, styled_spans, TextState},
 };
 
+/// Derive selection index for config panel from current page state
+pub fn derive_selection(app: &types::Status) -> usize {
+    match &app.page {
+        types::Page::ModbusDashboard { selected_port, .. }
+        | types::Page::ModbusConfig { selected_port, .. }
+        | types::Page::ModbusLog { selected_port, .. } => *selected_port,
+        types::Page::Entry {
+            cursor: Some(types::ui::EntryCursor::Com { idx }),
+            ..
+        } => *idx,
+        _ => 0usize,
+    }
+}
+
 /// Generate lines for a two-column key/value list for common serial settings and a few modbus fields.
 /// Returns a vector of rendered lines without handling outer frame rendering.
 /// 

@@ -106,19 +106,18 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Commit edit: write buffer back to PortData field
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
+                        selected_port,
                         edit_active: config_edit_active,
-                        edit_port: config_edit_port,
-                        edit_field_index: config_edit_field_index,
-                        edit_field_key: config_edit_field_key,
+                        edit_cursor: config_edit_cursor,
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
                     } = &mut s.page
                     {
-                        if let Some(port_name) = config_edit_port.clone() {
-                            if let Some(pd) = s.ports.map.get_mut(&port_name) {
+                        if let Some(port_name) = s.ports.order.get(*selected_port) {
+                            if let Some(pd) = s.ports.map.get_mut(port_name) {
                                 let val = config_edit_buffer.clone();
-                                match *config_edit_field_index {
+                                match *config_edit_cursor {
                                     0 => pd.port_name = val,
                                     1 => {
                                         if let Ok(v) = val.parse::<u32>() {
@@ -175,8 +174,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                         // Exit edit mode and clear buffer
                         *config_edit_active = false;
-                        *config_edit_port = None;
-                        *config_edit_field_key = None;
                         config_edit_buffer.clear();
                         *config_edit_cursor_pos = 0;
                     }
@@ -192,16 +189,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 let _ = crate::protocol::status::write_status(|s| {
                     if let types::Page::ModbusConfig {
                         edit_active: config_edit_active,
-                        edit_port: config_edit_port,
-                        edit_field_key: config_edit_field_key,
                         edit_buffer: config_edit_buffer,
                         edit_cursor_pos: config_edit_cursor_pos,
                         ..
                     } = &mut s.page
                     {
                         *config_edit_active = false;
-                        *config_edit_port = None;
-                        *config_edit_field_key = None;
                         config_edit_buffer.clear();
                         *config_edit_cursor_pos = 0;
                     }
@@ -293,18 +286,14 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     let _ = crate::protocol::status::write_status(|s| {
                         if let types::Page::ModbusConfig {
                             edit_active: config_edit_active,
-                            edit_port: config_edit_port,
-                            edit_field_index: config_edit_field_index,
-                            edit_field_key: config_edit_field_key,
+                            edit_cursor: config_edit_cursor,
                             edit_buffer: config_edit_buffer,
                             edit_cursor_pos: config_edit_cursor_pos,
                             ..
                         } = &mut s.page
                         {
                             *config_edit_active = true;
-                            *config_edit_port = Some(port_name.clone());
-                            *config_edit_field_index = sel_idx;
-                            *config_edit_field_key = None;
+                            *config_edit_cursor = selected_row;
                             *config_edit_buffer = init_buf.clone();
                             *config_edit_cursor_pos = init_buf.len();
                         }
