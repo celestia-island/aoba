@@ -1,15 +1,11 @@
 use anyhow::Result;
 
-use ratatui::{
-    prelude::*,
-    text::Line,
-    style::Modifier,
-};
+use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use crate::{
-    i18n::lang, 
+    i18n::lang,
     protocol::status::types,
-    tui::ui::components::styled_label::{StyledSpanKind, styled_spans, TextState},
+    tui::ui::components::styled_label::{styled_spans, StyledSpanKind, TextState},
 };
 
 /// Derive selection index for config panel from current page state
@@ -28,13 +24,13 @@ pub fn derive_selection(app: &types::Status) -> usize {
 
 /// Generate lines for a two-column key/value list for common serial settings and a few modbus fields.
 /// Returns a vector of rendered lines without handling outer frame rendering.
-/// 
+///
 /// The right-side values use StyledSpanKind::Text which allows external control over:
 /// - TextState::Normal - default appearance
 /// - TextState::Selected - green highlighting (hover)
 /// - TextState::Chosen - yellow highlighting  
 /// - TextState::Editing - yellow + bold (active editing)
-/// 
+///
 /// To control individual value states, modify the StyledSpanKind::Text parameters below.
 pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
     // Use read_status to access current Status snapshot and build list of kv pairs
@@ -121,20 +117,17 @@ pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
 
         // Build lines using StyledSpanKind for values
         let mut lines: Vec<Line<'static>> = Vec::new();
-        
+
         // Calculate max label width for alignment
-        let max_label_width = labels.iter()
-            .map(|l| l.len())
-            .max()
-            .unwrap_or(0);
+        let max_label_width = labels.iter().map(|l| l.len()).max().unwrap_or(0);
 
         for (label, value) in labels.into_iter().zip(values.into_iter()) {
             // Create left-aligned label span (bold)
             let label_span = Span::styled(
                 format!("{:width$}", label, width = max_label_width),
-                Style::default().add_modifier(Modifier::BOLD)
+                Style::default().add_modifier(Modifier::BOLD),
             );
-            
+
             // Create value span using StyledSpanKind::Text
             let value_spans = styled_spans(StyledSpanKind::Text {
                 text: &value,
@@ -145,7 +138,7 @@ pub fn render_kv_lines() -> Result<Vec<Line<'static>>> {
             // Build the line with label, spacing, and value
             let mut line_spans = vec![label_span, Span::raw("  ")];
             line_spans.extend(value_spans);
-            
+
             lines.push(Line::from(line_spans));
         }
 

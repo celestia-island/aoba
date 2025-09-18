@@ -6,8 +6,9 @@ use crate::{
     protocol::status::{
         read_status,
         types::{self, Status},
+        write_status,
     },
-    tui::utils::bus::Bus,
+    tui::utils::bus::{Bus, UiToCore},
 };
 
 /// Handle input for log panel. Sends commands via UiToCore.
@@ -19,7 +20,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Navigation commands within the log
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Esc | KeyCode::Char('h') => {
@@ -43,23 +44,19 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
 /// Handle leaving the log panel back to entry page
 fn handle_leave_page(bus: &Bus) -> Result<()> {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
     write_status(|s| {
         // Go back to entry page
         s.page = types::Page::Entry { cursor: None };
         Ok(())
     })?;
-    bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
     Ok(())
 }
 
 /// Handle toggling follow mode for logs
 fn handle_toggle_follow(bus: &Bus, app: &Status) -> Result<()> {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
     // Toggle the auto-scroll flag for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
         write_status(|s| {
@@ -71,15 +68,14 @@ fn handle_toggle_follow(bus: &Bus, app: &Status) -> Result<()> {
             Ok(())
         })?;
     }
-    bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
     Ok(())
 }
 
 /// Handle clearing logs for the current port
 fn handle_clear_logs(bus: &Bus, app: &Status) -> Result<()> {
-    use crate::protocol::status::write_status;
-    use crate::tui::utils::bus::UiToCore;
-
     // Clear logs for the current port
     if let types::Page::ModbusLog { selected_port, .. } = &app.page {
         write_status(|s| {
@@ -92,6 +88,8 @@ fn handle_clear_logs(bus: &Bus, app: &Status) -> Result<()> {
             Ok(())
         })?;
     }
-    bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
     Ok(())
 }

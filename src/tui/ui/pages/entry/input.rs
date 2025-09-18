@@ -124,7 +124,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             )?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
@@ -141,7 +141,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             )?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Enter => {
@@ -188,7 +188,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Some(types::ui::EntryCursor::Refresh) => {
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::Refresh)
-                        .map_err(|e| anyhow!(e))?;
+                        .map_err(|err| anyhow!(err))?;
                 }
                 Some(types::ui::EntryCursor::CreateVirtual) => {
                     // TODO: implement virtual port creation
@@ -203,13 +203,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc => {
             // Escape returns to top-level entry cursor cleared (or quit handled by caller)
-            crate::protocol::status::write_status(|s| {
+            write_status(|s| {
                 s.page = types::Page::Entry { cursor: None };
                 Ok(())
             })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|e| anyhow!(e))?;
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         _ => Ok(()),
