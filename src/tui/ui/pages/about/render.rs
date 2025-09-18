@@ -27,15 +27,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
             }
         })?;
 
-        render_boxed_paragraph(
-            frame,
-            area,
-            content,
-            offset,
-            Some(lang().index.about_label.as_str()),
-            None,
-            false,
-        );
+        render_boxed_paragraph(frame, area, content, offset, None, None, false);
     }
 
     Ok(())

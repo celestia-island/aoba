@@ -313,27 +313,11 @@ fn render_about_preview_content(f: &mut Frame, area: Rect) {
     let about_cache = init_about_cache();
     if let Ok(cache) = about_cache.lock() {
         let content_lines = render_about_page_manifest_lines(cache.clone());
-        // Use render_boxed_paragraph with title as requested
-        render_boxed_paragraph(
-            f,
-            area,
-            content_lines,
-            0,
-            Some(lang().index.about_label.as_str()),
-            None,
-            false,
-        );
+        // Render without title since we're already inside a titled panel
+        render_boxed_paragraph(f, area, content_lines, 0, None, None, false);
     } else {
         let content_lines = vec![Line::from("About (failed to load content)")];
-        render_boxed_paragraph(
-            f,
-            area,
-            content_lines,
-            0,
-            Some(lang().index.about_label.as_str()),
-            None,
-            false,
-        );
+        render_boxed_paragraph(f, area, content_lines, 0, None, None, false);
     };
 }
 
