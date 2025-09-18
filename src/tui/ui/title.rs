@@ -10,11 +10,10 @@ pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
 }
 
 pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
-    // Horizontal layout: left (spinner) + center (breadcrumb) + right (reserved)
+    // Horizontal layout: left (spinner + breadcrumb) + right (reserved)
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(4),
             Constraint::Min(10),
             Constraint::Length(2),
         ])
@@ -26,20 +25,20 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
         .style(Style::default().bg(Color::Gray));
     f.render_widget(bg_block, area);
 
-    // Spinner (top-left) using ◜◝◞◟ rotation
+    // Build breadcrumb text with spinner at the beginning
+    let mut breadcrumb_text = String::new();
+    
+    // Add spinner if busy (2 spaces from left)
+    breadcrumb_text.push_str("  ");
     if app.temporarily.busy.busy {
         let frames = ['◜', '◝', '◞', '◟'];
         let ch = frames[(app.temporarily.busy.spinner_frame as usize) % frames.len()];
-        let spin = Paragraph::new(ch.to_string()).style(
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        );
-        f.render_widget(spin, chunks[0]);
+        breadcrumb_text.push(ch);
+        breadcrumb_text.push(' ');
     }
 
-    // Breadcrumb text (center area)
-    let breadcrumb_text = match &app.page {
+    // Add breadcrumb path based on current page
+    let page_breadcrumb = match &app.page {
         // Entry page: AOBA title
         types::Page::Entry { .. } => lang().index.title.as_str().to_string(),
 
@@ -103,17 +102,19 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
             format!(
                 "{} > {}",
                 lang().index.title.as_str(),
-                lang().about.name.as_str()
+                lang().index.about_label.as_str()
             )
         }
     };
+    
+    breadcrumb_text.push_str(&page_breadcrumb);
 
     let title_para = Paragraph::new(breadcrumb_text)
-        .alignment(Alignment::Center)
+        .alignment(Alignment::Left)
         .style(
             Style::default()
                 .fg(Color::LightGreen)
                 .add_modifier(Modifier::BOLD),
         );
-    f.render_widget(title_para, chunks[1]);
+    f.render_widget(title_para, chunks[0]);
 }

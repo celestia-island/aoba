@@ -24,13 +24,15 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
     ui.allocate_ui_at_rect(rect, |child| {
         // left-to-right layout with vertical centering
         child.with_layout(Layout::left_to_right(Align::Center), |ui| {
+            // Start with 2 spaces from left (space for loading spinner)
+            ui.add_space(8.);
+            
             // Loading spinner at left using ◜◝◞◟ rotation
             if let Ok(is_busy) = read_status(|g| Ok(g.temporarily.busy.busy)) {
                 if is_busy {
                     if let Ok(frame) = read_status(|g| Ok(g.temporarily.busy.spinner_frame)) {
                         let spinner_chars = ['◜', '◝', '◞', '◟'];
                         let ch = spinner_chars[(frame as usize) % spinner_chars.len()];
-                        ui.add_space(4.);
                         let spinner_rect = ui
                             .allocate_exact_size(Vec2::new(16., 24.), egui::Sense::hover())
                             .0;
@@ -45,9 +47,6 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     }
                 }
             }
-
-            // Space between spinner and breadcrumb
-            ui.add_space(4.);
 
             // Breadcrumb implementation
             // Level 1: AOBA title (clickable, goes to home)
@@ -114,7 +113,7 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
 
                     // About page: AOBA title > About
                     types::Page::About { .. } => {
-                        let about_label = lang().about.name.as_str().to_string();
+                        let about_label = lang().index.about_label.as_str().to_string();
                         Ok((None::<String>, Some(about_label), None::<String>))
                     }
                 }
