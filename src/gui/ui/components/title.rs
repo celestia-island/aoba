@@ -26,7 +26,7 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
         child.with_layout(Layout::left_to_right(Align::Center), |ui| {
             // Start with 2 spaces from left (space for loading spinner)
             ui.add_space(8.);
-            
+
             // Loading spinner at left using ◜◝◞◟ rotation
             if let Ok(is_busy) = read_status(|g| Ok(g.temporarily.busy.busy)) {
                 if is_busy {

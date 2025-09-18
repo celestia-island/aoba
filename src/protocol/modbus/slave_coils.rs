@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 
-use rmodbus::server::{storage::ModbusStorageSmall, ModbusFrame};
+use rmodbus::{
+    consts::ModbusFunction,
+    server::{storage::ModbusStorageSmall, ModbusFrame},
+};
 
 pub fn build_slave_coils_response(
     request: &mut ModbusFrame<Vec<u8>>,
@@ -20,7 +23,7 @@ pub fn build_slave_coils_response(
     }
 
     if request.response_required {
-        if request.func == 0x01 {
+        if request.func == ModbusFunction::GetCoils {
             // Standard Modbus coils response; no custom byte order transformation applied.
             log::info!("Response length: {}", request.response.len());
         }

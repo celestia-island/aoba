@@ -1,14 +1,11 @@
+pub mod boxed_paragraph;
 pub mod error_msg;
 pub mod log_input;
 pub mod styled_label;
 
 use ratatui::{
-    prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{
-        Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
-    },
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -27,27 +24,6 @@ pub fn styled_title_span(label: &str, selected: bool, editing: bool) -> Span<'st
         Style::default().add_modifier(Modifier::BOLD)
     };
     Span::styled(label.to_string(), title_style)
-}
-
-/// Render a boxed paragraph. Accepts a list of lines, a target rect, and an optional style for the
-/// Paragraph content. The block will use all borders by default.
-pub fn render_boxed_paragraph(frame: &mut Frame, area: Rect, content: Vec<Line>, offset: usize) {
-    let content_len = content.len();
-    let content_len = content_len - (area.height / 2) as usize;
-    let offset = std::cmp::min(offset, content_len.saturating_sub(1));
-
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .padding(Padding::left(1));
-    let para = Paragraph::new(content)
-        .block(block)
-        .scroll((offset as u16, 0));
-    frame.render_widget(para, area);
-    frame.render_stateful_widget(
-        Scrollbar::new(ScrollbarOrientation::VerticalRight),
-        area,
-        &mut ScrollbarState::new(content_len).position(offset),
-    );
 }
 
 /// Convert label/value pairs into aligned `Line`s. Each pair is (label, value, optional style)
