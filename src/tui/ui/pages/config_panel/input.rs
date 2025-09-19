@@ -423,6 +423,7 @@ fn handle_protocol_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()>
                 cursor: 0,
                 editing_field: None,
                 input_buffer: String::new(),
+                view_offset: 0,
                 edit_choice_index: None,
                 edit_confirmed: false,
                 master_cursor: 0,

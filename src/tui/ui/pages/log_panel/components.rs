@@ -11,7 +11,6 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::{types, write_status},
-    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
 };
 
 /// Extract log data from current page state

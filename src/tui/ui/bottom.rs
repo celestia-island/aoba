@@ -53,7 +53,7 @@ pub fn render_bottom_readonly(f: &mut Frame, area: Rect, app: &Status) {
 
     // Determine if a per-port log-clear confirmation is pending (keeps legacy behavior).
     let mut port_log_clear_pending = false;
-    if let types::Page::ModbusLog { selected_port } = app.page {
+    if let types::Page::ModbusLog { selected_port, .. } = app.page {
         if let Some(port_name) = app.ports.order.get(selected_port) {
             if let Some(pdata) = app.ports.map.get(port_name) {
                 port_log_clear_pending = pdata.log_clear_pending;
