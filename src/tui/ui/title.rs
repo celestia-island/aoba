@@ -1,6 +1,10 @@
 use anyhow::Result;
 
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{
+    prelude::*,
+    text::{Line, Span},
+    widgets::*,
+};
 
 use crate::{
     i18n::lang,
@@ -41,18 +45,25 @@ pub fn render_title_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
         .style(Style::default().bg(Color::Gray));
     frame.render_widget(bg_block, area);
 
-    // Build breadcrumb text with spinner at the beginning
-    let mut breadcrumb_text = String::new();
+    // Build breadcrumb as a sequence of styled Spans with spinner at the beginning
+    let mut breadcrumb_spans: Vec<Span> = Vec::new();
 
-    // Add spinner if busy (2 spaces from left)
-    breadcrumb_text.push_str("  ");
-    if read_status(|s| Ok(s.temporarily.busy.busy))? {
-        let frames = ['◜', '◝', '◞', '◟'];
-        let ch = frames
-            [(read_status(|s| Ok(s.temporarily.busy.spinner_frame))? as usize) % frames.len()];
-        breadcrumb_text.push(ch);
-        breadcrumb_text.push(' ');
-    }
+    // Always reserve 2 spaces from left then draw spinner which always animates.
+    // Spinner color: yellow when busy, white when idle.
+    let busy = read_status(|s| Ok(s.temporarily.busy.busy))?;
+    let frame_idx = read_status(|s| Ok(s.temporarily.busy.spinner_frame))? as usize;
+    let frames = ['▙', '▌', '▛', '▀', '▜', '▐', '▟', '▄'];
+    let ch = frames[frame_idx % frames.len()];
+    // leading spaces
+    breadcrumb_spans.push(Span::raw("  "));
+    // spinner with color depending on busy
+    let spinner_style = if busy {
+        Style::default().fg(Color::Yellow)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    breadcrumb_spans.push(Span::styled(ch.to_string(), spinner_style));
+    breadcrumb_spans.push(Span::raw("   "));
 
     // Add breadcrumb path based on current page
     let page_breadcrumb = match read_status(|s| Ok(s.page.clone()))? {
@@ -97,14 +108,15 @@ pub fn render_title_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
         }
     };
 
-    breadcrumb_text.push_str(&page_breadcrumb);
-    let title_para = Paragraph::new(breadcrumb_text)
-        .alignment(Alignment::Left)
-        .style(
-            Style::default()
-                .fg(Color::LightGreen)
-                .add_modifier(Modifier::BOLD),
-        );
+    // Append breadcrumb text as a styled span (light green, bold)
+    breadcrumb_spans.push(Span::styled(
+        page_breadcrumb,
+        Style::default()
+            .fg(Color::LightGreen)
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    let title_para = Paragraph::new(vec![Line::from(breadcrumb_spans)]).alignment(Alignment::Left);
     frame.render_widget(title_para, chunks[0]);
 
     Ok(())
