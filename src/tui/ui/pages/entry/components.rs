@@ -153,68 +153,62 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
     }
 
     // Get content lines based on page state
-    if let Ok((content_lines, title)) = read_status(|app| {
+    if let Ok(content_lines) = read_status(|app| {
         if app.ports.order.is_empty() {
             // No ports available
-            Ok((
-                vec![Line::from(lang().index.no_com_ports.as_str())],
-                lang().index.details.as_str().to_string(),
-            ))
+            Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
         } else if let types::Page::Entry { cursor } = &app.page {
             // Match on cursor to determine content
             match cursor {
                 Some(EntryCursor::Com { idx }) => {
                     if *idx < app.ports.order.len() {
-                        let port_name = &app.ports.order[*idx];
-                        let port_data = app.ports.map.get(port_name);
-                        let lines = get_port_details_content(*idx, port_data);
-                        Ok((lines, lang().index.details.as_str().to_string()))
+                        let lines = crate::tui::ui::pages::config_panel::components::render_kv_lines_with_indicators(*idx)?;
+                        Ok(lines)
                     } else {
-                        Ok((
-                            vec![Line::from("Invalid port selection")],
-                            lang().index.details.as_str().to_string(),
-                        ))
+                        Ok(vec![Line::from(
+                            lang().index.invalid_port_selection.as_str(),
+                        )])
                     }
                 }
                 Some(EntryCursor::Refresh) => {
                     let lines = get_refresh_content();
-                    Ok((lines, lang().index.details.as_str().to_string()))
+                    Ok(lines)
                 }
                 Some(EntryCursor::CreateVirtual) => {
                     let lines = get_manual_specify_content();
-                    Ok((lines, lang().index.details.as_str().to_string()))
+                    Ok(lines)
                 }
                 Some(EntryCursor::About) => {
                     let lines = get_about_preview_content();
-                    Ok((lines, lang().index.details.as_str().to_string()))
+                    Ok(lines)
                 }
                 None => {
                     // Default to first port if available
                     if !app.ports.order.is_empty() {
-                        let port_name = &app.ports.order[0];
-                        let port_data = app.ports.map.get(port_name);
-                        let lines = get_port_details_content(0, port_data);
-                        Ok((lines, lang().index.details.as_str().to_string()))
+                        let lines = crate::tui::ui::pages::config_panel::components::render_kv_lines_with_indicators(0)?;
+                        Ok(lines)
                     } else {
-                        Ok((
-                            vec![Line::from(lang().index.no_com_ports.as_str())],
-                            lang().index.details.as_str().to_string(),
-                        ))
+                        Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
                     }
                 }
             }
         } else {
             // Fallback for non-entry pages
-            Ok((
-                vec![Line::from("Entry page required")],
-                lang().index.details.as_str().to_string(),
-            ))
+            Ok(vec![Line::from(lang().index.entry_page_required.as_str())])
         }
     }) {
-        render_boxed_paragraph(frame, area, content_lines, 0, Some(&title), true, false);
+        render_boxed_paragraph(
+            frame,
+            area,
+            content_lines,
+            0,
+            Some(&lang().index.details),
+            true,
+            false,
+        );
     } else {
         // Error fallback
-        let content_lines = vec![Line::from("Error loading content")];
+        let content_lines = vec![Line::from(lang().index.error_loading_content.as_str())];
         render_boxed_paragraph(frame, area, content_lines, 0, None, false, false);
     }
 }
@@ -287,182 +281,4 @@ fn get_about_preview_content() -> Vec<Line<'static>> {
     };
 
     render_about_page_manifest_lines(snapshot)
-}
-
-/// Get content lines for a specific port
-fn get_port_details_content(
-    _port_index: usize,
-    port_data: Option<&PortData>,
-) -> Vec<Line<'static>> {
-    let mut info_lines: Vec<Line> = Vec::new();
-
-    if let Some(p) = port_data {
-        // Port status and basic info
-        let status_style = match p.state {
-            PortState::Free => Style::default(),
-            PortState::OccupiedByThis => Style::default()
-                .fg(Color::Green)
-                .add_modifier(Modifier::BOLD),
-            PortState::OccupiedByOther => Style::default()
-                .fg(Color::DarkGray)
-                .add_modifier(Modifier::ITALIC),
-        };
-
-        let status_text = match p.state {
-            PortState::Free => lang().index.port_state_free.clone(),
-            PortState::OccupiedByThis => lang().index.port_state_owned.clone(),
-            PortState::OccupiedByOther => lang().index.port_state_other.clone(),
-        };
-
-        // Basic port information
-        info_lines.push(Line::from(vec![
-            Span::styled("Port: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(p.port_name.clone()),
-        ]));
-
-        if !p.port_type.is_empty() {
-            info_lines.push(Line::from(vec![
-                Span::styled("Type: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(p.port_type.clone()),
-            ]));
-        }
-
-        info_lines.push(Line::from(vec![
-            Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::styled(status_text, status_style),
-        ]));
-
-        // Show runtime configuration if port is active
-        if let Some(runtime) = &p.runtime {
-            info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled(
-                "Configuration:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )));
-
-            let cfg = &runtime.current_cfg;
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled("Baud Rate: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.baud.to_string()),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled("Data Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.data_bits.to_string()),
-            ]));
-
-            let parity_str = match cfg.parity {
-                serialport::Parity::None => "None",
-                serialport::Parity::Even => "Even",
-                serialport::Parity::Odd => "Odd",
-            };
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled("Parity: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(parity_str),
-            ]));
-
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled("Stop Bits: ", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(cfg.stop_bits.to_string()),
-            ]));
-        }
-
-        // USB/Hardware information if available
-        if p.extra.vid.is_some() || p.extra.pid.is_some() {
-            info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled(
-                "Hardware:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )));
-
-            if let (Some(vid), Some(pid)) = (p.extra.vid, p.extra.pid) {
-                info_lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled("VID:PID: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(format!("{:04x}:{:04x}", vid, pid)),
-                ]));
-            }
-
-            if let Some(serial) = &p.extra.serial {
-                info_lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled("Serial: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(serial.clone()),
-                ]));
-            }
-
-            if let Some(manufacturer) = &p.extra.manufacturer {
-                info_lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled(
-                        "Manufacturer: ",
-                        Style::default().add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(manufacturer.clone()),
-                ]));
-            }
-
-            if let Some(product) = &p.extra.product {
-                info_lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled("Product: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::raw(product.clone()),
-                ]));
-            }
-        }
-
-        // Log statistics
-        if !p.logs.is_empty() {
-            info_lines.push(Line::from(""));
-            info_lines.push(Line::from(Span::styled(
-                "Logging:",
-                Style::default().add_modifier(Modifier::BOLD),
-            )));
-
-            let total_logs = p.logs.len();
-            let send_count = p
-                .logs
-                .iter()
-                .filter(|log| log.raw.contains("Send") || log.raw.contains("TX"))
-                .count();
-            let recv_count = p
-                .logs
-                .iter()
-                .filter(|log| log.raw.contains("Recv") || log.raw.contains("RX"))
-                .count();
-
-            info_lines.push(Line::from(vec![
-                Span::raw("  "),
-                Span::styled(
-                    "Total Entries: ",
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
-                Span::raw(total_logs.to_string()),
-            ]));
-
-            if send_count > 0 {
-                info_lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled("Sent: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(send_count.to_string(), Style::default().fg(Color::Green)),
-                ]));
-            }
-
-            if recv_count > 0 {
-                info_lines.push(Line::from(vec![
-                    Span::raw("  "),
-                    Span::styled("Received: ", Style::default().add_modifier(Modifier::BOLD)),
-                    Span::styled(recv_count.to_string(), Style::default().fg(Color::Yellow)),
-                ]));
-            }
-        }
-    } else {
-        info_lines.push(Line::from("Port data not available"));
-    }
-
-    info_lines
 }
