@@ -89,20 +89,35 @@ fn render_group1_with_indicators(
     };
 
     let enable_selected = current_selection == types::ui::ConfigPanelCursor::EnablePort;
-    lines.push(create_config_line(&enable_label, &enable_value, enable_selected, false)?);
+    lines.push(create_config_line(
+        &enable_label,
+        &enable_value,
+        enable_selected,
+        false,
+    )?);
 
     // 2. Protocol Mode selector (split from the old combined field)
     let mode_label = lang().protocol.common.protocol_mode.clone();
     let mode_value = lang().protocol.common.mode_modbus.clone(); // Default to Modbus for now
 
     let mode_selected = current_selection == types::ui::ConfigPanelCursor::ProtocolMode;
-    lines.push(create_config_line(&mode_label, &mode_value, mode_selected, true)?);
+    lines.push(create_config_line(
+        &mode_label,
+        &mode_value,
+        mode_selected,
+        true,
+    )?);
 
     // 3. Protocol Config navigation (hyperlink-style: no label, just action text)
     let config_value = lang().protocol.common.enter_modbus_config.clone(); // Default to Modbus for now
-    
+
     let config_selected = current_selection == types::ui::ConfigPanelCursor::ProtocolConfig;
-    lines.push(create_config_line("", &config_value, config_selected, false)?); // Empty label for hyperlink style
+    lines.push(create_config_line(
+        "",
+        &config_value,
+        config_selected,
+        false,
+    )?); // Empty label for hyperlink style
 
     Ok(())
 }
@@ -114,16 +129,28 @@ fn render_group2_with_indicators(
     current_selection: types::ui::ConfigPanelCursor,
 ) -> Result<()> {
     let serial_fields = [
-        (types::ui::ConfigPanelCursor::BaudRate, lang().protocol.common.label_baud.clone()),
-        (types::ui::ConfigPanelCursor::DataBits, lang().protocol.common.label_data_bits.clone()),
-        (types::ui::ConfigPanelCursor::Parity, lang().protocol.common.label_parity.clone()),
-        (types::ui::ConfigPanelCursor::StopBits, lang().protocol.common.label_stop_bits.clone()),
+        (
+            types::ui::ConfigPanelCursor::BaudRate,
+            lang().protocol.common.label_baud.clone(),
+        ),
+        (
+            types::ui::ConfigPanelCursor::DataBits,
+            lang().protocol.common.label_data_bits.clone(),
+        ),
+        (
+            types::ui::ConfigPanelCursor::Parity,
+            lang().protocol.common.label_parity.clone(),
+        ),
+        (
+            types::ui::ConfigPanelCursor::StopBits,
+            lang().protocol.common.label_stop_bits.clone(),
+        ),
     ];
 
     for (cursor_type, label) in serial_fields.iter() {
         let value = get_serial_param_value_by_cursor(port_data, *cursor_type);
         let selected = current_selection == *cursor_type;
-        
+
         lines.push(create_config_line(label, &value, selected, false)?);
     }
 
@@ -138,13 +165,13 @@ fn create_config_line(
     is_selector: bool,
 ) -> Result<Line<'static>> {
     use unicode_width::UnicodeWidthStr;
-    
+
     // Calculate the width of the label accurately accounting for Unicode
     let label_width = UnicodeWidthStr::width(label);
-    
+
     // Create spans
     let mut line_spans = Vec::new();
-    
+
     // Add label if not empty (for hyperlink-style entries, label will be empty)
     if !label.is_empty() {
         let label_span = Span::styled(
@@ -152,7 +179,7 @@ fn create_config_line(
             Style::default().add_modifier(Modifier::BOLD),
         );
         line_spans.push(label_span);
-        
+
         // Calculate dynamic spacing to align values properly
         // Target alignment: labels should take ~40% of width, values start at ~45%
         let target_label_width = 20; // Target column width for alignment
@@ -161,17 +188,14 @@ fn create_config_line(
         } else {
             2 // Minimum spacing
         };
-        
+
         // Add spacing
         line_spans.push(Span::raw(" ".repeat(padding_needed)));
     }
-    
+
     // Add focus indicator
     let indicator_span = if selected {
-        Span::styled(
-            "> ".to_string(),
-            Style::default().fg(Color::Green),
-        )
+        Span::styled("> ".to_string(), Style::default().fg(Color::Green))
     } else {
         Span::raw("  ".to_string()) // Two spaces for alignment
     };
@@ -245,11 +269,9 @@ fn render_group3_with_indicators(
 ) -> Result<()> {
     // Single hyperlink-style item: no label, just the action text
     let log_value = lang().protocol.common.view_communication_log.clone();
-    
+
     let log_selected = current_selection == types::ui::ConfigPanelCursor::ViewCommunicationLog;
     lines.push(create_config_line("", &log_value, log_selected, false)?); // Empty label for hyperlink style
 
     Ok(())
 }
-
-

@@ -18,7 +18,7 @@ impl EntryCursor {
     /// Move to the previous cursor position
     pub fn prev(self) -> Self {
         use crate::protocol::status::read_status;
-        
+
         match self {
             EntryCursor::Com { idx } => {
                 if idx > 0 {
@@ -30,7 +30,8 @@ impl EntryCursor {
             }
             EntryCursor::Refresh => {
                 // Go to last COM port if any exist
-                let max_port_idx = read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
+                let max_port_idx =
+                    read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
                 if max_port_idx > 0 {
                     EntryCursor::Com { idx: max_port_idx }
                 } else {
@@ -45,10 +46,11 @@ impl EntryCursor {
     /// Move to the next cursor position
     pub fn next(self) -> Self {
         use crate::protocol::status::read_status;
-        
+
         match self {
             EntryCursor::Com { idx } => {
-                let max_port_idx = read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
+                let max_port_idx =
+                    read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
                 if idx < max_port_idx {
                     EntryCursor::Com { idx: idx + 1 }
                 } else {
@@ -134,7 +136,10 @@ impl ConfigPanelCursor {
 
     /// Convert from index for compatibility with existing code
     pub fn from_index(index: usize) -> Self {
-        Self::all().get(index).copied().unwrap_or(ConfigPanelCursor::EnablePort)
+        Self::all()
+            .get(index)
+            .copied()
+            .unwrap_or(ConfigPanelCursor::EnablePort)
     }
 }
 
@@ -149,9 +154,7 @@ pub enum ModbusDashboardCursor {
 impl ModbusDashboardCursor {
     /// Get all cursor variants in order
     pub const fn all() -> &'static [ModbusDashboardCursor] {
-        &[
-            ModbusDashboardCursor::FirstItem,
-        ]
+        &[ModbusDashboardCursor::FirstItem]
     }
 
     /// Move to the previous cursor position
@@ -183,7 +186,10 @@ impl ModbusDashboardCursor {
 
     /// Convert from index for compatibility with existing code
     pub fn from_index(index: usize) -> Self {
-        Self::all().get(index).copied().unwrap_or(ModbusDashboardCursor::FirstItem)
+        Self::all()
+            .get(index)
+            .copied()
+            .unwrap_or(ModbusDashboardCursor::FirstItem)
     }
 }
 
@@ -198,9 +204,7 @@ pub enum LogPanelCursor {
 impl LogPanelCursor {
     /// Get all cursor variants in order
     pub const fn all() -> &'static [LogPanelCursor] {
-        &[
-            LogPanelCursor::FirstItem,
-        ]
+        &[LogPanelCursor::FirstItem]
     }
 
     /// Move to the previous cursor position
@@ -232,7 +236,10 @@ impl LogPanelCursor {
 
     /// Convert from index for compatibility with existing code
     pub fn from_index(index: usize) -> Self {
-        Self::all().get(index).copied().unwrap_or(LogPanelCursor::FirstItem)
+        Self::all()
+            .get(index)
+            .copied()
+            .unwrap_or(LogPanelCursor::FirstItem)
     }
 }
 

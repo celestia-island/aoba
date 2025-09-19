@@ -20,7 +20,7 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     // Get the content lines with proper indicators
     let content = render_kv_lines_with_indicators()?;
-    
+
     // Use render_boxed_paragraph as requested, no separate borders
     render_boxed_paragraph(frame, area, content, 0, None, false, true);
 

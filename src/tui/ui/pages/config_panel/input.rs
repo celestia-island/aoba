@@ -255,7 +255,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle Enter key press based on the selected cursor
-fn handle_enter_key(snapshot: &types::Status, selected_cursor: types::ui::ConfigPanelCursor, bus: &Bus) -> Result<()> {
+fn handle_enter_key(
+    snapshot: &types::Status,
+    selected_cursor: types::ui::ConfigPanelCursor,
+    bus: &Bus,
+) -> Result<()> {
     match selected_cursor {
         types::ui::ConfigPanelCursor::EnablePort => {
             // Enable Port toggle - attempt to toggle port state
@@ -270,10 +274,10 @@ fn handle_enter_key(snapshot: &types::Status, selected_cursor: types::ui::Config
             // Protocol configuration - navigate to the appropriate config page
             handle_protocol_navigation(snapshot, bus)
         }
-        types::ui::ConfigPanelCursor::BaudRate |
-        types::ui::ConfigPanelCursor::DataBits |
-        types::ui::ConfigPanelCursor::Parity |
-        types::ui::ConfigPanelCursor::StopBits => {
+        types::ui::ConfigPanelCursor::BaudRate
+        | types::ui::ConfigPanelCursor::DataBits
+        | types::ui::ConfigPanelCursor::Parity
+        | types::ui::ConfigPanelCursor::StopBits => {
             // Serial parameter fields - enter edit mode
             handle_parameter_edit(snapshot, selected_cursor, bus)
         }
@@ -318,20 +322,16 @@ fn handle_parity_switch(snapshot: &types::Status, key_code: KeyCode, bus: &Bus) 
                     if let Some(rt) = pd.runtime.as_mut() {
                         let current_parity = rt.current_cfg.parity;
                         rt.current_cfg.parity = match key_code {
-                            KeyCode::Left | KeyCode::Char('h') => {
-                                match current_parity {
-                                    serialport::Parity::None => serialport::Parity::Even,
-                                    serialport::Parity::Odd => serialport::Parity::None,
-                                    serialport::Parity::Even => serialport::Parity::Odd,
-                                }
-                            }
-                            KeyCode::Right | KeyCode::Char('l') => {
-                                match current_parity {
-                                    serialport::Parity::None => serialport::Parity::Odd,
-                                    serialport::Parity::Odd => serialport::Parity::Even,
-                                    serialport::Parity::Even => serialport::Parity::None,
-                                }
-                            }
+                            KeyCode::Left | KeyCode::Char('h') => match current_parity {
+                                serialport::Parity::None => serialport::Parity::Even,
+                                serialport::Parity::Odd => serialport::Parity::None,
+                                serialport::Parity::Even => serialport::Parity::Odd,
+                            },
+                            KeyCode::Right | KeyCode::Char('l') => match current_parity {
+                                serialport::Parity::None => serialport::Parity::Odd,
+                                serialport::Parity::Odd => serialport::Parity::Even,
+                                serialport::Parity::Even => serialport::Parity::None,
+                            },
                             _ => current_parity,
                         };
                     }
@@ -430,7 +430,11 @@ fn handle_protocol_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()>
 }
 
 /// Handle entering edit mode for serial parameters
-fn handle_parameter_edit(snapshot: &types::Status, selected_cursor: types::ui::ConfigPanelCursor, bus: &Bus) -> Result<()> {
+fn handle_parameter_edit(
+    snapshot: &types::Status,
+    selected_cursor: types::ui::ConfigPanelCursor,
+    bus: &Bus,
+) -> Result<()> {
     if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page {
         if let Some(port_name) = snapshot.ports.order.get(*selected_port) {
             if let Some(pd) = snapshot.ports.map.get(port_name) {
@@ -469,30 +473,26 @@ fn get_field_initial_value_by_cursor(
     cursor_type: types::ui::ConfigPanelCursor,
 ) -> String {
     match cursor_type {
-        types::ui::ConfigPanelCursor::BaudRate => {
-            pd.runtime
-                .as_ref()
-                .map(|rt| rt.current_cfg.baud.to_string())
-                .unwrap_or_else(|| "9600".to_string())
-        }
-        types::ui::ConfigPanelCursor::DataBits => {
-            pd.runtime
-                .as_ref()
-                .map(|rt| rt.current_cfg.data_bits.to_string())
-                .unwrap_or_else(|| "8".to_string())
-        }
-        types::ui::ConfigPanelCursor::Parity => {
-            pd.runtime
-                .as_ref()
-                .map(|rt| format!("{:?}", rt.current_cfg.parity))
-                .unwrap_or_else(|| lang().protocol.common.parity_none.clone())
-        }
-        types::ui::ConfigPanelCursor::StopBits => {
-            pd.runtime
-                .as_ref()
-                .map(|rt| rt.current_cfg.stop_bits.to_string())
-                .unwrap_or_else(|| "1".to_string())
-        }
+        types::ui::ConfigPanelCursor::BaudRate => pd
+            .runtime
+            .as_ref()
+            .map(|rt| rt.current_cfg.baud.to_string())
+            .unwrap_or_else(|| "9600".to_string()),
+        types::ui::ConfigPanelCursor::DataBits => pd
+            .runtime
+            .as_ref()
+            .map(|rt| rt.current_cfg.data_bits.to_string())
+            .unwrap_or_else(|| "8".to_string()),
+        types::ui::ConfigPanelCursor::Parity => pd
+            .runtime
+            .as_ref()
+            .map(|rt| format!("{:?}", rt.current_cfg.parity))
+            .unwrap_or_else(|| lang().protocol.common.parity_none.clone()),
+        types::ui::ConfigPanelCursor::StopBits => pd
+            .runtime
+            .as_ref()
+            .map(|rt| rt.current_cfg.stop_bits.to_string())
+            .unwrap_or_else(|| "1".to_string()),
         _ => String::new(),
     }
 }
