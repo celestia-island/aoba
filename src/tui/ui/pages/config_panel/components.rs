@@ -28,21 +28,9 @@ pub fn derive_selection(app: &types::Status) -> types::cursor::ConfigPanelCursor
 /// - Group 2: Serial port basic parameters (baud rate, parity, etc.)
 ///
 /// Each line has the format: [Label____] [>] [Value_____] with proper spacing.
-pub fn render_kv_lines_with_indicators() -> Result<Vec<Line<'static>>> {
+pub fn render_kv_lines_with_indicators(sel_idx: usize) -> Result<Vec<Line<'static>>> {
     crate::protocol::status::read_status(|app| {
         let mut lines: Vec<Line<'static>> = Vec::new();
-
-        // Get the currently selected port
-        let sel_idx = match &app.page {
-            types::Page::ModbusDashboard { selected_port, .. }
-            | types::Page::ConfigPanel { selected_port, .. }
-            | types::Page::LogPanel { selected_port, .. } => *selected_port,
-            types::Page::Entry {
-                cursor: Some(types::cursor::EntryCursor::Com { idx }),
-                ..
-            } => *idx,
-            _ => 0usize,
-        };
 
         // Get current port data
         let port_data = if let Some(port_name) = app.ports.order.get(sel_idx) {

@@ -13,7 +13,7 @@ pub enum TextState {
 }
 
 /// Produce spans for a left/right selector rendered as: `< [label] >`.
-/// When `hovered` use green; when `editing` use yellow+bold.
+/// When `hovered` use green; when `editing` use yellow + bold.
 pub fn selector_spans(base_prefix: &str, label: &str, state: TextState) -> Vec<Span<'static>> {
     // Always render selector as left/right arrows: `< [label] >`.
     // Color mapping:
