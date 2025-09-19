@@ -8,7 +8,7 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{i18n::lang, protocol::status::types};
+use crate::{i18n::lang, protocol::status::{types, write_status}, tui::ui::components::boxed_paragraph::render_boxed_paragraph};
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
@@ -203,4 +203,28 @@ pub fn is_subpage_active() -> bool {
     } else {
         false
     }
+}
+
+/// Scroll the LogPanel view offset up by `amount` (saturating at 0).
+pub fn log_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
+    write_status(|s| {
+        if let types::Page::ModbusLog { view_offset, .. } = &mut s.page {
+            if *view_offset > 0 {
+                *view_offset = view_offset.saturating_sub(amount);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the LogPanel view offset down by `amount`.
+pub fn log_panel_scroll_down(amount: usize) -> anyhow::Result<()> {
+    write_status(|s| {
+        if let types::Page::ModbusLog { view_offset, .. } = &mut s.page {
+            *view_offset = view_offset.saturating_add(amount);
+        }
+        Ok(())
+    })?;
+    Ok(())
 }

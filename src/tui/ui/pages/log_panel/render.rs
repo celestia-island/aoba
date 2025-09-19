@@ -3,6 +3,7 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
+    protocol::status::{read_status, types},
     tui::ui::pages::log_panel::components::{
         extract_log_data, is_in_subpage_editing, is_subpage_active, render_log_display,
         render_log_input,
@@ -33,16 +34,26 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
     let logs_area = chunks[0];
 
+    // Get the current view_offset from the page state
+    let view_offset = read_status(|s| {
+        if let types::Page::ModbusLog { view_offset, .. } = &s.page {
+            Ok(*view_offset)
+        } else {
+            Ok(0)
+        }
+    })?;
+
     // extract_log_data / is_subpage_active read status internally
-    if let Some((logs, port_log_selected, port_log_view_offset, port_log_auto_scroll)) =
+    if let Some((logs, port_log_selected, _port_log_view_offset, port_log_auto_scroll)) =
         extract_log_data()
     {
+        // Use page state view_offset instead of port_log_view_offset
         render_log_display(
             frame,
             logs_area,
             &logs,
             port_log_selected,
-            port_log_view_offset,
+            view_offset, // Use page state offset
             port_log_auto_scroll,
         );
     }

@@ -16,6 +16,22 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Snapshot previously provided by caller as `app`
     let snapshot = read_status(|s| Ok(s.clone()))?;
     match key.code {
+        KeyCode::PageUp => {
+            // Scroll up
+            crate::tui::ui::pages::log_panel::components::log_panel_scroll_up(5)?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
+        KeyCode::PageDown => {
+            // Scroll down
+            crate::tui::ui::pages::log_panel::components::log_panel_scroll_down(5)?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation commands within the log
             bus.ui_tx

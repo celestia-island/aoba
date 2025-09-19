@@ -10,6 +10,22 @@ use crate::{
 /// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
+        KeyCode::PageUp => {
+            // Scroll up
+            crate::tui::ui::pages::modbus_panel::components::modbus_panel_scroll_up(5)?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
+        KeyCode::PageDown => {
+            // Scroll down  
+            crate::tui::ui::pages::modbus_panel::components::modbus_panel_scroll_down(5)?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             // Navigation within the dashboard
             bus.ui_tx

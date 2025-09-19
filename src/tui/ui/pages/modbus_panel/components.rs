@@ -3,7 +3,7 @@ use std::cmp::min;
 use ratatui::{prelude::*, text::Line};
 
 use crate::{
-    i18n::lang, protocol::status::types,
+    i18n::lang, protocol::status::{types, write_status},
     tui::ui::components::boxed_paragraph::render_boxed_paragraph,
 };
 
@@ -62,16 +62,13 @@ pub fn calculate_scroll_params(lines: &[Line], area: Rect, cursor_line: usize) -
 }
 
 /// Render the modbus panel content with scrolling
-pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>) {
-    // Core no longer stores SubpageForm; default cursor to 0 for rendering purposes.
-    let cursor_line = 0;
-    let (first_visible, end) = calculate_scroll_params(&lines, area, cursor_line);
-
+pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>, view_offset: usize) {
+    // Use the view_offset from page state instead of calculating scroll params
     render_boxed_paragraph(
         frame,
         area,
-        lines[first_visible..end].to_vec(),
-        0,
+        lines,
+        view_offset,
         None,
         false,
         true,
@@ -84,4 +81,28 @@ pub fn get_modbus_bottom_hints() -> Vec<Vec<String>> {
         vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
         vec!["Enter: Edit".to_string(), "Del: Delete".to_string()],
     ]
+}
+
+/// Scroll the ModbusDashboard view offset up by `amount` (saturating at 0).
+pub fn modbus_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
+    write_status(|s| {
+        if let types::Page::ModbusDashboard { view_offset, .. } = &mut s.page {
+            if *view_offset > 0 {
+                *view_offset = view_offset.saturating_sub(amount);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the ModbusDashboard view offset down by `amount`.
+pub fn modbus_panel_scroll_down(amount: usize) -> anyhow::Result<()> {
+    write_status(|s| {
+        if let types::Page::ModbusDashboard { view_offset, .. } = &mut s.page {
+            *view_offset = view_offset.saturating_add(amount);
+        }
+        Ok(())
+    })?;
+    Ok(())
 }
