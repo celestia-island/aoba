@@ -311,7 +311,7 @@ pub fn ensure_cursor_visible() -> Result<()> {
     read_status(|app| {
         if let types::Page::ModbusConfig { cursor, view_offset, .. } = &app.page {
             // Get total number of fields (8 fields total: EnablePort, ProtocolMode, ProtocolConfig, BaudRate, DataBits, Parity, StopBits, ViewCommunicationLog)
-            let total_fields = 8;
+            let total_fields: usize = 8;
             let cursor_index = cursor.to_index();
             
             // Assume visible area shows about 10 lines

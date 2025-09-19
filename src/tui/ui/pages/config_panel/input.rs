@@ -3,7 +3,6 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    i18n::lang,
     protocol::status::{read_status, types, write_status},
     tui::utils::bus::Bus,
 };
@@ -45,10 +44,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 match bits {
-                                                    5 => rt.current_cfg.data_bits = serialport::DataBits::Five,
-                                                    6 => rt.current_cfg.data_bits = serialport::DataBits::Six,
-                                                    7 => rt.current_cfg.data_bits = serialport::DataBits::Seven,
-                                                    8 => rt.current_cfg.data_bits = serialport::DataBits::Eight,
+                                                    5 => rt.current_cfg.data_bits = 5,
+                                                    6 => rt.current_cfg.data_bits = 6,
+                                                    7 => rt.current_cfg.data_bits = 7,
+                                                    8 => rt.current_cfg.data_bits = 8,
                                                     _ => {}
                                                 }
                                             }
