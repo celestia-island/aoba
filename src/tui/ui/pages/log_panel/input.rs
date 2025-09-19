@@ -73,10 +73,7 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
         s.page = types::Page::ModbusConfig {
             selected_port,
             view_offset: 0,
-            edit_active: false,
-            edit_cursor: crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
-            edit_cursor_pos: 0,
-            edit_buffer: String::new(),
+            cursor: crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
         };
         Ok(())
     })?;

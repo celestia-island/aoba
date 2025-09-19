@@ -23,13 +23,18 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::Enter => {
                 // Commit edit: write buffer back to appropriate field
                 let buffer_content = snapshot.temporarily.input_raw_buffer.clone();
-                
+
                 write_status(|s| {
                     // Clear the global buffer
                     s.temporarily.input_raw_buffer.clear();
-                    
+
                     // Apply the edit based on current cursor
-                    if let types::Page::ModbusConfig { cursor, selected_port, .. } = &s.page {
+                    if let types::Page::ModbusConfig {
+                        cursor,
+                        selected_port,
+                        ..
+                    } = &s.page
+                    {
                         if let Some(port_name) = s.ports.order.get(*selected_port) {
                             if let Some(pd) = s.ports.map.get_mut(port_name) {
                                 match cursor {
@@ -57,8 +62,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 match bits {
-                                                    1 => rt.current_cfg.stop_bits = serialport::StopBits::One,
-                                                    2 => rt.current_cfg.stop_bits = serialport::StopBits::Two,
+                                                    1 => rt.current_cfg.stop_bits = 1u8,
+                                                    2 => rt.current_cfg.stop_bits = 2u8,
                                                     _ => {}
                                                 }
                                             }
@@ -72,8 +77,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     }
                     Ok(())
                 })?;
-                
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Esc => {
@@ -82,7 +89,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.temporarily.input_raw_buffer.clear();
                     Ok(())
                 })?;
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Backspace => {
@@ -90,7 +99,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.temporarily.input_raw_buffer.pop();
                     Ok(())
                 })?;
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Delete => {
@@ -99,7 +110,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.temporarily.input_raw_buffer.pop();
                     Ok(())
                 })?;
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             _ => Ok(()),
@@ -110,13 +123,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::PageUp => {
                 // Scroll up
                 super::components::config_panel_scroll_up(5)?;
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::PageDown => {
                 // Scroll down
                 super::components::config_panel_scroll_down(5)?;
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
@@ -135,11 +152,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     }
                     Ok(())
                 })?;
-                
+
                 // Ensure cursor stays visible
                 super::components::ensure_cursor_visible()?;
-                
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
@@ -155,7 +174,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                             rt.current_cfg.parity = match rt.current_cfg.parity {
                                                 serialport::Parity::None => serialport::Parity::Odd,
                                                 serialport::Parity::Odd => serialport::Parity::Even,
-                                                serialport::Parity::Even => serialport::Parity::None,
+                                                serialport::Parity::Even => {
+                                                    serialport::Parity::None
+                                                }
                                             };
                                         }
                                     }
@@ -163,7 +184,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             }
                             Ok(())
                         })?;
-                        bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
                     }
                     _ => {}
                 }
@@ -201,7 +224,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             }
                             Ok(())
                         })?;
-                        bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
                         Ok(())
                     }
                     types::ui::ConfigPanelCursor::ViewCommunicationLog => {
@@ -215,7 +240,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             }
                             Ok(())
                         })?;
-                        bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
                         Ok(())
                     }
                     types::ui::ConfigPanelCursor::BaudRate
@@ -223,25 +250,30 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     | types::ui::ConfigPanelCursor::StopBits => {
                         // Enter edit mode: initialize buffer with current value
                         write_status(|s| {
-                            if let types::Page::ModbusConfig { selected_port, cursor, .. } = &s.page {
+                            if let types::Page::ModbusConfig {
+                                selected_port,
+                                cursor,
+                                ..
+                            } = &s.page
+                            {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get(port_name) {
                                         let init_value = match cursor {
-                                            types::ui::ConfigPanelCursor::BaudRate => {
-                                                pd.runtime.as_ref()
-                                                    .map(|rt| rt.current_cfg.baud.to_string())
-                                                    .unwrap_or_else(|| "9600".to_string())
-                                            }
-                                            types::ui::ConfigPanelCursor::DataBits => {
-                                                pd.runtime.as_ref()
-                                                    .map(|rt| rt.current_cfg.data_bits.to_string())
-                                                    .unwrap_or_else(|| "8".to_string())
-                                            }
-                                            types::ui::ConfigPanelCursor::StopBits => {
-                                                pd.runtime.as_ref()
-                                                    .map(|rt| rt.current_cfg.stop_bits.to_string())
-                                                    .unwrap_or_else(|| "1".to_string())
-                                            }
+                                            types::ui::ConfigPanelCursor::BaudRate => pd
+                                                .runtime
+                                                .as_ref()
+                                                .map(|rt| rt.current_cfg.baud.to_string())
+                                                .unwrap_or_else(|| "9600".to_string()),
+                                            types::ui::ConfigPanelCursor::DataBits => pd
+                                                .runtime
+                                                .as_ref()
+                                                .map(|rt| rt.current_cfg.data_bits.to_string())
+                                                .unwrap_or_else(|| "8".to_string()),
+                                            types::ui::ConfigPanelCursor::StopBits => pd
+                                                .runtime
+                                                .as_ref()
+                                                .map(|rt| rt.current_cfg.stop_bits.to_string())
+                                                .unwrap_or_else(|| "1".to_string()),
                                             _ => String::new(),
                                         };
                                         s.temporarily.input_raw_buffer = init_value;
@@ -250,7 +282,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             }
                             Ok(())
                         })?;
-                        bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
                         Ok(())
                     }
                     _ => Ok(()),
@@ -258,8 +292,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             KeyCode::Esc => {
                 // Return to entry page
-                let cursor = if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page {
-                    Some(types::ui::EntryCursor::Com { idx: *selected_port })
+                let cursor = if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page
+                {
+                    Some(types::ui::EntryCursor::Com {
+                        idx: *selected_port,
+                    })
                 } else {
                     None
                 };
@@ -267,7 +304,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.page = types::Page::Entry { cursor };
                     Ok(())
                 })?;
-                bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
             _ => Ok(()),
