@@ -90,21 +90,28 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 /// Handle leaving the modbus dashboard back to entry page
+/// Handle leaving the ModBus dashboard back to config panel
 fn handle_leave_page(bus: &Bus) -> Result<()> {
     use crate::tui::utils::bus::UiToCore;
 
-    let cursor = read_status(|s| {
+    let selected_port = read_status(|s| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &s.page {
-            Ok(Some(types::ui::EntryCursor::Com {
-                idx: *selected_port,
-            }))
+            Ok(*selected_port)
         } else {
-            Ok(None)
+            Ok(0)
         }
     })?;
+    
     write_status(|s| {
-        // Go back to entry page
-        s.page = types::Page::Entry { cursor };
+        // Go back to config panel instead of entry page
+        s.page = types::Page::ModbusConfig { 
+            selected_port,
+            view_offset: 0,
+            edit_active: false,
+            edit_cursor: crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
+            edit_cursor_pos: 0,
+            edit_buffer: String::new(),
+        };
         Ok(())
     })?;
     bus.ui_tx

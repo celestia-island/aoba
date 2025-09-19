@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
-use crate::{i18n::lang, protocol::status::types, tui::ui::components::styled_label::styled_spans};
+use crate::{i18n::lang, protocol::status::{types, write_status}, tui::ui::components::styled_label::styled_spans};
 
 /// Derive selection index for config panel from current page state
 pub fn derive_selection(app: &types::Status) -> types::ui::ConfigPanelCursor {
@@ -273,5 +273,29 @@ fn render_group3_with_indicators(
     let log_selected = current_selection == types::ui::ConfigPanelCursor::ViewCommunicationLog;
     lines.push(create_config_line("", &log_value, log_selected, false)?); // Empty label for hyperlink style
 
+    Ok(())
+}
+
+/// Scroll the ConfigPanel view offset up by `amount` (saturating at 0).
+pub fn config_panel_scroll_up(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::ModbusConfig { view_offset, .. } = &mut s.page {
+            if *view_offset > 0 {
+                *view_offset = view_offset.saturating_sub(amount);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the ConfigPanel view offset down by `amount`.
+pub fn config_panel_scroll_down(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::ModbusConfig { view_offset, .. } = &mut s.page {
+            *view_offset = view_offset.saturating_add(amount);
+        }
+        Ok(())
+    })?;
     Ok(())
 }

@@ -22,6 +22,7 @@ derive_struct! {
             },
             ModbusConfig {
                 selected_port: usize,
+                view_offset: usize = 0,
 
                 edit_active: bool = false,
                 edit_cursor: crate::protocol::status::types::ui::ConfigPanelCursor = crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
@@ -30,6 +31,7 @@ derive_struct! {
             },
             ModbusDashboard {
                 selected_port: usize,
+                view_offset: usize = 0,
 
                 cursor: usize,
                 editing_field?: crate::protocol::status::types::modbus::EditingField,
@@ -48,6 +50,7 @@ derive_struct! {
             },
             ModbusLog {
                 selected_port: usize,
+                view_offset: usize = 0,
             },
             About {
                 view_offset: usize,

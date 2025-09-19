@@ -201,6 +201,22 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     } else {
         // Not in edit mode: handle navigation and enter to toggle/select/edit
         match key.code {
+            KeyCode::PageUp => {
+                // Scroll up
+                crate::tui::ui::pages::config_panel::components::config_panel_scroll_up(5)?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            }
+            KeyCode::PageDown => {
+                // Scroll down
+                crate::tui::ui::pages::config_panel::components::config_panel_scroll_down(5)?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            }
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Navigate between fields using cursor system
                 write_status(|s| {
@@ -503,6 +519,7 @@ fn handle_log_navigation(snapshot: &types::Status, bus: &Bus) -> Result<()> {
         write_status(|s| {
             s.page = types::Page::ModbusLog {
                 selected_port: *selected_port,
+                view_offset: 0,
             };
             Ok(())
         })?;
