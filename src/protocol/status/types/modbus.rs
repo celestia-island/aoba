@@ -118,5 +118,3 @@ pub enum MasterEditField {
     Counter,
     Value(u16),
 }
-
-// EntryCursor moved to `types::ui` (ui.rs). Keep modbus.rs focused on modbus-specific types.

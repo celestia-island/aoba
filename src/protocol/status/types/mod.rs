@@ -1,3 +1,4 @@
+pub mod cursor;
 pub mod modbus;
 pub mod port;
 pub mod ui;
@@ -5,34 +6,32 @@ pub mod ui;
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
-// snapshot_* methods removed per refactor: callers should now match on
-// `Status.page` directly and extract fields or panic when unexpected.
 use yuuka::derive_struct;
+
+use ui::InputMode;
 
 derive_struct! {
     pub Status {
         ports: {
             order: Vec<String> = vec![],
-            map: HashMap<String, crate::protocol::status::types::port::PortData> = HashMap::new(),
+            map: HashMap<String, port::PortData> = HashMap::new(),
         },
 
         page: enum Page {
             Entry {
-                cursor?: crate::protocol::status::types::ui::EntryCursor,
+                cursor?: cursor::EntryCursor,
             },
-            ModbusConfig {
+            ConfigPanel {
                 selected_port: usize,
-
-                edit_active: bool = false,
-                edit_cursor: usize = 0,
-                edit_cursor_pos: usize = 0,
-                edit_buffer: String = String::new(),
+                view_offset: usize = 0,
+                cursor: cursor::ConfigPanelCursor = cursor::ConfigPanelCursor::EnablePort,
             },
             ModbusDashboard {
                 selected_port: usize,
+                view_offset: usize = 0,
 
                 cursor: usize,
-                editing_field?: crate::protocol::status::types::modbus::EditingField,
+                editing_field?: modbus::EditingField,
                 input_buffer: String,
                 edit_choice_index: Option<usize>,
                 edit_confirmed: bool,
@@ -40,14 +39,16 @@ derive_struct! {
                 master_cursor: usize,
                 master_field_selected: bool,
                 master_field_editing: bool,
-                master_edit_field?: crate::protocol::status::types::modbus::MasterEditField,
+                master_edit_field?: modbus::MasterEditField,
                 master_edit_index: Option<usize>,
                 master_input_buffer: String,
                 poll_round_index: usize,
                 in_flight_reg_index: Option<usize>,
             },
-            ModbusLog {
+            LogPanel {
                 selected_port: usize,
+                input_mode: InputMode = InputMode::Ascii,
+                view_offset: usize = 0,
             },
             About {
                 view_offset: usize,
@@ -57,7 +58,6 @@ derive_struct! {
         temporarily: {
             // Short-lived UI state. Only place truly transient values here.
             input_raw_buffer: String,
-            input_mode: crate::protocol::status::types::ui::InputMode = crate::protocol::status::types::ui::InputMode::Ascii,
 
             // Scan results (transient)
             scan: {
@@ -80,7 +80,7 @@ derive_struct! {
             modals: {
                 mode_selector: {
                     active: bool = false,
-                    selector: crate::protocol::status::types::ui::AppMode = crate::protocol::status::types::ui::AppMode::Modbus,
+                    selector: ui::AppMode = ui::AppMode::Modbus,
                 },
             },
 
