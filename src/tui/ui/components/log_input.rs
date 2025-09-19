@@ -8,7 +8,7 @@ use ratatui::{
 use crate::{i18n::lang, protocol::status::types::ui::InputMode, protocol::status::types::Status};
 
 /// Render a small input area showing current mode and buffer. Height expected to be small (3 lines).
-pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status) {
+pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status, selected_port: usize) {
     let mut lines: Vec<Line> = Vec::new();
 
     // Show buffer on the first content line (right under the title)
