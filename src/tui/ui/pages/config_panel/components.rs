@@ -16,7 +16,7 @@ pub fn derive_selection(app: &types::Status) -> types::cursor::ConfigPanelCursor
             // cursor tracks both navigation and editing state
             *cursor
         }
-    _ => types::cursor::ConfigPanelCursor::EnablePort,
+        _ => types::cursor::ConfigPanelCursor::EnablePort,
     }
 }
 
@@ -257,7 +257,9 @@ fn get_serial_param_value_by_cursor(
             match cursor_type {
                 types::cursor::ConfigPanelCursor::BaudRate => "9600".to_string(),
                 types::cursor::ConfigPanelCursor::DataBits => "8".to_string(),
-                types::cursor::ConfigPanelCursor::Parity => lang().protocol.common.parity_none.clone(),
+                types::cursor::ConfigPanelCursor::Parity => {
+                    lang().protocol.common.parity_none.clone()
+                }
                 types::cursor::ConfigPanelCursor::StopBits => "1".to_string(),
                 _ => "??".to_string(),
             }
@@ -308,48 +310,4 @@ pub fn config_panel_scroll_down(amount: usize) -> Result<()> {
         Ok(())
     })?;
     Ok(())
-}
-
-/// Ensure the current cursor is visible by adjusting view_offset if needed
-pub fn ensure_cursor_visible() -> Result<()> {
-    use crate::protocol::status::read_status;
-    read_status(|app| {
-        if let types::Page::ConfigPanel {
-            cursor,
-            view_offset,
-            ..
-        } = &app.page
-        {
-            // Get total number of fields (8 fields total: EnablePort, ProtocolMode, ProtocolConfig, BaudRate, DataBits, Parity, StopBits, ViewCommunicationLog)
-            let total_fields: usize = 8;
-            let cursor_index = cursor.to_index();
-
-            // Assume visible area shows about 10 lines
-            let visible_lines = 10;
-
-            let should_scroll = if cursor_index < *view_offset {
-                // Cursor is above visible area, scroll up
-                Some(cursor_index)
-            } else if cursor_index >= view_offset + visible_lines {
-                // Cursor is below visible area, scroll down
-                Some(cursor_index.saturating_sub(visible_lines - 1))
-            } else {
-                None
-            };
-
-            if let Some(new_offset) = should_scroll {
-                let max_offset = total_fields.saturating_sub(visible_lines);
-                let new_offset = new_offset.min(max_offset);
-
-                // Update the view_offset
-                write_status(|s| {
-                    if let types::Page::ConfigPanel { view_offset, .. } = &mut s.page {
-                        *view_offset = new_offset;
-                    }
-                    Ok(())
-                })?;
-            }
-        }
-        Ok(())
-    })
 }

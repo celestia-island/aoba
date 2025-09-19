@@ -1,5 +1,22 @@
 use serde::{Deserialize, Serialize};
 
+use crate::protocol::status::read_status;
+
+/// For the config panel we have groups of options separated by blank lines.
+/// Define the sizes of each group so view_offset can account for the
+/// extra blank rows introduced between groups.
+pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[3, 4];
+
+/// Cursor trait to unify cursor behaviour across pages.
+pub trait Cursor {
+    /// Move to previous cursor position
+    fn prev(self) -> Self;
+    /// Move to next cursor position
+    fn next(self) -> Self;
+    /// Compute the view offset (number of rows the page should scroll)
+    fn view_offset(&self) -> usize;
+}
+
 /// UI-oriented enums and small types shared across pages.
 /// `EntryCursor` describes the cursor/selection on the main Entry page.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -14,11 +31,8 @@ pub enum EntryCursor {
     About,
 }
 
-impl EntryCursor {
-    /// Move to the previous cursor position
-    pub fn prev(self) -> Self {
-        use crate::protocol::status::read_status;
-
+impl Cursor for EntryCursor {
+    fn prev(self) -> Self {
         match self {
             EntryCursor::Com { idx } => {
                 if idx > 0 {
@@ -43,10 +57,7 @@ impl EntryCursor {
         }
     }
 
-    /// Move to the next cursor position
-    pub fn next(self) -> Self {
-        use crate::protocol::status::read_status;
-
+    fn next(self) -> Self {
         match self {
             EntryCursor::Com { idx } => {
                 let max_port_idx =
@@ -67,6 +78,13 @@ impl EntryCursor {
                     EntryCursor::Refresh
                 }
             }
+        }
+    }
+
+    fn view_offset(&self) -> usize {
+        match self {
+            EntryCursor::Com { idx } => *idx,
+            _ => 0,
         }
     }
 }
@@ -107,28 +125,6 @@ impl ConfigPanelCursor {
         ]
     }
 
-    /// Move to the previous cursor position
-    pub fn prev(self) -> Self {
-        let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx > 0 {
-            all[current_idx - 1]
-        } else {
-            all[all.len() - 1] // Wrap to last
-        }
-    }
-
-    /// Move to the next cursor position
-    pub fn next(self) -> Self {
-        let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx < all.len() - 1 {
-            all[current_idx + 1]
-        } else {
-            all[0] // Wrap to first
-        }
-    }
-
     /// Convert to index for compatibility with existing code
     pub fn to_index(self) -> usize {
         Self::all().iter().position(|&c| c == self).unwrap_or(0)
@@ -140,6 +136,47 @@ impl ConfigPanelCursor {
             .get(index)
             .copied()
             .unwrap_or(ConfigPanelCursor::EnablePort)
+    }
+}
+
+impl Cursor for ConfigPanelCursor {
+    fn prev(self) -> Self {
+        // inline prev logic to avoid extra indirection
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx > 0 {
+            all[current_idx - 1]
+        } else {
+            all[all.len() - 1]
+        }
+    }
+    fn next(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx < all.len() - 1 {
+            all[current_idx + 1]
+        } else {
+            all[0]
+        }
+    }
+    fn view_offset(&self) -> usize {
+        // inline view_offset: return the index of the cursor adjusted for
+        // blank rows inserted between groups. We compute the base index
+        // then add +1 for each preceding group boundary the index passes.
+        let idx = Self::all().iter().position(|&c| c == *self).unwrap_or(0);
+        // Accumulate extra blank rows introduced before this index
+        let mut extra = 0usize;
+        let mut running = 0usize;
+        for &group_size in CONFIG_PANEL_GROUP_SIZES {
+            if idx >= running + group_size {
+                // there is a blank line after this group
+                extra += 1;
+                running += group_size;
+            } else {
+                break;
+            }
+        }
+        idx + extra
     }
 }
 
@@ -157,28 +194,6 @@ impl ModbusDashboardCursor {
         &[ModbusDashboardCursor::FirstItem]
     }
 
-    /// Move to the previous cursor position
-    pub fn prev(self) -> Self {
-        let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx > 0 {
-            all[current_idx - 1]
-        } else {
-            all[all.len() - 1] // Wrap to last
-        }
-    }
-
-    /// Move to the next cursor position
-    pub fn next(self) -> Self {
-        let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx < all.len() - 1 {
-            all[current_idx + 1]
-        } else {
-            all[0] // Wrap to first
-        }
-    }
-
     /// Convert to index for compatibility with existing code
     pub fn to_index(self) -> usize {
         Self::all().iter().position(|&c| c == self).unwrap_or(0)
@@ -190,6 +205,30 @@ impl ModbusDashboardCursor {
             .get(index)
             .copied()
             .unwrap_or(ModbusDashboardCursor::FirstItem)
+    }
+}
+
+impl Cursor for ModbusDashboardCursor {
+    fn prev(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx > 0 {
+            all[current_idx - 1]
+        } else {
+            all[all.len() - 1]
+        }
+    }
+    fn next(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx < all.len() - 1 {
+            all[current_idx + 1]
+        } else {
+            all[0]
+        }
+    }
+    fn view_offset(&self) -> usize {
+        Self::all().iter().position(|&c| c == *self).unwrap_or(0)
     }
 }
 
@@ -207,28 +246,6 @@ impl LogPanelCursor {
         &[LogPanelCursor::FirstItem]
     }
 
-    /// Move to the previous cursor position
-    pub fn prev(self) -> Self {
-        let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx > 0 {
-            all[current_idx - 1]
-        } else {
-            all[all.len() - 1] // Wrap to last
-        }
-    }
-
-    /// Move to the next cursor position
-    pub fn next(self) -> Self {
-        let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx < all.len() - 1 {
-            all[current_idx + 1]
-        } else {
-            all[0] // Wrap to first
-        }
-    }
-
     /// Convert to index for compatibility with existing code
     pub fn to_index(self) -> usize {
         Self::all().iter().position(|&c| c == self).unwrap_or(0)
@@ -240,5 +257,29 @@ impl LogPanelCursor {
             .get(index)
             .copied()
             .unwrap_or(LogPanelCursor::FirstItem)
+    }
+}
+
+impl Cursor for LogPanelCursor {
+    fn prev(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx > 0 {
+            all[current_idx - 1]
+        } else {
+            all[all.len() - 1]
+        }
+    }
+    fn next(self) -> Self {
+        let all = Self::all();
+        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_idx < all.len() - 1 {
+            all[current_idx + 1]
+        } else {
+            all[0]
+        }
+    }
+    fn view_offset(&self) -> usize {
+        Self::all().iter().position(|&c| c == *self).unwrap_or(0)
     }
 }

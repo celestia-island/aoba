@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 use crate::{
     protocol::status::{
         read_status,
-    types::{self, cursor, Page, Status},
+        types::{self, cursor, Page, Status},
         write_status,
     },
     tui::utils::bus::Bus,
@@ -103,6 +103,8 @@ pub fn handle_move_next(app: &Status, cursor: cursor::EntryCursor) -> Result<()>
     Ok(())
 }
 
+/// Compatibility wrapper used by pages/mod.rs which expects signature:
+/// fn handle_input(key: KeyEvent, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
 /// Compatibility wrapper used by pages/mod.rs which expects signature:
 /// fn handle_input(key: KeyEvent, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {

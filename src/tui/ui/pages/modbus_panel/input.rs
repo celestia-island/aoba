@@ -8,6 +8,7 @@ use crate::{
 };
 
 /// Handle input for ModBus panel. Sends commands via UiToCore.
+/// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::PageUp => {

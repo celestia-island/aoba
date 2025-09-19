@@ -3,6 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
+    protocol::status::types::cursor::Cursor,
     protocol::status::{read_status, types, write_status},
     tui::utils::bus::Bus,
 };
@@ -139,7 +140,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Navigate between fields using cursor system
                 write_status(|s| {
-                    if let types::Page::ConfigPanel { cursor, .. } = &mut s.page {
+                    if let types::Page::ConfigPanel {
+                        cursor,
+                        view_offset,
+                        ..
+                    } = &mut s.page
+                    {
                         match key.code {
                             KeyCode::Up | KeyCode::Char('k') => {
                                 *cursor = cursor.prev();
@@ -149,12 +155,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             }
                             _ => {}
                         }
+                        // Recompute view offset using the cursor's index mapping
+                        *view_offset = cursor.view_offset();
                     }
                     Ok(())
                 })?;
-
-                // Ensure cursor stays visible
-                super::components::ensure_cursor_visible()?;
 
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
@@ -295,7 +300,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Return to entry page
                 let cursor = if let types::Page::ConfigPanel { selected_port, .. } = &snapshot.page
                 {
-                        Some(types::cursor::EntryCursor::Com {
+                    Some(types::cursor::EntryCursor::Com {
                         idx: *selected_port,
                     })
                 } else {

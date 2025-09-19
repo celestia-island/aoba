@@ -11,6 +11,7 @@ use crate::{
 };
 
 /// Handle input for about page. Sends navigation commands via UiToCore.
+/// Handle input for about page. Sends navigation commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     const PAGE_SIZE: usize = 10;
 
