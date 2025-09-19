@@ -11,12 +11,11 @@ use crate::{i18n::lang, protocol::status::types::ui::InputMode, protocol::status
 pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status, selected_port: usize) {
     let mut lines: Vec<Line> = Vec::new();
 
+    // For now, use ASCII mode as default since we don't have per-port input modes
+    let input_mode = InputMode::Ascii;
+    
     // Show buffer on the first content line (right under the title)
-    let content = if app.temporarily.per_port
-        .get(&format!("COM{}", selected_port + 1))
-        .and_then(|port| port.input_mode.as_ref())
-        .map(|mode| *mode == InputMode::Hex)
-        .unwrap_or(false) {
+    let content = if input_mode == InputMode::Hex {
         let mut s = String::new();
         let mut chars = app
             .temporarily
@@ -41,10 +40,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect, app: &mut Status, selected_po
     // If buffer empty and not editing, show faint gray italic placeholder indicating current input mode
     if content.is_empty() {
         // Show as: " {input_mode_current} {mode_text}" with a leading space to align with title
-        let mode_text = match app.temporarily.per_port
-            .get(&format!("COM{}", selected_port + 1))
-            .and_then(|port| port.input_mode.as_ref())
-            .unwrap_or(&InputMode::Text) {
+        let mode_text = match input_mode {
             InputMode::Ascii => lang().input.input_mode_ascii.as_str(),
             InputMode::Hex => lang().input.input_mode_hex.as_str(),
         };
