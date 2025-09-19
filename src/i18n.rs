@@ -148,6 +148,8 @@ derive_struct! {
                 view_communication_log: String = "view_communication_log".to_string(),
                 enter_modbus_config: String = "enter_modbus_config".to_string(),
                 enter_mqtt_config: String = "enter_mqtt_config".to_string(),
+                business_config: String = "business_config".to_string(),
+                log_monitoring: String = "log_monitoring".to_string(),
                 port_enabled: String = "port_enabled".to_string(),
                 port_disabled: String = "port_disabled".to_string(),
                 mode_modbus: String = "mode_modbus".to_string(),

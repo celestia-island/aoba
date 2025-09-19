@@ -12,9 +12,9 @@ use crate::{
 pub fn derive_selection(app: &types::Status) -> types::ui::ConfigPanelCursor {
     // For config panel, we need to determine which field is currently selected
     match &app.page {
-        types::Page::ModbusConfig { edit_cursor, .. } => {
-            // edit_cursor tracks both navigation and editing state
-            *edit_cursor
+        types::Page::ModbusConfig { cursor, .. } => {
+            // cursor tracks both navigation and editing state
+            *cursor
         }
         _ => types::ui::ConfigPanelCursor::EnablePort,
     }
@@ -112,16 +112,17 @@ fn render_group1_with_indicators(
         true,
     )?);
 
-    // 3. Protocol Config navigation (hyperlink-style: no label, just action text)
+    // 3. Protocol Config navigation 
+    let config_label = lang().protocol.common.business_config.clone();
     let config_value = lang().protocol.common.enter_modbus_config.clone(); // Default to Modbus for now
 
     let config_selected = current_selection == types::ui::ConfigPanelCursor::ProtocolConfig;
     lines.push(create_config_line(
-        "",
+        &config_label,
         &config_value,
         config_selected,
         false,
-    )?); // Empty label for hyperlink style
+    )?);
 
     Ok(())
 }
@@ -271,11 +272,11 @@ fn render_group3_with_indicators(
     lines: &mut Vec<Line<'static>>,
     current_selection: types::ui::ConfigPanelCursor,
 ) -> Result<()> {
-    // Single hyperlink-style item: no label, just the action text
+    // 1. View Communication Log navigation
+    let log_label = lang().protocol.common.log_monitoring.clone();
     let log_value = lang().protocol.common.view_communication_log.clone();
-
     let log_selected = current_selection == types::ui::ConfigPanelCursor::ViewCommunicationLog;
-    lines.push(create_config_line("", &log_value, log_selected, false)?); // Empty label for hyperlink style
+    lines.push(create_config_line(&log_label, &log_value, log_selected, false)?);
 
     Ok(())
 }
@@ -302,4 +303,43 @@ pub fn config_panel_scroll_down(amount: usize) -> Result<()> {
         Ok(())
     })?;
     Ok(())
+}
+
+/// Ensure the current cursor is visible by adjusting view_offset if needed
+pub fn ensure_cursor_visible() -> Result<()> {
+    use crate::protocol::status::read_status;
+    read_status(|app| {
+        if let types::Page::ModbusConfig { cursor, view_offset, .. } = &app.page {
+            // Get total number of fields (8 fields total: EnablePort, ProtocolMode, ProtocolConfig, BaudRate, DataBits, Parity, StopBits, ViewCommunicationLog)
+            let total_fields = 8;
+            let cursor_index = cursor.to_index();
+            
+            // Assume visible area shows about 10 lines
+            let visible_lines = 10;
+            
+            let should_scroll = if cursor_index < *view_offset {
+                // Cursor is above visible area, scroll up
+                Some(cursor_index)
+            } else if cursor_index >= view_offset + visible_lines {
+                // Cursor is below visible area, scroll down
+                Some(cursor_index.saturating_sub(visible_lines - 1))
+            } else {
+                None
+            };
+            
+            if let Some(new_offset) = should_scroll {
+                let max_offset = total_fields.saturating_sub(visible_lines);
+                let new_offset = new_offset.min(max_offset);
+                
+                // Update the view_offset
+                write_status(|s| {
+                    if let types::Page::ModbusConfig { view_offset, .. } = &mut s.page {
+                        *view_offset = new_offset;
+                    }
+                    Ok(())
+                })?;
+            }
+        }
+        Ok(())
+    })
 }

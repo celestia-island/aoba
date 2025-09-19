@@ -23,11 +23,7 @@ derive_struct! {
             ModbusConfig {
                 selected_port: usize,
                 view_offset: usize = 0,
-
-                edit_active: bool = false,
-                edit_cursor: crate::protocol::status::types::ui::ConfigPanelCursor = crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
-                edit_cursor_pos: usize = 0,
-                edit_buffer: String = String::new(),
+                cursor: crate::protocol::status::types::ui::ConfigPanelCursor = crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,
             },
             ModbusDashboard {
                 selected_port: usize,
@@ -60,7 +56,6 @@ derive_struct! {
         temporarily: {
             // Short-lived UI state. Only place truly transient values here.
             input_raw_buffer: String,
-            input_mode: crate::protocol::status::types::ui::InputMode = crate::protocol::status::types::ui::InputMode::Ascii,
 
             // Scan results (transient)
             scan: {
