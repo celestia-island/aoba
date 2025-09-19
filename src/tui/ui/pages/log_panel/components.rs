@@ -8,7 +8,11 @@ use ratatui::{
     widgets::{Block, Paragraph},
 };
 
-use crate::{i18n::lang, protocol::status::{types, write_status}, tui::ui::components::boxed_paragraph::render_boxed_paragraph};
+use crate::{
+    i18n::lang,
+    protocol::status::{types, write_status},
+    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
+};
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {

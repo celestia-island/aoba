@@ -21,7 +21,7 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     // Get the content lines with proper indicators
     let content = render_kv_lines_with_indicators()?;
-    
+
     // Get the current view_offset from the page state
     let offset = read_status(|s| {
         if let types::Page::ModbusConfig { view_offset, .. } = &s.page {

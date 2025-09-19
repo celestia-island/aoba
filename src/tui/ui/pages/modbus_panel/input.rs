@@ -19,7 +19,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::PageDown => {
-            // Scroll down  
+            // Scroll down
             crate::tui::ui::pages::modbus_panel::components::modbus_panel_scroll_down(5)?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
@@ -117,10 +117,10 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
             Ok(0)
         }
     })?;
-    
+
     write_status(|s| {
         // Go back to config panel instead of entry page
-        s.page = types::Page::ModbusConfig { 
+        s.page = types::Page::ModbusConfig {
             selected_port,
             view_offset: 0,
             edit_active: false,

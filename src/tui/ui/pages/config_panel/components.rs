@@ -2,7 +2,11 @@ use anyhow::Result;
 
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
-use crate::{i18n::lang, protocol::status::{types, write_status}, tui::ui::components::styled_label::styled_spans};
+use crate::{
+    i18n::lang,
+    protocol::status::{types, write_status},
+    tui::ui::components::styled_label::styled_spans,
+};
 
 /// Derive selection index for config panel from current page state
 pub fn derive_selection(app: &types::Status) -> types::ui::ConfigPanelCursor {

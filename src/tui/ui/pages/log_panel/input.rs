@@ -67,10 +67,10 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
             Ok(0)
         }
     })?;
-    
+
     write_status(|s| {
         // Go back to config panel instead of entry page
-        s.page = types::Page::ModbusConfig { 
+        s.page = types::Page::ModbusConfig {
             selected_port,
             view_offset: 0,
             edit_active: false,
