@@ -24,7 +24,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
     // Get the current view_offset from the page state
     let offset = read_status(|s| {
-        if let types::Page::ModbusConfig { view_offset, .. } = &s.page {
+        if let types::Page::ConfigPanel { view_offset, .. } = &s.page {
             Ok(*view_offset)
         } else {
             Ok(0)

@@ -1,15 +1,34 @@
+use anyhow::Result;
+
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
     i18n::lang,
-    protocol::status::types::{self, Status},
+    protocol::status::{read_status, types},
 };
 
-pub fn render_title(f: &mut Frame, area: Rect, app: &mut Status) {
-    render_title_readonly(f, area, app);
+pub fn render_title(f: &mut Frame, area: Rect) -> Result<()> {
+    render_title_readonly(f, area)?;
+    Ok(())
 }
 
-pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
+fn get_port_name(selected_port: usize) -> Result<String> {
+    let port_name = if selected_port < read_status(|s| Ok(s.ports.order.len()))? {
+        let name = &read_status(|s| Ok(s.ports.order[selected_port].clone()))?;
+        read_status(|s| {
+            Ok(s.ports
+                .map
+                .get(name)
+                .map(|p| p.port_name.clone())
+                .unwrap_or_else(|| format!("COM{}", selected_port)))
+        })?
+    } else {
+        format!("COM{}", selected_port)
+    };
+    Ok(port_name)
+}
+
+pub fn render_title_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
     // Horizontal layout: left (spinner + breadcrumb) + right (reserved)
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
@@ -20,52 +39,35 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
     let bg_block = Block::default()
         .borders(Borders::NONE)
         .style(Style::default().bg(Color::Gray));
-    f.render_widget(bg_block, area);
+    frame.render_widget(bg_block, area);
 
     // Build breadcrumb text with spinner at the beginning
     let mut breadcrumb_text = String::new();
 
     // Add spinner if busy (2 spaces from left)
     breadcrumb_text.push_str("  ");
-    if app.temporarily.busy.busy {
+    if read_status(|s| Ok(s.temporarily.busy.busy))? {
         let frames = ['◜', '◝', '◞', '◟'];
-        let ch = frames[(app.temporarily.busy.spinner_frame as usize) % frames.len()];
+        let ch = frames
+            [(read_status(|s| Ok(s.temporarily.busy.spinner_frame))? as usize) % frames.len()];
         breadcrumb_text.push(ch);
         breadcrumb_text.push(' ');
     }
 
     // Add breadcrumb path based on current page
-    let page_breadcrumb = match &app.page {
+    let page_breadcrumb = match read_status(|s| Ok(s.page.clone()))? {
         // Entry page: AOBA title
         types::Page::Entry { .. } => lang().index.title.as_str().to_string(),
 
         // Port configuration page: AOBA title > COMx
-        types::Page::ModbusConfig { selected_port, .. } => {
-            let port_name = if *selected_port < app.ports.order.len() {
-                let name = &app.ports.order[*selected_port];
-                app.ports
-                    .map
-                    .get(name)
-                    .map(|p| p.port_name.clone())
-                    .unwrap_or_else(|| format!("COM{}", selected_port))
-            } else {
-                format!("COM{}", selected_port)
-            };
+        types::Page::ConfigPanel { selected_port, .. } => {
+            let port_name = get_port_name(selected_port)?;
             format!("{} > {}", lang().index.title.as_str(), port_name)
         }
 
         // Modbus master/slave configuration: AOBA title > COMx > Modbus
         types::Page::ModbusDashboard { selected_port, .. } => {
-            let port_name = if *selected_port < app.ports.order.len() {
-                let name = &app.ports.order[*selected_port];
-                app.ports
-                    .map
-                    .get(name)
-                    .map(|p| p.port_name.clone())
-                    .unwrap_or_else(|| format!("COM{}", selected_port))
-            } else {
-                format!("COM{}", selected_port)
-            };
+            let port_name = get_port_name(selected_port)?;
             format!(
                 "{} > {} > {}",
                 lang().index.title.as_str(),
@@ -75,17 +77,8 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
         }
 
         // Manual debug log: AOBA title > COMx > Communication Log
-        types::Page::ModbusLog { selected_port, .. } => {
-            let port_name = if *selected_port < app.ports.order.len() {
-                let name = &app.ports.order[*selected_port];
-                app.ports
-                    .map
-                    .get(name)
-                    .map(|p| p.port_name.clone())
-                    .unwrap_or_else(|| format!("COM{}", selected_port))
-            } else {
-                format!("COM{}", selected_port)
-            };
+        types::Page::LogPanel { selected_port, .. } => {
+            let port_name = get_port_name(selected_port)?;
             format!(
                 "{} > {} > {}",
                 lang().index.title.as_str(),
@@ -105,7 +98,6 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
     };
 
     breadcrumb_text.push_str(&page_breadcrumb);
-
     let title_para = Paragraph::new(breadcrumb_text)
         .alignment(Alignment::Left)
         .style(
@@ -113,5 +105,7 @@ pub fn render_title_readonly(f: &mut Frame, area: Rect, app: &Status) {
                 .fg(Color::LightGreen)
                 .add_modifier(Modifier::BOLD),
         );
-    f.render_widget(title_para, chunks[0]);
+    frame.render_widget(title_para, chunks[0]);
+
+    Ok(())
 }

@@ -120,7 +120,7 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
 
     write_status(|s| {
         // Go back to config panel instead of entry page
-        s.page = types::Page::ModbusConfig {
+        s.page = types::Page::ConfigPanel {
             selected_port,
             view_offset: 0,
             cursor: crate::protocol::status::types::ui::ConfigPanelCursor::EnablePort,

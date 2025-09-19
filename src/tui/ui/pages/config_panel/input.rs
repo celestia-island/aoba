@@ -29,7 +29,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     s.temporarily.input_raw_buffer.clear();
 
                     // Apply the edit based on current cursor
-                    if let types::Page::ModbusConfig {
+                    if let types::Page::ConfigPanel {
                         cursor,
                         selected_port,
                         ..
@@ -139,7 +139,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Navigate between fields using cursor system
                 write_status(|s| {
-                    if let types::Page::ModbusConfig { cursor, .. } = &mut s.page {
+                    if let types::Page::ConfigPanel { cursor, .. } = &mut s.page {
                         match key.code {
                             KeyCode::Up | KeyCode::Char('k') => {
                                 *cursor = cursor.prev();
@@ -167,7 +167,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     types::ui::ConfigPanelCursor::Parity => {
                         // Cycle through parity options
                         write_status(|s| {
-                            if let types::Page::ModbusConfig { selected_port, .. } = &s.page {
+                            if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get_mut(port_name) {
                                         if let Some(rt) = pd.runtime.as_mut() {
@@ -203,7 +203,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     types::ui::ConfigPanelCursor::ProtocolConfig => {
                         // Navigate to modbus panel
                         write_status(|s| {
-                            if let types::Page::ModbusConfig { selected_port, .. } = &s.page {
+                            if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
                                 s.page = types::Page::ModbusDashboard {
                                     selected_port: *selected_port,
                                     view_offset: 0,
@@ -232,9 +232,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     types::ui::ConfigPanelCursor::ViewCommunicationLog => {
                         // Navigate to log panel
                         write_status(|s| {
-                            if let types::Page::ModbusConfig { selected_port, .. } = &s.page {
-                                s.page = types::Page::ModbusLog {
+                            if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
+                                s.page = types::Page::LogPanel {
                                     selected_port: *selected_port,
+                                    input_mode: types::ui::InputMode::Ascii,
                                     view_offset: 0,
                                 };
                             }
@@ -250,7 +251,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     | types::ui::ConfigPanelCursor::StopBits => {
                         // Enter edit mode: initialize buffer with current value
                         write_status(|s| {
-                            if let types::Page::ModbusConfig {
+                            if let types::Page::ConfigPanel {
                                 selected_port,
                                 cursor,
                                 ..
@@ -292,7 +293,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             KeyCode::Esc => {
                 // Return to entry page
-                let cursor = if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page
+                let cursor = if let types::Page::ConfigPanel { selected_port, .. } = &snapshot.page
                 {
                     Some(types::ui::EntryCursor::Com {
                         idx: *selected_port,

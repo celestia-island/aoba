@@ -104,7 +104,7 @@ pub fn handle_move_next(app: &Status, cursor: types::ui::EntryCursor) -> Result<
 }
 
 /// Compatibility wrapper used by pages/mod.rs which expects signature:
-/// fn handle_input(key: KeyEvent, app: &Status, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
+/// fn handle_input(key: KeyEvent, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Snapshot previously provided by caller as `app`
     let app = read_status(|s| Ok(s.clone()))?;
@@ -180,7 +180,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             match final_cursor {
                 Some(types::ui::EntryCursor::Com { idx }) => write_status(|s| {
-                    s.page = Page::ModbusConfig {
+                    s.page = Page::ConfigPanel {
                         selected_port: idx,
                         view_offset: 0,
                         cursor: types::ui::ConfigPanelCursor::EnablePort,

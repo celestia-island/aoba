@@ -36,7 +36,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
     // Get the current view_offset from the page state
     let view_offset = read_status(|s| {
-        if let types::Page::ModbusLog { view_offset, .. } = &s.page {
+        if let types::Page::LogPanel { view_offset, .. } = &s.page {
             Ok(*view_offset)
         } else {
             Ok(0)
@@ -58,8 +58,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
         );
     }
 
-    // Bottom text input for sending - simplified placeholder
-    render_log_input(frame, chunks[1]);
+    render_log_input(frame, chunks[1])?;
 
     Ok(())
 }

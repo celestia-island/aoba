@@ -14,7 +14,7 @@ pub fn is_subpage_active() -> bool {
     if let Ok(active) = crate::protocol::status::read_status(|app| {
         Ok(matches!(
             app.page,
-            types::Page::ModbusConfig { .. } | types::Page::ModbusDashboard { .. }
+            types::Page::ConfigPanel { .. } | types::Page::ModbusDashboard { .. }
         ))
     }) {
         active

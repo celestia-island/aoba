@@ -33,8 +33,8 @@ pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) ->
             None => 0usize,
         },
         types::Page::ModbusDashboard { selected_port, .. }
-        | types::Page::ModbusConfig { selected_port, .. }
-        | types::Page::ModbusLog { selected_port, .. } => *selected_port,
+        | types::Page::ConfigPanel { selected_port, .. }
+        | types::Page::LogPanel { selected_port, .. } => *selected_port,
         _ => 0usize,
     }
 }
