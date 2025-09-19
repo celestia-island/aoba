@@ -86,7 +86,7 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus) -> Result<()> {
 
     match ev {
         crossterm::event::Event::Key(key) => {
-            // Early catch for Ctrl+C at the top-level so the app can exit immediately.
+            // Early catch for Ctrl + C at the top-level so the app can exit immediately.
             if key.kind == crossterm::event::KeyEventKind::Press
                 && key
                     .modifiers
@@ -120,7 +120,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         return Ok(()); // Ignore non-initial key press (repeat / release)
     }
 
-    // Handle global quit with Ctrl+C
+    // Handle global quit with Ctrl + C
     if key
         .modifiers
         .contains(crossterm::event::KeyModifiers::CONTROL)

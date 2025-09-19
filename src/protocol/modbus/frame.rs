@@ -90,13 +90,13 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
             }
         }
         let func = col.get(1).copied().unwrap_or(0);
-        // Exception response (func with MSB set) typically: id(1)+func(1)+excode(1)+crc(2) => 5
+        // Exception response (func with MSB set) typically: id(1) + func(1) + excode(1) + crc(2) => 5
         if (func & 0x80) != 0 {
             return Some(5);
         }
         match func {
             0x01..=0x06 => {
-                // These are fixed-size requests: id+func+addr(2)+qty/val(2)+crc(2) = 8
+                // These are fixed-size requests: id + func + addr(2) + qty/val(2) + crc(2) = 8
                 Some(8)
             }
             0x0F | 0x10 => {
@@ -105,7 +105,7 @@ pub fn read_modbus_frame(usbtty: Arc<Mutex<Box<dyn SerialPort + Send>>>) -> Resu
                     return None; // need more bytes to read byte-count
                 }
                 let bytecount = col[6] as usize;
-                // total = id(1)+func(1)+addr2+qty2+bytecount(1)+data+crc2 = 9 + bytecount
+                // total = id(1) + func(1) + addr2 + qty2 + bytecount(1) + data + crc2 = 9 + bytecount
                 Some(9 + bytecount)
             }
             _ => None,
