@@ -72,7 +72,7 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     }
 
                     // Port configuration page: AOBA title > COMx
-                    types::Page::ModbusConfig { selected_port, .. } => {
+                    types::Page::ConfigPanel { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
                             g.ports.map.get(name).map(|p| p.port_name.clone())
@@ -100,7 +100,7 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     }
 
                     // Manual debug log: AOBA title > COMx > Communication Log
-                    types::Page::ModbusLog { selected_port, .. } => {
+                    types::Page::LogPanel { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
                             g.ports.map.get(name).map(|p| p.port_name.clone())

@@ -1,18 +1,10 @@
+use crate::protocol::status::types::cursor;
 use serde::{Deserialize, Serialize};
 
-/// UI-oriented enums and small types shared across pages.
-/// `EntryCursor` describes the cursor/selection on the main Entry page.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum EntryCursor {
-    /// Select one of the physical COM ports (index)
-    Com { idx: usize },
-    /// Force a refresh (special entry)
-    Refresh,
-    /// Create a virtual port entry
-    CreateVirtual,
-    /// The about page
-    About,
-}
+// Re-export cursor types so existing `types::ui::EntryCursor` style paths keep working.
+pub use crate::protocol::status::types::cursor::{
+    ConfigPanelCursor, EntryCursor, LogPanelCursor, ModbusDashboardCursor,
+};
 
 /// Special entries that appear after the serial ports list in the Entry page.
 /// Kept as a UI enum so other UI modules can reference the same canonical variants.
@@ -103,5 +95,5 @@ pub struct AboutStatus {
 
 #[derive(Debug, Clone)]
 pub struct EntryStatus {
-    pub cursor: Option<EntryCursor>,
+    pub cursor: Option<cursor::EntryCursor>,
 }

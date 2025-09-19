@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use ratatui::{backend::CrosstermBackend, prelude::*};
+use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
 use crate::{
     protocol::{
@@ -396,13 +396,9 @@ fn run_rendering_loop(
             break;
         }
 
-        // Render UI - only read from Status. Use read_status to clone snapshot and
-        // render from that to avoid holding the lock while rendering.
-        if let Ok(snapshot) = crate::protocol::status::read_status(|s| Ok(s.clone())) {
-            terminal.draw(|f| {
-                let _ = render_ui(f, &snapshot);
-            })?;
-        }
+        terminal.draw(|frame| {
+            render_ui(frame).expect("Render failed");
+        })?;
     }
 
     terminal.clear()?;
@@ -410,34 +406,22 @@ fn run_rendering_loop(
 }
 
 /// Render UI function that only reads from Status (immutable reference)
-fn render_ui(frame: &mut Frame, app: &Status) -> Result<()> {
+fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
-    let subpage_active = matches!(
-        app.page,
-        types::Page::ModbusConfig { .. }
-            | types::Page::ModbusDashboard { .. }
-            | types::Page::ModbusLog { .. }
-            | types::Page::About { .. }
-    );
-    let bottom_len = if app.temporarily.error.is_some() || subpage_active {
-        2
-    } else {
-        1
-    };
-    let main_chunks = ratatui::layout::Layout::default()
-        .direction(ratatui::layout::Direction::Vertical)
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
         .margin(0)
         .constraints([
-            ratatui::layout::Constraint::Length(1), // title
-            ratatui::layout::Constraint::Min(0),    // main
-            ratatui::layout::Constraint::Length(bottom_len),
+            Constraint::Length(1), // title
+            Constraint::Min(0),    // main
+            Constraint::Length(2),
         ])
         .split(area);
 
     // Use the new pages module for rendering
-    crate::tui::ui::title::render_title_readonly(frame, main_chunks[0], app);
+    crate::tui::ui::title::render_title_readonly(frame, main_chunks[0])?;
     crate::tui::ui::pages::render_panels(frame, main_chunks[1])?;
-    crate::tui::ui::bottom::render_bottom_readonly(frame, main_chunks[2], app);
+    crate::tui::ui::bottom::render_bottom_readonly(frame, main_chunks[2])?;
 
     Ok(())
 }

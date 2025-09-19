@@ -131,6 +131,34 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
     }
 
+    // Check if we're in global edit mode first
+    if let Ok(snapshot) = read_status(|s| Ok(s.clone())) {
+        // Check if any page is in edit mode
+        let in_edit_mode = match &snapshot.page {
+            types::Page::ConfigPanel { .. } => {
+                // Check if we have an active edit cursor - simplified check
+                !snapshot.temporarily.input_raw_buffer.is_empty()
+                    || matches!(key.code, KeyCode::Enter)
+            }
+            _ => false,
+        };
+
+        // If in edit mode, handle character input globally
+        if in_edit_mode && matches!(key.code, KeyCode::Char(_)) {
+            if let KeyCode::Char(c) = key.code {
+                use crate::protocol::status::write_status;
+                write_status(|s| {
+                    s.temporarily.input_raw_buffer.push(c);
+                    Ok(())
+                })?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                return Ok(());
+            }
+        }
+    }
+
     // Route input to appropriate page handler based on current Status.page.
     if let Ok(snapshot) = read_status(|s| Ok(s.clone())) {
         use crate::tui::ui::pages;
@@ -145,7 +173,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 pages::about::handle_input(key, bus)?;
                 return Ok(());
             }
-            types::Page::ModbusConfig { .. } => {
+            types::Page::ConfigPanel { .. } => {
                 pages::config_panel::handle_input(key, bus)?;
                 return Ok(());
             }
@@ -153,7 +181,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 pages::modbus_panel::input::handle_input(key, bus)?;
                 return Ok(());
             }
-            types::Page::ModbusLog { .. } => {
+            types::Page::LogPanel { .. } => {
                 pages::log_panel::handle_input(key, bus)?;
                 return Ok(());
             }

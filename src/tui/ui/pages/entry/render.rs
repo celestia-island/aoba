@@ -14,9 +14,9 @@ pub fn page_bottom_hints() -> Vec<Vec<String>> {
         let in_subpage_editing = false;
         let subpage_active = matches!(
             app.page,
-            types::Page::ModbusConfig { .. }
+            types::Page::ConfigPanel { .. }
                 | types::Page::ModbusDashboard { .. }
-                | types::Page::ModbusLog { .. }
+                | types::Page::LogPanel { .. }
                 | types::Page::About { .. }
         );
 
