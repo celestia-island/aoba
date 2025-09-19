@@ -38,14 +38,14 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         if let Some(port_name) = s.ports.order.get(*selected_port) {
                             if let Some(pd) = s.ports.map.get_mut(port_name) {
                                 match cursor {
-                                    types::ui::ConfigPanelCursor::BaudRate => {
+                                    types::cursor::ConfigPanelCursor::BaudRate => {
                                         if let Ok(baud) = buffer_content.parse::<u32>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 rt.current_cfg.baud = baud;
                                             }
                                         }
                                     }
-                                    types::ui::ConfigPanelCursor::DataBits => {
+                                    types::cursor::ConfigPanelCursor::DataBits => {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 match bits {
@@ -58,7 +58,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                             }
                                         }
                                     }
-                                    types::ui::ConfigPanelCursor::StopBits => {
+                                    types::cursor::ConfigPanelCursor::StopBits => {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
                                                 match bits {
@@ -164,7 +164,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
                 // Handle option switching for certain fields
                 match selected_cursor {
-                    types::ui::ConfigPanelCursor::Parity => {
+                    types::cursor::ConfigPanelCursor::Parity => {
                         // Cycle through parity options
                         write_status(|s| {
                             if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
@@ -195,12 +195,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             KeyCode::Enter => {
                 // Handle Enter key for different cursor positions
                 match selected_cursor {
-                    types::ui::ConfigPanelCursor::EnablePort => {
+                    types::cursor::ConfigPanelCursor::EnablePort => {
                         // Toggle port enable/disable
                         // TODO: Implement port toggle with error handling
                         Ok(())
                     }
-                    types::ui::ConfigPanelCursor::ProtocolConfig => {
+                    types::cursor::ConfigPanelCursor::ProtocolConfig => {
                         // Navigate to modbus panel
                         write_status(|s| {
                             if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
@@ -229,7 +229,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             .map_err(|err| anyhow!(err))?;
                         Ok(())
                     }
-                    types::ui::ConfigPanelCursor::ViewCommunicationLog => {
+                    types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
                         // Navigate to log panel
                         write_status(|s| {
                             if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
@@ -246,9 +246,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             .map_err(|err| anyhow!(err))?;
                         Ok(())
                     }
-                    types::ui::ConfigPanelCursor::BaudRate
-                    | types::ui::ConfigPanelCursor::DataBits
-                    | types::ui::ConfigPanelCursor::StopBits => {
+                    types::cursor::ConfigPanelCursor::BaudRate
+                    | types::cursor::ConfigPanelCursor::DataBits
+                    | types::cursor::ConfigPanelCursor::StopBits => {
                         // Enter edit mode: initialize buffer with current value
                         write_status(|s| {
                             if let types::Page::ConfigPanel {
@@ -260,17 +260,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get(port_name) {
                                         let init_value = match cursor {
-                                            types::ui::ConfigPanelCursor::BaudRate => pd
+                                            types::cursor::ConfigPanelCursor::BaudRate => pd
                                                 .runtime
                                                 .as_ref()
                                                 .map(|rt| rt.current_cfg.baud.to_string())
                                                 .unwrap_or_else(|| "9600".to_string()),
-                                            types::ui::ConfigPanelCursor::DataBits => pd
+                                            types::cursor::ConfigPanelCursor::DataBits => pd
                                                 .runtime
                                                 .as_ref()
                                                 .map(|rt| rt.current_cfg.data_bits.to_string())
                                                 .unwrap_or_else(|| "8".to_string()),
-                                            types::ui::ConfigPanelCursor::StopBits => pd
+                                            types::cursor::ConfigPanelCursor::StopBits => pd
                                                 .runtime
                                                 .as_ref()
                                                 .map(|rt| rt.current_cfg.stop_bits.to_string())
@@ -295,7 +295,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Return to entry page
                 let cursor = if let types::Page::ConfigPanel { selected_port, .. } = &snapshot.page
                 {
-                    Some(types::ui::EntryCursor::Com {
+                        Some(types::cursor::EntryCursor::Com {
                         idx: *selected_port,
                     })
                 } else {

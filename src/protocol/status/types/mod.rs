@@ -1,3 +1,4 @@
+pub mod cursor;
 pub mod modbus;
 pub mod port;
 pub mod ui;
@@ -18,12 +19,12 @@ derive_struct! {
 
         page: enum Page {
             Entry {
-                cursor?: ui::EntryCursor,
+                cursor?: cursor::EntryCursor,
             },
             ConfigPanel {
                 selected_port: usize,
                 view_offset: usize = 0,
-                cursor: ui::ConfigPanelCursor = ui::ConfigPanelCursor::EnablePort,
+                cursor: cursor::ConfigPanelCursor = cursor::ConfigPanelCursor::EnablePort,
             },
             ModbusDashboard {
                 selected_port: usize,

@@ -26,10 +26,10 @@ use crate::{
 pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> usize {
     match page {
         types::Page::Entry { cursor } => match cursor {
-            Some(types::ui::EntryCursor::Com { idx }) => *idx,
-            Some(types::ui::EntryCursor::Refresh) => ports_order.len(),
-            Some(types::ui::EntryCursor::CreateVirtual) => ports_order.len().saturating_add(1),
-            Some(types::ui::EntryCursor::About) => ports_order.len().saturating_add(2),
+            Some(types::cursor::EntryCursor::Com { idx }) => *idx,
+            Some(types::cursor::EntryCursor::Refresh) => ports_order.len(),
+            Some(types::cursor::EntryCursor::CreateVirtual) => ports_order.len().saturating_add(1),
+            Some(types::cursor::EntryCursor::About) => ports_order.len().saturating_add(2),
             None => 0usize,
         },
         types::Page::ModbusDashboard { selected_port, .. }
