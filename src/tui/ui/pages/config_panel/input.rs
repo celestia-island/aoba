@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    i18n::lang,
+    protocol::status::types::cursor::Cursor,
     protocol::status::{read_status, types, write_status},
     tui::utils::bus::Bus,
 };
@@ -12,171 +12,82 @@ use crate::{
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Create a snapshot of the current status (previously passed as `app`)
     let snapshot = read_status(|s| Ok(s.clone()))?;
-    // Derive selected row in panel (same logic as render_kv_panel)
-    let selected_row = super::components::derive_selection(&snapshot);
+    // Derive selected cursor in panel
+    let selected_cursor = super::components::derive_selection(&snapshot);
 
-    // Determine number of fields shown in panel
-    let labels_count = {
-        let base = 5usize;
-        let more = 9usize;
-        base + more
-    };
-
-    // If currently in edit mode for this port, handle edit-specific keys
-    // New location: per-page fields are stored inside Page::ModbusConfig
-    let mut in_edit = false;
-    if let types::Page::ModbusConfig {
-        edit_active: config_edit_active,
-        ..
-    } = &snapshot.page
-    {
-        in_edit = *config_edit_active;
-    }
+    // Check if we're in edit mode (simplified - using global buffer)
+    let in_edit = !snapshot.temporarily.input_raw_buffer.is_empty();
 
     if in_edit {
-        // We are editing a field: handle text input and control keys
+        // We are editing a field: handle editing keys (but not character input - that's handled globally)
         match key.code {
-            KeyCode::Char(c) => {
-                write_status(|s| {
-                    if let types::Page::ModbusConfig {
-                        edit_buffer: config_edit_buffer,
-                        edit_cursor_pos: config_edit_cursor_pos,
-                        ..
-                    } = &mut s.page
-                    {
-                        let pos = (*config_edit_cursor_pos).min(config_edit_buffer.len());
-                        config_edit_buffer.insert(pos, c);
-                        *config_edit_cursor_pos = pos + 1;
-                    }
-                    Ok(())
-                })?;
-                Ok(())
-            }
-            KeyCode::Backspace => {
-                write_status(|s| {
-                    if let types::Page::ModbusConfig {
-                        edit_buffer: config_edit_buffer,
-                        edit_cursor_pos: config_edit_cursor_pos,
-                        ..
-                    } = &mut s.page
-                    {
-                        let pos = *config_edit_cursor_pos;
-                        if pos > 0 && pos <= config_edit_buffer.len() {
-                            config_edit_buffer.remove(pos - 1);
-                            *config_edit_cursor_pos = pos - 1;
-                        }
-                    }
-                    Ok(())
-                })?;
-                Ok(())
-            }
-            KeyCode::Left => {
-                write_status(|s| {
-                    if let types::Page::ModbusConfig {
-                        edit_cursor_pos: config_edit_cursor_pos,
-                        ..
-                    } = &mut s.page
-                    {
-                        if *config_edit_cursor_pos > 0 {
-                            *config_edit_cursor_pos -= 1;
-                        }
-                    }
-                    Ok(())
-                })?;
-                Ok(())
-            }
-            KeyCode::Right => {
-                write_status(|s| {
-                    if let types::Page::ModbusConfig {
-                        edit_buffer: config_edit_buffer,
-                        edit_cursor_pos: config_edit_cursor_pos,
-                        ..
-                    } = &mut s.page
-                    {
-                        let len = config_edit_buffer.len();
-                        if *config_edit_cursor_pos < len {
-                            *config_edit_cursor_pos += 1;
-                        }
-                    }
-                    Ok(())
-                })?;
-                Ok(())
-            }
             KeyCode::Enter => {
-                // Commit edit: write buffer back to PortData field
+                // Commit edit: write buffer back to appropriate field
+                let buffer_content = snapshot.temporarily.input_raw_buffer.clone();
+
                 write_status(|s| {
-                    if let types::Page::ModbusConfig {
+                    // Clear the global buffer
+                    s.temporarily.input_raw_buffer.clear();
+
+                    // Apply the edit based on current cursor
+                    if let types::Page::ConfigPanel {
+                        cursor,
                         selected_port,
-                        edit_active: config_edit_active,
-                        edit_cursor: config_edit_cursor,
-                        edit_buffer: config_edit_buffer,
-                        edit_cursor_pos: config_edit_cursor_pos,
                         ..
-                    } = &mut s.page
+                    } = &s.page
                     {
                         if let Some(port_name) = s.ports.order.get(*selected_port) {
                             if let Some(pd) = s.ports.map.get_mut(port_name) {
-                                let val = config_edit_buffer.clone();
-                                match *config_edit_cursor {
-                                    0 => pd.port_name = val,
-                                    1 => {
-                                        if let Ok(v) = val.parse::<u32>() {
+                                match cursor {
+                                    types::cursor::ConfigPanelCursor::BaudRate => {
+                                        if let Ok(baud) = buffer_content.parse::<u32>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
-                                                rt.current_cfg.baud = v;
+                                                rt.current_cfg.baud = baud;
                                             }
                                         }
                                     }
-                                    2 => {
-                                        if let Ok(v) = val.parse::<u8>() {
+                                    types::cursor::ConfigPanelCursor::DataBits => {
+                                        if let Ok(bits) = buffer_content.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
-                                                rt.current_cfg.data_bits = v;
+                                                match bits {
+                                                    5 => rt.current_cfg.data_bits = 5,
+                                                    6 => rt.current_cfg.data_bits = 6,
+                                                    7 => rt.current_cfg.data_bits = 7,
+                                                    8 => rt.current_cfg.data_bits = 8,
+                                                    _ => {}
+                                                }
                                             }
                                         }
                                     }
-                                    3 => {
-                                        if let Some(rt) = pd.runtime.as_mut() {
-                                            rt.current_cfg.parity = match val.as_str() {
-                                                "None" | "none" => serialport::Parity::None,
-                                                "Odd" | "odd" => serialport::Parity::Odd,
-                                                "Even" | "even" => serialport::Parity::Even,
-                                                _ => rt.current_cfg.parity,
-                                            }
-                                        }
-                                    }
-                                    4 => {
-                                        if let Ok(v) = val.parse::<u8>() {
+                                    types::cursor::ConfigPanelCursor::StopBits => {
+                                        if let Ok(bits) = buffer_content.parse::<u8>() {
                                             if let Some(rt) = pd.runtime.as_mut() {
-                                                rt.current_cfg.stop_bits = v;
+                                                match bits {
+                                                    1 => rt.current_cfg.stop_bits = 1u8,
+                                                    2 => rt.current_cfg.stop_bits = 2u8,
+                                                    _ => {}
+                                                }
                                             }
                                         }
                                     }
-                                    5 => pd.port_type = val,
-                                    6 => {
-                                        pd.extra.guid =
-                                            if val.is_empty() { None } else { Some(val) }
-                                    }
-                                    7 => {}
-                                    8 => {
-                                        pd.extra.serial =
-                                            if val.is_empty() { None } else { Some(val) }
-                                    }
-                                    9 => {
-                                        pd.extra.manufacturer =
-                                            if val.is_empty() { None } else { Some(val) }
-                                    }
-                                    10 => {
-                                        pd.extra.product =
-                                            if val.is_empty() { None } else { Some(val) }
-                                    }
+                                    // Other fields can be handled here
                                     _ => {}
                                 }
                             }
                         }
-                        // Exit edit mode and clear buffer
-                        *config_edit_active = false;
-                        config_edit_buffer.clear();
-                        *config_edit_cursor_pos = 0;
                     }
+                    Ok(())
+                })?;
+
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            }
+            KeyCode::Esc => {
+                // Cancel edit: clear buffer
+                write_status(|s| {
+                    s.temporarily.input_raw_buffer.clear();
                     Ok(())
                 })?;
                 bus.ui_tx
@@ -184,20 +95,20 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
-            KeyCode::Esc => {
-                // Cancel edit
+            KeyCode::Backspace => {
                 write_status(|s| {
-                    if let types::Page::ModbusConfig {
-                        edit_active: config_edit_active,
-                        edit_buffer: config_edit_buffer,
-                        edit_cursor_pos: config_edit_cursor_pos,
-                        ..
-                    } = &mut s.page
-                    {
-                        *config_edit_active = false;
-                        config_edit_buffer.clear();
-                        *config_edit_cursor_pos = 0;
-                    }
+                    s.temporarily.input_raw_buffer.pop();
+                    Ok(())
+                })?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            }
+            KeyCode::Delete => {
+                // For simplicity, treat delete as backspace in this context
+                write_status(|s| {
+                    s.temporarily.input_raw_buffer.pop();
                     Ok(())
                 })?;
                 bus.ui_tx
@@ -208,116 +119,188 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             _ => Ok(()),
         }
     } else {
-        // Not in edit mode: handle navigation and enter/e to begin editing
+        // Not in edit mode: handle navigation and actions
         match key.code {
-            KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
-                // Update selected_port inside Page::ModbusConfig under write lock
-                write_status(|s| {
-                    if let types::Page::ModbusConfig { selected_port, .. } = &mut s.page {
-                        // Move selection by delta based on key
-                        match key.code {
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                if *selected_port > 0 {
-                                    *selected_port = selected_port.saturating_sub(1);
-                                }
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                let max = s.ports.order.len().saturating_sub(1);
-                                if *selected_port < max {
-                                    *selected_port += 1;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    Ok(())
-                })?;
+            KeyCode::PageUp => {
+                // Scroll up
+                super::components::config_panel_scroll_up(5)?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|err| anyhow!(err))?;
                 Ok(())
             }
-            KeyCode::Enter | KeyCode::Char('e') => {
-                // Begin edit for selected row if a real port exists at selection
-                // Determine selected port name from app snapshot
-                let sel_idx = selected_row.min(labels_count.saturating_sub(1));
-                if let Some(port_name) = snapshot.ports.order.get(sel_idx) {
-                    // Initialize config_edit in Status
-                    let init_buf = if let Some(pd) = snapshot.ports.map.get(port_name) {
-                        // Determine value to prefill based on sel_idx (same mapping as render)
-                        let pre = match sel_idx {
-                            0 => pd.port_name.clone(),
-                            1 => pd
-                                .runtime
-                                .as_ref()
-                                .map(|rt| rt.current_cfg.baud.to_string())
-                                .unwrap_or_else(|| "9600".to_string()),
-                            2 => pd
-                                .runtime
-                                .as_ref()
-                                .map(|rt| rt.current_cfg.data_bits.to_string())
-                                .unwrap_or_else(|| "8".to_string()),
-                            3 => pd
-                                .runtime
-                                .as_ref()
-                                .map(|rt| format!("{:?}", rt.current_cfg.parity))
-                                .unwrap_or_else(|| lang().protocol.common.parity_none.clone()),
-                            4 => pd
-                                .runtime
-                                .as_ref()
-                                .map(|rt| rt.current_cfg.stop_bits.to_string())
-                                .unwrap_or_else(|| "1".to_string()),
-                            5 => pd.port_type.clone(),
-                            6 => pd.extra.guid.clone().unwrap_or_default(),
-                            7 => match (pd.extra.vid, pd.extra.pid) {
-                                (Some(vid), Some(pid)) => format!("{vid:04x}:{pid:04x}"),
-                                _ => String::new(),
-                            },
-                            8 => pd.extra.serial.clone().unwrap_or_default(),
-                            9 => pd.extra.manufacturer.clone().unwrap_or_default(),
-                            10 => pd.extra.product.clone().unwrap_or_default(),
-                            _ => String::new(),
-                        };
-                        pre
-                    } else {
-                        String::new()
-                    };
-
-                    write_status(|s| {
-                        if let types::Page::ModbusConfig {
-                            edit_active: config_edit_active,
-                            edit_cursor: config_edit_cursor,
-                            edit_buffer: config_edit_buffer,
-                            edit_cursor_pos: config_edit_cursor_pos,
-                            ..
-                        } = &mut s.page
-                        {
-                            *config_edit_active = true;
-                            *config_edit_cursor = selected_row;
-                            *config_edit_buffer = init_buf.clone();
-                            *config_edit_cursor_pos = init_buf.len();
+            KeyCode::PageDown => {
+                // Scroll down
+                super::components::config_panel_scroll_down(5)?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            }
+            KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
+                // Navigate between fields using cursor system
+                write_status(|s| {
+                    if let types::Page::ConfigPanel {
+                        cursor,
+                        view_offset,
+                        ..
+                    } = &mut s.page
+                    {
+                        match key.code {
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                *cursor = cursor.prev();
+                            }
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                *cursor = cursor.next();
+                            }
+                            _ => {}
                         }
+                        // Recompute view offset using the cursor's index mapping
+                        *view_offset = cursor.view_offset();
+                    }
+                    Ok(())
+                })?;
+
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            }
+            KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => {
+                // Handle option switching for certain fields
+                match selected_cursor {
+                    types::cursor::ConfigPanelCursor::Parity => {
+                        // Cycle through parity options
+                        write_status(|s| {
+                            if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
+                                if let Some(port_name) = s.ports.order.get(*selected_port) {
+                                    if let Some(pd) = s.ports.map.get_mut(port_name) {
+                                        if let Some(rt) = pd.runtime.as_mut() {
+                                            rt.current_cfg.parity = match rt.current_cfg.parity {
+                                                serialport::Parity::None => serialport::Parity::Odd,
+                                                serialport::Parity::Odd => serialport::Parity::Even,
+                                                serialport::Parity::Even => {
+                                                    serialport::Parity::None
+                                                }
+                                            };
+                                        }
+                                    }
+                                }
+                            }
+                            Ok(())
+                        })?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
+                    }
+                    _ => {}
+                }
+                Ok(())
+            }
+            KeyCode::Enter => {
+                // Handle Enter key for different cursor positions
+                match selected_cursor {
+                    types::cursor::ConfigPanelCursor::EnablePort => {
+                        // Toggle port enable/disable
+                        // TODO: Implement port toggle with error handling
                         Ok(())
-                    })?;
-                    bus.ui_tx
-                        .send(crate::tui::utils::bus::UiToCore::Refresh)
-                        .map_err(|err| anyhow!(err))?;
-                    Ok(())
-                } else {
-                    // No port under selection: just refresh
-                    bus.ui_tx
-                        .send(crate::tui::utils::bus::UiToCore::Refresh)
-                        .map_err(|err| anyhow!(err))?;
-                    Ok(())
+                    }
+                    types::cursor::ConfigPanelCursor::ProtocolConfig => {
+                        // Navigate to modbus panel
+                        write_status(|s| {
+                            if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
+                                s.page = types::Page::ModbusDashboard {
+                                    selected_port: *selected_port,
+                                    view_offset: 0,
+                                    cursor: 0,
+                                    editing_field: None,
+                                    input_buffer: String::new(),
+                                    edit_choice_index: None,
+                                    edit_confirmed: false,
+                                    master_cursor: 0,
+                                    master_field_selected: false,
+                                    master_field_editing: false,
+                                    master_edit_field: None,
+                                    master_edit_index: None,
+                                    master_input_buffer: String::new(),
+                                    poll_round_index: 0,
+                                    in_flight_reg_index: None,
+                                };
+                            }
+                            Ok(())
+                        })?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
+                        Ok(())
+                    }
+                    types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
+                        // Navigate to log panel
+                        write_status(|s| {
+                            if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
+                                s.page = types::Page::LogPanel {
+                                    selected_port: *selected_port,
+                                    input_mode: types::ui::InputMode::Ascii,
+                                    view_offset: 0,
+                                };
+                            }
+                            Ok(())
+                        })?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
+                        Ok(())
+                    }
+                    types::cursor::ConfigPanelCursor::BaudRate
+                    | types::cursor::ConfigPanelCursor::DataBits
+                    | types::cursor::ConfigPanelCursor::StopBits => {
+                        // Enter edit mode: initialize buffer with current value
+                        write_status(|s| {
+                            if let types::Page::ConfigPanel {
+                                selected_port,
+                                cursor,
+                                ..
+                            } = &s.page
+                            {
+                                if let Some(port_name) = s.ports.order.get(*selected_port) {
+                                    if let Some(pd) = s.ports.map.get(port_name) {
+                                        let init_value = match cursor {
+                                            types::cursor::ConfigPanelCursor::BaudRate => pd
+                                                .runtime
+                                                .as_ref()
+                                                .map(|rt| rt.current_cfg.baud.to_string())
+                                                .unwrap_or_else(|| "9600".to_string()),
+                                            types::cursor::ConfigPanelCursor::DataBits => pd
+                                                .runtime
+                                                .as_ref()
+                                                .map(|rt| rt.current_cfg.data_bits.to_string())
+                                                .unwrap_or_else(|| "8".to_string()),
+                                            types::cursor::ConfigPanelCursor::StopBits => pd
+                                                .runtime
+                                                .as_ref()
+                                                .map(|rt| rt.current_cfg.stop_bits.to_string())
+                                                .unwrap_or_else(|| "1".to_string()),
+                                            _ => String::new(),
+                                        };
+                                        s.temporarily.input_raw_buffer = init_value;
+                                    }
+                                }
+                            }
+                            Ok(())
+                        })?;
+                        bus.ui_tx
+                            .send(crate::tui::utils::bus::UiToCore::Refresh)
+                            .map_err(|err| anyhow!(err))?;
+                        Ok(())
+                    }
+                    _ => Ok(()),
                 }
             }
             KeyCode::Esc => {
-                // If we reach here we are not in per-field edit mode (in_edit == false)
-                // so Esc should return the user to the main entry page.
-                // Preserve the cursor position based on the selected port.
-                let cursor = if let types::Page::ModbusConfig { selected_port, .. } = &snapshot.page
+                // Return to entry page
+                let cursor = if let types::Page::ConfigPanel { selected_port, .. } = &snapshot.page
                 {
-                    Some(types::ui::EntryCursor::Com {
+                    Some(types::cursor::EntryCursor::Com {
                         idx: *selected_port,
                     })
                 } else {
