@@ -4,21 +4,33 @@ use ratatui::{layout::*, prelude::*, widgets::*};
 
 use crate::{i18n::lang, protocol::status::read_status, tui::ui::pages::bottom_hints_for_app};
 
-pub fn render_bottom(f: &mut Frame, area: Rect) -> Result<()> {
-    render_bottom_readonly(f, area)?;
-    Ok(())
-}
+pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
+    // Cumulative rendering: we render page-provided bottom hints and also
+    // append transient error lines (error message + clear hint) if present.
+    let hints = bottom_hints_for_app().unwrap_or_else(|_| vec![]);
+    let err_opt = read_status(|s| Ok(s.temporarily.error.clone()))?;
 
-pub fn render_bottom_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
-    // If app has an error message, display it on the first line (red),
-    // And on the second line show instructions on how to clear it.
-    if let Some(err) = read_status(|s| Ok(s.temporarily.error.clone()))? {
-        let rows = Layout::default()
-            .direction(Direction::Vertical)
-            .margin(0)
-            .constraints([Constraint::Length(1), Constraint::Length(1)])
-            .split(area);
+    let err_lines = if err_opt.is_some() { 2usize } else { 0usize };
+    let rows_count = hints.len() + err_lines;
 
+    if rows_count == 0 {
+        // Nothing to render in bottom
+        return Ok(());
+    }
+
+    let rows = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(0)
+        .constraints(
+            (0..rows_count)
+                .map(|_| Constraint::Length(1))
+                .collect::<Vec<Constraint>>(),
+        )
+        .split(area);
+
+    // If error present, render it on the topmost lines of the bottom area.
+    let mut next_row = 0usize;
+    if let Some(err) = err_opt {
         let err_block = Block::default().borders(Borders::NONE).clone().style(
             Style::default()
                 .bg(Color::Red)
@@ -29,30 +41,35 @@ pub fn render_bottom_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
         let para = Paragraph::new(msg.as_str())
             .alignment(Alignment::Left)
             .block(err_block);
-        frame.render_widget(para, rows[0]);
+        frame.render_widget(para, rows[next_row]);
+        next_row += 1;
 
-        return Ok(());
+        // clear hint line
+        let clear_hint = lang().hotkeys.press_c_clear.as_str().to_string();
+        let hint_block = Block::default()
+            .borders(Borders::NONE)
+            .style(Style::default().bg(Color::Gray).fg(Color::White));
+        let hint_para = Paragraph::new(clear_hint)
+            .alignment(Alignment::Center)
+            .block(hint_block);
+        frame.render_widget(hint_para, rows[next_row]);
+        next_row += 1;
     }
 
     let block = Block::default()
         .borders(Borders::NONE)
         .style(Style::default().bg(Color::Gray).fg(Color::White));
-    let hints = bottom_hints_for_app()?;
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(0)
-        .constraints(
-            (0..hints.len().min(1).max(2))
-                .map(|_| Constraint::Length(1))
-                .collect::<Vec<Constraint>>(),
-        )
-        .split(area);
-    for (i, hint_row) in hints.into_iter().enumerate().take(rows.len()) {
+    // Render remaining hint rows (if any) after error lines
+    for (i, hint_row) in hints
+        .into_iter()
+        .enumerate()
+        .take(rows_count.saturating_sub(err_lines))
+    {
         let text = format_hints(hint_row);
         let p = Paragraph::new(text)
             .alignment(Alignment::Center)
             .block(block.clone());
-        frame.render_widget(p, rows[i]);
+        frame.render_widget(p, rows[next_row + i]);
     }
 
     Ok(())
