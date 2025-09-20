@@ -8,22 +8,19 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-/// Handle input for config panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
-    // Create a snapshot of the current status (previously passed as `app`)
-    let snapshot = read_status(|s| Ok(s.clone()))?;
     // Derive selected cursor in panel
-    let selected_cursor = super::components::derive_selection(&snapshot);
+    let selected_cursor = super::components::derive_selection()?;
 
     // Check if we're in edit mode (simplified - using global buffer)
-    let in_edit = !snapshot.temporarily.input_raw_buffer.is_empty();
+    let in_edit = read_status(|s| Ok(!s.temporarily.input_raw_buffer.is_empty()))?;
 
     if in_edit {
         // We are editing a field: handle editing keys (but not character input - that's handled globally)
         match key.code {
             KeyCode::Enter => {
                 // Commit edit: write buffer back to appropriate field
-                let buffer_content = snapshot.temporarily.input_raw_buffer.clone();
+                let buffer_content = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
 
                 write_status(|s| {
                     // Clear the global buffer
@@ -298,14 +295,14 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             KeyCode::Esc => {
                 // Return to entry page
-                let cursor = if let types::Page::ConfigPanel { selected_port, .. } = &snapshot.page
-                {
-                    Some(types::cursor::EntryCursor::Com {
-                        idx: *selected_port,
-                    })
-                } else {
-                    None
-                };
+                let cursor = read_status(|s| {
+                    if let types::Page::ConfigPanel { selected_port, .. } = s.page {
+                        Ok(Some(types::cursor::EntryCursor::Com { idx: selected_port }))
+                    } else {
+                        Ok(None)
+                    }
+                })?;
+
                 write_status(|s| {
                     s.page = types::Page::Entry { cursor };
                     Ok(())

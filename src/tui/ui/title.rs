@@ -52,7 +52,7 @@ pub fn render_title_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
     // Spinner color: yellow when busy, white when idle.
     let busy = read_status(|s| Ok(s.temporarily.busy.busy))?;
     let frame_idx = read_status(|s| Ok(s.temporarily.busy.spinner_frame))? as usize;
-    let frames = ['▙', '▌', '▛', '▀', '▜', '▐', '▟', '▄'];
+    let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
     let ch = frames[frame_idx % frames.len()];
     // leading spaces
     breadcrumb_spans.push(Span::raw("  "));

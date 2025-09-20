@@ -7,8 +7,6 @@ use crate::{
     tui::utils::bus::{Bus, UiToCore},
 };
 
-/// Handle input for log panel. Sends commands via UiToCore.
-/// Handle input for log panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::PageUp => {
@@ -53,7 +51,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 }
 
-/// Handle leaving the log panel back to config panel
 fn handle_leave_page(bus: &Bus) -> Result<()> {
     let selected_port = read_status(|s| {
         if let types::Page::LogPanel { selected_port, .. } = &s.page {
@@ -78,7 +75,6 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-/// Handle toggling follow mode for logs
 fn handle_toggle_follow(bus: &Bus) -> Result<()> {
     // Toggle the auto-scroll flag for the current port
     if let types::Page::LogPanel { selected_port, .. } = read_status(|s| Ok(s.page.clone()))? {
@@ -97,7 +93,6 @@ fn handle_toggle_follow(bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-/// Handle clearing logs for the current port
 fn handle_clear_logs(bus: &Bus) -> Result<()> {
     // Clear logs for the current port
     if let types::Page::LogPanel { selected_port, .. } = read_status(|s| Ok(s.page.clone()))? {
