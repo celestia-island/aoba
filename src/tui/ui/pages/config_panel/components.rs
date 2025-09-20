@@ -4,19 +4,19 @@ use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use crate::{
     i18n::lang,
-    protocol::status::{types, write_status},
+    protocol::status::{read_status, types, write_status},
     tui::ui::components::styled_label::styled_spans,
 };
 
 /// Derive selection index for config panel from current page state
-pub fn derive_selection(app: &types::Status) -> types::cursor::ConfigPanelCursor {
+pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
     // For config panel, we need to determine which field is currently selected
-    match &app.page {
+    match read_status(|s| Ok(s.page.clone()))? {
         types::Page::ConfigPanel { cursor, .. } => {
             // cursor tracks both navigation and editing state
-            *cursor
+            Ok(cursor)
         }
-        _ => types::cursor::ConfigPanelCursor::EnablePort,
+        _ => Ok(types::cursor::ConfigPanelCursor::EnablePort),
     }
 }
 
@@ -29,42 +29,41 @@ pub fn derive_selection(app: &types::Status) -> types::cursor::ConfigPanelCursor
 ///
 /// Each line has the format: [Label____] [>] [Value_____] with proper spacing.
 pub fn render_kv_lines_with_indicators(sel_idx: usize) -> Result<Vec<Line<'static>>> {
-    crate::protocol::status::read_status(|app| {
-        let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut lines: Vec<Line<'static>> = Vec::new();
 
-        // Get current port data
-        let port_data = if let Some(port_name) = app.ports.order.get(sel_idx) {
-            app.ports.map.get(port_name)
+    // Get current port data
+    let port_data =
+        if let Some(port_name) = read_status(|s| Ok(s.ports.order.get(sel_idx).cloned()))? {
+            read_status(|s| Ok(s.ports.map.get(&port_name).cloned()))?
         } else {
             None
         };
 
-        // Determine current selection for styling
-        let current_selection = derive_selection(app);
+    // Determine current selection for styling
+    let current_selection = derive_selection()?;
 
-        // GROUP 1: Port control and protocol
-        render_group1_with_indicators(&mut lines, port_data, current_selection)?;
+    // GROUP 1: Port control and protocol
+    render_group1_with_indicators(&mut lines, port_data.as_ref(), current_selection)?;
 
-        // Empty line between groups
-        lines.push(Line::from(vec![Span::raw("")]));
+    // Empty line between groups
+    lines.push(Line::from(vec![Span::raw("")]));
 
-        // GROUP 2: Serial parameters
-        render_group2_with_indicators(&mut lines, port_data, current_selection)?;
+    // GROUP 2: Serial parameters
+    render_group2_with_indicators(&mut lines, port_data.as_ref(), current_selection)?;
 
-        // Empty line between groups
-        lines.push(Line::from(vec![Span::raw("")]));
+    // Empty line between groups
+    lines.push(Line::from(vec![Span::raw("")]));
 
-        // GROUP 3: Communication log
-        render_group3_with_indicators(&mut lines, current_selection)?;
+    // GROUP 3: Communication log
+    render_group3_with_indicators(&mut lines, current_selection)?;
 
-        Ok(lines)
-    })
+    Ok(lines)
 }
 
 /// Render Group 1: Enable Port toggle + Protocol Mode selector + Protocol Config navigation
 fn render_group1_with_indicators(
     lines: &mut Vec<Line<'static>>,
-    port_data: Option<&crate::protocol::status::types::port::PortData>,
+    port_data: Option<&types::port::PortData>,
     current_selection: types::cursor::ConfigPanelCursor,
 ) -> Result<()> {
     // 1. Enable Port toggle
@@ -118,7 +117,7 @@ fn render_group1_with_indicators(
 /// Render Group 2: Serial port basic parameters
 fn render_group2_with_indicators(
     lines: &mut Vec<Line<'static>>,
-    port_data: Option<&crate::protocol::status::types::port::PortData>,
+    port_data: Option<&types::port::PortData>,
     current_selection: types::cursor::ConfigPanelCursor,
 ) -> Result<()> {
     let serial_fields = [
@@ -229,32 +228,30 @@ fn create_config_line(
 
 /// Get serial parameter value by cursor type
 fn get_serial_param_value_by_cursor(
-    port_data: Option<&crate::protocol::status::types::port::PortData>,
+    port_data: Option<&types::port::PortData>,
     cursor_type: types::cursor::ConfigPanelCursor,
 ) -> String {
     if let Some(pd) = port_data {
         if let Some(rt) = &pd.runtime {
             match cursor_type {
-                types::cursor::ConfigPanelCursor::BaudRate => rt.current_cfg.baud.to_string(),
-                types::cursor::ConfigPanelCursor::DataBits => rt.current_cfg.data_bits.to_string(),
-                types::cursor::ConfigPanelCursor::Parity => format!("{:?}", rt.current_cfg.parity),
-                types::cursor::ConfigPanelCursor::StopBits => rt.current_cfg.stop_bits.to_string(),
-                _ => "??".to_string(),
-            }
-        } else {
-            match cursor_type {
-                types::cursor::ConfigPanelCursor::BaudRate => "9600".to_string(),
-                types::cursor::ConfigPanelCursor::DataBits => "8".to_string(),
-                types::cursor::ConfigPanelCursor::Parity => {
-                    lang().protocol.common.parity_none.clone()
+                types::cursor::ConfigPanelCursor::BaudRate => {
+                    return rt.current_cfg.baud.to_string()
                 }
-                types::cursor::ConfigPanelCursor::StopBits => "1".to_string(),
-                _ => "??".to_string(),
+                types::cursor::ConfigPanelCursor::DataBits => {
+                    return rt.current_cfg.data_bits.to_string()
+                }
+                types::cursor::ConfigPanelCursor::Parity => {
+                    return format!("{:?}", rt.current_cfg.parity)
+                }
+                types::cursor::ConfigPanelCursor::StopBits => {
+                    return rt.current_cfg.stop_bits.to_string()
+                }
+                _ => return "??".to_string(),
             }
         }
-    } else {
-        "??".to_string()
     }
+
+    "??".to_string()
 }
 
 /// Render Group 3: Communication log access (hyperlink-style)

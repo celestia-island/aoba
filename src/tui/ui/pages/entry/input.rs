@@ -103,10 +103,6 @@ pub fn handle_move_next(app: &Status, cursor: cursor::EntryCursor) -> Result<()>
     Ok(())
 }
 
-/// Compatibility wrapper used by pages/mod.rs which expects signature:
-/// fn handle_input(key: KeyEvent, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
-/// Compatibility wrapper used by pages/mod.rs which expects signature:
-/// fn handle_input(key: KeyEvent, bus: &Bus, snap: &types::ui::EntryStatus) -> bool
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Snapshot previously provided by caller as `app`
     let app = read_status(|s| Ok(s.clone()))?;
@@ -222,9 +218,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 }
 
-/// Handle mouse events for About page (scroll wheel). Return true when consumed.
-pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
-    match me.kind {
+pub fn handle_mouse(event: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
+    match event.kind {
         MouseEventKind::ScrollUp => {
             handle_move_prev(
                 &read_status(|s| Ok(s.clone()))?,

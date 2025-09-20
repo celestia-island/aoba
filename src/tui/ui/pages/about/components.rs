@@ -182,31 +182,3 @@ pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Vec<Line<
 
     out
 }
-
-use anyhow::Result;
-
-use crate::protocol::status::{types, write_status};
-
-/// Scroll the About page view offset up by `amount` (saturating at 0).
-pub fn about_scroll_up(amount: usize) -> Result<()> {
-    write_status(|s| {
-        if let types::Page::About { view_offset } = &mut s.page {
-            if *view_offset > 0 {
-                *view_offset = view_offset.saturating_sub(amount);
-            }
-        }
-        Ok(())
-    })?;
-    Ok(())
-}
-
-/// Scroll the About page view offset down by `amount`.
-pub fn about_scroll_down(amount: usize) -> Result<()> {
-    write_status(|s| {
-        if let types::Page::About { view_offset } = &mut s.page {
-            *view_offset = view_offset.saturating_add(amount);
-        }
-        Ok(())
-    })?;
-    Ok(())
-}

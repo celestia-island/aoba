@@ -64,35 +64,61 @@ impl GuiApp {
         let bus = Bus::new(core_rx, ui_tx.clone());
 
         // Spawn a demo core thread that listens for UI commands and replies.
-        thread::spawn(move || loop {
-            if let Ok(msg) = ui_rx.recv() {
-                match msg {
-                    UiToCore::Refresh => {
-                        log::info!("[GUI-core-demo] received Refresh");
-                        let _ = core_tx.send(CoreToUi::Refreshed);
-                    }
-                    UiToCore::Quit => {
-                        log::info!("[GUI-core-demo] received Quit, exiting demo core");
-                        let _ = core_tx.send(CoreToUi::Refreshed);
-                        break;
-                    }
-                    UiToCore::PausePolling => {
-                        let _ = core_tx.send(CoreToUi::Refreshed);
-                    }
-                    UiToCore::ResumePolling => {
-                        let _ = core_tx.send(CoreToUi::Refreshed);
-                    }
-                    UiToCore::ToggleRuntime(_) => {
-                        // Demo GUI core ignores ToggleRuntime
-                        let _ = core_tx.send(CoreToUi::Refreshed);
-                    }
-                }
+        thread::spawn(move || {
+            if let Err(err) = run_demo_core(ui_rx, core_tx) {
+                log::error!("Demo core thread exited with error: {}", err);
             }
-            thread::sleep(Duration::from_millis(50));
         });
 
         Self { bus }
     }
+}
+
+// Extracted demo core loop so it can return a Result and use `?` on sends.
+fn run_demo_core(ui_rx: flume::Receiver<UiToCore>, core_tx: flume::Sender<CoreToUi>) -> Result<()> {
+    loop {
+        match ui_rx.recv() {
+            Ok(msg) => match msg {
+                UiToCore::Refresh => {
+                    log::info!("Received Refresh");
+                    core_tx
+                        .send(CoreToUi::Refreshed)
+                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                }
+                UiToCore::Quit => {
+                    log::info!("Received Quit, exiting demo core");
+                    core_tx
+                        .send(CoreToUi::Refreshed)
+                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                    break;
+                }
+                UiToCore::PausePolling => {
+                    core_tx
+                        .send(CoreToUi::Refreshed)
+                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                }
+                UiToCore::ResumePolling => {
+                    core_tx
+                        .send(CoreToUi::Refreshed)
+                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                }
+                UiToCore::ToggleRuntime(_) => {
+                    // Demo GUI core ignores ToggleRuntime
+                    core_tx
+                        .send(CoreToUi::Refreshed)
+                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                }
+            },
+            Err(_) => {
+                // Channel closed; exit gracefully
+                log::info!("`ui_rx` closed, exiting demo core");
+                break;
+            }
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+
+    Ok(())
 }
 
 impl eframe::App for GuiApp {
