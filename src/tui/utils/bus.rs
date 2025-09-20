@@ -1,7 +1,7 @@
 use flume::{Receiver, Sender};
 
 /// Messages sent from UI thread to core worker thread.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UiToCore {
     /// Request an immediate full port / device refresh (equivalent to pressing 'r').
     Refresh,
@@ -16,7 +16,7 @@ pub enum UiToCore {
 }
 
 /// Messages sent from core worker thread back to UI thread.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CoreToUi {
     /// Core completed a cycle of background work; UI may redraw.
     Tick,
@@ -29,7 +29,7 @@ pub enum CoreToUi {
 }
 
 /// Simple holder passed into UI loop containing the receiving side from core and the sending side to core.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Bus {
     pub core_rx: Receiver<CoreToUi>,
     pub ui_tx: Sender<UiToCore>,

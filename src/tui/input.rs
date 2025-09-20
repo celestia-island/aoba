@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
@@ -59,27 +59,26 @@ pub fn map_key(code: KeyCode) -> Action {
 }
 
 /// Spawn the input handling thread that processes keyboard and mouse events
-pub fn spawn_input_thread(
-    bus: Bus,
-    thr_tx: flume::Sender<Result<()>>,
-) -> std::thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let res = (|| -> Result<()> {
-            loop {
-                // Poll for input. Keep this loop tight and avoid toggling mouse
-                // capture here — constantly enabling/disabling mouse capture
-                // interferes with terminal selection and adds latency.
-                if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
-                    if let Ok(ev) = crossterm::event::read() {
-                        // handle_event now returns Result<()> and performs any quit
-                        // signaling itself. Propagate errors, otherwise continue.
-                        handle_event(ev, &bus)?;
-                    }
-                }
+pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
+    loop {
+        // Poll for input. Keep this loop tight and avoid toggling mouse
+        // capture here — constantly enabling/disabling mouse capture
+        // interferes with terminal selection and adds latency.
+        if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
+            if let Ok(event) = crossterm::event::read() {
+                // handle_event now returns Result<()> and performs any quit
+                // signaling itself. Propagate errors, otherwise continue.
+                handle_event(event, &bus)?;
             }
-        })();
-        let _ = thr_tx.send(res);
-    })
+        }
+
+        // Check for kill signal to exit the input thread
+        if let Ok(_) = kill_rx.try_recv() {
+            break;
+        }
+    }
+
+    Ok(())
 }
 
 fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
