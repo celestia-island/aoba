@@ -4,14 +4,14 @@ use ratatui::{prelude::*, text::Line};
 
 use crate::{
     i18n::lang,
-    protocol::status::{types, write_status},
+    protocol::status::{read_status, types, write_status},
     tui::ui::components::boxed_paragraph::render_boxed_paragraph,
 };
 
 /// Check if a subpage is currently active for modbus panel
 pub fn is_subpage_active() -> bool {
     // Read status and determine subpage active
-    if let Ok(active) = crate::protocol::status::read_status(|app| {
+    if let Ok(active) = read_status(|app| {
         Ok(matches!(
             app.page,
             types::Page::ConfigPanel { .. } | types::Page::ModbusDashboard { .. }

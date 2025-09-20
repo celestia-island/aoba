@@ -59,7 +59,10 @@ pub fn map_key(code: KeyCode) -> Action {
 }
 
 /// Spawn the input handling thread that processes keyboard and mouse events
-pub fn spawn_input_thread(bus: Bus, thr_tx: flume::Sender<Result<()>>) {
+pub fn spawn_input_thread(
+    bus: Bus,
+    thr_tx: flume::Sender<Result<()>>,
+) -> std::thread::JoinHandle<()> {
     thread::spawn(move || {
         let res = (|| -> Result<()> {
             loop {
@@ -76,15 +79,11 @@ pub fn spawn_input_thread(bus: Bus, thr_tx: flume::Sender<Result<()>>) {
             }
         })();
         let _ = thr_tx.send(res);
-    });
+    })
 }
 
-/// Handle a single input event (keyboard or mouse)
-fn handle_event(ev: crossterm::event::Event, bus: &Bus) -> Result<()> {
-    // Support both Key and Mouse scroll events. Map Mouse ScrollUp/Down to
-    // synthesized KeyEvent Up/Down so existing key handlers can be reused.
-
-    match ev {
+fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
+    match event {
         crossterm::event::Event::Key(key) => {
             // Early catch for Ctrl + C at the top-level so the app can exit immediately.
             if key.kind == crossterm::event::KeyEventKind::Press
@@ -114,7 +113,6 @@ fn handle_event(ev: crossterm::event::Event, bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-/// Handle a keyboard event
 fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
     if key.kind != crossterm::event::KeyEventKind::Press {
         return Ok(()); // Ignore non-initial key press (repeat / release)

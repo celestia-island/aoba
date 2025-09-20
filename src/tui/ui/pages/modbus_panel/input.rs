@@ -7,7 +7,6 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-/// Handle input for ModBus panel. Sends commands via UiToCore.
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::PageUp => {
@@ -105,8 +104,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 }
 
-/// Handle leaving the modbus dashboard back to entry page
-/// Handle leaving the ModBus dashboard back to config panel
 fn handle_leave_page(bus: &Bus) -> Result<()> {
     use crate::tui::utils::bus::UiToCore;
 

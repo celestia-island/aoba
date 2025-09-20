@@ -4,35 +4,54 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use crate::{
     protocol::status::{types, write_status},
-    tui::{
-        ui::pages::about::components::{about_scroll_down, about_scroll_up},
-        utils::bus::Bus,
-    },
+    tui::utils::bus::Bus,
 };
 
-/// Handle input for about page. Sends navigation commands via UiToCore.
-/// Handle input for about page. Sends navigation commands via UiToCore.
+/// Scroll the About page view offset up by `amount` (saturating at 0).
+pub fn handle_scroll_up(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::About { view_offset } = &mut s.page {
+            if *view_offset > 0 {
+                *view_offset = view_offset.saturating_sub(amount);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the About page view offset down by `amount`.
+pub fn handle_scroll_down(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::About { view_offset } = &mut s.page {
+            *view_offset = view_offset.saturating_add(amount);
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     const PAGE_SIZE: usize = 10;
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
-            about_scroll_up(1)?;
+            handle_scroll_up(1)?;
             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            about_scroll_down(1)?;
+            handle_scroll_down(1)?;
             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::PageUp => {
-            about_scroll_up(PAGE_SIZE)?;
+            handle_scroll_up(PAGE_SIZE)?;
             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::PageDown => {
-            about_scroll_down(PAGE_SIZE)?;
+            handle_scroll_down(PAGE_SIZE)?;
             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
@@ -50,15 +69,14 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 }
 
-/// Handle mouse events for About page (scroll wheel). Return true when consumed.
-pub fn handle_mouse(me: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
-    match me.kind {
+pub fn handle_mouse(event: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
+    match event.kind {
         MouseEventKind::ScrollUp => {
-            about_scroll_up(1)?;
+            handle_scroll_up(1)?;
             Ok(())
         }
         MouseEventKind::ScrollDown => {
-            about_scroll_down(1)?;
+            handle_scroll_down(1)?;
             Ok(())
         }
         _ => Ok(()),
