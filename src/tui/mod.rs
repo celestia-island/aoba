@@ -4,7 +4,7 @@ pub mod utils;
 
 use anyhow::{anyhow, Result};
 use std::{
-    io::{self, Stdout},
+    io,
     sync::{Arc, RwLock},
     thread,
     time::Duration,
@@ -27,12 +27,9 @@ use crate::{
 pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
-    // Setup terminal
-    let mut stdout = io::stdout();
-    crossterm::terminal::enable_raw_mode()?;
-    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(&mut stdout);
-    let mut terminal = Terminal::new(backend)?;
+    // Terminal is initialized inside the rendering thread to avoid sharing
+    // a Terminal instance across threads. The rendering loop will create
+    // and restore the terminal on its own.
 
     let app = Arc::new(RwLock::new(Status::default()));
 
@@ -66,91 +63,102 @@ pub fn start() -> Result<()> {
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
 
-        move || {
-            let _ = thr_tx.send(run_core_thread(ui_rx, core_tx));
-        }
+        move || thr_tx.send(run_core_thread(ui_rx, core_tx))
     });
 
     // Thread 2: Input handling thread - processes keyboard input
-    let input_handle = input::spawn_input_thread(bus.clone(), thr_tx.clone());
+    let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
+    let input_handle = thread::spawn({
+        let bus = bus.clone();
+        move || input::run_input_thread(bus, input_kill_rx)
+    });
 
     // Thread 3: UI rendering loop - handles rendering based on Status
-    let res = run_rendering_loop(&mut terminal, bus, thr_rx);
+    // The rendering thread will initialize and restore the terminal itself.
+    let render_handle = thread::spawn(move || run_rendering_loop(bus, thr_rx));
 
-    // Restore terminal
+    // Rendering thread is responsible for terminal restoration; nothing to do here.
+
+    core_handle
+        .join()
+        .map_err(|err| anyhow!("Failed to join core thread: {:?}", err))??;
+    render_handle
+        .join()
+        .map_err(|err| anyhow!("Failed to join render thread: {:?}", err))??;
+
+    input_kill_tx.send(())?;
+    input_handle
+        .join()
+        .map_err(|err| anyhow!("Failed to join input thread: {:?}", err))??;
+    Ok(())
+}
+
+fn run_rendering_loop(bus: Bus, thr_rx: flume::Receiver<Result<()>>) -> Result<()> {
+    // Initialize terminal inside rendering thread to avoid cross-thread Terminal usage
     let mut stdout = io::stdout();
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(&mut stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Ensure terminal is restored on any early return
+    let result = (|| {
+        // Check whether any watched thread reported an error or exit
+        loop {
+            if let Ok(res) = thr_rx.try_recv() {
+                if let Err(err) = res {
+                    eprintln!("thread exited with error: {:#}", err);
+                    return Err(err);
+                } else {
+                    // thread exited successfully - treat as fatal and exit
+                    log::info!("a monitored thread exited cleanly; shutting down");
+                    return Ok(());
+                }
+            }
+            // Wait for core signals with timeout
+            let should_quit = match bus.core_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(CoreToUi::Tick)
+                | Ok(CoreToUi::Refreshed)
+                | Ok(CoreToUi::Error)
+                | Err(flume::RecvTimeoutError::Timeout) => {
+                    // Redraw on refresh
+                    false
+                }
+                _ => {
+                    // Core thread died, exit
+                    true
+                }
+            };
+
+            if should_quit {
+                break;
+            }
+
+            terminal.draw(|frame| {
+                render_ui(frame).expect("Render failed");
+            })?;
+        }
+
+        terminal.clear()?;
+        Ok(())
+    })();
+
+    // Restore terminal state
     crossterm::execute!(
-        stdout,
+        io::stdout(),
         crossterm::terminal::LeaveAlternateScreen,
         crossterm::event::DisableMouseCapture
     )?;
     crossterm::terminal::disable_raw_mode()?;
 
-    // Wait for the other threads to finish before returning from start().
-    // We join them to ensure the application only exits once core and input threads have terminated.
-    // Convert panics into Err so callers of start() observe thread panics as errors.
-    if let Err(e) = core_handle.join() {
-        return Err(anyhow!("core thread panicked: {:?}", e));
-    }
-    if let Err(e) = input_handle.join() {
-        return Err(anyhow!("input thread panicked: {:?}", e));
-    }
-
-    // We expect two monitored threads: core and input. The rendering loop will
-    // return early if any monitored thread returns Err, or only return Ok when
-    // all monitored threads have exited successfully.
-    res
-}
-
-fn run_rendering_loop(
-    terminal: &mut Terminal<CrosstermBackend<&mut Stdout>>,
-    bus: crate::tui::utils::bus::Bus,
-    thr_rx: flume::Receiver<Result<()>>,
-) -> Result<()> {
-    // Check whether any watched thread reported an error or exit
-    loop {
-        if let Ok(res) = thr_rx.try_recv() {
-            if let Err(err) = res {
-                eprintln!("thread exited with error: {:#}", err);
-                return Err(err);
-            } else {
-                // thread exited successfully - treat as fatal and exit
-                log::info!("a monitored thread exited cleanly; shutting down");
-                return Ok(());
-            }
-        }
-        // Wait for core signals with timeout
-        let should_quit = match bus.core_rx.recv_timeout(Duration::from_millis(100)) {
-            Ok(CoreToUi::Tick)
-            | Ok(CoreToUi::Refreshed)
-            | Ok(CoreToUi::Error)
-            | Err(flume::RecvTimeoutError::Timeout) => {
-                // Redraw on refresh
-                false
-            }
-            _ => {
-                // Core thread died, exit
-                true
-            }
-        };
-
-        if should_quit {
-            break;
-        }
-
-        terminal.draw(|frame| {
-            render_ui(frame).expect("Render failed");
-        })?;
-    }
-
-    terminal.clear()?;
-    Ok(())
+    // propagate inner result
+    result
 }
 
 // Extracted core thread main function so it can return Result and use `?` for fallible ops.
 fn run_core_thread(
-    ui_rx: flume::Receiver<crate::tui::utils::bus::UiToCore>,
-    core_tx: flume::Sender<crate::tui::utils::bus::CoreToUi>,
+    ui_rx: flume::Receiver<UiToCore>,
+    core_tx: flume::Sender<CoreToUi>,
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30); // Reduced from 2s to 30s
