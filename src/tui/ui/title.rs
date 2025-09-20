@@ -11,11 +11,6 @@ use crate::{
     protocol::status::{read_status, types},
 };
 
-pub fn render_title(f: &mut Frame, area: Rect) -> Result<()> {
-    render_title_readonly(f, area)?;
-    Ok(())
-}
-
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|s| Ok(s.ports.order.len()))? {
         let name = &read_status(|s| Ok(s.ports.order[selected_port].clone()))?;
@@ -32,7 +27,7 @@ fn get_port_name(selected_port: usize) -> Result<String> {
     Ok(port_name)
 }
 
-pub fn render_title_readonly(frame: &mut Frame, area: Rect) -> Result<()> {
+pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
     // Horizontal layout: left (spinner + breadcrumb) + right (reserved)
     let chunks = Layout::default()
         .direction(Direction::Horizontal)

@@ -3,7 +3,6 @@ use std::cmp::min;
 use ratatui::{prelude::*, text::Line};
 
 use crate::{
-    i18n::lang,
     protocol::status::{read_status, types, write_status},
     tui::ui::components::boxed_paragraph::render_boxed_paragraph,
 };
@@ -66,14 +65,6 @@ pub fn calculate_scroll_params(lines: &[Line], area: Rect, cursor_line: usize) -
 pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>, view_offset: usize) {
     // Use the view_offset from page state instead of calculating scroll params
     render_boxed_paragraph(frame, area, lines, view_offset, None, false, true);
-}
-
-/// Get bottom hints for modbus panel
-pub fn get_modbus_bottom_hints() -> Vec<Vec<String>> {
-    vec![
-        vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
-        vec!["Enter: Edit".to_string(), "Del: Delete".to_string()],
-    ]
 }
 
 /// Scroll the ModbusDashboard view offset up by `amount` (saturating at 0).

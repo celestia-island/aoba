@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use ratatui::prelude::*;
 
 use crate::{
@@ -10,18 +10,23 @@ use crate::{
     },
 };
 
-pub fn page_bottom_hints() -> Vec<Vec<String>> {
+pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     let in_subpage_editing = is_in_subpage_editing();
     let subpage_active = is_subpage_active();
 
     let mut base = vec![
         vec![lang().hotkeys.hint_move_vertical.as_str().to_string()],
-        vec!["f: Toggle follow".to_string(), "c: Clear logs".to_string()],
+        vec![
+            lang().tabs.log.hint_follow_on.as_str().to_string(),
+            lang().hotkeys.press_c_clear.as_str().to_string(),
+        ],
     ];
     if !subpage_active && !in_subpage_editing {
-        base.push(vec![lang().hotkeys.press_q_quit.as_str().to_string()]);
+        base.get_mut(0)
+            .ok_or(anyhow!("Failed to get mutable reference to bottom hints"))?
+            .push(lang().hotkeys.press_q_quit.as_str().to_string());
     }
-    base
+    Ok(base)
 }
 
 /// Render the log panel. Only reads from Status, does not mutate.

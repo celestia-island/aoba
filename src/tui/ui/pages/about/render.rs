@@ -11,8 +11,12 @@ use crate::{
     },
 };
 
-pub fn page_bottom_hints() -> Vec<Vec<String>> {
-    vec![vec![lang().hotkeys.hint_back_list.as_str().to_string()]]
+pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
+    Ok(vec![vec![lang()
+        .hotkeys
+        .hint_back_list
+        .as_str()
+        .to_string()]])
 }
 
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
