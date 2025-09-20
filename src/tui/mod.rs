@@ -323,27 +323,35 @@ fn run_core_thread(
             .map_err(|e| anyhow!("failed to send Tick: {}", e))?;
         thread::sleep(Duration::from_millis(50));
     }
-
-    // unreachable
 }
 
 /// Render UI function that only reads from Status (immutable reference)
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
+
+    let bottom_height = read_status(|s| {
+        let err_lines = if s.temporarily.error.is_some() { 1 } else { 0 };
+        let hints_count = match crate::tui::ui::pages::bottom_hints_for_app() {
+            Ok(h) => h.len(),
+            Err(_) => 0,
+        };
+        Ok(hints_count + err_lines)
+    })?;
+
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
         .constraints([
             Constraint::Length(1), // title
-            Constraint::Min(0),    // main
-            Constraint::Length(2),
+            Constraint::Min(3),    // main
+            Constraint::Length(bottom_height as u16),
         ])
         .split(area);
 
     // Use the new pages module for rendering
-    crate::tui::ui::title::render_title_readonly(frame, main_chunks[0])?;
+    crate::tui::ui::title::render_title(frame, main_chunks[0])?;
     crate::tui::ui::pages::render_panels(frame, main_chunks[1])?;
-    crate::tui::ui::bottom::render_bottom_readonly(frame, main_chunks[2])?;
+    crate::tui::ui::bottom::render_bottom(frame, main_chunks[2])?;
 
     Ok(())
 }
