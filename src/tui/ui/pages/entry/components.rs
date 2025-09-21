@@ -52,7 +52,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
             let state = p.state.clone();
             let (state_text, state_style) = match state {
                 PortState::Free => (lang().index.port_state_free.clone(), Style::default()),
-                PortState::OccupiedByThis => (
+                PortState::OccupiedByThis { .. } => (
                     lang().index.port_state_owned.clone(),
                     Style::default().fg(Color::Green),
                 ),
