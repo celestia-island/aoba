@@ -1,12 +1,6 @@
-use crate::protocol::status::types::cursor;
 use serde::{Deserialize, Serialize};
 
-// Re-export cursor types so existing `types::ui::EntryCursor` style paths keep working.
-pub use crate::protocol::status::types::cursor::{
-    ConfigPanelCursor, EntryCursor, LogPanelCursor, ModbusDashboardCursor,
-};
-
-use std::fmt;
+use crate::protocol::status::types;
 
 /// A small enum used to represent temporary input buffers across the UI.
 /// - `None` means there's no active temporary buffer
@@ -25,8 +19,8 @@ impl Default for InputRawBuffer {
     }
 }
 
-impl fmt::Display for InputRawBuffer {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for InputRawBuffer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InputRawBuffer::None => write!(f, ""),
             InputRawBuffer::Index(i) => write!(f, "{}", i),
@@ -41,6 +35,71 @@ impl fmt::Display for InputRawBuffer {
 impl From<usize> for InputRawBuffer {
     fn from(i: usize) -> Self {
         InputRawBuffer::Index(i)
+    }
+}
+
+impl InputRawBuffer {
+    /// Return true if buffer contains no useful content.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            InputRawBuffer::None => true,
+            InputRawBuffer::Index(_) => false,
+            InputRawBuffer::String(v) => v.is_empty(),
+        }
+    }
+
+    /// Clear the buffer (becomes None)
+    pub fn clear(&mut self) {
+        *self = InputRawBuffer::None;
+    }
+
+    /// Push a char into the string buffer, creating one if necessary.
+    pub fn push(&mut self, c: char) {
+        match self {
+            InputRawBuffer::String(v) => {
+                let mut buf = [0u8; 4];
+                let s = c.encode_utf8(&mut buf);
+                v.extend_from_slice(s.as_bytes());
+            }
+            _ => {
+                let mut v = Vec::new();
+                let mut buf = [0u8; 4];
+                let s = c.encode_utf8(&mut buf);
+                v.extend_from_slice(s.as_bytes());
+                *self = InputRawBuffer::String(v);
+            }
+        }
+    }
+
+    /// Pop the last character from the string buffer (if any).
+    pub fn pop(&mut self) -> Option<char> {
+        match self {
+            InputRawBuffer::String(v) => {
+                // Convert to String, pop last char, write back
+                if let Ok(mut s) = String::from_utf8(v.clone()) {
+                    let ch = s.pop();
+                    *v = s.into_bytes();
+                    ch
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// Return an owned Vec<char> of the internal string (or empty vec).
+    pub fn chars(&self) -> Vec<char> {
+        self.as_string().chars().collect()
+    }
+
+    /// Return an owned String representation of the buffer
+    pub fn as_string(&self) -> String {
+        match self {
+            InputRawBuffer::String(v) => String::from_utf8_lossy(v).into_owned(),
+            InputRawBuffer::Index(i) => i.to_string(),
+            InputRawBuffer::None => String::new(),
+        }
     }
 }
 
@@ -106,7 +165,7 @@ pub struct ModbusDashboardStatus {
     pub selected_port: usize,
 
     pub cursor: usize,
-    pub editing_field: Option<crate::protocol::status::types::modbus::EditingField>,
+    pub editing_field: Option<types::modbus::EditingField>,
     pub input_buffer: String,
     pub edit_choice_index: Option<usize>,
     pub edit_confirmed: bool,
@@ -114,7 +173,7 @@ pub struct ModbusDashboardStatus {
     pub master_cursor: usize,
     pub master_field_selected: bool,
     pub master_field_editing: bool,
-    pub master_edit_field: Option<crate::protocol::status::types::modbus::MasterEditField>,
+    pub master_edit_field: Option<types::modbus::MasterEditField>,
     pub master_edit_index: Option<usize>,
     pub master_input_buffer: String,
     pub poll_round_index: usize,
@@ -133,5 +192,5 @@ pub struct AboutStatus {
 
 #[derive(Debug, Clone)]
 pub struct EntryStatus {
-    pub cursor: Option<cursor::EntryCursor>,
+    pub cursor: Option<types::cursor::EntryCursor>,
 }

@@ -1,8 +1,7 @@
 use chrono::{DateTime, Local};
-use serialport::SerialPortInfo;
 use std::sync::{Arc, Mutex};
 
-use crate::protocol::{runtime::PortRuntimeHandle, tty::PortExtra};
+use crate::protocol::{runtime::PortRuntimeHandle, status::types, tty::PortExtra};
 
 /// A single log entry associated with a specific port.
 #[derive(Debug, Clone)]
@@ -42,9 +41,9 @@ impl SerialPortWrapper {
 pub struct PortData {
     pub port_name: String,
     pub port_type: String,
-    pub info: Option<SerialPortInfo>,
     pub extra: PortExtra,
     pub state: PortState,
+    pub config: PortConfig,
 
     pub logs: Vec<PortLogEntry>,
     pub log_selected: usize,
@@ -58,14 +57,37 @@ impl Default for PortData {
         PortData {
             port_name: String::new(),
             port_type: String::new(),
-            info: None,
             extra: Default::default(),
             state: PortState::Free,
+            config: PortConfig::default(),
             logs: Vec::new(),
             log_selected: 0,
             log_view_offset: 0,
             log_auto_scroll: true,
             log_clear_pending: false,
+        }
+    }
+}
+
+/// Protocol-specific configuration attached to a serial port. Currently only Modbus
+/// is implemented as a placeholder to hold master/slave configuration lists which
+/// can be extended later.
+#[derive(Debug, Clone)]
+pub enum PortConfig {
+    Modbus {
+        /// Stores logical entries related to Modbus (using RegisterEntry as a
+        /// lightweight placeholder for per-endpoint configuration). This can be
+        /// replaced by a more appropriate struct later.
+        masters: Vec<types::modbus::RegisterEntry>,
+        slaves: Vec<types::modbus::RegisterEntry>,
+    },
+}
+
+impl Default for PortConfig {
+    fn default() -> Self {
+        PortConfig::Modbus {
+            masters: Vec::new(),
+            slaves: Vec::new(),
         }
     }
 }

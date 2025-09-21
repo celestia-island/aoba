@@ -23,10 +23,7 @@ fn sanitize_configpanel_cursor() -> Result<()> {
             // Determine occupancy of selected port
             let occupied = if let Some(port_name) = s.ports.order.get(*selected_port) {
                 if let Some(pd) = s.ports.map.get(port_name) {
-                    matches!(
-                        pd.state,
-                        crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
-                    )
+                    matches!(pd.state, types::port::PortState::OccupiedByThis { .. })
                 } else {
                     false
                 }
@@ -92,7 +89,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         match key.code {
             KeyCode::Enter => {
                 // Commit edit: write buffer back to appropriate field
-                let buffer_content = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+                let buffer_content = read_status(|s| match &s.temporarily.input_raw_buffer {
+                    types::ui::InputRawBuffer::String(v) => {
+                        Ok(String::from_utf8_lossy(v).into_owned())
+                    }
+                    types::ui::InputRawBuffer::Index(i) => Ok(i.to_string()),
+                    types::ui::InputRawBuffer::None => Ok(String::new()),
+                })?;
 
                 write_status(|s| {
                     // Clear the global buffer
@@ -110,14 +113,22 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 match cursor {
                                     types::cursor::ConfigPanelCursor::BaudRate => {
                                         if let Ok(baud) = buffer_content.parse::<u32>() {
-                                            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
+                                            if let types::port::PortState::OccupiedByThis {
+                                                runtime,
+                                                ..
+                                            } = &mut pd.state
+                                            {
                                                 runtime.current_cfg.baud = baud;
                                             }
                                         }
                                     }
                                     types::cursor::ConfigPanelCursor::DataBits => {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
-                                            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
+                                            if let types::port::PortState::OccupiedByThis {
+                                                runtime,
+                                                ..
+                                            } = &mut pd.state
+                                            {
                                                 match bits {
                                                     5 => runtime.current_cfg.data_bits = 5,
                                                     6 => runtime.current_cfg.data_bits = 6,
@@ -130,7 +141,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                     }
                                     types::cursor::ConfigPanelCursor::StopBits => {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
-                                            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
+                                            if let types::port::PortState::OccupiedByThis {
+                                                runtime,
+                                                ..
+                                            } = &mut pd.state
+                                            {
                                                 match bits {
                                                     1 => runtime.current_cfg.stop_bits = 1u8,
                                                     2 => runtime.current_cfg.stop_bits = 2u8,
@@ -248,8 +263,15 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get_mut(port_name) {
-                                        if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
-                                            runtime.current_cfg.parity = match runtime.current_cfg.parity {
+                                        if let types::port::PortState::OccupiedByThis {
+                                            runtime,
+                                            ..
+                                        } = &mut pd.state
+                                        {
+                                            runtime.current_cfg.parity = match runtime
+                                                .current_cfg
+                                                .parity
+                                            {
                                                 serialport::Parity::None => serialport::Parity::Odd,
                                                 serialport::Parity::Odd => serialport::Parity::Even,
                                                 serialport::Parity::Even => {
@@ -338,21 +360,39 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get(port_name) {
                                         let init_value = match cursor {
-                                            types::cursor::ConfigPanelCursor::BaudRate => match &pd.state {
-                                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => runtime.current_cfg.baud.to_string(),
-                                                _ => "9600".to_string(),
-                                            },
-                                            types::cursor::ConfigPanelCursor::DataBits => match &pd.state {
-                                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => runtime.current_cfg.data_bits.to_string(),
-                                                _ => "8".to_string(),
-                                            },
-                                            types::cursor::ConfigPanelCursor::StopBits => match &pd.state {
-                                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => runtime.current_cfg.stop_bits.to_string(),
-                                                _ => "1".to_string(),
-                                            },
+                                            types::cursor::ConfigPanelCursor::BaudRate => {
+                                                match &pd.state {
+                                                    types::port::PortState::OccupiedByThis {
+                                                        runtime,
+                                                        ..
+                                                    } => runtime.current_cfg.baud.to_string(),
+                                                    _ => "9600".to_string(),
+                                                }
+                                            }
+                                            types::cursor::ConfigPanelCursor::DataBits => {
+                                                match &pd.state {
+                                                    types::port::PortState::OccupiedByThis {
+                                                        runtime,
+                                                        ..
+                                                    } => runtime.current_cfg.data_bits.to_string(),
+                                                    _ => "8".to_string(),
+                                                }
+                                            }
+                                            types::cursor::ConfigPanelCursor::StopBits => {
+                                                match &pd.state {
+                                                    types::port::PortState::OccupiedByThis {
+                                                        runtime,
+                                                        ..
+                                                    } => runtime.current_cfg.stop_bits.to_string(),
+                                                    _ => "1".to_string(),
+                                                }
+                                            }
                                             _ => String::new(),
                                         };
-                                        s.temporarily.input_raw_buffer = init_value;
+                                        s.temporarily.input_raw_buffer =
+                                            types::ui::InputRawBuffer::String(
+                                                init_value.into_bytes(),
+                                            );
                                     }
                                 }
                             }

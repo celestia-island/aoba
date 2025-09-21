@@ -90,7 +90,7 @@ fn render_group1_with_indicators(
     let enable_label = lang().protocol.common.enable_port.clone();
     let enable_value = if let Some(pd) = port_data {
         match pd.state {
-            crate::protocol::status::types::port::PortState::OccupiedByThis { .. } => {
+            types::port::PortState::OccupiedByThis { .. } => {
                 lang().protocol.common.port_enabled.clone()
             }
             _ => lang().protocol.common.port_disabled.clone(),
@@ -100,25 +100,36 @@ fn render_group1_with_indicators(
     };
 
     let enable_selected = current_selection == types::cursor::ConfigPanelCursor::EnablePort;
+    // Use a Selector-like presentation for the enable switch so it can show as toggled
+    // visually. We'll use the label string (enabled/disabled) as the selector label.
     lines.push(create_line(
         &enable_label,
-        StyledSpanKind::Text {
-            text: &enable_value,
+        StyledSpanKind::Selector {
+            base_prefix: "",
+            label: &enable_value,
             state: if enable_selected {
                 TextState::Selected
             } else {
                 TextState::Normal
             },
-            bold: false,
         },
         enable_selected,
     )?);
 
     // 2. Protocol Mode selector (split from the old combined field)
     let mode_label = lang().protocol.common.protocol_mode.clone();
-    let mode_value = lang().protocol.common.mode_modbus.clone(); // Default to Modbus for now
-
+    // Protocol mode selector: reflect the current enum variant in PortConfig if available.
     let mode_selected = current_selection == types::cursor::ConfigPanelCursor::ProtocolMode;
+
+    // Determine label from port_data.config if present
+    let mode_value = if let Some(pd) = port_data {
+        match &pd.config {
+            types::port::PortConfig::Modbus { .. } => lang().protocol.common.mode_modbus.clone(),
+        }
+    } else {
+        lang().protocol.common.mode_modbus.clone()
+    };
+
     lines.push(create_line(
         &mode_label,
         StyledSpanKind::Selector {
@@ -141,6 +152,7 @@ fn render_group1_with_indicators(
         let config_value = lang().protocol.common.enter_modbus_config.clone(); // Default to Modbus for now
 
         let config_selected = current_selection == types::cursor::ConfigPanelCursor::ProtocolConfig;
+        // This is a navigable text entry (press Enter to go to Modbus panel)
         lines.push(create_line(
             &config_label,
             StyledSpanKind::Text {
@@ -197,16 +209,18 @@ fn render_group2_with_indicators(
         let value = get_serial_param_value_by_cursor(port_data, *cursor_type);
         let selected = current_selection == *cursor_type;
 
+        // Use Selector presentation for serial parameter so cycling via left/right
+        // shows as a selectable list-like widget.
         lines.push(create_line(
             label,
-            StyledSpanKind::Text {
-                text: &value,
+            StyledSpanKind::Selector {
+                base_prefix: "",
+                label: &value,
                 state: if selected {
                     TextState::Selected
                 } else {
                     TextState::Normal
                 },
-                bold: false,
             },
             selected,
         )?);
