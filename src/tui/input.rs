@@ -97,15 +97,17 @@ fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
 
             handle_key_event(key, bus)?;
         }
-        crossterm::event::Event::Mouse(event) => match read_status(|s| Ok(s.page.clone())) {
-            Ok(types::Page::Entry { .. }) => {
-                pages::entry::input::handle_mouse(event, bus)?;
+        crossterm::event::Event::Mouse(event) => {
+            match read_status(|status| Ok(status.page.clone())) {
+                Ok(types::Page::Entry { .. }) => {
+                    pages::entry::input::handle_mouse(event, bus)?;
+                }
+                Ok(types::Page::About { .. }) => {
+                    pages::about::handle_mouse(event, bus)?;
+                }
+                _ => {}
             }
-            Ok(types::Page::About { .. }) => {
-                pages::about::handle_mouse(event, bus)?;
-            }
-            _ => {}
-        },
+        }
         _ => {}
     }
 
@@ -129,13 +131,17 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 
     // Check if we're in global edit mode first
-    if let Ok(snapshot) = read_status(|s| Ok(s.clone())) {
+    if let Ok((page, input_buffer)) = read_status(|status| {
+        Ok((
+            status.page.clone(),
+            status.temporarily.input_raw_buffer.clone(),
+        ))
+    }) {
         // Check if any page is in edit mode
-        let in_edit_mode = match &snapshot.page {
+        let in_edit_mode = match &page {
             types::Page::ConfigPanel { .. } => {
                 // Check if we have an active edit cursor - simplified check
-                !snapshot.temporarily.input_raw_buffer.is_empty()
-                    || matches!(key.code, KeyCode::Enter)
+                !input_buffer.is_empty() || matches!(key.code, KeyCode::Enter)
             }
             _ => false,
         };
@@ -144,8 +150,8 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         if in_edit_mode && matches!(key.code, KeyCode::Char(_)) {
             if let KeyCode::Char(c) = key.code {
                 use crate::protocol::status::write_status;
-                write_status(|s| {
-                    s.temporarily.input_raw_buffer.push(c);
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer.push(c);
                     Ok(())
                 })?;
                 bus.ui_tx
@@ -157,32 +163,28 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
 
     // Route input to appropriate page handler based on current Status.page.
-    if let Ok(snapshot) = read_status(|s| Ok(s.clone())) {
+    if let Ok(page) = read_status(|status| Ok(status.page.clone())) {
         use crate::tui::ui::pages;
 
         // Route by exact page variant and construct the page snapshot inline.
-        match &snapshot.page {
+        match &page {
             types::Page::Entry { .. } => {
                 pages::entry::handle_input(key, bus)?;
-                return Ok(());
             }
             types::Page::About { .. } => {
                 pages::about::handle_input(key, bus)?;
-                return Ok(());
             }
             types::Page::ConfigPanel { .. } => {
                 pages::config_panel::handle_input(key, bus)?;
-                return Ok(());
             }
             types::Page::ModbusDashboard { .. } => {
                 pages::modbus_panel::input::handle_input(key, bus)?;
-                return Ok(());
             }
             types::Page::LogPanel { .. } => {
                 pages::log_panel::handle_input(key, bus)?;
-                return Ok(());
             }
         }
+        return Ok(());
     }
 
     Ok(())

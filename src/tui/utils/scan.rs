@@ -10,7 +10,7 @@ use crate::{
                 self,
                 port::{PortData, PortLogEntry, PortState},
             },
-            write_status,
+            with_port_read, with_port_write, write_status,
         },
         tty::available_ports_enriched,
     },
@@ -28,8 +28,13 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     *scan_in_progress = true;
 
     // Set busy indicator
-    write_status(|s| {
-        s.temporarily.busy.busy = true;
+    // We'll collect runtime handles for removed ports while holding the write lock,
+    // but perform the potentially-blocking Stop+wait operations after releasing it.
+    let mut to_stop: Vec<(String, crate::protocol::runtime::PortRuntimeHandle)> = Vec::new();
+    let mut to_remove_names: Vec<String> = Vec::new();
+
+    write_status(|status| {
+        status.temporarily.busy.busy = true;
         Ok(())
     })?;
 
@@ -40,47 +45,158 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
         .collect::<Vec<_>>()
         .join("\n");
 
-    write_status(|s| {
-        s.ports.order.clear();
-        s.ports.map.clear();
-        for (info, extra) in ports.iter() {
-            let pd = PortData {
-                port_name: info.port_name.clone(),
-                port_type: format!("{:?}", info.port_type),
-                extra: extra.clone(),
-                state: PortState::Free,
-                ..Default::default()
-            };
+    write_status(|status| {
+        // Update existing s.ports.map in-place to preserve PortData instances
+        // (notably any PortState::OccupiedByThis runtime handles). Insert new
+        // entries for newly discovered ports and remove entries for ports no
+        // longer present.
+        let mut new_order: Vec<String> = Vec::new();
+        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-            s.ports.order.push(info.port_name.clone());
-            s.ports.map.insert(info.port_name.clone(), pd);
+        for (info, extra) in ports.iter() {
+            let name = info.port_name.clone();
+            // Update existing PortData in-place if present
+            if let Some(port) = status.ports.map.get(&name) {
+                // update in-place using helper to avoid unwrap panics
+                if let Some(_) = with_port_write(port, |port| {
+                    port.extra = extra.clone();
+                    port.port_type = format!("{:?}", info.port_type);
+                    port.port_name = name.clone();
+                }) {
+                    // updated
+                } else {
+                    log::warn!("scan_ports: failed to acquire write lock for port {}", name);
+                }
+            } else {
+                // Insert a new PortData for newly discovered port (wrap in Arc<RwLock<>>)
+                let pd = PortData {
+                    port_name: name.clone(),
+                    port_type: format!("{:?}", info.port_type),
+                    extra: extra.clone(),
+                    state: PortState::Free,
+                    ..Default::default()
+                };
+                status.ports.map.insert(
+                    name.clone(),
+                    std::sync::Arc::new(std::sync::RwLock::new(pd)),
+                );
+            }
+
+            new_order.push(name.clone());
+            seen.insert(name);
         }
 
-        s.temporarily.scan.last_scan_time = Some(Local::now());
-        s.temporarily.scan.last_scan_info = scan_text.clone();
+        // Determine ports that disappeared since last scan. We'll collect their
+        // names and any runtime handles that need stopping, then perform stop
+        // outside of this write lock to avoid blocking other writers.
+        let to_remove: Vec<String> = status
+            .ports
+            .map
+            .keys()
+            .filter(|k| !seen.contains(*k))
+            .cloned()
+            .collect();
+
+        for key in to_remove.iter() {
+            if let Some(port) = status.ports.map.get(key) {
+                if let Some(opt_rt) = with_port_read(port, |port| match &port.state {
+                    PortState::OccupiedByThis { runtime, .. } => Some(runtime.clone()),
+                    _ => None,
+                }) {
+                    if let Some(rt) = opt_rt {
+                        // Clone runtime handle for stopping later outside the write lock
+                        to_stop.push((key.clone(), rt));
+                    }
+                } else {
+                    log::warn!("scan_ports: failed to acquire read lock for port {}", key);
+                }
+            }
+            to_remove_names.push(key.clone());
+        }
+
+        // Update order for now (may be trimmed again after removals)
+        status.ports.order = new_order;
+
+        status.temporarily.scan.last_scan_time = Some(Local::now());
+        status.temporarily.scan.last_scan_info = scan_text.clone();
         // Clear busy indicator after scan completes
-        s.temporarily.busy.busy = false;
+        status.temporarily.busy.busy = false;
         Ok(())
     })?;
+
+    // Now perform Stop + wait for each runtime outside the write lock to avoid
+    // blocking other status writers. We still collected the runtime handles
+    // while holding the write lock above.
+    for (name, rt) in to_stop.into_iter() {
+        let _ = rt
+            .cmd_tx
+            .send(crate::protocol::runtime::RuntimeCommand::Stop);
+        let mut stopped = false;
+        for _ in 0..10 {
+            match rt
+                .evt_rx
+                .recv_timeout(std::time::Duration::from_millis(100))
+            {
+                Ok(evt) => {
+                    if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
+                        stopped = true;
+                        break;
+                    }
+                }
+                Err(_) => {
+                    // timeout interval, continue waiting
+                }
+            }
+        }
+        if !stopped {
+            log::warn!(
+                "scan_ports: stop did not emit Stopped event within timeout for {}",
+                name
+            );
+        }
+    }
+
+    // After stopping runtimes, remove disappeared ports from the map and
+    // update order to remove references to them.
+    if !to_remove_names.is_empty() {
+        write_status(|status| {
+            for key in to_remove_names.iter() {
+                status.ports.map.remove(key);
+            }
+            // Trim order to remove deleted names
+            status.ports.order.retain(|n| !to_remove_names.contains(n));
+            Ok(())
+        })?;
+    }
 
     *scan_in_progress = false;
 
     // After adding ports to status, spawn per-port runtime listeners.
-    let ports_order = read_status(|s| Ok(s.ports.order.clone()))?;
+    let ports_order = read_status(|status| Ok(status.ports.order.clone()))?;
     for port_name in ports_order.iter() {
-        if let Some(pd) = read_status(|s| Ok(s.ports.map.get(port_name).cloned()))? {
-            if let types::port::PortState::OccupiedByThis { runtime, .. } = pd.state {
-                let evt_rx = runtime.evt_rx.clone();
-                let pn = port_name.clone();
-                std::thread::spawn(move || {
-                    if let Err(err) = spawn_runtime_listener(evt_rx, pn.clone()) {
-                        log::warn!(
-                            "spawn_runtime_listener for {} exited with error: {:?}",
-                            pn,
-                            err
-                        );
-                    }
-                });
+        if let Some(pd_arc) = read_status(|status| Ok(status.ports.map.get(port_name).cloned()))? {
+            if let Some(opt_rt) = with_port_read(&pd_arc, |pd| match &pd.state {
+                types::port::PortState::OccupiedByThis { runtime, .. } => Some(runtime.clone()),
+                _ => None,
+            }) {
+                if let Some(runtime) = opt_rt {
+                    let evt_rx = runtime.evt_rx.clone();
+                    let pn = port_name.clone();
+                    std::thread::spawn(move || {
+                        if let Err(err) = spawn_runtime_listener(evt_rx, pn.clone()) {
+                            log::warn!(
+                                "spawn_runtime_listener for {} exited with error: {:?}",
+                                pn,
+                                err
+                            );
+                        }
+                    });
+                }
+            } else {
+                log::warn!(
+                    "scan_ports: failed to acquire read lock for port {}",
+                    port_name
+                );
             }
         }
     }
@@ -109,15 +225,24 @@ fn spawn_runtime_listener(evt_rx: flume::Receiver<RuntimeEvent>, port_name: Stri
                     raw,
                     parsed,
                 };
-                write_status(|s| {
-                    if let Some(pdata) = s.ports.map.get_mut(&port_name) {
-                        pdata.logs.push(entry.clone());
-                        if pdata.logs.len() > MAX_LOGS {
-                            let drop = pdata.logs.len() - MAX_LOGS;
-                            pdata.logs.drain(0..drop);
-                        }
-                        if pdata.log_auto_scroll {
-                            pdata.log_selected = pdata.logs.len().saturating_sub(1);
+                write_status(|status| {
+                    if let Some(port) = status.ports.map.get(&port_name) {
+                        if let Some(_) = with_port_write(port, |port| {
+                            port.logs.push(entry.clone());
+                            if port.logs.len() > MAX_LOGS {
+                                let drop = port.logs.len() - MAX_LOGS;
+                                port.logs.drain(0..drop);
+                            }
+                            if port.log_auto_scroll {
+                                port.log_selected = port.logs.len().saturating_sub(1);
+                            }
+                        }) {
+                            // written
+                        } else {
+                            log::warn!(
+                                "spawn_runtime_listener: failed to acquire write lock for {}",
+                                port_name
+                            );
                         }
                     }
                     Ok(())

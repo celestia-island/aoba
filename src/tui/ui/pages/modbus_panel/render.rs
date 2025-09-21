@@ -26,8 +26,8 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 /// Render the ModBus panel. Only reads from Status, does not mutate.
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     // Get the current view_offset from the page state
-    let view_offset = read_status(|s| {
-        if let types::Page::ModbusDashboard { view_offset, .. } = &s.page {
+    let view_offset = read_status(|status| {
+        if let types::Page::ModbusDashboard { view_offset, .. } = &status.page {
             Ok(*view_offset)
         } else {
             Ok(0)

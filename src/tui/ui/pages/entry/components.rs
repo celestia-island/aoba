@@ -15,6 +15,7 @@ use crate::{
             cursor::EntryCursor,
             port::{PortData, PortState},
         },
+        with_port_read,
     },
     tui::ui::{
         components::boxed_paragraph::render_boxed_paragraph,
@@ -41,15 +42,30 @@ pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) ->
 
 /// Render the left ports list panel
 pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
-    if read_status(|s| {
+    if read_status(|status| {
         let width = area.width as usize;
         let mut lines: Vec<Line> = Vec::new();
         let default_pd = PortData::default();
 
-        for (i, name) in s.ports.order.iter().enumerate() {
-            let p = s.ports.map.get(name).unwrap_or(&default_pd);
-            let name = p.port_name.clone();
-            let state = p.state.clone();
+        for (i, name) in status.ports.order.iter().enumerate() {
+            let (name, state) = if let Some(port) = status.ports.map.get(name) {
+                if let Some((pn, st)) =
+                    with_port_read(port, |port| (port.port_name.clone(), port.state.clone()))
+                {
+                    (pn, st)
+                } else {
+                    log::warn!(
+                        "render_ports_list: failed to acquire read lock for {}",
+                        name
+                    );
+                    (
+                        PortData::default().port_name.clone(),
+                        PortData::default().state.clone(),
+                    )
+                }
+            } else {
+                (default_pd.port_name.clone(), default_pd.state.clone())
+            };
             let (state_text, state_style) = match state {
                 PortState::Free => (lang().index.port_state_free.clone(), Style::default()),
                 PortState::OccupiedByThis { .. } => (
@@ -110,7 +126,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
         }
 
         for (j, lbl) in extras.into_iter().enumerate() {
-            let idx = s.ports.order.len() + j;
+            let idx = status.ports.order.len() + j;
             let prefix = if idx == selection { "> " } else { "  " };
             let spans = vec![Span::raw(prefix), Span::raw(lbl)];
             if idx == selection {

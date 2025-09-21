@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{read_status, types, write_status},
+    protocol::status::{read_status, types, with_port_write, write_status},
     tui::utils::bus::{Bus, UiToCore},
 };
 
@@ -52,17 +52,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 fn handle_leave_page(bus: &Bus) -> Result<()> {
-    let selected_port = read_status(|s| {
-        if let types::Page::LogPanel { selected_port, .. } = &s.page {
+    let selected_port = read_status(|status| {
+        if let types::Page::LogPanel { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
         }
     })?;
 
-    write_status(|s| {
+    write_status(|status| {
         // Go back to config panel instead of entry page
-        s.page = types::Page::ConfigPanel {
+        status.page = types::Page::ConfigPanel {
             selected_port,
             view_offset: 0,
             cursor: crate::protocol::status::types::cursor::ConfigPanelCursor::EnablePort,
@@ -77,11 +77,22 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
 
 fn handle_toggle_follow(bus: &Bus) -> Result<()> {
     // Toggle the auto-scroll flag for the current port
-    if let types::Page::LogPanel { selected_port, .. } = read_status(|s| Ok(s.page.clone()))? {
-        write_status(|s| {
-            if let Some(port_name) = s.ports.order.get(selected_port) {
-                if let Some(port_data) = s.ports.map.get_mut(port_name) {
-                    port_data.log_auto_scroll = !port_data.log_auto_scroll;
+    if let types::Page::LogPanel { selected_port, .. } =
+        read_status(|status| Ok(status.page.clone()))?
+    {
+        write_status(|status| {
+            if let Some(port_name) = status.ports.order.get(selected_port) {
+                if let Some(port) = status.ports.map.get(port_name) {
+                    if let Some(_) = with_port_write(port, |port| {
+                        port.log_auto_scroll = !port.log_auto_scroll;
+                    }) {
+                        // updated
+                    } else {
+                        log::warn!(
+                            "handle_toggle_follow: failed to acquire write lock for {}",
+                            port_name
+                        );
+                    }
                 }
             }
             Ok(())
@@ -95,12 +106,23 @@ fn handle_toggle_follow(bus: &Bus) -> Result<()> {
 
 fn handle_clear_logs(bus: &Bus) -> Result<()> {
     // Clear logs for the current port
-    if let types::Page::LogPanel { selected_port, .. } = read_status(|s| Ok(s.page.clone()))? {
-        write_status(|s| {
-            if let Some(port_name) = s.ports.order.get(selected_port) {
-                if let Some(port_data) = s.ports.map.get_mut(port_name) {
-                    port_data.logs.clear();
-                    port_data.log_selected = 0;
+    if let types::Page::LogPanel { selected_port, .. } =
+        read_status(|status| Ok(status.page.clone()))?
+    {
+        write_status(|status| {
+            if let Some(port_name) = status.ports.order.get(selected_port) {
+                if let Some(port) = status.ports.map.get(port_name) {
+                    if let Some(_) = with_port_write(port, |port| {
+                        port.logs.clear();
+                        port.log_selected = 0;
+                    }) {
+                        // updated
+                    } else {
+                        log::warn!(
+                            "handle_clear_logs: failed to acquire write lock for {}",
+                            port_name
+                        );
+                    }
                 }
             }
             Ok(())

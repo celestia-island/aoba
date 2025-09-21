@@ -5,7 +5,7 @@ use egui::{Align, Align2, Button, FontId, Layout, Ui, Vec2};
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types, write_status},
+    protocol::status::{read_status, types, with_port_read, write_status},
 };
 
 /// Render a single-row breadcrumb layout. Layout is left-to-right
@@ -75,7 +75,9 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     types::Page::ConfigPanel { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
-                            g.ports.map.get(name).map(|p| p.port_name.clone())
+                            g.ports.map.get(name).and_then(|port| {
+                                with_port_read(port, |port| port.port_name.clone())
+                            })
                         } else {
                             None
                         };
@@ -86,7 +88,9 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     types::Page::ModbusDashboard { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
-                            g.ports.map.get(name).map(|p| p.port_name.clone())
+                            g.ports.map.get(name).and_then(|port| {
+                                with_port_read(port, |port| port.port_name.clone())
+                            })
                         } else {
                             None
                         };
@@ -103,7 +107,9 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                     types::Page::LogPanel { selected_port, .. } => {
                         let port_name = if *selected_port < g.ports.order.len() {
                             let name = &g.ports.order[*selected_port];
-                            g.ports.map.get(name).map(|p| p.port_name.clone())
+                            g.ports.map.get(name).and_then(|port| {
+                                with_port_read(port, |port| port.port_name.clone())
+                            })
                         } else {
                             None
                         };

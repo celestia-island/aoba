@@ -8,17 +8,18 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
+    protocol::status::{read_status, types, with_port_read},
 };
 
 fn get_port_name(selected_port: usize) -> Result<String> {
-    let port_name = if selected_port < read_status(|s| Ok(s.ports.order.len()))? {
-        let name = &read_status(|s| Ok(s.ports.order[selected_port].clone()))?;
-        read_status(|s| {
-            Ok(s.ports
+    let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {
+        read_status(|status| {
+            let name = status.ports.order[selected_port].clone();
+            Ok(status
+                .ports
                 .map
-                .get(name)
-                .map(|p| p.port_name.clone())
+                .get(&name)
+                .and_then(|port| with_port_read(port, |port| port.port_name.clone()))
                 .unwrap_or_else(|| format!("COM{}", selected_port)))
         })?
     } else {
@@ -45,8 +46,8 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
 
     // Always reserve 2 spaces from left then draw spinner which always animates.
     // Spinner color: yellow when busy, white when idle.
-    let busy = read_status(|s| Ok(s.temporarily.busy.busy))?;
-    let frame_idx = read_status(|s| Ok(s.temporarily.busy.spinner_frame))? as usize;
+    let busy = read_status(|status| Ok(status.temporarily.busy.busy))?;
+    let frame_idx = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
     let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
     let ch = frames[frame_idx % frames.len()];
     // leading spaces
@@ -61,7 +62,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
     breadcrumb_spans.push(Span::raw("   "));
 
     // Add breadcrumb path based on current page
-    let page_breadcrumb = match read_status(|s| Ok(s.page.clone()))? {
+    let page_breadcrumb = match read_status(|status| Ok(status.page.clone()))? {
         // Entry page: AOBA title
         types::Page::Entry { .. } => lang().index.title.as_str().to_string(),
 

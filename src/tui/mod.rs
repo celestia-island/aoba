@@ -16,7 +16,7 @@ use crate::{
     protocol::status::{
         init_status, read_status,
         types::{self, port::PortState, Status},
-        write_status,
+        with_port_read, with_port_write, write_status,
     },
     tui::{
         ui::components::error_msg::ui_error_set,
@@ -199,13 +199,18 @@ fn run_core_thread(
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
                     // Step 1: extract any existing runtime handle (clone) so we can stop it
-                    let existing_rt = read_status(|s| {
-                        if let Some(pd) = s.ports.map.get(&port_name) {
-                            match &pd.state {
+                    let existing_rt = read_status(|status| {
+                        if let Some(port) = status.ports.map.get(&port_name) {
+                            // use helper to avoid panics on poisoned locks
+                            if let Some(opt_rt) = with_port_read(port, |port| match &port.state {
                                 types::port::PortState::OccupiedByThis { runtime, .. } => {
-                                    Ok(Some(runtime.clone()))
+                                    Some(runtime.clone())
                                 }
-                                _ => Ok(None),
+                                _ => None,
+                            }) {
+                                Ok(opt_rt)
+                            } else {
+                                Ok(None)
                             }
                         } else {
                             Ok(None)
@@ -215,9 +220,18 @@ fn run_core_thread(
 
                     if let Some(rt) = existing_rt {
                         // Clear runtime reference in Status under write lock quickly
-                        write_status(|s| {
-                            if let Some(pd) = s.ports.map.get_mut(&port_name) {
-                                pd.state = PortState::Free;
+                        write_status(|status| {
+                            if let Some(port) = status.ports.map.get(&port_name) {
+                                if let Some(_) = with_port_write(port, |port| {
+                                    port.state = PortState::Free;
+                                }) {
+                                    // updated
+                                } else {
+                                    log::warn!(
+                                        "ToggleRuntime: failed to acquire write lock for {} (Free)",
+                                        port_name
+                                    );
+                                }
                             }
                             Ok(())
                         })?;
@@ -285,21 +299,27 @@ fn run_core_thread(
                         // Clone handle for insertion under write lock to avoid moving
                         let handle_for_write = handle.clone();
                         // Write handle into status under write lock
-                        write_status(|s| {
-                            if let Some(pd) = s.ports.map.get_mut(&port_name) {
-                                pd.state = PortState::OccupiedByThis {
-                                    handle: Some(types::port::SerialPortWrapper::new(
-                                        handle_for_write.shared_serial.clone(),
-                                    )),
-                                    runtime: handle_for_write.clone(),
-                                };
+                        write_status(|status| {
+                            if let Some(port) = status.ports.map.get(&port_name) {
+                                if let Some(_) = with_port_write(port, |port| {
+                                    port.state = PortState::OccupiedByThis {
+                                        handle: Some(types::port::SerialPortWrapper::new(
+                                            handle_for_write.shared_serial.clone(),
+                                        )),
+                                        runtime: handle_for_write.clone(),
+                                    };
+                                }) {
+                                    // updated
+                                } else {
+                                    log::warn!("ToggleRuntime: failed to acquire write lock for {} (OccupiedByThis)", port_name);
+                                }
                             }
                             Ok(())
                         })?;
                     } else if let Some(e) = spawn_err {
                         // All attempts failed: set transient error for UI
-                        write_status(|s| {
-                            s.temporarily.error = Some(types::ErrorInfo {
+                        write_status(|status| {
+                            status.temporarily.error = Some(types::ErrorInfo {
                                 message: format!("failed to start runtime: {e}"),
                                 timestamp: chrono::Local::now(),
                             });
@@ -321,8 +341,9 @@ fn run_core_thread(
         }
 
         // Update spinner frame for busy indicator animation
-        write_status(|s| {
-            s.temporarily.busy.spinner_frame = s.temporarily.busy.spinner_frame.wrapping_add(1);
+        write_status(|status| {
+            status.temporarily.busy.spinner_frame =
+                status.temporarily.busy.spinner_frame.wrapping_add(1);
             Ok(())
         })?;
 
@@ -337,8 +358,12 @@ fn run_core_thread(
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
 
-    let bottom_height = read_status(|s| {
-        let err_lines = if s.temporarily.error.is_some() { 1 } else { 0 };
+    let bottom_height = read_status(|status| {
+        let err_lines = if status.temporarily.error.is_some() {
+            1
+        } else {
+            0
+        };
         let hints_count = match crate::tui::ui::pages::bottom_hints_for_app() {
             Ok(h) => h.len(),
             Err(_) => 0,
