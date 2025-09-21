@@ -57,7 +57,7 @@ derive_struct! {
 
         temporarily: {
             // Short-lived UI state. Only place truly transient values here.
-            input_raw_buffer: String,
+            input_raw_buffer: ui::InputRawBuffer = ui::InputRawBuffer::None,
 
             // Scan results (transient)
             scan: {

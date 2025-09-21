@@ -120,7 +120,7 @@ fn handle_leave_page(bus: &Bus) -> Result<()> {
         s.page = types::Page::ConfigPanel {
             selected_port,
             view_offset: 0,
-            cursor: crate::protocol::status::types::cursor::ConfigPanelCursor::EnablePort,
+            cursor: types::cursor::ConfigPanelCursor::EnablePort,
         };
         Ok(())
     })?;

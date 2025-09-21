@@ -199,6 +199,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
         let mut chars = read_status(|s| {
             Ok(s.temporarily
                 .input_raw_buffer
+                .as_string()
                 .chars()
                 .filter(|c| !c.is_whitespace())
                 .collect::<String>())
@@ -214,7 +215,11 @@ pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
         }
         s
     } else {
-        read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?
+        read_status(|s| match &s.temporarily.input_raw_buffer {
+            types::ui::InputRawBuffer::String(v) => Ok(String::from_utf8_lossy(v).into_owned()),
+            types::ui::InputRawBuffer::Index(i) => Ok(i.to_string()),
+            types::ui::InputRawBuffer::None => Ok(String::new()),
+        })?
     };
 
     // If buffer empty and not editing, show faint gray italic placeholder indicating current input mode

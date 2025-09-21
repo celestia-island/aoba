@@ -202,7 +202,7 @@ fn run_core_thread(
                     let existing_rt = read_status(|s| {
                         if let Some(pd) = s.ports.map.get(&port_name) {
                             match &pd.state {
-                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => {
+                                types::port::PortState::OccupiedByThis { runtime, .. } => {
                                     Ok(Some(runtime.clone()))
                                 }
                                 _ => Ok(None),
@@ -288,7 +288,9 @@ fn run_core_thread(
                         write_status(|s| {
                             if let Some(pd) = s.ports.map.get_mut(&port_name) {
                                 pd.state = PortState::OccupiedByThis {
-                                    handle: Some(crate::protocol::status::types::port::SerialPortWrapper::new(handle_for_write.shared_serial.clone())),
+                                    handle: Some(types::port::SerialPortWrapper::new(
+                                        handle_for_write.shared_serial.clone(),
+                                    )),
                                     runtime: handle_for_write.clone(),
                                 };
                             }

@@ -6,7 +6,10 @@ use crate::{
         runtime::RuntimeEvent,
         status::{
             read_status,
-            types::port::{PortData, PortLogEntry, PortState},
+            types::{
+                self,
+                port::{PortData, PortLogEntry, PortState},
+            },
             write_status,
         },
         tty::available_ports_enriched,
@@ -44,7 +47,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
             let pd = PortData {
                 port_name: info.port_name.clone(),
                 port_type: format!("{:?}", info.port_type),
-                info: Some(info.clone()),
                 extra: extra.clone(),
                 state: PortState::Free,
                 ..Default::default()
@@ -67,7 +69,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     let ports_order = read_status(|s| Ok(s.ports.order.clone()))?;
     for port_name in ports_order.iter() {
         if let Some(pd) = read_status(|s| Ok(s.ports.map.get(port_name).cloned()))? {
-            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = pd.state {
+            if let types::port::PortState::OccupiedByThis { runtime, .. } = pd.state {
                 let evt_rx = runtime.evt_rx.clone();
                 let pn = port_name.clone();
                 std::thread::spawn(move || {

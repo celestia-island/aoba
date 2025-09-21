@@ -23,7 +23,7 @@ pub fn selector_spans(base_prefix: &str, label: &str, state: TextState) -> Vec<S
     };
     let mid_style = match state {
         TextState::Editing => Style::default()
-            .fg(Color::Green)
+            .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD),
         TextState::Chosen => Style::default().fg(Color::Green),
         TextState::Selected => Style::default().fg(Color::Green),
@@ -52,7 +52,7 @@ pub fn input_spans(
     with_prefix: bool,
 ) -> Vec<Span<'static>> {
     let outer_style = if editing {
-        Style::default().fg(Color::Green)
+        Style::default().fg(Color::Yellow)
     } else if hovered {
         Style::default().fg(Color::Green)
     } else {
@@ -60,7 +60,7 @@ pub fn input_spans(
     };
     let inner_style = if editing {
         Style::default()
-            .fg(Color::Green)
+            .fg(Color::Yellow)
             .add_modifier(Modifier::BOLD)
     } else if hovered {
         Style::default().fg(Color::Green)
@@ -115,7 +115,7 @@ pub fn styled_text(text: &str, state: TextState, bold: bool) -> Span<'static> {
     let mut style = Style::default();
     match state {
         TextState::Editing => {
-            style = style.fg(Color::Green).add_modifier(Modifier::BOLD);
+            style = style.fg(Color::Yellow).add_modifier(Modifier::BOLD);
         }
         TextState::Chosen => {
             style = style.fg(Color::Green);
@@ -170,7 +170,7 @@ where
         // We'll render each item as [item] (no arrows per-item)
         let mid_style = match state {
             TextState::Editing => Style::default()
-                .fg(Color::Green)
+                .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
             TextState::Selected => Style::default().fg(Color::Green),
             _ => Style::default(),
@@ -183,12 +183,77 @@ where
         // Insert opening arrow after base_prefix
         if spans.len() > 0 {
             // base_prefix is at index 0; insert after it
-            spans.insert(1, Span::styled("< ", Style::default().fg(Color::Green)));
-            spans.push(Span::styled(" >", Style::default().fg(Color::Green)));
+            spans.insert(1, Span::styled("< ", Style::default().fg(Color::Yellow)));
+            spans.push(Span::styled(" >", Style::default().fg(Color::Yellow)));
         }
     }
 
     spans
+}
+
+/// Return true if the provided InputRawBuffer selects the given index
+pub fn buffer_matches_index(buf: &InputRawBuffer, idx: usize) -> bool {
+    match buf {
+        InputRawBuffer::Index(i) => *i == idx,
+        _ => false,
+    }
+}
+
+/// Compute a TextState for an indexable widget using the global buffer and an explicit
+/// `editing` flag (the caller should pass `true` when the app is in second-stage editing).
+pub fn state_for_index(buf: &InputRawBuffer, idx: usize, chosen: bool, editing: bool) -> TextState {
+    if buffer_matches_index(buf, idx) {
+        if editing {
+            TextState::Editing
+        } else if chosen {
+            TextState::Chosen
+        } else {
+            TextState::Selected
+        }
+    } else {
+        TextState::Normal
+    }
+}
+
+/// Produce input spans directly from the global buffer (converts buffer to string internally).
+pub fn input_spans_from_buffer(
+    base_prefix: &str,
+    buf: &InputRawBuffer,
+    hovered: bool,
+    editing: bool,
+    with_prefix: bool,
+) -> Vec<Span<'static>> {
+    let content = buf.as_string();
+    input_spans(base_prefix, content.as_str(), hovered, editing, with_prefix)
+}
+
+/// Produce prefix/index spans based on global buffer (selected when index matches buffer Index).
+pub fn prefix_and_index_spans_from_buffer(
+    idx: usize,
+    buf: &InputRawBuffer,
+    chosen: bool,
+) -> Vec<Span<'static>> {
+    let selected = buffer_matches_index(buf, idx);
+    prefix_and_index_spans(idx, selected, chosen)
+}
+
+/// Generic selector helper that reads the selected index from global buffer when present.
+pub fn generic_selector_spans_from_buffer<T, I>(
+    base_prefix: &str,
+    items: I,
+    buf: &InputRawBuffer,
+    editing: bool,
+) -> Vec<Span<'static>>
+where
+    I: IntoIterator<Item = T>,
+    T: std::fmt::Display,
+{
+    // Determine selected_idx from the buffer
+    let selected_idx = match buf {
+        InputRawBuffer::Index(i) => Some(*i),
+        _ => None,
+    };
+    generic_selector_spans(base_prefix, items, selected_idx, editing)
 }
 
 /// Small helper to convert an optional selected index into `InputRawBuffer`.

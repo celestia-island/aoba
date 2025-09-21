@@ -12,8 +12,8 @@ use crate::{
         read_status,
         types::{
             self,
+            cursor::EntryCursor,
             port::{PortData, PortState},
-            ui::EntryCursor,
         },
     },
     tui::ui::{
