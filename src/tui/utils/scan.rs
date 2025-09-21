@@ -47,8 +47,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 info: Some(info.clone()),
                 extra: extra.clone(),
                 state: PortState::Free,
-                handle: None,
-                runtime: None,
                 ..Default::default()
             };
 
@@ -69,7 +67,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     let ports_order = read_status(|s| Ok(s.ports.order.clone()))?;
     for port_name in ports_order.iter() {
         if let Some(pd) = read_status(|s| Ok(s.ports.map.get(port_name).cloned()))? {
-            if let Some(runtime) = pd.runtime {
+            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = pd.state {
                 let evt_rx = runtime.evt_rx.clone();
                 let pn = port_name.clone();
                 std::thread::spawn(move || {

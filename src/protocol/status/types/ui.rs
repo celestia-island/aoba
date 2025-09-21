@@ -6,6 +6,44 @@ pub use crate::protocol::status::types::cursor::{
     ConfigPanelCursor, EntryCursor, LogPanelCursor, ModbusDashboardCursor,
 };
 
+use std::fmt;
+
+/// A small enum used to represent temporary input buffers across the UI.
+/// - `None` means there's no active temporary buffer
+/// - `Index(n)` records a selected index for selectors
+/// - `String(bytes)` stores raw bytes when editing free-form input
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InputRawBuffer {
+    None,
+    Index(usize),
+    String(Vec<u8>),
+}
+
+impl Default for InputRawBuffer {
+    fn default() -> Self {
+        InputRawBuffer::None
+    }
+}
+
+impl fmt::Display for InputRawBuffer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InputRawBuffer::None => write!(f, ""),
+            InputRawBuffer::Index(i) => write!(f, "{}", i),
+            InputRawBuffer::String(bytes) => match std::str::from_utf8(bytes) {
+                Ok(s) => write!(f, "{}", s),
+                Err(_) => write!(f, "{:?}", bytes),
+            },
+        }
+    }
+}
+
+impl From<usize> for InputRawBuffer {
+    fn from(i: usize) -> Self {
+        InputRawBuffer::Index(i)
+    }
+}
+
 /// Special entries that appear after the serial ports list in the Entry page.
 /// Kept as a UI enum so other UI modules can reference the same canonical variants.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

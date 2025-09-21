@@ -8,9 +8,81 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
+/// Ensure current cursor for ConfigPanel does not point to hidden items when
+/// the selected port is not occupied by this instance. This moves the cursor
+/// to a visible default (`EnablePort`) and updates `view_offset` when needed.
+fn sanitize_configpanel_cursor() -> Result<()> {
+    write_status(|s| {
+        if let types::Page::ConfigPanel {
+            cursor,
+            selected_port,
+            view_offset,
+            ..
+        } = &mut s.page
+        {
+            // Determine occupancy of selected port
+            let occupied = if let Some(port_name) = s.ports.order.get(*selected_port) {
+                if let Some(pd) = s.ports.map.get(port_name) {
+                    matches!(
+                        pd.state,
+                        crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                    )
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if !occupied {
+                match cursor {
+                    types::cursor::ConfigPanelCursor::EnablePort
+                    | types::cursor::ConfigPanelCursor::ProtocolMode => {
+                        // allowed
+                    }
+                    _ => {
+                        *cursor = types::cursor::ConfigPanelCursor::EnablePort;
+                    }
+                }
+
+                *view_offset = cursor.view_offset();
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the ConfigPanel view offset up by `amount` (saturating at 0).
+pub fn handle_scroll_up(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::ConfigPanel { view_offset, .. } = &mut s.page {
+            if *view_offset > 0 {
+                *view_offset = view_offset.saturating_sub(amount);
+            }
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
+/// Scroll the ConfigPanel view offset down by `amount`.
+pub fn handle_scroll_down(amount: usize) -> Result<()> {
+    write_status(|s| {
+        if let types::Page::ConfigPanel { view_offset, .. } = &mut s.page {
+            *view_offset = view_offset.saturating_add(amount);
+        }
+        Ok(())
+    })?;
+    Ok(())
+}
+
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Derive selected cursor in panel
     let selected_cursor = super::components::derive_selection()?;
+
+    // Ensure cursor does not point to hidden items on entry
+    sanitize_configpanel_cursor()?;
 
     // Check if we're in edit mode (simplified - using global buffer)
     let in_edit = read_status(|s| Ok(!s.temporarily.input_raw_buffer.is_empty()))?;
@@ -38,19 +110,19 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 match cursor {
                                     types::cursor::ConfigPanelCursor::BaudRate => {
                                         if let Ok(baud) = buffer_content.parse::<u32>() {
-                                            if let Some(rt) = pd.runtime.as_mut() {
-                                                rt.current_cfg.baud = baud;
+                                            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
+                                                runtime.current_cfg.baud = baud;
                                             }
                                         }
                                     }
                                     types::cursor::ConfigPanelCursor::DataBits => {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
-                                            if let Some(rt) = pd.runtime.as_mut() {
+                                            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
                                                 match bits {
-                                                    5 => rt.current_cfg.data_bits = 5,
-                                                    6 => rt.current_cfg.data_bits = 6,
-                                                    7 => rt.current_cfg.data_bits = 7,
-                                                    8 => rt.current_cfg.data_bits = 8,
+                                                    5 => runtime.current_cfg.data_bits = 5,
+                                                    6 => runtime.current_cfg.data_bits = 6,
+                                                    7 => runtime.current_cfg.data_bits = 7,
+                                                    8 => runtime.current_cfg.data_bits = 8,
                                                     _ => {}
                                                 }
                                             }
@@ -58,10 +130,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                     }
                                     types::cursor::ConfigPanelCursor::StopBits => {
                                         if let Ok(bits) = buffer_content.parse::<u8>() {
-                                            if let Some(rt) = pd.runtime.as_mut() {
+                                            if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
                                                 match bits {
-                                                    1 => rt.current_cfg.stop_bits = 1u8,
-                                                    2 => rt.current_cfg.stop_bits = 2u8,
+                                                    1 => runtime.current_cfg.stop_bits = 1u8,
+                                                    2 => runtime.current_cfg.stop_bits = 2u8,
                                                     _ => {}
                                                 }
                                             }
@@ -120,7 +192,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         match key.code {
             KeyCode::PageUp => {
                 // Scroll up
-                super::components::config_panel_scroll_up(5)?;
+                handle_scroll_up(5)?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|err| anyhow!(err))?;
@@ -128,7 +200,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             KeyCode::PageDown => {
                 // Scroll down
-                super::components::config_panel_scroll_down(5)?;
+                handle_scroll_down(5)?;
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|err| anyhow!(err))?;
@@ -136,6 +208,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
                 // Navigate between fields using cursor system
+
                 write_status(|s| {
                     if let types::Page::ConfigPanel {
                         cursor,
@@ -158,6 +231,9 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
 
+                // After moving cursor, sanitize again to ensure we didn't land on a hidden item
+                sanitize_configpanel_cursor()?;
+
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::Refresh)
                     .map_err(|err| anyhow!(err))?;
@@ -172,8 +248,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             if let types::Page::ConfigPanel { selected_port, .. } = &s.page {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get_mut(port_name) {
-                                        if let Some(rt) = pd.runtime.as_mut() {
-                                            rt.current_cfg.parity = match rt.current_cfg.parity {
+                                        if let crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } = &mut pd.state {
+                                            runtime.current_cfg.parity = match runtime.current_cfg.parity {
                                                 serialport::Parity::None => serialport::Parity::Odd,
                                                 serialport::Parity::Odd => serialport::Parity::Even,
                                                 serialport::Parity::Even => {
@@ -262,21 +338,18 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 if let Some(port_name) = s.ports.order.get(*selected_port) {
                                     if let Some(pd) = s.ports.map.get(port_name) {
                                         let init_value = match cursor {
-                                            types::cursor::ConfigPanelCursor::BaudRate => pd
-                                                .runtime
-                                                .as_ref()
-                                                .map(|rt| rt.current_cfg.baud.to_string())
-                                                .unwrap_or_else(|| "9600".to_string()),
-                                            types::cursor::ConfigPanelCursor::DataBits => pd
-                                                .runtime
-                                                .as_ref()
-                                                .map(|rt| rt.current_cfg.data_bits.to_string())
-                                                .unwrap_or_else(|| "8".to_string()),
-                                            types::cursor::ConfigPanelCursor::StopBits => pd
-                                                .runtime
-                                                .as_ref()
-                                                .map(|rt| rt.current_cfg.stop_bits.to_string())
-                                                .unwrap_or_else(|| "1".to_string()),
+                                            types::cursor::ConfigPanelCursor::BaudRate => match &pd.state {
+                                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => runtime.current_cfg.baud.to_string(),
+                                                _ => "9600".to_string(),
+                                            },
+                                            types::cursor::ConfigPanelCursor::DataBits => match &pd.state {
+                                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => runtime.current_cfg.data_bits.to_string(),
+                                                _ => "8".to_string(),
+                                            },
+                                            types::cursor::ConfigPanelCursor::StopBits => match &pd.state {
+                                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => runtime.current_cfg.stop_bits.to_string(),
+                                                _ => "1".to_string(),
+                                            },
                                             _ => String::new(),
                                         };
                                         s.temporarily.input_raw_buffer = init_value;

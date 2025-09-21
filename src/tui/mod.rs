@@ -201,7 +201,12 @@ fn run_core_thread(
                     // Step 1: extract any existing runtime handle (clone) so we can stop it
                     let existing_rt = read_status(|s| {
                         if let Some(pd) = s.ports.map.get(&port_name) {
-                            Ok(pd.runtime.clone())
+                            match &pd.state {
+                                crate::protocol::status::types::port::PortState::OccupiedByThis { runtime, .. } => {
+                                    Ok(Some(runtime.clone()))
+                                }
+                                _ => Ok(None),
+                            }
                         } else {
                             Ok(None)
                         }
@@ -212,7 +217,6 @@ fn run_core_thread(
                         // Clear runtime reference in Status under write lock quickly
                         write_status(|s| {
                             if let Some(pd) = s.ports.map.get_mut(&port_name) {
-                                pd.runtime = None;
                                 pd.state = PortState::Free;
                             }
                             Ok(())
@@ -283,8 +287,10 @@ fn run_core_thread(
                         // Write handle into status under write lock
                         write_status(|s| {
                             if let Some(pd) = s.ports.map.get_mut(&port_name) {
-                                pd.runtime = Some(handle_for_write.clone());
-                                pd.state = PortState::OccupiedByThis;
+                                pd.state = PortState::OccupiedByThis {
+                                    handle: Some(crate::protocol::status::types::port::SerialPortWrapper::new(handle_for_write.shared_serial.clone())),
+                                    runtime: handle_for_write.clone(),
+                                };
                             }
                             Ok(())
                         })?;

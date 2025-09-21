@@ -109,7 +109,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
-            // move selection up in Entry page
             handle_move_prev(
                 &app,
                 read_status(|s| {
@@ -126,17 +125,43 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            // move selection down
-            handle_move_next(
-                &app,
-                read_status(|s| {
-                    if let types::Page::Entry { cursor } = &s.page {
-                        Ok(cursor.unwrap_or(cursor::EntryCursor::Refresh))
-                    } else {
-                        Ok(cursor::EntryCursor::Refresh)
-                    }
-                })?,
-            )?;
+            // If cursor is None (initial startup), choose behavior based on number of ports:
+            // - if there are at least 2 ports, jump to the second port (idx = 1)
+            // - otherwise jump to Refresh
+            let cursor_opt = read_status(|s| {
+                if let types::Page::Entry { cursor } = &s.page {
+                    Ok(cursor.clone())
+                } else {
+                    Ok(None)
+                }
+            })?;
+
+            if cursor_opt.is_none() {
+                if app.ports.map.len() >= 2 {
+                    // Jump to second port (index 1)
+                    write_status(|s| {
+                        s.page = Page::Entry {
+                            cursor: Some(types::cursor::EntryCursor::Com { idx: 1 }),
+                        };
+                        Ok(())
+                    })?;
+                } else {
+                    // Default to Refresh when less than 2 ports
+                    write_status(|s| {
+                        s.page = Page::Entry {
+                            cursor: Some(types::cursor::EntryCursor::Refresh),
+                        };
+                        Ok(())
+                    })?;
+                }
+            } else {
+                // Existing behavior when cursor already set
+                handle_move_next(
+                    &app,
+                    cursor_opt.unwrap_or(types::cursor::EntryCursor::Refresh),
+                )?;
+            }
+
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
