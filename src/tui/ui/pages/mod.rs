@@ -14,7 +14,7 @@ use crate::protocol::status::{read_status, types};
 /// Now returns a Vec of rows, where each row is a Vec of hint fragments.
 pub fn bottom_hints_for_app() -> Result<Vec<Vec<String>>> {
     // Dispatch directly on the current page variant (About handled here directly)
-    Ok(match &read_status(|s| Ok(s.page.clone()))? {
+    Ok(match &read_status(|status| Ok(status.page.clone()))? {
         types::Page::ConfigPanel { .. } => config_panel::page_bottom_hints()?,
         types::Page::ModbusDashboard { .. } => modbus_panel::page_bottom_hints()?,
         types::Page::LogPanel { .. } => log_panel::page_bottom_hints()?,

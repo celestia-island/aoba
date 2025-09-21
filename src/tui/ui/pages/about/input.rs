@@ -9,8 +9,8 @@ use crate::{
 
 /// Scroll the About page view offset up by `amount` (saturating at 0).
 pub fn handle_scroll_up(amount: usize) -> Result<()> {
-    write_status(|s| {
-        if let types::Page::About { view_offset } = &mut s.page {
+    write_status(|status| {
+        if let types::Page::About { view_offset } = &mut status.page {
             if *view_offset > 0 {
                 *view_offset = view_offset.saturating_sub(amount);
             }
@@ -22,8 +22,8 @@ pub fn handle_scroll_up(amount: usize) -> Result<()> {
 
 /// Scroll the About page view offset down by `amount`.
 pub fn handle_scroll_down(amount: usize) -> Result<()> {
-    write_status(|s| {
-        if let types::Page::About { view_offset } = &mut s.page {
+    write_status(|status| {
+        if let types::Page::About { view_offset } = &mut status.page {
             *view_offset = view_offset.saturating_add(amount);
         }
         Ok(())
@@ -56,8 +56,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::Esc => {
-            write_status(|s| {
-                s.page = types::Page::Entry {
+            write_status(|status| {
+                status.page = types::Page::Entry {
                     cursor: Some(types::cursor::EntryCursor::About),
                 };
                 Ok(())

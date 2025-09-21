@@ -40,8 +40,8 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let logs_area = chunks[0];
 
     // Get the current view_offset from the page state
-    let view_offset = read_status(|s| {
-        if let types::Page::LogPanel { view_offset, .. } = &s.page {
+    let view_offset = read_status(|status| {
+        if let types::Page::LogPanel { view_offset, .. } = &status.page {
             Ok(*view_offset)
         } else {
             Ok(0)

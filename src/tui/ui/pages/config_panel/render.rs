@@ -23,8 +23,8 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     // Get the content lines with proper indicators
-    let content = render_kv_lines_with_indicators(read_status(|s| {
-        Ok(match &s.page {
+    let content = render_kv_lines_with_indicators(read_status(|status| {
+        Ok(match &status.page {
             types::Page::ModbusDashboard { selected_port, .. }
             | types::Page::ConfigPanel { selected_port, .. }
             | types::Page::LogPanel { selected_port, .. } => *selected_port,
@@ -37,8 +37,8 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     })?)?;
 
     // Get the current view_offset from the page state
-    let offset = read_status(|s| {
-        if let types::Page::ConfigPanel { view_offset, .. } = &s.page {
+    let offset = read_status(|status| {
+        if let types::Page::ConfigPanel { view_offset, .. } = &status.page {
             Ok(*view_offset)
         } else {
             Ok(0)

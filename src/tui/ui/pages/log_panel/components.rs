@@ -13,22 +13,35 @@ use crate::{
     protocol::status::{
         read_status,
         types::{self, ui::InputMode},
-        write_status,
+        with_port_read, write_status,
     },
 };
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
-    read_status(|s| match &s.page {
+    read_status(|status| match &status.page {
         types::Page::LogPanel { selected_port, .. } => {
-            if let Some(port_name) = s.ports.order.get(*selected_port) {
-                let pd = s.ports.map.get(port_name).cloned().unwrap_or_default();
-                Ok(Some((
-                    pd.logs.clone(),
-                    pd.log_selected,
-                    pd.log_view_offset,
-                    pd.log_auto_scroll,
-                )))
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port) = status.ports.map.get(port_name) {
+                    if let Some(tuple) = with_port_read(port, |pd| {
+                        Some((
+                            pd.logs.clone(),
+                            pd.log_selected,
+                            pd.log_view_offset,
+                            pd.log_auto_scroll,
+                        ))
+                    }) {
+                        Ok(tuple)
+                    } else {
+                        log::warn!(
+                            "extract_log_data: failed to acquire read lock for {}",
+                            port_name
+                        );
+                        Ok(None)
+                    }
+                } else {
+                    Ok(None)
+                }
             } else {
                 Ok(None)
             }
@@ -185,8 +198,8 @@ pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
     let mut lines: Vec<Line> = Vec::new();
 
     // For now, use ASCII mode as default since we don't have per-port input modes
-    let input_mode = read_status(|s| {
-        if let types::Page::LogPanel { input_mode, .. } = s.page {
+    let input_mode = read_status(|status| {
+        if let types::Page::LogPanel { input_mode, .. } = status.page {
             Ok(input_mode)
         } else {
             Ok(InputMode::Ascii) // Default to ASCII if not in LogPanel
@@ -196,8 +209,9 @@ pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
     // Show buffer on the first content line (right under the title)
     let content = if input_mode == InputMode::Hex {
         let mut s = String::new();
-        let mut chars = read_status(|s| {
-            Ok(s.temporarily
+        let mut chars = read_status(|status| {
+            Ok(status
+                .temporarily
                 .input_raw_buffer
                 .as_string()
                 .chars()
@@ -215,7 +229,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
         }
         s
     } else {
-        read_status(|s| match &s.temporarily.input_raw_buffer {
+        read_status(|status| match &status.temporarily.input_raw_buffer {
             types::ui::InputRawBuffer::String(v) => Ok(String::from_utf8_lossy(v).into_owned()),
             types::ui::InputRawBuffer::Index(i) => Ok(i.to_string()),
             types::ui::InputRawBuffer::None => Ok(String::new()),
@@ -319,8 +333,8 @@ pub fn is_subpage_active() -> bool {
 
 /// Scroll the LogPanel view offset up by `amount` (saturating at 0).
 pub fn log_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
-    write_status(|s| {
-        if let types::Page::LogPanel { view_offset, .. } = &mut s.page {
+    write_status(|status| {
+        if let types::Page::LogPanel { view_offset, .. } = &mut status.page {
             if *view_offset > 0 {
                 *view_offset = view_offset.saturating_sub(amount);
             }
@@ -332,8 +346,8 @@ pub fn log_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
 
 /// Scroll the LogPanel view offset down by `amount`.
 pub fn log_panel_scroll_down(amount: usize) -> anyhow::Result<()> {
-    write_status(|s| {
-        if let types::Page::LogPanel { view_offset, .. } = &mut s.page {
+    write_status(|status| {
+        if let types::Page::LogPanel { view_offset, .. } = &mut status.page {
             *view_offset = view_offset.saturating_add(amount);
         }
         Ok(())
