@@ -83,10 +83,6 @@ pub struct RegisterEntry {
     pub values: Vec<u16>,          // Register values
 }
 
-// SubpageForm type intentionally deleted to simplify status types.
-// If any functionality relied on SubpageForm, consider replacing it with
-// a smaller, focused structure in another module or in the UI layer.
-
 // Reusable enums moved here so other modules can reference them via types::modbus::*
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditingField {
