@@ -15,7 +15,10 @@ pub struct PortLogEntry {
 #[derive(Debug, Clone)]
 pub enum PortState {
     Free,
-    OccupiedByThis,
+    OccupiedByThis {
+        handle: Option<SerialPortWrapper>,
+        runtime: PortRuntimeHandle,
+    },
     OccupiedByOther,
 }
 
@@ -29,6 +32,12 @@ impl std::fmt::Debug for SerialPortWrapper {
     }
 }
 
+impl SerialPortWrapper {
+    pub fn new(inner: Arc<Mutex<Box<dyn serialport::SerialPort + Send>>>) -> Self {
+        SerialPortWrapper(inner)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PortData {
     pub port_name: String,
@@ -36,8 +45,6 @@ pub struct PortData {
     pub info: Option<SerialPortInfo>,
     pub extra: PortExtra,
     pub state: PortState,
-    pub handle: Option<SerialPortWrapper>,
-    pub runtime: Option<PortRuntimeHandle>,
 
     pub logs: Vec<PortLogEntry>,
     pub log_selected: usize,
@@ -54,8 +61,6 @@ impl Default for PortData {
             info: None,
             extra: Default::default(),
             state: PortState::Free,
-            handle: None,
-            runtime: None,
             logs: Vec::new(),
             log_selected: 0,
             log_view_offset: 0,
