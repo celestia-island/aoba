@@ -23,8 +23,8 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let content = init_about_cache();
     if let Ok(content) = content.lock() {
         let content = render_about_page_manifest_lines(content.clone());
-        let offset = read_status(|s| {
-            if let types::Page::About { view_offset } = &s.page {
+        let offset = read_status(|status| {
+            if let types::Page::About { view_offset } = &status.page {
                 Ok(*view_offset)
             } else {
                 Ok(0)

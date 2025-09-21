@@ -69,8 +69,8 @@ pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>, vi
 
 /// Scroll the ModbusDashboard view offset up by `amount` (saturating at 0).
 pub fn modbus_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
-    write_status(|s| {
-        if let types::Page::ModbusDashboard { view_offset, .. } = &mut s.page {
+    write_status(|status| {
+        if let types::Page::ModbusDashboard { view_offset, .. } = &mut status.page {
             if *view_offset > 0 {
                 *view_offset = view_offset.saturating_sub(amount);
             }
@@ -82,8 +82,8 @@ pub fn modbus_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
 
 /// Scroll the ModbusDashboard view offset down by `amount`.
 pub fn modbus_panel_scroll_down(amount: usize) -> anyhow::Result<()> {
-    write_status(|s| {
-        if let types::Page::ModbusDashboard { view_offset, .. } = &mut s.page {
+    write_status(|status| {
+        if let types::Page::ModbusDashboard { view_offset, .. } = &mut status.page {
             *view_offset = view_offset.saturating_add(amount);
         }
         Ok(())

@@ -8,7 +8,7 @@ pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
     // Cumulative rendering: we render page-provided bottom hints and also
     // append transient error lines (error message + clear hint) if present.
     let hints = bottom_hints_for_app().unwrap_or_else(|_| vec![]);
-    let err_opt = read_status(|s| Ok(s.temporarily.error.clone()))?;
+    let err_opt = read_status(|status| Ok(status.temporarily.error.clone()))?;
 
     let err_lines = if err_opt.is_some() { 2usize } else { 0usize };
     let rows_count = hints.len() + err_lines;

@@ -5,9 +5,10 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
+    protocol::status::{read_status, types, with_port_read},
     tui::ui::components::styled_label::{styled_spans, StyledSpanKind, TextState},
 };
+use std::sync::{Arc, RwLock};
 
 // Constants to avoid magic numbers/strings in layout calculation
 const TARGET_LABEL_WIDTH: usize = 20; // target label column width for alignment
@@ -18,7 +19,7 @@ const INDICATOR_UNSELECTED: &str = "  ";
 /// Derive selection index for config panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
     // For config panel, we need to determine which field is currently selected
-    match read_status(|s| Ok(s.page.clone()))? {
+    match read_status(|status| Ok(status.page.clone()))? {
         types::Page::ConfigPanel { cursor, .. } => {
             // cursor tracks both navigation and editing state
             Ok(cursor)
@@ -39,12 +40,13 @@ pub fn render_kv_lines_with_indicators(sel_idx: usize) -> Result<Vec<Line<'stati
     let mut lines: Vec<Line<'static>> = Vec::new();
 
     // Get current port data
-    let port_data =
-        if let Some(port_name) = read_status(|s| Ok(s.ports.order.get(sel_idx).cloned()))? {
-            read_status(|s| Ok(s.ports.map.get(&port_name).cloned()))?
-        } else {
-            None
-        };
+    let port_data = if let Some(port_name) =
+        read_status(|status| Ok(status.ports.order.get(sel_idx).cloned()))?
+    {
+        read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
+    } else {
+        None
+    };
 
     // Determine current selection for styling
     let current_selection = derive_selection()?;
@@ -82,18 +84,23 @@ pub fn render_kv_lines_with_indicators(sel_idx: usize) -> Result<Vec<Line<'stati
 /// Render Group 1: Enable Port toggle + Protocol Mode selector + Protocol Config navigation
 fn render_group1_with_indicators(
     lines: &mut Vec<Line<'static>>,
-    port_data: Option<&types::port::PortData>,
+    port_data: Option<&Arc<RwLock<types::port::PortData>>>,
     current_selection: types::cursor::ConfigPanelCursor,
     occupied_by_this: bool,
 ) -> Result<()> {
     // 1. Enable Port toggle
     let enable_label = lang().protocol.common.enable_port.clone();
-    let enable_value = if let Some(pd) = port_data {
-        match pd.state {
+    let enable_value = if let Some(port) = port_data {
+        if let Some(v) = with_port_read(port, |port| match port.state {
             types::port::PortState::OccupiedByThis { .. } => {
                 lang().protocol.common.port_enabled.clone()
             }
             _ => lang().protocol.common.port_disabled.clone(),
+        }) {
+            v
+        } else {
+            log::warn!("render_kv_lines_with_indicators: failed to acquire read lock");
+            lang().protocol.common.port_disabled.clone()
         }
     } else {
         lang().protocol.common.port_disabled.clone()
@@ -122,9 +129,14 @@ fn render_group1_with_indicators(
     let mode_selected = current_selection == types::cursor::ConfigPanelCursor::ProtocolMode;
 
     // Determine label from port_data.config if present
-    let mode_value = if let Some(pd) = port_data {
-        match &pd.config {
+    let mode_value = if let Some(port) = port_data {
+        if let Some(v) = with_port_read(port, |port| match &port.config {
             types::port::PortConfig::Modbus { .. } => lang().protocol.common.mode_modbus.clone(),
+        }) {
+            v
+        } else {
+            log::warn!("render_kv_lines_with_indicators: failed to acquire read lock for mode");
+            lang().protocol.common.mode_modbus.clone()
         }
     } else {
         lang().protocol.common.mode_modbus.clone()
@@ -172,9 +184,16 @@ fn render_group1_with_indicators(
 }
 
 /// Helper: true if port_data indicates PortState::OccupiedByThis
-fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
-    if let Some(pd) = port_data {
-        matches!(pd.state, types::port::PortState::OccupiedByThis { .. })
+fn is_port_occupied_by_this(port_data: Option<&Arc<RwLock<types::port::PortData>>>) -> bool {
+    if let Some(port) = port_data {
+        if let Some(b) = with_port_read(port, |port| {
+            matches!(port.state, types::port::PortState::OccupiedByThis { .. })
+        }) {
+            b
+        } else {
+            log::warn!("is_port_occupied_by_this: failed to acquire read lock");
+            false
+        }
     } else {
         false
     }
@@ -183,7 +202,7 @@ fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
 /// Render Group 2: Serial port basic parameters
 fn render_group2_with_indicators(
     lines: &mut Vec<Line<'static>>,
-    port_data: Option<&types::port::PortData>,
+    port_data: Option<&Arc<RwLock<types::port::PortData>>>,
     current_selection: types::cursor::ConfigPanelCursor,
 ) -> Result<()> {
     let serial_fields = [
@@ -345,26 +364,33 @@ fn create_line(
 
 /// Get serial parameter value by cursor type
 fn get_serial_param_value_by_cursor(
-    port_data: Option<&types::port::PortData>,
+    port_data: Option<&Arc<RwLock<types::port::PortData>>>,
     cursor_type: types::cursor::ConfigPanelCursor,
 ) -> String {
-    if let Some(pd) = port_data {
-        if let types::port::PortState::OccupiedByThis { ref runtime, .. } = &pd.state {
-            match cursor_type {
-                types::cursor::ConfigPanelCursor::BaudRate => {
-                    return runtime.current_cfg.baud.to_string()
+    if let Some(port) = port_data {
+        if let Some(s) = with_port_read(port, |port| {
+            if let types::port::PortState::OccupiedByThis { ref runtime, .. } = &port.state {
+                match cursor_type {
+                    types::cursor::ConfigPanelCursor::BaudRate => {
+                        return runtime.current_cfg.baud.to_string()
+                    }
+                    types::cursor::ConfigPanelCursor::DataBits => {
+                        return runtime.current_cfg.data_bits.to_string()
+                    }
+                    types::cursor::ConfigPanelCursor::Parity => {
+                        return format!("{:?}", runtime.current_cfg.parity)
+                    }
+                    types::cursor::ConfigPanelCursor::StopBits => {
+                        return runtime.current_cfg.stop_bits.to_string()
+                    }
+                    _ => return "??".to_string(),
                 }
-                types::cursor::ConfigPanelCursor::DataBits => {
-                    return runtime.current_cfg.data_bits.to_string()
-                }
-                types::cursor::ConfigPanelCursor::Parity => {
-                    return format!("{:?}", runtime.current_cfg.parity)
-                }
-                types::cursor::ConfigPanelCursor::StopBits => {
-                    return runtime.current_cfg.stop_bits.to_string()
-                }
-                _ => return "??".to_string(),
             }
+            "??".to_string()
+        }) {
+            return s;
+        } else {
+            log::warn!("get_serial_param_value_by_cursor: failed to acquire read lock");
         }
     }
 

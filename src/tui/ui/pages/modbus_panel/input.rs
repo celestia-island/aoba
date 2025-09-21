@@ -43,13 +43,13 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // If dashboard has nested edit state in Status (e.g. editing_field or master_field_editing),
             // prefer to cancel those first. Otherwise leave to entry page.
             let mut cancelled = false;
-            write_status(|s| {
+            write_status(|status| {
                 if let types::Page::ModbusDashboard {
                     editing_field,
                     master_field_editing,
                     master_edit_field,
                     ..
-                } = &mut s.page
+                } = &mut status.page
                 {
                     // If any editing sub-state is active, clear it instead of leaving page
                     if editing_field.is_some() || *master_field_editing {
@@ -107,17 +107,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 fn handle_leave_page(bus: &Bus) -> Result<()> {
     use crate::tui::utils::bus::UiToCore;
 
-    let selected_port = read_status(|s| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &s.page {
+    let selected_port = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
         }
     })?;
 
-    write_status(|s| {
+    write_status(|status| {
         // Go back to config panel instead of entry page
-        s.page = types::Page::ConfigPanel {
+        status.page = types::Page::ConfigPanel {
             selected_port,
             view_offset: 0,
             cursor: types::cursor::ConfigPanelCursor::EnablePort,

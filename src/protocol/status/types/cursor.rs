@@ -45,7 +45,8 @@ impl Cursor for EntryCursor {
             EntryCursor::Refresh => {
                 // Go to last COM port if any exist
                 let max_port_idx =
-                    read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
+                    read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))
+                        .unwrap_or(0);
                 if max_port_idx > 0 {
                     EntryCursor::Com { idx: max_port_idx }
                 } else {
@@ -61,7 +62,8 @@ impl Cursor for EntryCursor {
         match self {
             EntryCursor::Com { idx } => {
                 let max_port_idx =
-                    read_status(|s| Ok(s.ports.order.len().saturating_sub(1))).unwrap_or(0);
+                    read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))
+                        .unwrap_or(0);
                 if idx < max_port_idx {
                     EntryCursor::Com { idx: idx + 1 }
                 } else {
@@ -72,7 +74,7 @@ impl Cursor for EntryCursor {
             EntryCursor::CreateVirtual => EntryCursor::About,
             EntryCursor::About => {
                 // Wrap to first COM port if any exist
-                if read_status(|s| Ok(!s.ports.order.is_empty())).unwrap_or(false) {
+                if read_status(|status| Ok(!status.ports.order.is_empty())).unwrap_or(false) {
                     EntryCursor::Com { idx: 0 }
                 } else {
                     EntryCursor::Refresh
