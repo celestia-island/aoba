@@ -39,7 +39,7 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                         ui.painter().text(
                             spinner_rect.center(),
                             Align2::CENTER_CENTER,
-                            &ch.to_string(),
+                            ch.to_string(),
                             FontId::proportional(14.),
                             ui.visuals().text_color(),
                         );

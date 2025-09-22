@@ -6,27 +6,22 @@ use crate::protocol::status::types;
 /// - `None` means there's no active temporary buffer
 /// - `Index(n)` records a selected index for selectors
 /// - `String(bytes)` stores raw bytes when editing free-form input
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum InputRawBuffer {
+    #[default]
     None,
     Index(usize),
     String(Vec<u8>),
-}
-
-impl Default for InputRawBuffer {
-    fn default() -> Self {
-        InputRawBuffer::None
-    }
 }
 
 impl std::fmt::Display for InputRawBuffer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             InputRawBuffer::None => write!(f, ""),
-            InputRawBuffer::Index(i) => write!(f, "{}", i),
+            InputRawBuffer::Index(i) => write!(f, "{i}"),
             InputRawBuffer::String(bytes) => match std::str::from_utf8(bytes) {
-                Ok(s) => write!(f, "{}", s),
-                Err(_) => write!(f, "{:?}", bytes),
+                Ok(s) => write!(f, "{s}"),
+                Err(_) => write!(f, "{bytes:?}"),
             },
         }
     }
@@ -129,6 +124,38 @@ pub enum InputMode {
     Hex,
 }
 
+// UI-only editing enums (moved from types::modbus)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditingField {
+    Loop,
+    Baud,
+    Parity,
+    StopBits,
+    DataBits,
+    GlobalInterval,
+    GlobalTimeout,
+    RegisterField { idx: usize, field: RegisterField },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegisterField {
+    SlaveId,
+    Mode,
+    Address,
+    Length,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MasterEditField {
+    Role,
+    Id,
+    Type,
+    Start,
+    End,
+    Counter,
+    Value(u16),
+}
+
 // AppMode is a small UI-oriented enum (moved here from modbus.rs).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum AppMode {
@@ -165,7 +192,7 @@ pub struct ModbusDashboardStatus {
     pub selected_port: usize,
 
     pub cursor: usize,
-    pub editing_field: Option<types::modbus::EditingField>,
+    pub editing_field: Option<EditingField>,
     pub input_buffer: String,
     pub edit_choice_index: Option<usize>,
     pub edit_confirmed: bool,
@@ -173,7 +200,7 @@ pub struct ModbusDashboardStatus {
     pub master_cursor: usize,
     pub master_field_selected: bool,
     pub master_field_editing: bool,
-    pub master_edit_field: Option<types::modbus::MasterEditField>,
+    pub master_edit_field: Option<MasterEditField>,
     pub master_edit_index: Option<usize>,
     pub master_input_buffer: String,
     pub poll_round_index: usize,

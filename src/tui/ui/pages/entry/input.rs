@@ -123,7 +123,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // - otherwise jump to Refresh
             let cursor_opt = read_status(|status| {
                 if let types::Page::Entry { cursor } = &status.page {
-                    Ok(cursor.clone())
+                    Ok(*cursor)
                 } else {
                     Ok(None)
                 }
@@ -161,7 +161,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let cursor = read_status(|status| {
                 if let types::Page::Entry { cursor } = &status.page {
-                    Ok(cursor.clone())
+                    Ok(*cursor)
                 } else {
                     Ok(None)
                 }

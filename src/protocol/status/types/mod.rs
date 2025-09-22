@@ -32,7 +32,7 @@ derive_struct! {
                 view_offset: usize = 0,
 
                 cursor: usize,
-                editing_field?: modbus::EditingField,
+                editing_field?: ui::EditingField,
                 input_buffer: String,
                 edit_choice_index: Option<usize>,
                 edit_confirmed: bool,
@@ -40,7 +40,7 @@ derive_struct! {
                 master_cursor: usize,
                 master_field_selected: bool,
                 master_field_editing: bool,
-                master_edit_field?: modbus::MasterEditField,
+                master_edit_field?: ui::MasterEditField,
                 master_edit_index: Option<usize>,
                 master_input_buffer: String,
                 poll_round_index: usize,

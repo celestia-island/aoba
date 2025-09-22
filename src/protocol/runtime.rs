@@ -125,13 +125,13 @@ impl PortRuntimeHandle {
 impl Drop for PortRuntimeHandle {
     fn drop(&mut self) {
         if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
-            log::warn!("PortRuntimeHandle stop command send error: {:?}", err);
+            log::warn!("PortRuntimeHandle stop command send error: {err:?}");
         }
 
         if let Ok(mut thread) = self.thread_handle.lock() {
             if let Some(thread) = thread.take() {
                 if let Err(err) = thread.join() {
-                    log::warn!("PortRuntimeHandle thread join error: {:?}", err);
+                    log::warn!("PortRuntimeHandle thread join error: {err:?}");
                 }
             }
         } else {

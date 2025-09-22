@@ -83,14 +83,15 @@ fn handle_toggle_follow(bus: &Bus) -> Result<()> {
         write_status(|status| {
             if let Some(port_name) = status.ports.order.get(selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(_) = with_port_write(port, |port| {
+                    if with_port_write(port, |port| {
                         port.log_auto_scroll = !port.log_auto_scroll;
-                    }) {
+                    })
+                    .is_some()
+                    {
                         // updated
                     } else {
                         log::warn!(
-                            "handle_toggle_follow: failed to acquire write lock for {}",
-                            port_name
+                            "handle_toggle_follow: failed to acquire write lock for {port_name}"
                         );
                     }
                 }
@@ -112,15 +113,15 @@ fn handle_clear_logs(bus: &Bus) -> Result<()> {
         write_status(|status| {
             if let Some(port_name) = status.ports.order.get(selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(_) = with_port_write(port, |port| {
+                    if with_port_write(port, |port| {
                         port.logs.clear();
-                        port.log_selected = 0;
-                    }) {
+                    })
+                    .is_some()
+                    {
                         // updated
                     } else {
                         log::warn!(
-                            "handle_clear_logs: failed to acquire write lock for {}",
-                            port_name
+                            "handle_clear_logs: failed to acquire write lock for {port_name}"
                         );
                     }
                 }

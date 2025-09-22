@@ -10,16 +10,13 @@ use crate::{
 /// Check if a subpage is currently active for modbus panel
 pub fn is_subpage_active() -> bool {
     // Read status and determine subpage active
-    if let Ok(active) = read_status(|app| {
+    read_status(|app| {
         Ok(matches!(
             app.page,
             types::Page::ConfigPanel { .. } | types::Page::ModbusDashboard { .. }
         ))
-    }) {
-        active
-    } else {
-        false
-    }
+    })
+    .unwrap_or_default()
 }
 
 /// Generate status lines for modbus panel display

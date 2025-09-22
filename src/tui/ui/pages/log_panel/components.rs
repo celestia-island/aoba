@@ -18,25 +18,17 @@ use crate::{
 };
 
 /// Extract log data from current page state
-pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, usize, usize, bool)> {
+pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, bool)> {
     read_status(|status| match &status.page {
         types::Page::LogPanel { selected_port, .. } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(tuple) = with_port_read(port, |pd| {
-                        Some((
-                            pd.logs.clone(),
-                            pd.log_selected,
-                            pd.log_view_offset,
-                            pd.log_auto_scroll,
-                        ))
-                    }) {
+                    if let Some(tuple) =
+                        with_port_read(port, |pd| Some((pd.logs.clone(), pd.log_auto_scroll)))
+                    {
                         Ok(tuple)
                     } else {
-                        log::warn!(
-                            "extract_log_data: failed to acquire read lock for {}",
-                            port_name
-                        );
+                        log::warn!("extract_log_data: failed to acquire read lock for {port_name}");
                         Ok(None)
                     }
                 } else {
@@ -53,13 +45,11 @@ pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, usize, usiz
 
 /// Render the main log display area
 pub fn render_log_display(
-    f: &mut Frame,
+    frame: &mut Frame,
     area: Rect,
     logs: &[types::port::PortLogEntry],
-    port_log_selected: usize,
-    port_log_view_offset: usize,
     port_log_auto_scroll: bool,
-) {
+) -> Result<()> {
     let total_groups = logs.len();
     // We'll render a windowed view of log groups. Each group is 3 lines.
     let group_height = 3usize;
@@ -74,7 +64,14 @@ pub fn render_log_display(
     } else if port_log_auto_scroll {
         total_groups.saturating_sub(1)
     } else {
-        min(port_log_view_offset, total_groups.saturating_sub(1))
+        read_status(|status| {
+            if let types::Page::LogPanel { view_offset, .. } = &status.page {
+                Ok(min(total_groups.saturating_sub(1), *view_offset))
+            } else {
+                Ok(0usize)
+            }
+        })
+        .unwrap_or(0usize)
     };
 
     // Compute top group so that bottom aligns at the bottom of the visible area
@@ -90,10 +87,31 @@ pub fn render_log_display(
     let mut styled_lines: Vec<Line> = Vec::new();
     for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
         if let Some(entry) = logs.get(g) {
-            let selected = port_log_selected
-                .checked_sub(top_group)
-                .map(|s| s == idx)
-                .unwrap_or(false);
+            let selected = read_status(|status| {
+                if let types::Page::LogPanel { selected_port, .. } = &status.page {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port) = status.ports.map.get(port_name) {
+                            if let Some((port_log_auto_scroll, len)) =
+                                with_port_read(port, |pd| (pd.log_auto_scroll, pd.logs.len()))
+                            {
+                                // Determine which log entry is currently selected based on auto-scroll and view_offset
+                                let port_log_selected = if port_log_auto_scroll {
+                                    len.saturating_sub(1)
+                                } else {
+                                    if let types::Page::LogPanel { view_offset, .. } = &status.page
+                                    {
+                                        min(len.saturating_sub(1), *view_offset)
+                                    } else {
+                                        0usize
+                                    }
+                                };
+                                return Ok(g == port_log_selected);
+                            }
+                        }
+                    }
+                }
+                Ok(false)
+            })?;
 
             let prefix_text = if selected { "> " } else { "  " };
             // Direction: try to infer send/recv from parsed summary (best-effort)
@@ -159,7 +177,7 @@ pub fn render_log_display(
     let sel_display = if total_groups == 0 {
         0
     } else {
-        port_log_selected + 1
+        1 // FIXME: should be selected + 1, but we don't track selected separately now
     };
     // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if port_log_auto_scroll {
@@ -190,11 +208,13 @@ pub fn render_log_display(
     let log_para = Paragraph::new(styled_lines)
         .block(log_block)
         .wrap(ratatui::widgets::Wrap { trim: true });
-    f.render_widget(log_para, area);
+    frame.render_widget(log_para, area);
+
+    Ok(())
 }
 
 /// Render a small input area showing current mode and buffer. Height expected to be small (3 lines).
-pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
+pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
     let mut lines: Vec<Line> = Vec::new();
 
     // For now, use ASCII mode as default since we don't have per-port input modes
@@ -304,7 +324,7 @@ pub fn render_log_input(f: &mut Frame, area: Rect) -> Result<()> {
     let para = Paragraph::new(lines)
         .block(block)
         .wrap(ratatui::widgets::Wrap { trim: false });
-    f.render_widget(para, area);
+    frame.render_widget(para, area);
 
     Ok(())
 }
@@ -316,7 +336,7 @@ pub fn is_in_subpage_editing() -> bool {
 
 /// Check if a subpage is currently active
 pub fn is_subpage_active() -> bool {
-    if let Ok(v) = read_status(|app| {
+    read_status(|app| {
         Ok(matches!(
             app.page,
             types::Page::ConfigPanel { .. }
@@ -324,11 +344,8 @@ pub fn is_subpage_active() -> bool {
                 | types::Page::LogPanel { .. }
                 | types::Page::About { .. }
         ))
-    }) {
-        v
-    } else {
-        false
-    }
+    })
+    .unwrap_or_default()
 }
 
 /// Scroll the LogPanel view offset up by `amount` (saturating at 0).

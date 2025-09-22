@@ -1,5 +1,5 @@
 //! Shared helper functions for form editing to eliminate repeated code.
-use crate::protocol::status::types::modbus::{EditingField, RegisterField};
+use crate::protocol::status::types::ui::{EditingField, RegisterField};
 
 /// Select the field being edited based on the current `cursor` position.
 ///
