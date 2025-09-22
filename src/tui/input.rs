@@ -73,7 +73,7 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
         }
 
         // Check for kill signal to exit the input thread
-        if let Ok(_) = kill_rx.try_recv() {
+        if kill_rx.try_recv().is_ok() {
             break;
         }
     }

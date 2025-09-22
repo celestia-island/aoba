@@ -55,7 +55,7 @@ impl GuiApp {
 
         // Initialize the global status
         if let Err(err) = init_status(status.clone()) {
-            log::error!("Failed to initialize global status: {}", err);
+            log::error!("Failed to initialize global status: {err}");
         }
 
         // Create channels and a simple core-like thread for demo handling of Refresh/Quit.
@@ -66,7 +66,7 @@ impl GuiApp {
         // Spawn a demo core thread that listens for UI commands and replies.
         thread::spawn(move || {
             if let Err(err) = run_demo_core(ui_rx, core_tx) {
-                log::error!("Demo core thread exited with error: {}", err);
+                log::error!("Demo core thread exited with error: {err}");
             }
         });
 

@@ -58,14 +58,16 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
             // Update existing PortData in-place if present
             if let Some(port) = status.ports.map.get(&name) {
                 // update in-place using helper to avoid unwrap panics
-                if let Some(_) = with_port_write(port, |port| {
+                if with_port_write(port, |port| {
                     port.extra = extra.clone();
                     port.port_type = format!("{:?}", info.port_type);
                     port.port_name = name.clone();
-                }) {
+                })
+                .is_some()
+                {
                     // updated
                 } else {
-                    log::warn!("scan_ports: failed to acquire write lock for port {}", name);
+                    log::warn!("scan_ports: failed to acquire write lock for port {name}");
                 }
             } else {
                 // Insert a new PortData for newly discovered port (wrap in Arc<RwLock<>>)
@@ -108,7 +110,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                         to_stop.push((key.clone(), rt));
                     }
                 } else {
-                    log::warn!("scan_ports: failed to acquire read lock for port {}", key);
+                    log::warn!("scan_ports: failed to acquire read lock for port {key}");
                 }
             }
             to_remove_names.push(key.clone());
@@ -149,10 +151,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
             }
         }
         if !stopped {
-            log::warn!(
-                "scan_ports: stop did not emit Stopped event within timeout for {}",
-                name
-            );
+            log::warn!("scan_ports: stop did not emit Stopped event within timeout for {name}",);
         }
     }
 
@@ -185,18 +184,13 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     std::thread::spawn(move || {
                         if let Err(err) = spawn_runtime_listener(evt_rx, pn.clone()) {
                             log::warn!(
-                                "spawn_runtime_listener for {} exited with error: {:?}",
-                                pn,
-                                err
+                                "spawn_runtime_listener for {pn} exited with error: {err:?}",
                             );
                         }
                     });
                 }
             } else {
-                log::warn!(
-                    "scan_ports: failed to acquire read lock for port {}",
-                    port_name
-                );
+                log::warn!("scan_ports: failed to acquire read lock for port {port_name}");
             }
         }
     }
@@ -227,22 +221,18 @@ fn spawn_runtime_listener(evt_rx: flume::Receiver<RuntimeEvent>, port_name: Stri
                 };
                 write_status(|status| {
                     if let Some(port) = status.ports.map.get(&port_name) {
-                        if let Some(_) = with_port_write(port, |port| {
+                        if with_port_write(port, |port| {
                             port.logs.push(entry.clone());
                             if port.logs.len() > MAX_LOGS {
                                 let drop = port.logs.len() - MAX_LOGS;
                                 port.logs.drain(0..drop);
                             }
-                            if port.log_auto_scroll {
-                                port.log_selected = port.logs.len().saturating_sub(1);
-                            }
-                        }) {
+                        })
+                        .is_some()
+                        {
                             // written
                         } else {
-                            log::warn!(
-                                "spawn_runtime_listener: failed to acquire write lock for {}",
-                                port_name
-                            );
+                            log::warn!("spawn_runtime_listener: failed to acquire write lock for {port_name}");
                         }
                     }
                     Ok(())

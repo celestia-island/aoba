@@ -20,10 +20,10 @@ fn get_port_name(selected_port: usize) -> Result<String> {
                 .map
                 .get(&name)
                 .and_then(|port| with_port_read(port, |port| port.port_name.clone()))
-                .unwrap_or_else(|| format!("COM{}", selected_port)))
+                    .unwrap_or_else(|| format!("COM{selected_port}")))
         })?
     } else {
-        format!("COM{}", selected_port)
+        format!("COM{selected_port}")
     };
     Ok(port_name)
 }

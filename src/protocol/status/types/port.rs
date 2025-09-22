@@ -46,8 +46,6 @@ pub struct PortData {
     pub config: PortConfig,
 
     pub logs: Vec<PortLogEntry>,
-    pub log_selected: usize,
-    pub log_view_offset: usize,
     pub log_auto_scroll: bool,
     pub log_clear_pending: bool,
 }
@@ -61,8 +59,6 @@ impl Default for PortData {
             state: PortState::Free,
             config: PortConfig::default(),
             logs: Vec::new(),
-            log_selected: 0,
-            log_view_offset: 0,
             log_auto_scroll: true,
             log_clear_pending: false,
         }
@@ -78,8 +74,8 @@ pub enum PortConfig {
         /// Stores logical entries related to Modbus (using RegisterEntry as a
         /// lightweight placeholder for per-endpoint configuration). This can be
         /// replaced by a more appropriate struct later.
-        masters: Vec<types::modbus::RegisterEntry>,
-        slaves: Vec<types::modbus::RegisterEntry>,
+        masters: Vec<types::modbus::ModbusRegisterItem>,
+        slaves: Vec<types::modbus::ModbusRegisterItem>,
     },
 }
 

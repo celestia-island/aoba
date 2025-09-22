@@ -107,7 +107,7 @@ fn run_rendering_loop(bus: Bus, thr_rx: flume::Receiver<Result<()>>) -> Result<(
         loop {
             if let Ok(res) = thr_rx.try_recv() {
                 if let Err(err) = res {
-                    eprintln!("thread exited with error: {:#}", err);
+                    eprintln!("thread exited with error: {err:#}");
                     return Err(err);
                 } else {
                     // thread exited successfully - treat as fatal and exit
@@ -222,15 +222,14 @@ fn run_core_thread(
                         // Clear runtime reference in Status under write lock quickly
                         write_status(|status| {
                             if let Some(port) = status.ports.map.get(&port_name) {
-                                if let Some(_) = with_port_write(port, |port| {
+                                if with_port_write(port, |port| {
                                     port.state = PortState::Free;
-                                }) {
+                                })
+                                .is_some()
+                                {
                                     // updated
                                 } else {
-                                    log::warn!(
-                                        "ToggleRuntime: failed to acquire write lock for {} (Free)",
-                                        port_name
-                                    );
+                                    log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (Free)");
                                 }
                             }
                             Ok(())
@@ -301,17 +300,19 @@ fn run_core_thread(
                         // Write handle into status under write lock
                         write_status(|status| {
                             if let Some(port) = status.ports.map.get(&port_name) {
-                                if let Some(_) = with_port_write(port, |port| {
+                                if with_port_write(port, |port| {
                                     port.state = PortState::OccupiedByThis {
                                         handle: Some(types::port::SerialPortWrapper::new(
                                             handle_for_write.shared_serial.clone(),
                                         )),
                                         runtime: handle_for_write.clone(),
                                     };
-                                }) {
+                                })
+                                .is_some()
+                                {
                                     // updated
                                 } else {
-                                    log::warn!("ToggleRuntime: failed to acquire write lock for {} (OccupiedByThis)", port_name);
+                                    log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (OccupiedByThis)");
                                 }
                             }
                             Ok(())
@@ -334,10 +335,11 @@ fn run_core_thread(
             }
         }
 
-        if polling_enabled && last_scan.elapsed() >= scan_interval {
-            if crate::tui::utils::scan::scan_ports(&core_tx, &mut scan_in_progress)? {
-                last_scan = std::time::Instant::now();
-            }
+        if polling_enabled
+            && last_scan.elapsed() >= scan_interval
+            && crate::tui::utils::scan::scan_ports(&core_tx, &mut scan_in_progress)?
+        {
+            last_scan = std::time::Instant::now();
         }
 
         // Update spinner frame for busy indicator animation
