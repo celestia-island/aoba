@@ -99,7 +99,7 @@ pub fn format_kv_hint(key: &str, value: &str) -> String {
 }
 
 /// Render hints into the given `area` using the project's standard hint style and separator.
-pub fn render_hints<'a, I>(f: &mut Frame, area: Rect, hints: I)
+pub fn render_hints<'a, I>(frame: &mut Frame, area: Rect, hints: I)
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -110,5 +110,5 @@ where
     let hint_para = Paragraph::new(text)
         .alignment(Alignment::Center)
         .block(hint_block);
-    f.render_widget(hint_para, area);
+    frame.render_widget(hint_para, area);
 }

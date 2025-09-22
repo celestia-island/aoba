@@ -134,12 +134,12 @@ pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Vec<Line<
     out.push(Line::from(lang().about.welcome.clone()));
     out.push(Line::from(Span::raw("")));
 
-    let mut base_pairs: Vec<(String, String)> = Vec::new();
-
-    base_pairs.push((lang().about.version.clone(), app_snapshot.version.clone()));
-    base_pairs.push((lang().about.authors.clone(), app_snapshot.authors.clone()));
-    base_pairs.push((lang().about.repository.clone(), app_snapshot.repo.clone()));
-    base_pairs.push((lang().about.license.clone(), app_snapshot.license.clone()));
+    let base_pairs: Vec<(String, String)> = vec![
+        (lang().about.version.clone(), app_snapshot.version.clone()),
+        (lang().about.authors.clone(), app_snapshot.authors.clone()),
+        (lang().about.repository.clone(), app_snapshot.repo.clone()),
+        (lang().about.license.clone(), app_snapshot.license.clone()),
+    ];
 
     // Render base pairs first
     let mut base_kv_lines = kv_pairs_to_lines(&base_pairs, 5);
