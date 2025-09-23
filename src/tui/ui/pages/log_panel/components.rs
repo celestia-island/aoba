@@ -85,7 +85,7 @@ pub fn render_log_display(
     };
 
     let mut styled_lines: Vec<Line> = Vec::new();
-    for (idx, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
+    for (_index, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
         if let Some(entry) = logs.get(g) {
             let selected = read_status(|status| {
                 if let types::Page::LogPanel { selected_port, .. } = &status.page {
@@ -250,7 +250,7 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
         s
     } else {
         read_status(|status| match &status.temporarily.input_raw_buffer {
-            types::ui::InputRawBuffer::String(v) => Ok(String::from_utf8_lossy(v).into_owned()),
+            types::ui::InputRawBuffer::String { bytes: v, offset: _ } => Ok(String::from_utf8_lossy(v).into_owned()),
             types::ui::InputRawBuffer::Index(i) => Ok(i.to_string()),
             types::ui::InputRawBuffer::None => Ok(String::new()),
         })?

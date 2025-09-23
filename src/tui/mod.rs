@@ -186,9 +186,9 @@ fn run_core_thread(
                 }
                 UiToCore::PausePolling => {
                     polling_enabled = false;
-                    core_tx
-                        .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                    if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
+                        log::warn!("ToggleRuntime: failed to send Refreshed: {}", e);
+                    }
                 }
                 UiToCore::ResumePolling => {
                     polling_enabled = true;
@@ -236,9 +236,15 @@ fn run_core_thread(
                         })?;
 
                         // Send stop outside of the write lock and wait briefly for the runtime to acknowledge
-                        rt.cmd_tx
+                        // Try to request runtime stop. Sending may fail if the runtime
+                        // already exited; treat that non-fatally to avoid bringing down
+                        // the entire core thread when user double-presses Enter.
+                        if let Err(e) = rt
+                            .cmd_tx
                             .send(crate::protocol::runtime::RuntimeCommand::Stop)
-                            .map_err(|e| anyhow!("failed to send Stop: {}", e))?;
+                        {
+                            log::warn!("ToggleRuntime: failed to send Stop: {}", e);
+                        }
                         // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
                         let mut stopped = false;
                         for _ in 0..10 {
@@ -261,9 +267,9 @@ fn run_core_thread(
                             log::warn!("ToggleRuntime: stop did not emit Stopped event within timeout for {port_name}");
                         }
 
-                        core_tx
-                            .send(CoreToUi::Refreshed)
-                            .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
+                            log::warn!("ToggleRuntime: failed to send Refreshed: {}", e);
+                        }
                         continue;
                     }
 
