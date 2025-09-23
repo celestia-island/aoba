@@ -22,7 +22,7 @@ pub trait Cursor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EntryCursor {
     /// Select one of the physical COM ports (index)
-    Com { idx: usize },
+    Com { index: usize },
     /// Force a refresh (special entry)
     Refresh,
     /// Create a virtual port entry
@@ -34,9 +34,9 @@ pub enum EntryCursor {
 impl Cursor for EntryCursor {
     fn prev(self) -> Self {
         match self {
-            EntryCursor::Com { idx } => {
-                if idx > 0 {
-                    EntryCursor::Com { idx: idx - 1 }
+            EntryCursor::Com { index } => {
+                if index > 0 {
+                    EntryCursor::Com { index: index - 1 }
                 } else {
                     // Wrap to last special entry
                     EntryCursor::About
@@ -44,11 +44,13 @@ impl Cursor for EntryCursor {
             }
             EntryCursor::Refresh => {
                 // Go to last COM port if any exist
-                let max_port_idx =
+                let max_port_index =
                     read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))
                         .unwrap_or(0);
-                if max_port_idx > 0 {
-                    EntryCursor::Com { idx: max_port_idx }
+                if max_port_index > 0 {
+                    EntryCursor::Com {
+                        index: max_port_index,
+                    }
                 } else {
                     EntryCursor::About
                 }
@@ -60,12 +62,12 @@ impl Cursor for EntryCursor {
 
     fn next(self) -> Self {
         match self {
-            EntryCursor::Com { idx } => {
-                let max_port_idx =
+            EntryCursor::Com { index } => {
+                let max_port_index =
                     read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))
                         .unwrap_or(0);
-                if idx < max_port_idx {
-                    EntryCursor::Com { idx: idx + 1 }
+                if index < max_port_index {
+                    EntryCursor::Com { index: index + 1 }
                 } else {
                     EntryCursor::Refresh
                 }
@@ -75,7 +77,7 @@ impl Cursor for EntryCursor {
             EntryCursor::About => {
                 // Wrap to first COM port if any exist
                 if read_status(|status| Ok(!status.ports.order.is_empty())).unwrap_or(false) {
-                    EntryCursor::Com { idx: 0 }
+                    EntryCursor::Com { index: 0 }
                 } else {
                     EntryCursor::Refresh
                 }
@@ -85,7 +87,7 @@ impl Cursor for EntryCursor {
 
     fn view_offset(&self) -> usize {
         match self {
-            EntryCursor::Com { idx } => *idx,
+            EntryCursor::Com { index } => *index,
             _ => 0,
         }
     }
@@ -103,7 +105,7 @@ pub enum ConfigPanelCursor {
     /// Baud rate setting
     BaudRate,
     /// Data bits setting
-    DataBits,
+    DataBits { custom_mode: bool },
     /// Parity setting
     Parity,
     /// Stop bits setting
@@ -120,7 +122,7 @@ impl ConfigPanelCursor {
             ConfigPanelCursor::ProtocolMode,
             ConfigPanelCursor::ProtocolConfig,
             ConfigPanelCursor::BaudRate,
-            ConfigPanelCursor::DataBits,
+            ConfigPanelCursor::DataBits { custom_mode: false },
             ConfigPanelCursor::Parity,
             ConfigPanelCursor::StopBits,
             ConfigPanelCursor::ViewCommunicationLog,
@@ -145,18 +147,18 @@ impl Cursor for ConfigPanelCursor {
     fn prev(self) -> Self {
         // inline prev logic to avoid extra indirection
         let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx > 0 {
-            all[current_idx - 1]
+        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_index > 0 {
+            all[current_index - 1]
         } else {
             all[all.len() - 1]
         }
     }
     fn next(self) -> Self {
         let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx < all.len() - 1 {
-            all[current_idx + 1]
+        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_index < all.len() - 1 {
+            all[current_index + 1]
         } else {
             all[0]
         }
@@ -165,12 +167,12 @@ impl Cursor for ConfigPanelCursor {
         // inline view_offset: return the index of the cursor adjusted for
         // blank rows inserted between groups. We compute the base index
         // then add +1 for each preceding group boundary the index passes.
-        let idx = Self::all().iter().position(|&c| c == *self).unwrap_or(0);
+        let index = Self::all().iter().position(|&c| c == *self).unwrap_or(0);
         // Accumulate extra blank rows introduced before this index
         let mut extra = 0usize;
         let mut running = 0usize;
         for &group_size in CONFIG_PANEL_GROUP_SIZES {
-            if idx >= running + group_size {
+            if index >= running + group_size {
                 // there is a blank line after this group
                 extra += 1;
                 running += group_size;
@@ -178,7 +180,7 @@ impl Cursor for ConfigPanelCursor {
                 break;
             }
         }
-        idx + extra
+        index + extra
     }
 }
 
@@ -213,18 +215,18 @@ impl ModbusDashboardCursor {
 impl Cursor for ModbusDashboardCursor {
     fn prev(self) -> Self {
         let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx > 0 {
-            all[current_idx - 1]
+        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_index > 0 {
+            all[current_index - 1]
         } else {
             all[all.len() - 1]
         }
     }
     fn next(self) -> Self {
         let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx < all.len() - 1 {
-            all[current_idx + 1]
+        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_index < all.len() - 1 {
+            all[current_index + 1]
         } else {
             all[0]
         }
@@ -265,18 +267,18 @@ impl LogPanelCursor {
 impl Cursor for LogPanelCursor {
     fn prev(self) -> Self {
         let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx > 0 {
-            all[current_idx - 1]
+        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_index > 0 {
+            all[current_index - 1]
         } else {
             all[all.len() - 1]
         }
     }
     fn next(self) -> Self {
         let all = Self::all();
-        let current_idx = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_idx < all.len() - 1 {
-            all[current_idx + 1]
+        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
+        if current_index < all.len() - 1 {
+            all[current_index + 1]
         } else {
             all[0]
         }

@@ -11,7 +11,10 @@ pub enum InputRawBuffer {
     #[default]
     None,
     Index(usize),
-    String(Vec<u8>),
+    /// String buffer with an editing cursor offset (signed). Offset semantics:
+    /// - offset >= 0: character index from start (0..=len)
+    /// - offset < 0: character index from end (len as isize + offset), clamped
+    String { bytes: Vec<u8>, offset: isize },
 }
 
 impl std::fmt::Display for InputRawBuffer {
@@ -19,7 +22,7 @@ impl std::fmt::Display for InputRawBuffer {
         match self {
             InputRawBuffer::None => write!(f, ""),
             InputRawBuffer::Index(i) => write!(f, "{i}"),
-            InputRawBuffer::String(bytes) => match std::str::from_utf8(bytes) {
+            InputRawBuffer::String { bytes, .. } => match std::str::from_utf8(bytes) {
                 Ok(s) => write!(f, "{s}"),
                 Err(_) => write!(f, "{bytes:?}"),
             },
@@ -39,7 +42,7 @@ impl InputRawBuffer {
         match self {
             InputRawBuffer::None => true,
             InputRawBuffer::Index(_) => false,
-            InputRawBuffer::String(v) => v.is_empty(),
+            InputRawBuffer::String { bytes, .. } => bytes.is_empty(),
         }
     }
 
@@ -51,17 +54,34 @@ impl InputRawBuffer {
     /// Push a char into the string buffer, creating one if necessary.
     pub fn push(&mut self, c: char) {
         match self {
-            InputRawBuffer::String(v) => {
-                let mut buf = [0u8; 4];
-                let s = c.encode_utf8(&mut buf);
-                v.extend_from_slice(s.as_bytes());
+            InputRawBuffer::String { bytes, offset } => {
+                // Insert char at current cursor offset (character index semantics)
+                let mut s = String::from_utf8_lossy(bytes).to_string();
+                let len_chars = s.chars().count() as isize;
+                // compute insertion position
+                let mut pos = if *offset >= 0 { *offset } else { len_chars + *offset };
+                if pos < 0 {
+                    pos = 0;
+                }
+                if pos > len_chars {
+                    pos = len_chars;
+                }
+                let insert_pos = pos as usize;
+                s.insert(insert_pos, c);
+                *bytes = s.into_bytes();
+                // advance cursor after inserted char
+                if *offset >= 0 {
+                    *offset += 1;
+                } else {
+                    // keep negative offsets relative to end by no change
+                }
             }
             _ => {
                 let mut v = Vec::new();
                 let mut buf = [0u8; 4];
                 let s = c.encode_utf8(&mut buf);
                 v.extend_from_slice(s.as_bytes());
-                *self = InputRawBuffer::String(v);
+                *self = InputRawBuffer::String { bytes: v, offset: 1 };
             }
         }
     }
@@ -69,11 +89,30 @@ impl InputRawBuffer {
     /// Pop the last character from the string buffer (if any).
     pub fn pop(&mut self) -> Option<char> {
         match self {
-            InputRawBuffer::String(v) => {
-                // Convert to String, pop last char, write back
-                if let Ok(mut s) = String::from_utf8(v.clone()) {
-                    let ch = s.pop();
-                    *v = s.into_bytes();
+            InputRawBuffer::String { bytes, offset } => {
+                if let Ok(s) = String::from_utf8(bytes.clone()) {
+                    let len_chars = s.chars().count() as isize;
+                    // determine deletion index: character before cursor
+                    let pos = if *offset >= 0 { *offset } else { len_chars + *offset };
+                    if pos <= 0 {
+                        return None;
+                    }
+                    let del_pos = (pos - 1) as usize;
+                    // remove char at del_pos
+                    let mut chars: Vec<char> = s.chars().collect();
+                    let ch = chars.get(del_pos).copied();
+                    if ch.is_some() {
+                        chars.remove(del_pos);
+                        let new_s: String = chars.into_iter().collect();
+                        *bytes = new_s.into_bytes();
+                        // move cursor left when it was >=0
+                        if *offset >= 0 {
+                            *offset -= 1;
+                            if *offset < 0 {
+                                *offset = 0;
+                            }
+                        }
+                    }
                     ch
                 } else {
                     None
@@ -91,9 +130,35 @@ impl InputRawBuffer {
     /// Return an owned String representation of the buffer
     pub fn as_string(&self) -> String {
         match self {
-            InputRawBuffer::String(v) => String::from_utf8_lossy(v).into_owned(),
+            InputRawBuffer::String { bytes, .. } => String::from_utf8_lossy(bytes).into_owned(),
             InputRawBuffer::Index(i) => i.to_string(),
             InputRawBuffer::None => String::new(),
+        }
+    }
+
+    /// Move cursor offset by delta (can be negative). Clamped to valid range.
+    pub fn move_offset(&mut self, delta: isize) {
+            if let InputRawBuffer::String { bytes, offset } = self {
+            let s = String::from_utf8_lossy(bytes).to_string();
+            let len_chars = s.chars().count() as isize;
+            let mut new = *offset + delta;
+            // clamp: allow negative values down to -len_chars
+            if new < -len_chars {
+                new = -len_chars;
+            }
+            if new > len_chars {
+                new = len_chars;
+            }
+            *offset = new;
+        }
+    }
+
+    /// Set the string buffer from a given String and set cursor offset to end.
+    pub fn set_string_and_place_cursor_at_end(&mut self, s: String) {
+        let len_chars = s.chars().count() as isize;
+        *self = InputRawBuffer::String {
+            bytes: s.into_bytes(),
+            offset: len_chars,
         }
     }
 }
@@ -134,7 +199,7 @@ pub enum EditingField {
     DataBits,
     GlobalInterval,
     GlobalTimeout,
-    RegisterField { idx: usize, field: RegisterField },
+    RegisterField { index: usize, field: RegisterField },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

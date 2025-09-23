@@ -20,7 +20,7 @@ fn get_port_name(selected_port: usize) -> Result<String> {
                 .map
                 .get(&name)
                 .and_then(|port| with_port_read(port, |port| port.port_name.clone()))
-                    .unwrap_or_else(|| format!("COM{selected_port}")))
+                .unwrap_or_else(|| format!("COM{selected_port}")))
         })?
     } else {
         format!("COM{selected_port}")
@@ -47,9 +47,9 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
     // Always reserve 2 spaces from left then draw spinner which always animates.
     // Spinner color: yellow when busy, white when idle.
     let busy = read_status(|status| Ok(status.temporarily.busy.busy))?;
-    let frame_idx = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
+    let frame_index = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
     let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-    let ch = frames[frame_idx % frames.len()];
+    let ch = frames[frame_index % frames.len()];
     // leading spaces
     breadcrumb_spans.push(Span::raw("  "));
     // spinner with color depending on busy
