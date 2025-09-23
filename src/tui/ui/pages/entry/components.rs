@@ -175,7 +175,9 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
             match cursor {
                 Some(EntryCursor::Com { index }) => {
                     if *index < app.ports.order.len() {
-                        let lines = crate::tui::ui::pages::config_panel::components::render_kv_lines_with_indicators(*index)?;
+                        // Use a local, simpler renderer for port basic info to avoid
+                        // cursor/selection coupling bugs from the full config panel.
+                        let lines = render_port_basic_info_lines(*index);
                         Ok(lines)
                     } else {
                         Ok(vec![Line::from(
@@ -198,7 +200,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
                 None => {
                     // Default to first port if available
                     if !app.ports.order.is_empty() {
-                        let lines = crate::tui::ui::pages::config_panel::components::render_kv_lines_with_indicators(0)?;
+                        let lines = render_port_basic_info_lines(0);
                         Ok(lines)
                     } else {
                         Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
@@ -275,6 +277,110 @@ fn get_refresh_content() -> Vec<Line<'static>> {
     } else {
         vec![Line::from(lang().index.scan_none.as_str())]
     }
+}
+
+/// Render a simplified, local-only port basic info block for the entry page.
+/// This intentionally does not depend on the full ConfigPanel renderer to
+/// avoid cursor/selection coupling issues. It shows enabled state and common
+/// serial parameters in a compact layout.
+fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
+    // Fetch the port Arc once under the status read lock to minimize lock churn
+    let port_arc_opt: Option<std::sync::Arc<std::sync::RwLock<types::port::PortData>>> =
+        match read_status(|s| {
+            Ok(s.ports
+                .order
+                .get(index)
+                .and_then(|name| s.ports.map.get(name).cloned()))
+        }) {
+            Ok(v) => v,
+            Err(_) => None,
+        };
+
+    if let Some(port_arc) = port_arc_opt {
+        // Read port data safely
+        if let Some((_pn, state, cfg_opt)) = with_port_read(&port_arc, |port| {
+            let pn = port.port_name.clone();
+            let st = port.state.clone();
+            let cfg = match &port.config {
+                types::port::PortConfig::Modbus { .. } => {
+                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                        Some(runtime.current_cfg.clone())
+                    } else {
+                        None
+                    }
+                }
+            };
+            (pn, st, cfg)
+        }) {
+            let mut lines: Vec<Line<'static>> = Vec::new();
+
+            // Enabled switch
+            let enabled = matches!(state, types::port::PortState::OccupiedByThis { .. });
+            let val_enabled = lang().protocol.common.port_enabled.clone();
+            let val_disabled = lang().protocol.common.port_disabled.clone();
+            let enable_text = if enabled { val_enabled } else { val_disabled };
+            lines.push(Line::from(Span::raw(format!("{} {}", "", enable_text))));
+
+            // Serial params: Baud, DataBits, Parity, StopBits
+            if let Some(cfg) = cfg_opt {
+                // Separator line
+                let sep_len = 48usize;
+                let sep_str: String = std::iter::repeat('─').take(sep_len).collect();
+                lines.push(Line::from(Span::styled(
+                    sep_str,
+                    Style::default().fg(Color::DarkGray),
+                )));
+
+                // Align labels and values into two columns (label | value).
+                // Define a minimum left column width and pad labels using
+                // unicode-width so CJK and other wide chars are counted correctly.
+                let left_min_width: usize = 14; // reasonable default to match config panel style
+
+                let kv_pairs = vec![
+                    (
+                        lang().protocol.common.label_baud.as_str().to_string(),
+                        cfg.baud.to_string(),
+                    ),
+                    (
+                        lang().protocol.common.label_data_bits.as_str().to_string(),
+                        cfg.data_bits.to_string(),
+                    ),
+                    (
+                        lang().protocol.common.label_parity.as_str().to_string(),
+                        format!("{:?}", cfg.parity),
+                    ),
+                    (
+                        lang().protocol.common.label_stop_bits.as_str().to_string(),
+                        cfg.stop_bits.to_string(),
+                    ),
+                ];
+
+                for (label, val) in kv_pairs {
+                    // compute display width of label and padding needed
+                    let lab_w = UnicodeWidthStr::width(label.as_str());
+                    let pad = if left_min_width > lab_w {
+                        left_min_width - lab_w
+                    } else {
+                        1
+                    };
+                    let spacer = " ".repeat(pad);
+
+                    // make label bold and value normal; use Span for styling
+                    let spans = vec![
+                        Span::styled(label, Style::default().add_modifier(Modifier::BOLD)),
+                        Span::raw(spacer),
+                        Span::raw(val),
+                    ];
+                    lines.push(Line::from(spans));
+                }
+            }
+
+            return lines;
+        }
+    }
+
+    // Fallback when port info is absent
+    vec![Line::from(lang().index.invalid_port_selection.as_str())]
 }
 
 /// Get content lines for manual specify entry
