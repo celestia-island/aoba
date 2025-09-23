@@ -111,11 +111,11 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
             groups.entry(base).or_default().push(i);
         }
 
-        for (_base, idxs) in groups.into_iter() {
-            if idxs.len() <= 1 {
+        for (_base, indexs) in groups.into_iter() {
+            if indexs.len() <= 1 {
                 continue;
             }
-            for i in idxs.into_iter() {
+            for i in indexs.into_iter() {
                 // If it's a usb-type port, attempt to append VID / PID / SN if
                 // We can extract them; otherwise append a generic (usb).
                 if matches!(ports[i].port_type, SerialPortType::UsbPort { .. }) {

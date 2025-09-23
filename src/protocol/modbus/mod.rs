@@ -123,12 +123,12 @@ pub fn boot_modbus_slave_service(
             _ => return Err(anyhow!("Unsupported function code")),
         }
         let original = frame.clone();
-        let (byte_count_idx, data_start) = (2usize, 3usize);
+        let (byte_count_index, data_start) = (2usize, 3usize);
         if frame.len() < data_start + 1 + 2 {
             // Need at least one data byte + crc
             return Err(anyhow!("Frame too short to trim duplicates"));
         }
-        let reported_bc = frame[byte_count_idx] as usize;
+        let reported_bc = frame[byte_count_index] as usize;
 
         // Data segment excluding crc
         if frame.len() < data_start + reported_bc + 2 {

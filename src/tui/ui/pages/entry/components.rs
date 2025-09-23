@@ -27,7 +27,7 @@ use crate::{
 pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> usize {
     match page {
         types::Page::Entry { cursor } => match cursor {
-            Some(types::cursor::EntryCursor::Com { idx }) => *idx,
+            Some(types::cursor::EntryCursor::Com { index }) => *index,
             Some(types::cursor::EntryCursor::Refresh) => ports_order.len(),
             Some(types::cursor::EntryCursor::CreateVirtual) => ports_order.len().saturating_add(1),
             Some(types::cursor::EntryCursor::About) => ports_order.len().saturating_add(2),
@@ -123,10 +123,10 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
         }
 
         for (j, lbl) in extras.into_iter().enumerate() {
-            let idx = status.ports.order.len() + j;
-            let prefix = if idx == selection { "> " } else { "  " };
+            let index = status.ports.order.len() + j;
+            let prefix = if index == selection { "> " } else { "  " };
             let spans = vec![Span::raw(prefix), Span::raw(lbl)];
-            if idx == selection {
+            if index == selection {
                 let styled = spans
                     .into_iter()
                     .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
@@ -173,9 +173,9 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
         } else if let types::Page::Entry { cursor } = &app.page {
             // Match on cursor to determine content
             match cursor {
-                Some(EntryCursor::Com { idx }) => {
-                    if *idx < app.ports.order.len() {
-                        let lines = crate::tui::ui::pages::config_panel::components::render_kv_lines_with_indicators(*idx)?;
+                Some(EntryCursor::Com { index }) => {
+                    if *index < app.ports.order.len() {
+                        let lines = crate::tui::ui::pages::config_panel::components::render_kv_lines_with_indicators(*index)?;
                         Ok(lines)
                     } else {
                         Ok(vec![Line::from(

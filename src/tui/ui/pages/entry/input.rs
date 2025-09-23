@@ -13,11 +13,11 @@ use crate::{
 
 pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
     match cursor {
-        cursor::EntryCursor::Com { idx } => {
-            let prev = idx.saturating_sub(1);
+        cursor::EntryCursor::Com { index } => {
+            let prev = index.saturating_sub(1);
             write_status(|status| {
                 status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::Com { idx: prev }),
+                    cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
                 };
                 Ok(())
             })?;
@@ -34,7 +34,7 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
             } else {
                 write_status(|status| {
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { idx: prev }),
+                        cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
                     };
                     Ok(())
                 })?;
@@ -63,8 +63,8 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
 
 pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
     match cursor {
-        cursor::EntryCursor::Com { idx } => {
-            let next = idx.saturating_add(1);
+        cursor::EntryCursor::Com { index } => {
+            let next = index.saturating_add(1);
             if next >= read_status(|status| Ok(status.ports.map.len()))? {
                 write_status(|status| {
                     status.page = Page::Entry {
@@ -75,7 +75,7 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
             } else {
                 write_status(|status| {
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { idx: next }),
+                        cursor: Some(types::cursor::EntryCursor::Com { index: next }),
                     };
                     Ok(())
                 })?;
@@ -119,7 +119,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             // If cursor is None (initial startup), choose behavior based on number of ports:
-            // - if there are at least 2 ports, jump to the second port (idx = 1)
+            // - if there are at least 2 ports, jump to the second port (index = 1)
             // - otherwise jump to Refresh
             let cursor_opt = read_status(|status| {
                 if let types::Page::Entry { cursor } = &status.page {
@@ -134,7 +134,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     // Jump to second port (index 1)
                     write_status(|status| {
                         status.page = Page::Entry {
-                            cursor: Some(types::cursor::EntryCursor::Com { idx: 1 }),
+                            cursor: Some(types::cursor::EntryCursor::Com { index: 1 }),
                         };
                         Ok(())
                     })?;
@@ -180,20 +180,20 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 } else {
                     write_status(|status| {
                         status.page = Page::Entry {
-                            cursor: Some(types::cursor::EntryCursor::Com { idx: 0 }),
+                            cursor: Some(types::cursor::EntryCursor::Com { index: 0 }),
                         };
                         Ok(())
                     })?;
-                    Some(types::cursor::EntryCursor::Com { idx: 0 })
+                    Some(types::cursor::EntryCursor::Com { index: 0 })
                 }
             } else {
                 cursor
             };
 
             match final_cursor {
-                Some(types::cursor::EntryCursor::Com { idx }) => write_status(|status| {
+                Some(types::cursor::EntryCursor::Com { index }) => write_status(|status| {
                     status.page = Page::ConfigPanel {
-                        selected_port: idx,
+                        selected_port: index,
                         view_offset: 0,
                         cursor: types::cursor::ConfigPanelCursor::EnablePort,
                     };

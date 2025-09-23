@@ -124,11 +124,11 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         groups.entry(base).or_default().push(i);
     }
 
-    for (_base, idxs) in groups.into_iter() {
-        if idxs.len() <= 1 {
+    for (_base, indexs) in groups.into_iter() {
+        if indexs.len() <= 1 {
             continue;
         }
-        for i in idxs.into_iter() {
+        for i in indexs.into_iter() {
             if let SerialPortType::UsbPort(info) = &ports[i].port_type {
                 ports[i].port_name = format!(
                     "{} (vid:{:04x} pid:{:04x})",
@@ -217,17 +217,17 @@ mod tests {
         ];
         let out = sort_and_dedup_ports(input);
         let names: Vec<_> = out.iter().map(|p| p.port_name.to_lowercase()).collect();
-        let idx_usb = names
+        let index_usb = names
             .iter()
             .position(|n| n.contains("ttyusb") || n.contains("usb"));
-        let idx_acm = names.iter().position(|n| n.contains("acm"));
-        let idx_ttys = names.iter().position(|n| {
+        let index_acm = names.iter().position(|n| n.contains("acm"));
+        let index_ttys = names.iter().position(|n| {
             n.contains("ttys") || n.contains("ttys0") || n.contains("ttys1") || n.contains("ttys")
         });
-        if let (Some(i_usb), Some(i_ttys)) = (idx_usb, idx_ttys) {
+        if let (Some(i_usb), Some(i_ttys)) = (index_usb, index_ttys) {
             assert!(i_usb < i_ttys);
         }
-        if let (Some(i_acm), Some(i_ttys)) = (idx_acm, idx_ttys) {
+        if let (Some(i_acm), Some(i_ttys)) = (index_acm, index_ttys) {
             assert!(i_acm < i_ttys);
         }
     }

@@ -29,9 +29,9 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
             | types::Page::ConfigPanel { selected_port, .. }
             | types::Page::LogPanel { selected_port, .. } => *selected_port,
             types::Page::Entry {
-                cursor: Some(types::cursor::EntryCursor::Com { idx }),
+                cursor: Some(types::cursor::EntryCursor::Com { index }),
                 ..
-            } => *idx,
+            } => *index,
             _ => 0usize,
         })
     })?)?;
