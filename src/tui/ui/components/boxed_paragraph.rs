@@ -27,7 +27,7 @@ pub fn render_boxed_paragraph(
 ) {
     let content_len = content.len();
     let content_len = content_len.saturating_sub((area.height / 2) as usize);
-    let offset = std::cmp::min(offset, content_len.saturating_sub(1));
+    let offset = std::cmp::min(offset.saturating_sub(2), content_len.saturating_sub(1));
 
     // Create block with optional title
     let mut block = Block::default()
@@ -35,7 +35,7 @@ pub fn render_boxed_paragraph(
         .padding(Padding::left(1));
 
     if let Some(title_text) = title {
-    block = block.title(format!(" {title_text} "));
+        block = block.title(format!(" {title_text} "));
     }
 
     let mut para = Paragraph::new(content)
