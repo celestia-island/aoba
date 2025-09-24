@@ -4,59 +4,12 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{read_status, types},
+    protocol::status::{read_status, types, write_status},
     tui::{
         ui::pages,
         utils::bus::{Bus, UiToCore},
     },
 };
-
-/// High-level user actions
-#[derive(Debug, Clone)]
-pub enum Action {
-    Quit,
-    LeavePage,
-    EnterPage,
-    EditToggle,
-    AddRegister,
-    DeleteRegister,
-    PageUp,
-    PageDown,
-    JumpTop,
-    JumpBottom,
-    MoveNext,
-    MovePrev,
-    ClearError,
-    EnterSubpage(char),
-    ExitSubpage,
-    SwitchNext,
-    SwitchPrev,
-    TogglePort,
-    ToggleFollow,
-    QuickScan,
-    None,
-}
-
-/// Map a KeyCode to a high-level Action
-pub fn map_key(code: KeyCode) -> Action {
-    match code {
-        KeyCode::Char('q') => Action::Quit,
-        // Most navigation and page actions are now handled by individual pages
-        KeyCode::Char('c') => Action::ClearError,
-        KeyCode::Char('e') => Action::EditToggle,
-        KeyCode::Char('n') => Action::AddRegister,
-        KeyCode::Char('d') => Action::DeleteRegister,
-        KeyCode::Char('p') => Action::ToggleFollow,
-        KeyCode::Tab => Action::SwitchNext,
-        KeyCode::BackTab => Action::SwitchPrev,
-        KeyCode::PageUp => Action::PageUp,
-        KeyCode::PageDown => Action::PageDown,
-        KeyCode::Home => Action::JumpTop,
-        KeyCode::End => Action::JumpBottom,
-
-        _ => Action::None,
-    }
-}
 
 /// Spawn the input handling thread that processes keyboard and mouse events
 pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
@@ -149,7 +102,6 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         // If in edit mode, handle character input globally
         if in_edit_mode && matches!(key.code, KeyCode::Char(_)) {
             if let KeyCode::Char(c) = key.code {
-                use crate::protocol::status::write_status;
                 write_status(|status| {
                     status.temporarily.input_raw_buffer.push(c);
                     Ok(())
@@ -164,8 +116,6 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     // Route input to appropriate page handler based on current Status.page.
     if let Ok(page) = read_status(|status| Ok(status.page.clone())) {
-        use crate::tui::ui::pages;
-
         // Route by exact page variant and construct the page snapshot inline.
         match &page {
             types::Page::Entry { .. } => {

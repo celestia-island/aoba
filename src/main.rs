@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::process::Command;
+use std::{process::Command, thread, time::Duration};
 
 // Try to spawn the GUI next to the current exe. Return true if GUI started successfully,
 // False if spawning or early startup failed (caller may fallback to TUI).
@@ -12,8 +12,6 @@ fn spawn_gui_next_to_current_exe() -> bool {
             Ok(mut child) => {
                 // Give the GUI process a short time to fail fast. If it exits quickly,
                 // Assume startup failed and return false so caller can fallback to TUI.
-                use std::{thread, time::Duration};
-
                 let mut failed_early = false;
                 for _ in 0..30 {
                     thread::sleep(Duration::from_millis(100));
