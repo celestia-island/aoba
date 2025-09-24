@@ -217,74 +217,28 @@ pub enum ModbusDashboardCursor {
 
 impl Cursor for ModbusDashboardCursor {
     fn prev(self) -> Self {
-        // Helper: build a flat ordered list of cursor positions based on current items
+        // Build flat ordered list using shared helper to keep behavior consistent
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
-        // Add top AddLine
         flat.push(ModbusDashboardCursor::AddLine);
 
-        // Try to collect current items (masters + slaves or placeholder) similar to renderer
-        let items_opt = read_status(|status| {
-            if let crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. } =
-                &status.page
-            {
-                let port_name = status.ports.order.get(*selected_port).cloned();
-                Ok(port_name)
-            } else {
-                Ok(None)
-            }
-        })
-        .ok()
-        .flatten();
-
-        if let Some(port_name) = items_opt {
-            if let Ok(port_entry_opt) =
-                read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
-            {
-                if let Some(port_entry) = port_entry_opt {
-                    if let Ok(port_data) = port_entry.read() {
-                        let crate::protocol::status::types::port::PortConfig::Modbus {
-                            masters,
-                            slaves,
-                        } = &port_data.config;
-                        let mut items_vec: Vec<
-                            crate::protocol::status::types::modbus::ModbusRegisterItem,
-                        > = Vec::new();
-                        for it in masters.iter() {
-                            items_vec.push(it.clone());
-                        }
-                        // Only include actual configured masters and slaves.
-                        // When there are no items, leave `items_vec` empty so the
-                        // flat cursor list will only contain `AddLine` and cursor
-                        // movement will not advance into non-existent entries.
-                        for it in slaves.iter() {
-                            items_vec.push(it.clone());
-                        }
-
-                        for (idx, item) in items_vec.iter().enumerate() {
-                            // per-item editable fields
-                            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
-                            flat.push(ModbusDashboardCursor::StationId { index: idx });
-                            flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
-                            flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
-                            flat.push(ModbusDashboardCursor::RegisterLength { index: idx });
-                            // per-register entries
-                            let regs = item.register_length as usize;
-                            for reg in 0..regs {
-                                flat.push(ModbusDashboardCursor::Register {
-                                    slave_index: idx,
-                                    register_index: reg,
-                                });
-                            }
-                        }
-                    }
-                }
+        let items_vec = build_modbus_items_vec();
+        for (idx, item) in items_vec.iter().enumerate() {
+            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
+            flat.push(ModbusDashboardCursor::StationId { index: idx });
+            flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
+            flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
+            flat.push(ModbusDashboardCursor::RegisterLength { index: idx });
+            let regs = item.register_length as usize;
+            for reg in 0..regs {
+                flat.push(ModbusDashboardCursor::Register {
+                    slave_index: idx,
+                    register_index: reg,
+                });
             }
         }
 
-        // find current position in flat list
         let cur_pos = flat.iter().position(|c| *c == self).unwrap_or(0);
         if cur_pos == 0 {
-            // keep at AddLine
             flat[0]
         } else {
             flat[cur_pos - 1]
@@ -295,65 +249,24 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
 
-        let items_opt = read_status(|status| {
-            if let crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. } =
-                &status.page
-            {
-                let port_name = status.ports.order.get(*selected_port).cloned();
-                Ok(port_name)
-            } else {
-                Ok(None)
-            }
-        })
-        .ok()
-        .flatten();
-
-        if let Some(port_name) = items_opt {
-            if let Ok(port_entry_opt) =
-                read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
-            {
-                if let Some(port_entry) = port_entry_opt {
-                    if let Ok(port_data) = port_entry.read() {
-                        let crate::protocol::status::types::port::PortConfig::Modbus {
-                            masters,
-                            slaves,
-                        } = &port_data.config;
-                        let mut items_vec: Vec<
-                            crate::protocol::status::types::modbus::ModbusRegisterItem,
-                        > = Vec::new();
-                        for it in masters.iter() {
-                            items_vec.push(it.clone());
-                        }
-                        // Only include actual configured masters and slaves.
-                        // When there are no items, leave `items_vec` empty so the
-                        // flat cursor list will only contain `AddLine` and cursor
-                        // movement will not advance into non-existent entries.
-                        for it in slaves.iter() {
-                            items_vec.push(it.clone());
-                        }
-
-                        for (idx, item) in items_vec.iter().enumerate() {
-                            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
-                            flat.push(ModbusDashboardCursor::StationId { index: idx });
-                            flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
-                            flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
-                            flat.push(ModbusDashboardCursor::RegisterLength { index: idx });
-                            let regs = item.register_length as usize;
-                            for reg in 0..regs {
-                                flat.push(ModbusDashboardCursor::Register {
-                                    slave_index: idx,
-                                    register_index: reg,
-                                });
-                            }
-                        }
-                    }
-                }
+        let items_vec = build_modbus_items_vec();
+        for (idx, item) in items_vec.iter().enumerate() {
+            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
+            flat.push(ModbusDashboardCursor::StationId { index: idx });
+            flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
+            flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
+            flat.push(ModbusDashboardCursor::RegisterLength { index: idx });
+            let regs = item.register_length as usize;
+            for reg in 0..regs {
+                flat.push(ModbusDashboardCursor::Register {
+                    slave_index: idx,
+                    register_index: reg,
+                });
             }
         }
 
         let cur_pos = flat.iter().position(|c| *c == self).unwrap_or(0);
         if cur_pos + 1 >= flat.len() {
-            // stay at last element (do not wrap)
             flat[flat.len() - 1]
         } else {
             flat[cur_pos + 1]
@@ -369,103 +282,106 @@ impl Cursor for ModbusDashboardCursor {
         offset += 2;
 
         // Build items and walk until we find the current selection
-        let items_opt = read_status(|status| {
-            if let crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. } =
-                &status.page
-            {
-                let port_name = status.ports.order.get(*selected_port).cloned();
-                Ok(port_name)
-            } else {
-                Ok(None)
-            }
-        })
-        .ok()
-        .flatten();
-
         if *self == ModbusDashboardCursor::AddLine {
             return 0;
         }
 
-        if let Some(port_name) = items_opt {
-            if let Ok(port_entry_opt) =
-                read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
-            {
-                if let Some(port_entry) = port_entry_opt {
-                    if let Ok(port_data) = port_entry.read() {
-                        let crate::protocol::status::types::port::PortConfig::Modbus {
-                            masters,
-                            slaves,
-                        } = &port_data.config;
-                        let mut items_vec: Vec<
-                            crate::protocol::status::types::modbus::ModbusRegisterItem,
-                        > = Vec::new();
-                        for it in masters.iter() {
+        let items_vec = build_modbus_items_vec();
+        // Walk items, accumulate heights until we reach the target
+        for (idx, item) in items_vec.iter().enumerate() {
+            let config_rows = 5usize;
+            let reg_rows = ((item.register_length as usize + 7) / 8).max(0usize);
+            let rows = 1 + config_rows + reg_rows;
+
+            match self {
+                ModbusDashboardCursor::ModbusMode { index } if *index == idx => {
+                    return offset + 1;
+                }
+                ModbusDashboardCursor::StationId { index } if *index == idx => {
+                    return offset + 2;
+                }
+                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
+                    return offset + 3;
+                }
+                ModbusDashboardCursor::RegisterStartAddress { index } if *index == idx => {
+                    return offset + 4;
+                }
+                ModbusDashboardCursor::RegisterLength { index } if *index == idx => {
+                    return offset + 5;
+                }
+                ModbusDashboardCursor::Register {
+                    slave_index,
+                    register_index,
+                } if *slave_index == idx => {
+                    let cell_row = register_index / 8;
+                    return offset + 1 + config_rows + cell_row;
+                }
+                _ => {
+                    offset += rows + 1;
+                }
+            }
+        }
+
+        offset
+    }
+}
+
+/// Helper to build the per-port items vector in a single consistent place.
+fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::ModbusRegisterItem> {
+    let mut items_vec: Vec<crate::protocol::status::types::modbus::ModbusRegisterItem> = Vec::new();
+
+    let items_opt = read_status(|status| {
+        if let crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. } =
+            &status.page
+        {
+            let port_name = status.ports.order.get(*selected_port).cloned();
+            Ok(port_name)
+        } else {
+            Ok(None)
+        }
+    })
+    .ok()
+    .flatten();
+
+    if let Some(port_name) = items_opt {
+        if let Ok(port_entry_opt) =
+            read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
+        {
+            if let Some(port_entry) = port_entry_opt {
+                if let Ok(port_data) = port_entry.read() {
+                    let crate::protocol::status::types::port::PortConfig::Modbus {
+                        masters,
+                        slaves,
+                    } = &port_data.config;
+                    for it in masters.iter() {
+                        items_vec.push(it.clone());
+                    }
+                    if masters.is_empty() && slaves.is_empty() {
+                        // add a default placeholder only when there are no configured items
+                        let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem {
+                            connection_mode: crate::protocol::status::types::modbus::ModbusConnectionMode::Slave,
+                            station_id: 1,
+                            register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils,
+                            register_address: 0,
+                            register_length: 8,
+                            req_success: 0,
+                            req_total: 0,
+                            next_poll_at: std::time::Instant::now(),
+                            pending_requests: Vec::new(),
+                            values: Vec::new(),
+                        };
+                        items_vec.push(default_item);
+                    } else {
+                        for it in slaves.iter() {
                             items_vec.push(it.clone());
-                        }
-                        if slaves.is_empty() {
-                            let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem { connection_mode: crate::protocol::status::types::modbus::ModbusConnectionMode::Slave, station_id: 1, register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils, register_address: 0, register_length: 8, req_success: 0, req_total: 0, next_poll_at: std::time::Instant::now(), pending_requests: Vec::new(), values: Vec::new() };
-                            items_vec.push(default_item);
-                        } else {
-                            for it in slaves.iter() {
-                                items_vec.push(it.clone());
-                            }
-                        }
-
-                        // Walk items, accumulate heights until we reach the target
-                        for (idx, item) in items_vec.iter().enumerate() {
-                            // compute block height in rows
-                            // layout (per components.rs):
-                            //  - 1 row: group title
-                            //  - 5 rows: connection_mode, station_id, register_mode, register_start_address, register_length
-                            //  - R rows: registers rendered 8 per row -> ceil(register_length/8)
-                            let config_rows = 5usize;
-                            let reg_rows = ((item.register_length as usize + 7) / 8).max(0usize);
-                            let rows = 1 + config_rows + reg_rows; // total rows occupied by this block (excluding separator)
-
-                            // If cursor refers to this block (by index), return appropriate offset.
-                            match self {
-                                ModbusDashboardCursor::ModbusMode { index } if *index == idx => {
-                                    // connection_mode is the first config row after the title
-                                    return offset + 1;
-                                }
-                                ModbusDashboardCursor::StationId { index } if *index == idx => {
-                                    return offset + 2;
-                                }
-                                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
-                                    return offset + 3;
-                                }
-                                ModbusDashboardCursor::RegisterStartAddress { index }
-                                    if *index == idx =>
-                                {
-                                    return offset + 4;
-                                }
-                                ModbusDashboardCursor::RegisterLength { index }
-                                    if *index == idx =>
-                                {
-                                    return offset + 5;
-                                }
-                                ModbusDashboardCursor::Register {
-                                    slave_index,
-                                    register_index,
-                                } if *slave_index == idx => {
-                                    let cell_row = register_index / 8;
-                                    // registers start after title + config rows
-                                    return offset + 1 + config_rows + cell_row;
-                                }
-                                _ => {
-                                    // advance by block height + separator (components adds a separator when not last)
-                                    offset += rows + 1;
-                                }
-                            }
                         }
                     }
                 }
             }
         }
-
-        // fallback
-        offset
     }
+
+    items_vec
 }
 
 /// LogPanelCursor describes the cursor/selection in the log panel

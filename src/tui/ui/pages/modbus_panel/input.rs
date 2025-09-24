@@ -309,10 +309,69 @@ fn handle_enter_action(bus: &Bus) -> Result<()> {
             create_new_modbus_entry()?;
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
         }
-        types::cursor::ModbusDashboardCursor::ModbusMode { .. }
-        | types::cursor::ModbusDashboardCursor::RegisterMode { .. } => {
+        types::cursor::ModbusDashboardCursor::ModbusMode { index } => {
+            let mut sel_index: usize = 0;
+            let port_name_opt = read_status(|status| {
+                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                    Ok(status.ports.order.get(*selected_port).cloned())
+                } else {
+                    Ok(None)
+                }
+            })?;
+
+            if let Some(port_name) = port_name_opt {
+                if let Some(port_entry) =
+                    read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
+                {
+                    if let Ok(port_data_guard) = port_entry.read() {
+                        let types::port::PortConfig::Modbus { masters, slaves } =
+                            &port_data_guard.config;
+                        if let Some(item) = masters
+                            .get(index)
+                            .or_else(|| slaves.get(index.saturating_sub(masters.len())))
+                        {
+                            sel_index = item.connection_mode as usize;
+                        }
+                    }
+                }
+            }
+
             write_status(|status| {
-                status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(0);
+                status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(sel_index);
+                Ok(())
+            })?;
+            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+        }
+        types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
+            let mut sel_index: usize = 2;
+            let port_name_opt = read_status(|status| {
+                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                    Ok(status.ports.order.get(*selected_port).cloned())
+                } else {
+                    Ok(None)
+                }
+            })?;
+
+            if let Some(port_name) = port_name_opt {
+                if let Some(port_entry) =
+                    read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
+                {
+                    if let Ok(port_data_guard) = port_entry.read() {
+                        let types::port::PortConfig::Modbus { masters, slaves } =
+                            &port_data_guard.config;
+                        if let Some(item) = masters
+                            .get(index)
+                            .or_else(|| slaves.get(index.saturating_sub(masters.len())))
+                        {
+                            // RegisterMode's discriminant is 1..4; map to 0..3
+                            sel_index = (item.register_mode as u8 - 1u8) as usize;
+                        }
+                    }
+                }
+            }
+
+            write_status(|status| {
+                status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(sel_index);
                 Ok(())
             })?;
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
@@ -415,29 +474,47 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     match current_cursor {
         types::cursor::ModbusDashboardCursor::ModbusMode { .. } => {
-            input_span_handler::handle_input_span(key, bus, Some(2), None, |opt| {
-                if opt.is_none() {
-                    commit_selector_edit(current_cursor)?;
-                }
-                Ok(())
-            })
+            input_span_handler::handle_input_span(
+                key,
+                bus,
+                Some(2),
+                None,
+                |_| true,
+                |opt| {
+                    if opt.is_none() {
+                        commit_selector_edit(current_cursor)?;
+                    }
+                    Ok(())
+                },
+            )
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { .. } => {
-            input_span_handler::handle_input_span(key, bus, Some(4), None, |opt| {
-                if opt.is_none() {
-                    commit_selector_edit(current_cursor)?;
-                }
-                Ok(())
-            })
+            input_span_handler::handle_input_span(
+                key,
+                bus,
+                Some(4),
+                None,
+                |_| true,
+                |opt| {
+                    if opt.is_none() {
+                        commit_selector_edit(current_cursor)?;
+                    }
+                    Ok(())
+                },
+            )
         }
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
         | types::cursor::ModbusDashboardCursor::RegisterLength { .. } => {
+            // Allow hexadecimal characters (0-9, a-f, A-F) and optional signs
+            // Filtering is permissive; parsing/validation occurs on commit.
+            // For StationId we restrict significant hex digits to 2 (max 255)
             input_span_handler::handle_input_span(
                 key,
                 bus,
                 None,
-                Some(Box::new(|c: char| c.is_ascii_digit())),
+                Some(2),
+                |c: char| c.is_ascii_hexdigit() || c == '-' || c == '+' || c == 'x' || c == 'X',
                 |opt| {
                     if let Some(s) = opt {
                         commit_text_edit(current_cursor, s)?;
@@ -453,7 +530,8 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 key,
                 bus,
                 None,
-                Some(Box::new(|c: char| c.is_ascii_hexdigit() || c == '-')),
+                None,
+                |c: char| c.is_ascii_hexdigit() || c == '-',
                 |opt| {
                     if let Some(s) = opt {
                         commit_text_edit(current_cursor, s)?;

@@ -128,6 +128,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus,
             index_choices,
             None,
+            |_| true,
             |maybe_string| -> Result<()> {
                 // Helper: read selected port name and map to port data (if any)
                 let port_name_opt = read_status(|status| {
@@ -244,8 +245,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                             }
                                         }
                                         types::cursor::ConfigPanelCursor::DataBits { .. } => {
-                                            let val = types::modbus::DataBitsOption::from_index(i)
-                                                .as_u8();
+                                            // index i is 0..3 -> data bits 5..8
+                                            let val = (i + 5) as u8;
                                             if with_port_write(&port, |port| {
                                                 if let types::port::PortState::OccupiedByThis {
                                                     runtime,
@@ -274,11 +275,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                                     ..
                                                 } = &mut port.state
                                                 {
-                                                    runtime.current_cfg.stop_bits =
-                                                        types::modbus::StopBitsOption::from_index(
-                                                            i,
-                                                        )
-                                                        .as_u8();
+                                                    // index i is 0..1 -> stop bits 1..2
+                                                    runtime.current_cfg.stop_bits = (i + 1) as u8;
                                                     let _ = runtime.cmd_tx.send(
                                                         RuntimeCommand::Reconfigure(
                                                             runtime.current_cfg.clone(),
@@ -502,13 +500,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                                 // initialize index buffer using normalized enum
                                                 let index = with_port_read(port, |port| match &port.state {
                                                     types::port::PortState::OccupiedByThis { runtime, .. } => {
-                                                        crate::protocol::status::types::modbus::
-                                                            DataBitsOption::from_u8(runtime.current_cfg.data_bits)
-                                                            .to_index()
+                                                        // runtime.current_cfg.data_bits is 5..8
+                                                        match runtime.current_cfg.data_bits {
+                                                            5 => 0usize,
+                                                            6 => 1usize,
+                                                            7 => 2usize,
+                                                            _ => 3usize,
+                                                        }
                                                     }
-                                                    _ => crate::protocol::status::types::modbus::DataBitsOption::Eight.to_index(),
+                                                    _ => 3usize,
                                                 })
-                                                .unwrap_or(crate::protocol::status::types::modbus::DataBitsOption::Eight.to_index());
+                                                .unwrap_or(3usize);
 
                                                 status.temporarily.input_raw_buffer =
                                                     types::ui::InputRawBuffer::Index(index);
@@ -539,13 +541,15 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                             types::cursor::ConfigPanelCursor::StopBits => {
                                                 let index = with_port_read(port, |port| match &port.state {
                                                     types::port::PortState::OccupiedByThis { runtime, .. } => {
-                                                        crate::protocol::status::types::modbus::
-                                                            StopBitsOption::from_u8(runtime.current_cfg.stop_bits)
-                                                            .to_index()
+                                                        // runtime.current_cfg.stop_bits is 1 or 2
+                                                        match runtime.current_cfg.stop_bits {
+                                                            2 => 1usize,
+                                                            _ => 0usize,
+                                                        }
                                                     }
-                                                    _ => crate::protocol::status::types::modbus::StopBitsOption::One.to_index(),
+                                                    _ => 0usize,
                                                 })
-                                                .unwrap_or(crate::protocol::status::types::modbus::StopBitsOption::One.to_index());
+                                                .unwrap_or(0usize);
 
                                                 status.temporarily.input_raw_buffer =
                                                     types::ui::InputRawBuffer::Index(index);

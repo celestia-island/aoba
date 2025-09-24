@@ -15,13 +15,10 @@ use crate::{
         with_port_read,
     },
     tui::ui::components::{
-        boxed_paragraph::render_boxed_paragraph,
         kv_line::render_kv_line,
         styled_label::{input_spans, selector_spans, switch_spans, TextState},
     },
 };
-
-// Layout constants moved to `tui::ui::components::kv_line`.
 
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {
@@ -55,19 +52,12 @@ fn create_line(
     // `render_kv_line` which assembles indicator/label/padding and appends
     // the returned spans. The closure receives a `TextState` and should
     // return `Result<Vec<Span>>`.
+    // TODO: 将这里的所有闭包都分别拆分出去，分给各自的 create_line 调用者自行传入；create_line 自身额外加一个没有参数的闭包参数用以渲染
     let value_closure = |_state: TextState| -> Result<Vec<Span>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
         match cursor {
             types::cursor::ModbusDashboardCursor::AddLine => {
-                // Simple text option for "Create Master/Slave"
-                rendered_value_spans = vec![Span::styled(
-                    lang().protocol.modbus.add_master_slave.clone(),
-                    if selected {
-                        Style::default().fg(Color::Green)
-                    } else {
-                        Style::default()
-                    },
-                )];
+                rendered_value_spans = vec![];
             }
             types::cursor::ModbusDashboardCursor::ModbusMode { index } => {
                 // Connection mode selector
@@ -81,10 +71,7 @@ fn create_line(
                             .get(index)
                             .or_else(|| slaves.get(index - masters.len()))
                         {
-                            match item.connection_mode {
-                                ModbusConnectionMode::Master => 0usize,
-                                ModbusConnectionMode::Slave => 1usize,
-                            }
+                            item.connection_mode as usize
                         } else {
                             0usize // default to Master
                         }
@@ -157,7 +144,19 @@ fn create_line(
                         TextState::Normal => Style::default(),
                     };
 
-                    rendered_value_spans = input_spans(current_value, state)?;
+                    // Render station id with 0x prefix for display only
+                    // (do not change underlying stored value)
+                    let hex_display = if current_value.starts_with("0x") {
+                        current_value.clone()
+                    } else {
+                        // try to parse decimal and render as hex; fallback to raw
+                        if let Ok(n) = current_value.parse::<u32>() {
+                            format!("0x{:04X}", n)
+                        } else {
+                            format!("0x{}", current_value)
+                        }
+                    };
+                    rendered_value_spans = input_spans(hex_display, state)?;
                 }
             }
             types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
@@ -169,12 +168,7 @@ fn create_line(
                             .get(index)
                             .or_else(|| slaves.get(index - masters.len()))
                         {
-                            match item.register_mode {
-                                RegisterMode::Coils => 0usize,
-                                RegisterMode::DiscreteInputs => 1usize,
-                                RegisterMode::Holding => 2usize,
-                                RegisterMode::Input => 3usize,
-                            }
+                            (item.register_mode as u8 - 1u8) as usize
                         } else {
                             2usize // default to Holding
                         }
@@ -242,7 +236,17 @@ fn create_line(
                         TextState::Normal => Style::default(),
                     };
 
-                    rendered_value_spans = input_spans(current_value, state)?;
+                    // Render start address with 0x prefix for display only
+                    let hex_display = if current_value.starts_with("0x") {
+                        current_value.clone()
+                    } else {
+                        if let Ok(n) = current_value.parse::<u32>() {
+                            format!("0x{:04X}", n)
+                        } else {
+                            format!("0x{}", current_value)
+                        }
+                    };
+                    rendered_value_spans = input_spans(hex_display, state)?;
                 }
             }
             types::cursor::ModbusDashboardCursor::RegisterLength { index } => {
@@ -271,7 +275,17 @@ fn create_line(
                         TextState::Normal
                     };
 
-                    rendered_value_spans = input_spans(current_value, state)?;
+                    // Render length as hex with 0x prefix for display only
+                    let hex_display = if current_value.starts_with("0x") {
+                        current_value.clone()
+                    } else {
+                        if let Ok(n) = current_value.parse::<u32>() {
+                            format!("0x{:04X}", n)
+                        } else {
+                            format!("0x{}", current_value)
+                        }
+                    };
+                    rendered_value_spans = input_spans(hex_display, state)?;
                 }
             }
             types::cursor::ModbusDashboardCursor::Register {
@@ -484,19 +498,17 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
     // Get current cursor
     let current_selection = derive_selection()?;
+
     // Start with "Create Master/Slave" option
-    let selected = matches!(
-        current_selection,
-        types::cursor::ModbusDashboardCursor::AddLine
-    );
-    if let Ok(line) = create_line(
+    lines.push(create_line(
         &lang().protocol.modbus.add_master_slave,
         types::cursor::ModbusDashboardCursor::AddLine,
-        selected,
+        matches!(
+            current_selection,
+            types::cursor::ModbusDashboardCursor::AddLine
+        ),
         port_data.as_ref(),
-    ) {
-        lines.push(line);
-    }
+    )?);
 
     // Add separator after the first group only if there is at least one master or slave
     let sep_len = 64usize;
@@ -667,16 +679,4 @@ pub fn generate_modbus_status_lines() -> Result<Vec<Line<'static>>> {
 
     // Use the new render function
     render_kv_lines_with_indicators(sel_index).map_err(|e| e)
-}
-
-/// Render the modbus panel content with scrolling
-pub fn render_modbus_content(
-    frame: &mut Frame,
-    area: Rect,
-    lines: Vec<Line>,
-    view_offset: usize,
-) -> Result<()> {
-    // Use the view_offset from page state instead of calculating scroll params
-    render_boxed_paragraph(frame, area, lines, view_offset, None, false, true);
-    Ok(())
 }
