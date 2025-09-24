@@ -78,7 +78,7 @@ where
     })
 }
 
-pub fn input_spans<'a, F>(current_value: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
+pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
     let mut out: Vec<Span> = Vec::new();
     match state {
         TextState::Normal => {

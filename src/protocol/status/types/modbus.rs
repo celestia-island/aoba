@@ -2,7 +2,7 @@ use strum::EnumIter;
 
 use crate::i18n::lang;
 
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum ModbusConnectionMode {
     Master,
     Slave,
@@ -17,7 +17,7 @@ impl std::fmt::Display for ModbusConnectionMode {
     }
 }
 
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum RegisterMode {
     Coils = 1,
     DiscreteInputs = 2,
@@ -72,7 +72,7 @@ pub struct ModbusRegisterItem {
     pub values: Vec<u16>,          // Register values
 }
 
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum ParityOption {
     None,
     Odd,
@@ -90,7 +90,7 @@ impl std::fmt::Display for ParityOption {
 }
 
 /// UI enums for DataBits and StopBits so they can be used with selector_spans
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
 pub enum DataBitsOption {
     Five,
     Six,
@@ -147,7 +147,7 @@ impl DataBitsOption {
     }
 }
 
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum StopBitsOption {
     One,
     Two,
@@ -165,7 +165,7 @@ impl std::fmt::Display for StopBitsOption {
 /// Baud rate presets including a Custom placeholder. Custom does not carry
 /// the numeric value here; the actual runtime baud is stored in the port
 /// configuration as a `u32`. This enum is used for selector rendering.
-#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
 pub enum BaudRateSelector {
     B110,
     B300,
