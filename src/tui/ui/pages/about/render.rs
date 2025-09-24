@@ -22,7 +22,10 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let content = init_about_cache();
     if let Ok(content) = content.lock() {
-        let content = render_about_page_manifest_lines(content.clone());
+        let content = match render_about_page_manifest_lines(content.clone()) {
+            Ok(c) => c,
+            Err(_) => vec![Line::from("About (failed to render)")],
+        };
         let offset = read_status(|status| {
             if let types::Page::About { view_offset } = &status.page {
                 Ok(*view_offset)
