@@ -2,7 +2,7 @@ use strum::EnumIter;
 
 use crate::i18n::lang;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModbusConnectionMode {
     Master,
     Slave,
@@ -17,7 +17,7 @@ impl std::fmt::Display for ModbusConnectionMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(EnumIter, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterMode {
     Coils = 1,
     DiscreteInputs = 2,
@@ -42,6 +42,17 @@ impl RegisterMode {
             3 => Self::Holding,
             4 => Self::Input,
             _ => unimplemented!("Invalid RegisterMode value: {v}"),
+        }
+    }
+}
+
+impl std::fmt::Display for RegisterMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RegisterMode::Coils => write!(f, "Coils"),
+            RegisterMode::DiscreteInputs => write!(f, "Discrete Inputs"),
+            RegisterMode::Holding => write!(f, "Holding Registers"),
+            RegisterMode::Input => write!(f, "Input Registers"),
         }
     }
 }

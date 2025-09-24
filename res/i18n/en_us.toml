@@ -163,6 +163,12 @@ label_master_passive = "Listen for external requests"
 status_master_passive = "Passive, listen-only"
 status_master_active = "Active, polling"
 label_default_marker = "default"
+add_master_slave = "Create Master/Slave"
+connection_mode = "Connection Mode"
+station_id = "Station ID"
+register_mode = "Register Type"
+register_start_address = "Start Address"
+register_length = "Register Length"
 
 [protocol.mqtt]
 panel_placeholder = "MQTT mode placeholder panel (not implemented yet)"
