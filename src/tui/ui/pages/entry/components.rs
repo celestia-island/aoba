@@ -23,9 +23,11 @@ use crate::{
     },
 };
 
+use anyhow::Result;
+
 /// Helper function to derive selection from page state (entry page specific)
-pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> usize {
-    match page {
+pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> Result<usize> {
+    let res = match page {
         types::Page::Entry { cursor } => match cursor {
             Some(types::cursor::EntryCursor::Com { index }) => *index,
             Some(types::cursor::EntryCursor::Refresh) => ports_order.len(),
@@ -37,12 +39,13 @@ pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) ->
         | types::Page::ConfigPanel { selected_port, .. }
         | types::Page::LogPanel { selected_port, .. } => *selected_port,
         _ => 0usize,
-    }
+    };
+    Ok(res)
 }
 
 /// Render the left ports list panel
-pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
-    if read_status(|status| {
+pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Result<()> {
+    let res = read_status(|status| {
         let width = area.width as usize;
         let mut lines: Vec<Line> = Vec::new();
         let default_pd = PortData::default();
@@ -88,16 +91,45 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
             };
             let spacer = " ".repeat(pad);
 
+            // Determine prefix style: if selected, color prefix green. If the
+            // app is currently editing (input buffer non-empty) and this is
+            // the selected row, show yellow instead. We need a lightweight
+            // heuristic: consult global input buffer to see if editing is
+            // active. This mirrors behavior used elsewhere.
+            let input_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()));
+            let mut prefix_style = Style::default();
+            if i == selection {
+                // Editing detection: if input buffer is not None/Empty, treat as editing
+                if let Ok(buf) = input_buffer {
+                    use crate::protocol::status::types::ui::InputRawBuffer;
+                    if !matches!(buf, InputRawBuffer::None) {
+                        prefix_style = Style::default().fg(Color::Yellow);
+                    } else {
+                        prefix_style = Style::default().fg(Color::Green);
+                    }
+                } else {
+                    prefix_style = Style::default().fg(Color::Green);
+                }
+            }
+
             let spans = vec![
-                Span::raw(prefix),
+                Span::styled(prefix, prefix_style),
                 Span::raw(name),
                 Span::raw(spacer),
                 Span::styled(state_text, state_style),
             ];
             if i == selection {
+                // preserve existing background highlight while keeping our
+                // colored prefix: apply background to all spans but keep
+                // prefix's foreground color by composing styles.
                 let styled = spans
                     .into_iter()
-                    .map(|sp| Span::styled(sp.content, Style::default().bg(Color::LightGreen)))
+                    .map(|sp| {
+                        // If this is the prefix span, keep its style and add bg
+                        let mut s = sp.style;
+                        s = s.bg(Color::LightGreen);
+                        Span::styled(sp.content, s)
+                    })
                     .collect::<Vec<_>>();
                 lines.push(Line::from(styled));
             } else {
@@ -143,19 +175,21 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
         let left_para = Paragraph::new(lines).block(left_block);
         frame.render_widget(left_para, area);
         Ok(())
-    })
-    .is_err()
-    {
+    });
+
+    if res.is_err() {
         let input_block = Block::default()
             .borders(Borders::ALL)
             .title(Span::raw(format!(" {}", lang().index.com_ports.as_str())));
         let left_para = Paragraph::new(Vec::<Line>::new()).block(input_block);
         frame.render_widget(left_para, area);
     }
+
+    Ok(())
 }
 
 /// Render the right details panel content
-pub fn render_details_panel(frame: &mut Frame, area: Rect) {
+pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
     // Get content lines based on page state
     if let Ok(content_lines) = read_status(|app| {
         if app.ports.order.is_empty() {
@@ -217,6 +251,8 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) {
         let content_lines = vec![Line::from(lang().index.error_loading_content.as_str())];
         render_boxed_paragraph(frame, area, content_lines, 0, None, false, false);
     }
+
+    Ok(())
 }
 
 /// Get content lines for refresh entry
@@ -390,5 +426,8 @@ fn get_about_preview_content() -> Vec<Line<'static>> {
         }
     };
 
-    render_about_page_manifest_lines(snapshot)
+    match render_about_page_manifest_lines(snapshot) {
+        Ok(v) => v,
+        Err(_) => vec![Line::from("About (failed to render)")],
+    }
 }

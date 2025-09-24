@@ -51,6 +51,9 @@ fn create_line(
         INDICATOR_UNSELECTED
     };
 
+    // Indicator style defaults to no color; branches below may override.
+    let mut indicator_style = Style::default();
+
     // Read the global input buffer once to avoid calling `read_status` while
     // holding any per-port locks. Calling `read_status` while holding a
     // port-level read lock can cause a lock-order inversion with code paths
@@ -76,6 +79,9 @@ fn create_line(
             if let Some(port) = port_data {
                 let current_mode = with_port_read(port, |port| {
                     let types::port::PortConfig::Modbus { masters, slaves } = &port.config;
+
+                    // Indicator style: default unless overridden per-field below. We will set
+                    // this to green for selected (non-editing) and yellow for editing.
                     if let Some(item) = masters
                         .get(index)
                         .or_else(|| slaves.get(index - masters.len()))
@@ -113,6 +119,13 @@ fn create_line(
                     TextState::Normal
                 };
 
+                // Color the left indicator according to text state
+                indicator_style = match state {
+                    TextState::Editing => Style::default().fg(Color::Yellow),
+                    TextState::Selected => Style::default().fg(Color::Green),
+                    TextState::Normal => Style::default(),
+                };
+
                 rendered_value_spans =
                     selector_spans::<ModbusConnectionMode>(selected_index, state)?;
             }
@@ -141,6 +154,12 @@ fn create_line(
                     TextState::Selected
                 } else {
                     TextState::Normal
+                };
+
+                indicator_style = match state {
+                    TextState::Editing => Style::default().fg(Color::Yellow),
+                    TextState::Selected => Style::default().fg(Color::Green),
+                    TextState::Normal => Style::default(),
                 };
 
                 rendered_value_spans = input_spans(current_value, state)?;
@@ -187,6 +206,12 @@ fn create_line(
                     TextState::Normal
                 };
 
+                indicator_style = match state {
+                    TextState::Editing => Style::default().fg(Color::Yellow),
+                    TextState::Selected => Style::default().fg(Color::Green),
+                    TextState::Normal => Style::default(),
+                };
+
                 rendered_value_spans = selector_spans::<RegisterMode>(selected_index, state)?;
             }
         }
@@ -214,6 +239,12 @@ fn create_line(
                     TextState::Selected
                 } else {
                     TextState::Normal
+                };
+
+                indicator_style = match state {
+                    TextState::Editing => Style::default().fg(Color::Yellow),
+                    TextState::Selected => Style::default().fg(Color::Green),
+                    TextState::Normal => Style::default(),
                 };
 
                 rendered_value_spans = input_spans(current_value, state)?;
@@ -304,7 +335,7 @@ fn create_line(
     };
     let padded_label = " ".repeat(padded_label);
     let mut spans = vec![
-        Span::raw(indicator),
+        Span::styled(indicator, indicator_style),
         Span::raw(label.to_string()).add_modifier(Modifier::BOLD),
         Span::raw(padded_label),
     ];
@@ -363,8 +394,32 @@ fn create_register_row_line(
     // read global input buffer (for editing detection)
     let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
 
+    // Determine row selection/editing state to color the left indicator.
+    let row_selected = if let types::cursor::ModbusDashboardCursor::Register {
+        slave_index: si,
+        register_index: ri,
+    } = current_selection
+    {
+        if si == slave_index {
+            let sel_addr = item.register_address as u16 + (ri as u16);
+            sel_addr >= row_base && sel_addr < row_base + 8
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    let mut row_indicator_style = Style::default();
+    let row_editing = row_selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
+    if row_editing {
+        row_indicator_style = Style::default().fg(Color::Yellow);
+    } else if row_selected {
+        row_indicator_style = Style::default().fg(Color::Green);
+    }
+
     let mut spans: Vec<Span> = Vec::new();
-    spans.push(Span::raw(indicator));
+    spans.push(Span::styled(indicator, row_indicator_style));
     spans.push(Span::raw(padded_label));
 
     // For each of the 8 slots in this row, render a value span or a placeholder
@@ -479,7 +534,6 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
     // Get current cursor
     let current_selection = derive_selection()?;
-
     // Start with "Create Master/Slave" option
     let selected = matches!(
         current_selection,

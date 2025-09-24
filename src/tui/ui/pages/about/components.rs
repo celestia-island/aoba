@@ -9,6 +9,8 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
+use anyhow::Result;
+
 use crate::{i18n::lang, tui::ui::components::kv_pairs_to_lines};
 
 #[derive(Default, Clone)]
@@ -128,7 +130,7 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
 /// Render about content on right panel. Reads Cargo.toml at repo root and shows package and deps.
 /// Render the about details (label/value pairs) into lines. This can be used both for
 /// the entry preview and the full about subpage.
-pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Vec<Line<'static>> {
+pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Result<Vec<Line<'static>>> {
     let mut out: Vec<Line> = Vec::new();
 
     out.push(Line::from(lang().about.welcome.clone()));
@@ -180,5 +182,5 @@ pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Vec<Line<
         }
     }
 
-    out
+    Ok(out)
 }

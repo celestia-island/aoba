@@ -36,13 +36,13 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let right = chunks[1];
 
     // Components read status internally now; just derive selection and call them
-    let selection = read_status(|app| Ok(derive_selection_from_page(&app.page, &app.ports.order)))?;
+    let selection = read_status(|app| derive_selection_from_page(&app.page, &app.ports.order))?;
 
     // LEFT: ports list
-    render_ports_list(frame, left, selection);
+    render_ports_list(frame, left, selection)?;
 
     // RIGHT: content details
-    render_details_panel(frame, right);
+    render_details_panel(frame, right)?;
 
     Ok(())
 }
