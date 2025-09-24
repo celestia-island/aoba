@@ -5,8 +5,9 @@ use ratatui::prelude::*;
 use crate::{
     i18n::lang,
     protocol::status::{read_status, types},
-    tui::ui::pages::modbus_panel::components::{
-        generate_modbus_status_lines, render_modbus_content,
+    tui::ui::{
+        components::boxed_paragraph::render_boxed_paragraph,
+        pages::modbus_panel::components::generate_modbus_status_lines,
     },
 };
 
@@ -36,7 +37,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
     // generate_modbus_status_lines reads status internally
     let lines = generate_modbus_status_lines()?;
-    render_modbus_content(frame, area, lines, view_offset)?;
+    render_boxed_paragraph(frame, area, lines, view_offset, None, false, true);
 
     Ok(())
 }
