@@ -5,8 +5,12 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     protocol::status::{
-        types::{self, cursor::Cursor},
-        read_status, with_port_read, with_port_write, write_status,
+        read_status,
+        types::{
+            self,
+            cursor::{Cursor, ModbusDashboardCursor},
+        },
+        with_port_read, with_port_write, write_status,
     },
     tui::utils::bus::Bus,
 };
@@ -422,19 +426,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 status.page = types::Page::ModbusDashboard {
                                     selected_port: *selected_port,
                                     view_offset: 0,
-                                    cursor: 0,
-                                    editing_field: None,
-                                    input_buffer: String::new(),
-                                    edit_choice_index: None,
-                                    edit_confirmed: false,
-                                    master_cursor: 0,
-                                    master_field_selected: false,
-                                    master_field_editing: false,
-                                    master_edit_field: None,
-                                    master_edit_index: None,
-                                    master_input_buffer: String::new(),
-                                    poll_round_index: 0,
-                                    in_flight_reg_index: None,
+                                    cursor: ModbusDashboardCursor::AddLine,
                                 };
                             }
                             Ok(())

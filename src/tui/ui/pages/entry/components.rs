@@ -156,15 +156,6 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) {
 
 /// Render the right details panel content
 pub fn render_details_panel(frame: &mut Frame, area: Rect) {
-    // Check if subpage is active first
-    if let Ok(subpage_active) =
-        read_status(|app| Ok(!matches!(app.page, types::Page::Entry { .. })))
-    {
-        if subpage_active {
-            return;
-        }
-    }
-
     // Get content lines based on page state
     if let Ok(content_lines) = read_status(|app| {
         if app.ports.order.is_empty() {

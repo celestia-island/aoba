@@ -5,7 +5,6 @@ pub mod ui;
 
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
-
 use yuuka::derive_struct;
 
 use ui::InputMode;
@@ -30,21 +29,7 @@ derive_struct! {
             ModbusDashboard {
                 selected_port: usize,
                 view_offset: usize = 0,
-
-                cursor: usize,
-                editing_field?: ui::EditingField,
-                input_buffer: String,
-                edit_choice_index: Option<usize>,
-                edit_confirmed: bool,
-
-                master_cursor: usize,
-                master_field_selected: bool,
-                master_field_editing: bool,
-                master_edit_field?: ui::MasterEditField,
-                master_edit_index: Option<usize>,
-                master_input_buffer: String,
-                poll_round_index: usize,
-                in_flight_reg_index: Option<usize>,
+                cursor: cursor::ModbusDashboardCursor = cursor::ModbusDashboardCursor::AddLine,
             },
             LogPanel {
                 selected_port: usize,

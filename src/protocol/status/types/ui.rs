@@ -14,7 +14,10 @@ pub enum InputRawBuffer {
     /// String buffer with an editing cursor offset (signed). Offset semantics:
     /// - offset >= 0: character index from start (0..=len)
     /// - offset < 0: character index from end (len as isize + offset), clamped
-    String { bytes: Vec<u8>, offset: isize },
+    String {
+        bytes: Vec<u8>,
+        offset: isize,
+    },
 }
 
 impl std::fmt::Display for InputRawBuffer {
@@ -59,7 +62,11 @@ impl InputRawBuffer {
                 let mut s = String::from_utf8_lossy(bytes).to_string();
                 let len_chars = s.chars().count() as isize;
                 // compute insertion position
-                let mut pos = if *offset >= 0 { *offset } else { len_chars + *offset };
+                let mut pos = if *offset >= 0 {
+                    *offset
+                } else {
+                    len_chars + *offset
+                };
                 if pos < 0 {
                     pos = 0;
                 }
@@ -81,7 +88,10 @@ impl InputRawBuffer {
                 let mut buf = [0u8; 4];
                 let s = c.encode_utf8(&mut buf);
                 v.extend_from_slice(s.as_bytes());
-                *self = InputRawBuffer::String { bytes: v, offset: 1 };
+                *self = InputRawBuffer::String {
+                    bytes: v,
+                    offset: 1,
+                };
             }
         }
     }
@@ -93,7 +103,11 @@ impl InputRawBuffer {
                 if let Ok(s) = String::from_utf8(bytes.clone()) {
                     let len_chars = s.chars().count() as isize;
                     // determine deletion index: character before cursor
-                    let pos = if *offset >= 0 { *offset } else { len_chars + *offset };
+                    let pos = if *offset >= 0 {
+                        *offset
+                    } else {
+                        len_chars + *offset
+                    };
                     if pos <= 0 {
                         return None;
                     }
@@ -138,7 +152,7 @@ impl InputRawBuffer {
 
     /// Move cursor offset by delta (can be negative). Clamped to valid range.
     pub fn move_offset(&mut self, delta: isize) {
-            if let InputRawBuffer::String { bytes, offset } = self {
+        if let InputRawBuffer::String { bytes, offset } = self {
             let s = String::from_utf8_lossy(bytes).to_string();
             let len_chars = s.chars().count() as isize;
             let mut new = *offset + delta;
@@ -208,6 +222,7 @@ pub enum RegisterField {
     Mode,
     Address,
     Length,
+    Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
