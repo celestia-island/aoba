@@ -414,28 +414,46 @@ impl Cursor for ModbusDashboardCursor {
                         // Walk items, accumulate heights until we reach the target
                         for (idx, item) in items_vec.iter().enumerate() {
                             // compute block height in rows
-                            let rows = 1 + ((item.register_length as usize + 7) / 8);
+                            // layout (per components.rs):
+                            //  - 1 row: group title
+                            //  - 5 rows: connection_mode, station_id, register_mode, register_start_address, register_length
+                            //  - R rows: registers rendered 8 per row -> ceil(register_length/8)
+                            let config_rows = 5usize;
+                            let reg_rows = ((item.register_length as usize + 7) / 8).max(0usize);
+                            let rows = 1 + config_rows + reg_rows; // total rows occupied by this block (excluding separator)
 
                             // If cursor refers to this block (by index), return appropriate offset.
                             match self {
-                                ModbusDashboardCursor::ModbusMode { index }
-                                | ModbusDashboardCursor::StationId { index }
-                                | ModbusDashboardCursor::RegisterMode { index }
-                                | ModbusDashboardCursor::RegisterStartAddress { index }
-                                | ModbusDashboardCursor::RegisterLength { index }
+                                ModbusDashboardCursor::ModbusMode { index } if *index == idx => {
+                                    // connection_mode is the first config row after the title
+                                    return offset + 1;
+                                }
+                                ModbusDashboardCursor::StationId { index } if *index == idx => {
+                                    return offset + 2;
+                                }
+                                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
+                                    return offset + 3;
+                                }
+                                ModbusDashboardCursor::RegisterStartAddress { index }
                                     if *index == idx =>
                                 {
-                                    return offset; // point to block title row
+                                    return offset + 4;
+                                }
+                                ModbusDashboardCursor::RegisterLength { index }
+                                    if *index == idx =>
+                                {
+                                    return offset + 5;
                                 }
                                 ModbusDashboardCursor::Register {
                                     slave_index,
                                     register_index,
                                 } if *slave_index == idx => {
                                     let cell_row = register_index / 8;
-                                    return offset + 1 + cell_row;
+                                    // registers start after title + config rows
+                                    return offset + 1 + config_rows + cell_row;
                                 }
                                 _ => {
-                                    // advance by block height + separator
+                                    // advance by block height + separator (components adds a separator when not last)
                                     offset += rows + 1;
                                 }
                             }
