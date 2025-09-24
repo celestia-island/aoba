@@ -1,6 +1,7 @@
 pub mod boxed_paragraph;
 pub mod error_msg;
 pub mod input_span_handler;
+pub mod kv_line;
 pub mod styled_label;
 
 use ratatui::{
