@@ -163,6 +163,12 @@ label_master_passive = "是否监听外来请求"
 status_master_passive = "被动, 仅监听"
 status_master_active = "主动, 轮询"
 label_default_marker = "默认"
+add_master_slave = "创建主/从站"
+connection_mode = "连接模式"
+station_id = "站点ID"
+register_mode = "寄存器类型"
+register_start_address = "起始地址"
+register_length = "寄存器长度"
 
 [protocol.mqtt]
 panel_placeholder = "MQTT 模式占位面板 (尚未实现)"

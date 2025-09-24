@@ -185,6 +185,12 @@ derive_struct! {
                 log_recv_unmatched: String = "log_recv_unmatched".to_string(),
                 log_reconfigured: String = "log_reconfigured".to_string(),
                 log_req_timeout: String = "log_req_timeout".to_string(),
+                add_master_slave: String = "add_master_slave".to_string(),
+                connection_mode: String = "connection_mode".to_string(),
+                station_id: String = "station_id".to_string(),
+                register_mode: String = "register_mode".to_string(),
+                register_start_address: String = "register_start_address".to_string(),
+                register_length: String = "register_length".to_string(),
             },
             mqtt: {
                 // Placeholder texts for MQTT panel (new)
