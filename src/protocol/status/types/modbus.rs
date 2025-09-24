@@ -1,11 +1,12 @@
-use strum::EnumIter;
+use strum::{EnumIter, FromRepr};
 
 use crate::i18n::lang;
 
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
 pub enum ModbusConnectionMode {
-    Master,
-    Slave,
+    Master = 0,
+    Slave = 1,
 }
 
 impl std::fmt::Display for ModbusConnectionMode {
@@ -17,7 +18,8 @@ impl std::fmt::Display for ModbusConnectionMode {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
 pub enum RegisterMode {
     Coils = 1,
     DiscreteInputs = 2,
@@ -44,6 +46,9 @@ impl RegisterMode {
             _ => unimplemented!("Invalid RegisterMode value: {v}"),
         }
     }
+
+    // Note: custom conversion helpers removed per request. Use `FromRepr::from_repr` and
+    // direct casts where needed (e.g. `as u8` / `as usize`).
 }
 
 impl std::fmt::Display for RegisterMode {
@@ -72,7 +77,8 @@ pub struct ModbusRegisterItem {
     pub values: Vec<u16>,          // Register values
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
 pub enum ParityOption {
     None,
     Odd,
@@ -90,7 +96,8 @@ impl std::fmt::Display for ParityOption {
 }
 
 /// UI enums for DataBits and StopBits so they can be used with selector_spans
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
 pub enum DataBitsOption {
     Five,
     Six,
@@ -109,45 +116,11 @@ impl std::fmt::Display for DataBitsOption {
     }
 }
 
-impl DataBitsOption {
-    pub fn as_u8(self) -> u8 {
-        match self {
-            DataBitsOption::Five => 5u8,
-            DataBitsOption::Six => 6u8,
-            DataBitsOption::Seven => 7u8,
-            DataBitsOption::Eight => 8u8,
-        }
-    }
+// Custom conversion helpers removed. Use direct casts and `FromRepr::from_repr` as needed.
+impl DataBitsOption {}
 
-    pub fn from_u8(v: u8) -> Self {
-        match v {
-            5 => DataBitsOption::Five,
-            6 => DataBitsOption::Six,
-            7 => DataBitsOption::Seven,
-            _ => DataBitsOption::Eight,
-        }
-    }
-
-    pub fn to_index(self) -> usize {
-        match self {
-            DataBitsOption::Five => 0usize,
-            DataBitsOption::Six => 1usize,
-            DataBitsOption::Seven => 2usize,
-            DataBitsOption::Eight => 3usize,
-        }
-    }
-
-    pub fn from_index(i: usize) -> Self {
-        match i {
-            0 => DataBitsOption::Five,
-            1 => DataBitsOption::Six,
-            2 => DataBitsOption::Seven,
-            _ => DataBitsOption::Eight,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter)]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, FromRepr)]
 pub enum StopBitsOption {
     One,
     Two,
@@ -216,7 +189,7 @@ impl BaudRateSelector {
             BaudRateSelector::B921600 => 921600u32,
             BaudRateSelector::B1000000 => 1000000u32,
             BaudRateSelector::B2000000 => 2000000u32,
-            BaudRateSelector::Custom { .. } => 0u32,
+            BaudRateSelector::Custom { baud } => baud,
         }
     }
 
@@ -321,32 +294,5 @@ impl BaudRateOption {
     }
 }
 
-impl StopBitsOption {
-    pub fn as_u8(self) -> u8 {
-        match self {
-            StopBitsOption::One => 1u8,
-            StopBitsOption::Two => 2u8,
-        }
-    }
-
-    pub fn from_u8(v: u8) -> Self {
-        match v {
-            2 => StopBitsOption::Two,
-            _ => StopBitsOption::One,
-        }
-    }
-
-    pub fn to_index(self) -> usize {
-        match self {
-            StopBitsOption::One => 0usize,
-            StopBitsOption::Two => 1usize,
-        }
-    }
-
-    pub fn from_index(i: usize) -> Self {
-        match i {
-            1 => StopBitsOption::Two,
-            _ => StopBitsOption::One,
-        }
-    }
-}
+// Custom conversion helpers removed. Use direct casts and `FromRepr::from_repr` as needed.
+impl StopBitsOption {}

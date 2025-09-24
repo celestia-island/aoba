@@ -366,19 +366,23 @@ fn create_line(
                                 if let types::port::PortState::OccupiedByThis { runtime, .. } =
                                     &port.state
                                 {
-                                    Some(
-                                        types::modbus::DataBitsOption::from_u8(
-                                            runtime.current_cfg.data_bits,
-                                        )
-                                        .to_index(),
-                                    )
+                                    Some({
+                                        // map runtime 5/6/7/8 to selector index 0..3
+                                        let db = runtime.current_cfg.data_bits;
+                                        match db {
+                                            5 => 0usize,
+                                            6 => 1usize,
+                                            7 => 2usize,
+                                            _ => 3usize,
+                                        }
+                                    })
                                 } else {
-                                    Some(types::modbus::DataBitsOption::Eight.to_index())
+                                    Some(3usize)
                                 }
                             })
-                            .unwrap_or(Some(types::modbus::DataBitsOption::Eight.to_index()))
+                            .unwrap_or(Some(3usize))
                         } else {
-                            Some(types::modbus::DataBitsOption::Eight.to_index())
+                            Some(3usize)
                         };
                         // Consider we're in global editing mode only when the
                         // temporary input buffer is non-empty AND this row is the
@@ -405,15 +409,21 @@ fn create_line(
                         } else {
                             TextState::Normal
                         };
-                        let spans =
-                            selector_spans::<types::modbus::DataBitsOption>(selected_index, state)
-                                .unwrap_or_else(|_| {
-                                    vec![Span::raw(
-                                    crate::protocol::status::types::modbus::
-                                        DataBitsOption::from_index(selected_index)
-                                        .to_string(),
-                                )]
-                                });
+                        let spans = selector_spans::<types::modbus::DataBitsOption>(
+                            selected_index,
+                            state,
+                        )
+                        .unwrap_or_else(|_| {
+                            vec![Span::raw(
+                                crate::protocol::status::types::modbus::DataBitsOption::from_repr(
+                                    selected_index as u8,
+                                )
+                                .unwrap_or(
+                                    crate::protocol::status::types::modbus::DataBitsOption::Eight,
+                                )
+                                .to_string(),
+                            )]
+                        });
                         rendered_value_spans = spans.into_iter().map(|s| s).collect();
                     }
                     types::cursor::ConfigPanelCursor::StopBits => {
@@ -422,19 +432,20 @@ fn create_line(
                                 if let types::port::PortState::OccupiedByThis { runtime, .. } =
                                     &port.state
                                 {
-                                    Some(
-                                        types::modbus::StopBitsOption::from_u8(
-                                            runtime.current_cfg.stop_bits,
-                                        )
-                                        .to_index(),
-                                    )
+                                    Some({
+                                        // map 1/2 -> index 0/1
+                                        match runtime.current_cfg.stop_bits {
+                                            2 => 1usize,
+                                            _ => 0usize,
+                                        }
+                                    })
                                 } else {
-                                    Some(types::modbus::StopBitsOption::One.to_index())
+                                    Some(0usize)
                                 }
                             })
-                            .unwrap_or(Some(types::modbus::StopBitsOption::One.to_index()))
+                            .unwrap_or(Some(0usize))
                         } else {
-                            Some(types::modbus::StopBitsOption::One.to_index())
+                            Some(0usize)
                         };
                         // Only treat as editing when this row is selected and the
                         // global temporary buffer has content.
@@ -458,15 +469,21 @@ fn create_line(
                         } else {
                             TextState::Normal
                         };
-                        let spans =
-                            selector_spans::<types::modbus::StopBitsOption>(selected_index, state)
-                                .unwrap_or_else(|_| {
-                                    vec![Span::raw(
-                                    crate::protocol::status::types::modbus::
-                                        StopBitsOption::from_index(selected_index)
-                                        .to_string(),
-                                )]
-                                });
+                        let spans = selector_spans::<types::modbus::StopBitsOption>(
+                            selected_index,
+                            state,
+                        )
+                        .unwrap_or_else(|_| {
+                            vec![Span::raw(
+                                crate::protocol::status::types::modbus::StopBitsOption::from_repr(
+                                    selected_index as u8,
+                                )
+                                .unwrap_or(
+                                    crate::protocol::status::types::modbus::StopBitsOption::One,
+                                )
+                                .to_string(),
+                            )]
+                        });
                         rendered_value_spans = spans.into_iter().map(|s| s).collect();
                     }
                     _ => {}

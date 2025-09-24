@@ -20,15 +20,17 @@ use crate::{
 // Optional character filter: when present, only characters for which the
 // filter returns true will be accepted into string buffers. This is used
 // by callers to restrict input to digits, hex digits, etc.
-pub fn handle_input_span<F>(
+pub fn handle_input_span<F1, F2>(
     key: KeyEvent,
     bus: &Bus,
     index_choices: Option<usize>,
-    char_filter: Option<Box<dyn Fn(char) -> bool>>,
-    mut commit_fn: F,
+    max_string_len: Option<usize>,
+    char_filter_fn: F1,
+    mut commit_fn: F2,
 ) -> Result<()>
 where
-    F: FnMut(Option<String>) -> Result<()>,
+    F1: FnOnce(char) -> bool,
+    F2: FnMut(Option<String>) -> Result<()>,
 {
     // Only operate on the global temporary buffer in a generic way.
     match key.code {
@@ -77,10 +79,28 @@ where
         }
         crossterm::event::KeyCode::Char(c) => {
             // Character input: apply optional filter then push into buffer
-            let accept = match &char_filter {
-                Some(f) => f(c),
-                None => true,
-            };
+            let mut accept = char_filter_fn(c);
+
+            // If a max_string_len is provided, enforce it for "significant"
+            // characters. For hex-limited fields we consider only hex digits
+            // as significant; other characters like '0','x','X','+' '-' are
+            // allowed but do not count toward the significant-char limit.
+            if accept {
+                if let Some(max) = max_string_len {
+                    // Only enforce when current buffer is a String
+                    let buf =
+                        read_status(|status| Ok(status.temporarily.input_raw_buffer.clone()))?;
+                    if let InputRawBuffer::String { bytes, .. } = buf {
+                        if let Ok(s) = std::str::from_utf8(&bytes) {
+                            let sig_count = s.chars().filter(|ch| ch.is_ascii_hexdigit()).count();
+                            // If incoming char is a hex digit, count it toward the limit
+                            if c.is_ascii_hexdigit() && sig_count >= max {
+                                accept = false;
+                            }
+                        }
+                    }
+                }
+            }
 
             if accept {
                 write_status(|status| {
