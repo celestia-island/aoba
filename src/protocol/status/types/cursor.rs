@@ -252,13 +252,12 @@ impl Cursor for ModbusDashboardCursor {
                         for it in masters.iter() {
                             items_vec.push(it.clone());
                         }
-                        if slaves.is_empty() {
-                            let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem { connection_mode: crate::protocol::status::types::modbus::ModbusConnectionMode::Slave, station_id: 1, register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils, register_address: 0, register_length: 8, req_success: 0, req_total: 0, next_poll_at: std::time::Instant::now(), pending_requests: Vec::new(), values: Vec::new() };
-                            items_vec.push(default_item);
-                        } else {
-                            for it in slaves.iter() {
-                                items_vec.push(it.clone());
-                            }
+                        // Only include actual configured masters and slaves.
+                        // When there are no items, leave `items_vec` empty so the
+                        // flat cursor list will only contain `AddLine` and cursor
+                        // movement will not advance into non-existent entries.
+                        for it in slaves.iter() {
+                            items_vec.push(it.clone());
                         }
 
                         for (idx, item) in items_vec.iter().enumerate() {
@@ -325,13 +324,12 @@ impl Cursor for ModbusDashboardCursor {
                         for it in masters.iter() {
                             items_vec.push(it.clone());
                         }
-                        if slaves.is_empty() {
-                            let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem { connection_mode: crate::protocol::status::types::modbus::ModbusConnectionMode::Slave, station_id: 1, register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils, register_address: 0, register_length: 8, req_success: 0, req_total: 0, next_poll_at: std::time::Instant::now(), pending_requests: Vec::new(), values: Vec::new() };
-                            items_vec.push(default_item);
-                        } else {
-                            for it in slaves.iter() {
-                                items_vec.push(it.clone());
-                            }
+                        // Only include actual configured masters and slaves.
+                        // When there are no items, leave `items_vec` empty so the
+                        // flat cursor list will only contain `AddLine` and cursor
+                        // movement will not advance into non-existent entries.
+                        for it in slaves.iter() {
+                            items_vec.push(it.clone());
                         }
 
                         for (idx, item) in items_vec.iter().enumerate() {

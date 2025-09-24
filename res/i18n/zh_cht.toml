@@ -162,6 +162,12 @@ label_master_passive = "是否監聽外來請求"
 status_master_passive = "被動, 僅監聽"
 status_master_active = "主動, 輪詢"
 label_default_marker = "預設"
+add_master_slave = "建立主/從站"
+connection_mode = "連接模式"
+station_id = "站點ID"
+register_mode = "暫存器類型"
+register_start_address = "起始位址"
+register_length = "暫存器長度"
 
 [protocol.mqtt]
 panel_placeholder = "MQTT 模式佔位面板 (尚未實作)"

@@ -276,7 +276,7 @@ fn create_line(
                         // Show input box using the string buffer content
                         let val = get_serial_param_value_by_cursor(port_data, cursor);
                         let state = TextState::Editing;
-                        let spans = input_spans::<'static, ()>(val.clone(), state)
+                        let spans = input_spans(val.clone(), state)
                             .unwrap_or_else(|_| vec![Span::raw(val)]);
                         rendered_value_spans = spans.into_iter().map(|s| s).collect();
                     } else {
