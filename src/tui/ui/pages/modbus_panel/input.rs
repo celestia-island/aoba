@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{read_status, types, write_status},
+    protocol::status::{read_status, types, write_status, with_port_write},
     tui::{ui::components::input_span_handler, utils::bus::Bus},
 };
 
@@ -31,7 +31,21 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
-            // Move cursor up
+            // Compute new cursor outside of the global write lock to avoid
+            // calling `read_status` while holding the write lock (which can
+            // deadlock because Cursor::prev/next access global status).
+            let current_cursor = read_status(|status| {
+                if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    Ok(*cursor)
+                } else {
+                    Ok(types::cursor::ModbusDashboardCursor::AddLine)
+                }
+            })?;
+
+            let new_cursor = current_cursor.prev();
+            let new_offset = new_cursor.view_offset();
+
+            // Now write the computed cursor and offset under the write lock.
             write_status(|status| {
                 if let types::Page::ModbusDashboard {
                     cursor,
@@ -39,19 +53,33 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     ..
                 } = &mut status.page
                 {
-                    let new_cursor = (*cursor).prev();
                     *cursor = new_cursor;
-                    *view_offset = new_cursor.view_offset();
+                    *view_offset = new_offset;
                 }
                 Ok(())
             })?;
+
             bus.ui_tx
                 .send(UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
+
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            // Move cursor down
+            // Compute new cursor outside of the global write lock to avoid
+            // calling `read_status` while holding the write lock (see comment
+            // in Up handling).
+            let current_cursor = read_status(|status| {
+                if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    Ok(*cursor)
+                } else {
+                    Ok(types::cursor::ModbusDashboardCursor::AddLine)
+                }
+            })?;
+
+            let new_cursor = current_cursor.next();
+            let new_offset = new_cursor.view_offset();
+
             write_status(|status| {
                 if let types::Page::ModbusDashboard {
                     cursor,
@@ -59,15 +87,16 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     ..
                 } = &mut status.page
                 {
-                    let new_cursor = (*cursor).next();
                     *cursor = new_cursor;
-                    *view_offset = new_cursor.view_offset();
+                    *view_offset = new_offset;
                 }
                 Ok(())
             })?;
+
             bus.ui_tx
                 .send(UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
+
             Ok(())
         }
         KeyCode::Enter => {
@@ -302,8 +331,50 @@ fn commit_text_edit(_cursor: types::cursor::ModbusDashboardCursor, _value: Strin
 }
 
 fn create_new_modbus_entry() -> Result<()> {
-    // TODO: Create a new ModbusRegisterItem and add it to the configuration
-    // This will require adding a new entry to either masters or slaves list
+    use crate::protocol::status::types::modbus::{ModbusRegisterItem, ModbusConnectionMode, RegisterMode};
+
+    // Determine selected port and append a default slave item to its config
+    let port_name_opt = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            Ok(status.ports.order.get(*selected_port).cloned())
+        } else {
+            Ok(None)
+        }
+    })?;
+
+    if let Some(port_name) = port_name_opt {
+        // Write into status: add a default ModbusRegisterItem to slaves
+        write_status(|status| {
+            if let Some(port) = status.ports.map.get(&port_name) {
+                // Use with_port_write to mutate the PortData in-place
+                if with_port_write(port, |port| {
+                    if let types::port::PortConfig::Modbus { masters: _, slaves } = &mut port.config {
+                        let item = ModbusRegisterItem {
+                            connection_mode: ModbusConnectionMode::Slave,
+                            station_id: 1,
+                            register_mode: RegisterMode::Coils,
+                            register_address: 0,
+                            register_length: 8,
+                            req_success: 0,
+                            req_total: 0,
+                            next_poll_at: std::time::Instant::now(),
+                            pending_requests: Vec::new(),
+                            values: Vec::new(),
+                        };
+                        slaves.push(item);
+                        return Some(());
+                    }
+                    None
+                })
+                .is_none()
+                {
+                    log::warn!("create_new_modbus_entry: failed to acquire write lock for {port_name}");
+                }
+            }
+            Ok(())
+        })?;
+    }
+
     Ok(())
 }
 

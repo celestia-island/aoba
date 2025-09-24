@@ -61,6 +61,13 @@ fn create_line(
         " ".repeat(padding_needed + LABEL_PADDING_EXTRA)
     );
 
+    // Read the global input buffer once to avoid calling `read_status` while
+    // holding any per-port locks. Calling `read_status` while holding a
+    // port-level read lock can cause a lock-order inversion with code paths
+    // that take the global status write lock and then a port write lock,
+    // leading to deadlocks. Cache the buffer here and consult it below.
+    let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+
     let mut rendered_value_spans: Vec<Span> = Vec::new();
 
     match cursor {
@@ -93,24 +100,18 @@ fn create_line(
                     }
                 })
                 .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
-
-                let editing = selected
-                    && read_status(|s| {
-                        Ok(matches!(
-                            s.temporarily.input_raw_buffer,
-                            types::ui::InputRawBuffer::Index(_)
-                        ))
-                    })?;
+                // Determine whether the user is currently editing an index for
+                // this field by consulting the cached input buffer (no
+                // additional calls to `read_status` here).
+                let editing =
+                    selected && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
 
                 let selected_index = if editing {
-                    read_status(|s| {
-                        if let types::ui::InputRawBuffer::Index(i) = s.temporarily.input_raw_buffer
-                        {
-                            Ok(i)
-                        } else {
-                            Ok(current_mode)
-                        }
-                    })?
+                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                        *i
+                    } else {
+                        current_mode
+                    }
                 } else {
                     current_mode
                 };
@@ -143,14 +144,8 @@ fn create_line(
                     }
                 })
                 .ok_or(anyhow!("Failed to read port data for StationId"))?;
-
-                let editing = selected
-                    && read_status(|s| {
-                        Ok(!matches!(
-                            s.temporarily.input_raw_buffer,
-                            types::ui::InputRawBuffer::None
-                        ))
-                    })?;
+                let editing =
+                    selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
                 let state = if editing {
                     TextState::Editing
@@ -184,24 +179,15 @@ fn create_line(
                     }
                 })
                 .ok_or(anyhow!("Failed to read port data for RegisterMode"))?;
-
-                let editing = selected
-                    && read_status(|s| {
-                        Ok(matches!(
-                            s.temporarily.input_raw_buffer,
-                            types::ui::InputRawBuffer::Index(_)
-                        ))
-                    })?;
+                let editing =
+                    selected && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
 
                 let selected_index = if editing {
-                    read_status(|s| {
-                        if let types::ui::InputRawBuffer::Index(i) = s.temporarily.input_raw_buffer
-                        {
-                            Ok(i)
-                        } else {
-                            Ok(current_mode)
-                        }
-                    })?
+                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                        *i
+                    } else {
+                        current_mode
+                    }
                 } else {
                     current_mode
                 };
@@ -233,14 +219,8 @@ fn create_line(
                     }
                 })
                 .ok_or(anyhow!("Failed to read port data for RegisterStartAddress"))?;
-
-                let editing = selected
-                    && read_status(|s| {
-                        Ok(!matches!(
-                            s.temporarily.input_raw_buffer,
-                            types::ui::InputRawBuffer::None
-                        ))
-                    })?;
+                let editing =
+                    selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
                 let state = if editing {
                     TextState::Editing
@@ -269,14 +249,8 @@ fn create_line(
                     }
                 })
                 .ok_or(anyhow!("Failed to read port data for RegisterLength"))?;
-
-                let editing = selected
-                    && read_status(|s| {
-                        Ok(!matches!(
-                            s.temporarily.input_raw_buffer,
-                            types::ui::InputRawBuffer::None
-                        ))
-                    })?;
+                let editing =
+                    selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
                 let state = if editing {
                     TextState::Editing
@@ -310,14 +284,8 @@ fn create_line(
                     }
                 })
                 .ok_or(anyhow!("Failed to read port data for Register"))?;
-
-                let editing = selected
-                    && read_status(|s| {
-                        Ok(!matches!(
-                            s.temporarily.input_raw_buffer,
-                            types::ui::InputRawBuffer::None
-                        ))
-                    })?;
+                let editing =
+                    selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
                 let state = if editing {
                     TextState::Editing
