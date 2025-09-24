@@ -192,10 +192,11 @@ pub fn switch_spans<'a>(
                 } else {
                     unselected_raw.to_string()
                 },
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ));
-        }
-        //_ => unreachable!(),
+        } //_ => unreachable!(),
     }
 
     Ok(out)
@@ -217,7 +218,9 @@ pub fn link_spans<'a>(text: impl ToString, state: TextState) -> Result<Vec<Span<
         TextState::Editing => {
             out.push(Span::styled(
                 text.to_string(),
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             ));
         }
     }
