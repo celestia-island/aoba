@@ -48,11 +48,11 @@ impl RegisterMode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModbusRegisterItem {
-    pub slave_id: u8,
-    pub role: ModbusConnectionMode,
-    pub mode: RegisterMode,
-    pub address: u16,
-    pub length: u16,
+    pub connection_mode: ModbusConnectionMode,
+    pub station_id: u8,
+    pub register_mode: RegisterMode,
+    pub register_address: u16,
+    pub register_length: u16,
 
     pub req_success: u32,
     pub req_total: u32,
