@@ -4,13 +4,16 @@ use strum::IntoEnumIterator;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{
-        read_status,
-        types::{
-            self,
-            cursor::{Cursor, ModbusDashboardCursor},
+    protocol::{
+        runtime::RuntimeCommand,
+        status::{
+            read_status,
+            types::{
+                self,
+                cursor::{Cursor, ModbusDashboardCursor},
+            },
+            with_port_read, with_port_write, write_status,
         },
-        with_port_read, with_port_write, write_status,
     },
     tui::utils::bus::Bus,
 };
@@ -125,8 +128,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus,
             index_choices,
             |maybe_string| -> Result<()> {
-                use crate::protocol::runtime::RuntimeCommand;
-
                 // Helper: read selected port name and map to port data (if any)
                 let port_name_opt = read_status(|status| {
                     if let types::Page::ConfigPanel { selected_port, .. } = status.page {

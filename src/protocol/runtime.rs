@@ -1,6 +1,7 @@
 use anyhow::Result;
 use flume::{Receiver, Sender};
 use std::{
+    io::{Read, Write},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -167,7 +168,6 @@ fn boot_serial_loop(
                 RuntimeCommand::Write(bytes) => {
                     let mut ok = false;
                     if let Ok(mut serial) = serial.lock() {
-                        use std::io::Write;
                         if serial.write_all(&bytes).is_ok() && serial.flush().is_ok() {
                             ok = true;
                         }
@@ -190,7 +190,6 @@ fn boot_serial_loop(
             }
         }
         if let Ok(mut g) = serial.lock() {
-            use std::io::Read;
             let mut buf = [0u8; 256];
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {

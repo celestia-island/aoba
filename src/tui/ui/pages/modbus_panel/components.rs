@@ -6,11 +6,19 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types, with_port_read},
-    tui::ui::components::styled_label::{input_spans, selector_spans, switch_spans, TextState},
+    protocol::status::{
+        read_status,
+        types::{
+            self,
+            modbus::{ModbusConnectionMode, RegisterMode},
+        },
+        with_port_read,
+    },
+    tui::ui::components::{
+        boxed_paragraph::render_boxed_paragraph,
+        styled_label::{input_spans, selector_spans, switch_spans, TextState},
+    },
 };
-
-use types::modbus::{ModbusConnectionMode, RegisterMode};
 
 // Constants to avoid magic numbers/strings in layout calculation
 const LABEL_PADDING_EXTRA: usize = 2; // extra spacing added before label when padding
@@ -483,7 +491,6 @@ pub fn generate_modbus_status_lines() -> Vec<Line<'static>> {
 
 /// Render the modbus panel content with scrolling
 pub fn render_modbus_content(frame: &mut Frame, area: Rect, lines: Vec<Line>, view_offset: usize) {
-    use crate::tui::ui::components::boxed_paragraph::render_boxed_paragraph;
     // Use the view_offset from page state instead of calculating scroll params
     render_boxed_paragraph(frame, area, lines, view_offset, None, false, true);
 }

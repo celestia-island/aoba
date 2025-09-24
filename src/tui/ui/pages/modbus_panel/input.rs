@@ -3,8 +3,19 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{read_status, types, write_status, with_port_write},
-    tui::{ui::components::input_span_handler, utils::bus::Bus},
+    protocol::status::{
+        read_status,
+        types::{
+            self,
+            cursor::Cursor,
+            modbus::{ModbusConnectionMode, ModbusRegisterItem, RegisterMode},
+        },
+        with_port_write, write_status,
+    },
+    tui::{
+        ui::components::input_span_handler,
+        utils::bus::{Bus, UiToCore},
+    },
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -26,9 +37,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
-    use crate::protocol::status::types::cursor::Cursor;
-    use crate::tui::utils::bus::UiToCore;
-
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             // Compute new cursor outside of the global write lock to avoid
@@ -167,8 +175,6 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 fn handle_enter_action(bus: &Bus) -> Result<()> {
-    use crate::tui::utils::bus::UiToCore;
-
     let current_cursor = read_status(|status| {
         if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
             Ok(*cursor)
@@ -331,8 +337,6 @@ fn commit_text_edit(_cursor: types::cursor::ModbusDashboardCursor, _value: Strin
 }
 
 fn create_new_modbus_entry() -> Result<()> {
-    use crate::protocol::status::types::modbus::{ModbusRegisterItem, ModbusConnectionMode, RegisterMode};
-
     // Determine selected port and append a default slave item to its config
     let port_name_opt = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -348,27 +352,27 @@ fn create_new_modbus_entry() -> Result<()> {
             if let Some(port) = status.ports.map.get(&port_name) {
                 // Use with_port_write to mutate the PortData in-place
                 if with_port_write(port, |port| {
-                    if let types::port::PortConfig::Modbus { masters: _, slaves } = &mut port.config {
-                        let item = ModbusRegisterItem {
-                            connection_mode: ModbusConnectionMode::Slave,
-                            station_id: 1,
-                            register_mode: RegisterMode::Coils,
-                            register_address: 0,
-                            register_length: 8,
-                            req_success: 0,
-                            req_total: 0,
-                            next_poll_at: std::time::Instant::now(),
-                            pending_requests: Vec::new(),
-                            values: Vec::new(),
-                        };
-                        slaves.push(item);
-                        return Some(());
-                    }
-                    None
+                    let types::port::PortConfig::Modbus { masters: _, slaves } = &mut port.config;
+                    let item = ModbusRegisterItem {
+                        connection_mode: ModbusConnectionMode::Slave,
+                        station_id: 1,
+                        register_mode: RegisterMode::Coils,
+                        register_address: 0,
+                        register_length: 8,
+                        req_success: 0,
+                        req_total: 0,
+                        next_poll_at: std::time::Instant::now(),
+                        pending_requests: Vec::new(),
+                        values: Vec::new(),
+                    };
+                    slaves.push(item);
+                    Some(())
                 })
                 .is_none()
                 {
-                    log::warn!("create_new_modbus_entry: failed to acquire write lock for {port_name}");
+                    log::warn!(
+                        "create_new_modbus_entry: failed to acquire write lock for {port_name}"
+                    );
                 }
             }
             Ok(())
@@ -379,8 +383,6 @@ fn create_new_modbus_entry() -> Result<()> {
 }
 
 fn handle_leave_page(bus: &Bus) -> Result<()> {
-    use crate::tui::utils::bus::UiToCore;
-
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
