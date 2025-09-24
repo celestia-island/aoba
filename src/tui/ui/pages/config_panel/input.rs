@@ -127,6 +127,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             key,
             bus,
             index_choices,
+            None,
             |maybe_string| -> Result<()> {
                 // Helper: read selected port name and map to port data (if any)
                 let port_name_opt = read_status(|status| {

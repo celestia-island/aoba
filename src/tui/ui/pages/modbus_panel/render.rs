@@ -35,8 +35,8 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     })?;
 
     // generate_modbus_status_lines reads status internally
-    let lines = generate_modbus_status_lines();
-    render_modbus_content(frame, area, lines, view_offset);
+    let lines = generate_modbus_status_lines()?;
+    render_modbus_content(frame, area, lines, view_offset)?;
 
     Ok(())
 }

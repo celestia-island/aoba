@@ -184,7 +184,18 @@ pub fn switch_spans<'a>(
                 Style::default().fg(Color::Green),
             ));
         }
-        _ => unreachable!(),
+        TextState::Editing => {
+            // Render editing-like visual using yellow color to match input_spans
+            out.push(Span::styled(
+                if is_selected {
+                    selected_raw.to_string()
+                } else {
+                    unselected_raw.to_string()
+                },
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ));
+        }
+        //_ => unreachable!(),
     }
 
     Ok(out)
@@ -203,7 +214,12 @@ pub fn link_spans<'a>(text: impl ToString, state: TextState) -> Result<Vec<Span<
                 Style::default().fg(Color::Green),
             ));
         }
-        _ => unreachable!(),
+        TextState::Editing => {
+            out.push(Span::styled(
+                text.to_string(),
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            ));
+        }
     }
 
     Ok(out)

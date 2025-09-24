@@ -17,10 +17,14 @@ use crate::{
 /// - `index_choices`: optional number of choices for Index buffers; when provided,
 ///   Left/Right will wrap modulo this value. If None, Left will saturate at 0 and
 ///   Right will increment without wrapping.
+// Optional character filter: when present, only characters for which the
+// filter returns true will be accepted into string buffers. This is used
+// by callers to restrict input to digits, hex digits, etc.
 pub fn handle_input_span<F>(
     key: KeyEvent,
     bus: &Bus,
     index_choices: Option<usize>,
+    char_filter: Option<Box<dyn Fn(char) -> bool>>,
     mut commit_fn: F,
 ) -> Result<()>
 where
@@ -69,6 +73,26 @@ where
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|e| anyhow!(e))?;
+            Ok(())
+        }
+        crossterm::event::KeyCode::Char(c) => {
+            // Character input: apply optional filter then push into buffer
+            let accept = match &char_filter {
+                Some(f) => f(c),
+                None => true,
+            };
+
+            if accept {
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer.push(c);
+                    Ok(())
+                })?;
+
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|e| anyhow!(e))?;
+            }
+
             Ok(())
         }
         crossterm::event::KeyCode::Enter => {
