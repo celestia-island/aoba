@@ -18,8 +18,8 @@ use crate::{
 };
 
 /// Extract log data from current page state
-pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, bool)> {
-    read_status(|status| match &status.page {
+pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, bool)>> {
+    let res = read_status(|status| match &status.page {
         types::Page::LogPanel { selected_port, .. } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
@@ -39,8 +39,8 @@ pub fn extract_log_data() -> Option<(Vec<types::port::PortLogEntry>, bool)> {
             }
         }
         _ => Ok(None),
-    })
-    .ok()?
+    })?;
+    Ok(res)
 }
 
 /// Render the main log display area
@@ -250,7 +250,10 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
         s
     } else {
         read_status(|status| match &status.temporarily.input_raw_buffer {
-            types::ui::InputRawBuffer::String { bytes: v, offset: _ } => Ok(String::from_utf8_lossy(v).into_owned()),
+            types::ui::InputRawBuffer::String {
+                bytes: v,
+                offset: _,
+            } => Ok(String::from_utf8_lossy(v).into_owned()),
             types::ui::InputRawBuffer::Index(i) => Ok(i.to_string()),
             types::ui::InputRawBuffer::None => Ok(String::new()),
         })?
@@ -329,24 +332,7 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
     Ok(())
 }
 
-/// Check if we're in a subpage editing mode
-pub fn is_in_subpage_editing() -> bool {
-    false // Simplified for now
-}
-
-/// Check if a subpage is currently active
-pub fn is_subpage_active() -> bool {
-    read_status(|app| {
-        Ok(matches!(
-            app.page,
-            types::Page::ConfigPanel { .. }
-                | types::Page::ModbusDashboard { .. }
-                | types::Page::LogPanel { .. }
-                | types::Page::About { .. }
-        ))
-    })
-    .unwrap_or_default()
-}
+// (removed is_in_subpage_editing / is_subpage_active — simplified architecture)
 
 /// Scroll the LogPanel view offset up by `amount` (saturating at 0).
 pub fn log_panel_scroll_up(amount: usize) -> anyhow::Result<()> {
