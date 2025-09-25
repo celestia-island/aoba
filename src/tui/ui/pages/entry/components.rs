@@ -91,15 +91,9 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             };
             let spacer = " ".repeat(pad);
 
-            // Determine prefix style: if selected, color prefix green. If the
-            // app is currently editing (input buffer non-empty) and this is
-            // the selected row, show yellow instead. We need a lightweight
-            // heuristic: consult global input buffer to see if editing is
-            // active. This mirrors behavior used elsewhere.
             let input_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()));
             let mut prefix_style = Style::default();
             if i == selection {
-                // Editing detection: if input buffer is not None/Empty, treat as editing
                 if let Ok(buf) = input_buffer {
                     use crate::protocol::status::types::ui::InputRawBuffer;
                     if !matches!(buf, InputRawBuffer::None) {
@@ -119,13 +113,9 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
                 Span::styled(state_text, state_style),
             ];
             if i == selection {
-                // preserve existing background highlight while keeping our
-                // colored prefix: apply background to all spans but keep
-                // prefix's foreground color by composing styles.
                 let styled = spans
                     .into_iter()
                     .map(|sp| {
-                        // If this is the prefix span, keep its style and add bg
                         let mut s = sp.style;
                         s = s.bg(Color::LightGreen);
                         Span::styled(sp.content, s)
@@ -190,18 +180,13 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
 
 /// Render the right details panel content
 pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
-    // Get content lines based on page state
     if let Ok(content_lines) = read_status(|app| {
         if app.ports.order.is_empty() {
-            // No ports available
             Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
         } else if let types::Page::Entry { cursor } = &app.page {
-            // Match on cursor to determine content
             match cursor {
                 Some(EntryCursor::Com { index }) => {
                     if *index < app.ports.order.len() {
-                        // Use a local, simpler renderer for port basic info to avoid
-                        // cursor/selection coupling bugs from the full config panel.
                         let lines = render_port_basic_info_lines(*index);
                         Ok(lines)
                     } else {
@@ -223,7 +208,6 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
                     Ok(lines)
                 }
                 None => {
-                    // Default to first port if available
                     if !app.ports.order.is_empty() {
                         let lines = render_port_basic_info_lines(0);
                         Ok(lines)
@@ -233,7 +217,6 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
                 }
             }
         } else {
-            // Fallback for non-entry pages
             Ok(vec![Line::from(lang().index.entry_page_required.as_str())])
         }
     }) {
@@ -247,7 +230,6 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
             false,
         );
     } else {
-        // Error fallback
         let content_lines = vec![Line::from(lang().index.error_loading_content.as_str())];
         render_boxed_paragraph(frame, area, content_lines, 0, None, false, false);
     }
@@ -313,18 +295,15 @@ fn get_refresh_content() -> Vec<Line<'static>> {
 fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     // Fetch the port Arc once under the status read lock to minimize lock churn
     let port_arc_opt: Option<std::sync::Arc<std::sync::RwLock<types::port::PortData>>> =
-        match read_status(|s| {
+        read_status(|s| {
             Ok(s.ports
                 .order
                 .get(index)
                 .and_then(|name| s.ports.map.get(name).cloned()))
-        }) {
-            Ok(v) => v,
-            Err(_) => None,
-        };
+        })
+        .unwrap_or(None);
 
     if let Some(port_arc) = port_arc_opt {
-        // Read port data safely
         if let Some((_pn, state, cfg_opt)) = with_port_read(&port_arc, |port| {
             let pn = port.port_name.clone();
             let st = port.state.clone();
@@ -341,26 +320,20 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
         }) {
             let mut lines: Vec<Line<'static>> = Vec::new();
 
-            // Enabled switch
             let enabled = matches!(state, types::port::PortState::OccupiedByThis { .. });
             let val_enabled = lang().protocol.common.port_enabled.clone();
             let val_disabled = lang().protocol.common.port_disabled.clone();
             let enable_text = if enabled { val_enabled } else { val_disabled };
             lines.push(Line::from(Span::raw(format!("{} {}", "", enable_text))));
 
-            // Serial params: Baud, DataBits, Parity, StopBits
             if let Some(cfg) = cfg_opt {
-                // Separator line
                 let sep_len = 48usize;
-                let sep_str: String = std::iter::repeat('─').take(sep_len).collect();
+                let sep_str: String = "─".repeat(sep_len);
                 lines.push(Line::from(Span::styled(
                     sep_str,
                     Style::default().fg(Color::DarkGray),
                 )));
 
-                // Align labels and values into two columns (label | value).
-                // Define a minimum left column width and pad labels using
-                // unicode-width so CJK and other wide chars are counted correctly.
                 let left_min_width: usize = 14; // reasonable default to match config panel style
 
                 let kv_pairs = vec![
@@ -383,7 +356,6 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
                 ];
 
                 for (label, val) in kv_pairs {
-                    // compute display width of label and padding needed
                     let lab_w = UnicodeWidthStr::width(label.as_str());
                     let pad = if left_min_width > lab_w {
                         left_min_width - lab_w
@@ -392,7 +364,6 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
                     };
                     let spacer = " ".repeat(pad);
 
-                    // make label bold and value normal; use Span for styling
                     let spans = vec![
                         Span::styled(label, Style::default().add_modifier(Modifier::BOLD)),
                         Span::raw(spacer),
@@ -406,7 +377,6 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
         }
     }
 
-    // Fallback when port info is absent
     vec![Line::from(lang().index.invalid_port_selection.as_str())]
 }
 

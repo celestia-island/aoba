@@ -26,20 +26,17 @@ pub struct RepoManifest {
 
 static ABOUT_CACHE: OnceLock<Arc<Mutex<RepoManifest>>> = OnceLock::new();
 
-// Initialize ABOUT_CACHE from the generated TOML snapshot at compile time.
 pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
     if let Some(v) = ABOUT_CACHE.get() {
         return v.clone();
     }
 
-    // Embedded file produced by build.rs. Path adjusted for files under `about/`.
     const ABOUT_TOML: &str = include_str!("../../../../../res/about_cache.toml");
 
     let mut cache = RepoManifest::default();
 
     match toml::from_str::<toml::Value>(ABOUT_TOML) {
         Ok(val) => {
-            // package section
             if let Some(pkg) = val.get("package") {
                 if let Some(n) = pkg.get("name").and_then(|v| v.as_str()) {
                     cache.full_name = n.to_string();
@@ -63,9 +60,6 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
                 }
             }
 
-            // deps: support both forms that may be produced by build.rs
-            // 1) a top-level table array named `deps` (legacy used in some builds)
-            // 2) a table array named `dependencies` (Cargo-style emitted by cargo metadata)
             let mut added = Vec::new();
             if let Some(deps) = val.get("deps").and_then(|v| v.as_array()) {
                 for dep in deps {
@@ -143,15 +137,11 @@ pub fn render_about_page_manifest_lines(app_snapshot: RepoManifest) -> Result<Ve
         (lang().about.license.clone(), app_snapshot.license.clone()),
     ];
 
-    // Render base pairs first
     let mut base_kv_lines = kv_pairs_to_lines(&base_pairs, 5);
     out.append(&mut base_kv_lines);
 
-    // Then render dependencies header + dependency items (if any)
     if !app_snapshot.deps.is_empty() {
-        // blank separator
         out.push(Line::from(Span::raw("")));
-        // Bold dependencies header (use localized text)
         out.push(Line::from(Span::styled(
             lang().about.dependencies_license_list.clone(),
             ratatui::style::Style::default().add_modifier(ratatui::style::Modifier::BOLD),
