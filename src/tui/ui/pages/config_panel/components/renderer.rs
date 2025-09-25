@@ -1,6 +1,4 @@
 use std::sync::{Arc, RwLock};
-use strum::IntoEnumIterator;
-
 use ratatui::{prelude::*, text::Line};
 
 use crate::{
@@ -17,15 +15,7 @@ use super::utilities::{derive_selection, is_port_occupied_by_this};
 
 use anyhow::Result;
 
-/// Helper function to create selector spans from a list of options
-fn selector_spans_with_options(options: &[String], selected_index: usize, text_state: TextState) -> Result<Vec<Span<'static>>> {
-    let display_text = options.get(selected_index).cloned().unwrap_or_default();
-    match text_state {
-        TextState::Editing => input_spans(display_text, text_state),
-        TextState::Selected => input_spans(display_text, text_state),
-        TextState::Normal => Ok(vec![Span::raw(display_text)]),
-    }
-}
+
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
@@ -57,12 +47,15 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
 
     for (group_i, &group_end) in group_boundaries.iter().enumerate() {
         if group_i > 0 {
-            let sep_len = 48usize;
-            let sep_str: String = "─".repeat(sep_len);
-            lines.push(Line::from(Span::styled(
-                sep_str,
-                Style::default().fg(Color::DarkGray),
-            )));
+            // Only show separator if port is occupied by this instance
+            if occupied_by_this {
+                let sep_len = 48usize;
+                let sep_str: String = "─".repeat(sep_len);
+                lines.push(Line::from(Span::styled(
+                    sep_str,
+                    Style::default().fg(Color::DarkGray),
+                )));
+            }
         }
 
         let group_start = if group_i == 0 { 0 } else { group_boundaries[group_i - 1] };
@@ -131,7 +124,7 @@ fn create_line(
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| match &port.config {
                         types::port::PortConfig::Modbus { .. } => 0usize, // Only Modbus RTU for now
-                    }).unwrap_or(0usize)
+                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port config"))?
                 } else {
                     0usize
                 };
@@ -148,12 +141,12 @@ fn create_line(
 
                 // For now only one option: Modbus RTU  
                 let protocol_options = vec![lang().protocol.common.mode_modbus.clone()];
-                let spans = selector_spans_with_options(&protocol_options, selected_index, text_state)
-                    .unwrap_or_else(|_| {
-                        let display_text = protocol_options.get(selected_index).cloned().unwrap_or_else(|| lang().protocol.common.mode_modbus.clone());
-                        vec![Span::raw(display_text)]
-                    });
-                rendered_value_spans = spans;
+                let display_text = protocol_options.get(selected_index).ok_or_else(|| anyhow::anyhow!("Invalid protocol mode index: {}", selected_index))?;
+                match text_state {
+                    TextState::Editing => rendered_value_spans = input_spans(display_text.clone(), text_state)?,
+                    TextState::Selected => rendered_value_spans = input_spans(display_text.clone(), text_state)?,
+                    TextState::Normal => rendered_value_spans = vec![Span::raw(display_text.clone())],
+                }
             }
             types::cursor::ConfigPanelCursor::ProtocolConfig => {
                 rendered_value_spans = link_spans("", text_state)?; // Remove Configure →
@@ -197,12 +190,7 @@ fn create_line(
                         rendered_value_spans = vec![Span::raw(format!("{} baud ({})", current_baud, lang().protocol.common.custom))];
                     } else {
                         // Use selector_spans for first phase (includes custom option selection)
-                        let spans = selector_spans::<types::modbus::BaudRateSelector>(selected_index, text_state)
-                            .unwrap_or_else(|_| {
-                                let selected_selector = types::modbus::BaudRateSelector::from_index(selected_index);
-                                vec![Span::raw(selected_selector.to_string())]
-                            });
-                        rendered_value_spans = spans;
+                        rendered_value_spans = selector_spans::<types::modbus::BaudRateSelector>(selected_index, text_state)?;
                     }
                 } else {
                     rendered_value_spans = vec![Span::raw("9600 baud")];
@@ -221,7 +209,7 @@ fn create_line(
                         } else {
                             3usize
                         }
-                    }).unwrap_or(3usize)
+                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
                 } else {
                     3usize
                 };
@@ -236,15 +224,7 @@ fn create_line(
                     current_index
                 };
 
-                let spans = selector_spans::<types::modbus::DataBitsOption>(selected_index, text_state)
-                    .unwrap_or_else(|_| {
-                        vec![Span::raw(
-                            types::modbus::DataBitsOption::from_repr(selected_index as u8)
-                                .unwrap_or(types::modbus::DataBitsOption::Eight)
-                                .to_string(),
-                        )]
-                    });
-                rendered_value_spans = spans;
+                rendered_value_spans = selector_spans::<types::modbus::DataBitsOption>(selected_index, text_state)?;
             }
             types::cursor::ConfigPanelCursor::StopBits => {
                 let current_index = if let Some(port) = port_data {
@@ -257,7 +237,7 @@ fn create_line(
                         } else {
                             0usize
                         }
-                    }).unwrap_or(0usize)
+                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
                 } else {
                     0usize
                 };
@@ -272,15 +252,7 @@ fn create_line(
                     current_index
                 };
 
-                let spans = selector_spans::<types::modbus::StopBitsOption>(selected_index, text_state)
-                    .unwrap_or_else(|_| {
-                        vec![Span::raw(
-                            types::modbus::StopBitsOption::from_repr(selected_index as u8)
-                                .unwrap_or(types::modbus::StopBitsOption::One)
-                                .to_string(),
-                        )]
-                    });
-                rendered_value_spans = spans;
+                rendered_value_spans = selector_spans::<types::modbus::StopBitsOption>(selected_index, text_state)?;
             }
             types::cursor::ConfigPanelCursor::Parity => {
                 let current_index = if let Some(port) = port_data {
@@ -294,7 +266,7 @@ fn create_line(
                         } else {
                             0usize
                         }
-                    }).unwrap_or(0usize)
+                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
                 } else {
                     0usize
                 };
@@ -309,12 +281,7 @@ fn create_line(
                     current_index
                 };
 
-                let spans = selector_spans::<ParityOption>(selected_index, text_state)
-                    .unwrap_or_else(|_| {
-                        let opts: Vec<String> = ParityOption::iter().map(|p| p.to_string()).collect();
-                        vec![Span::raw(opts.get(selected_index).cloned().unwrap_or_default())]
-                    });
-                rendered_value_spans = spans;
+                rendered_value_spans = selector_spans::<ParityOption>(selected_index, text_state)?;
             }
         }
 
@@ -324,18 +291,9 @@ fn create_line(
     render_kv_line(label, text_state, value_closure)
 }
 
-fn render_baud_rate_selector(sel: types::modbus::BaudRateSelector, text_state: TextState) -> Result<Vec<Span<'static>>> {
-    match sel {
-        types::modbus::BaudRateSelector::Custom { baud } => {
-            input_spans(format!("{} baud (custom)", baud), text_state)
-        }
-        _ => {
-            input_spans(format!("{} baud", sel.as_u32()), text_state)
-        }
-    }
-}
 
-fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, occupied_by_this: bool) -> String {
+
+fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, _occupied_by_this: bool) -> String {
     match cursor {
         types::cursor::ConfigPanelCursor::EnablePort => {
             lang().protocol.common.enable_port.clone()
@@ -344,11 +302,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, occupied_by_this: 
             lang().protocol.common.protocol_mode.clone()
         }
         types::cursor::ConfigPanelCursor::ProtocolConfig => {
-            if occupied_by_this {
-                "进入业务配置页面".to_string() // TODO: Use proper internationalization
-            } else {
-                String::new()
-            }
+            "进入业务配置页面".to_string() // TODO: Use proper internationalization
         }
         types::cursor::ConfigPanelCursor::BaudRate => {
             lang().protocol.common.label_baud.clone()
@@ -363,11 +317,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, occupied_by_this: 
             lang().protocol.common.label_parity.clone()
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
-            if occupied_by_this {
-                "进入通信日志页面".to_string() // TODO: Use proper internationalization
-            } else {
-                String::new()
-            }
+            "进入通信日志页面".to_string() // TODO: Use proper internationalization
         }
     }
 }

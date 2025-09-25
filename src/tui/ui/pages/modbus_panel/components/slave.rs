@@ -221,10 +221,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
                             let hex_display = if current_value.starts_with("0x") {
                                 current_value.clone()
-                            } else if let Ok(n) = current_value.parse::<u32>() {
-                                format!("0x{n:02X}")
+                            } else if let Ok(n) = current_value.parse::<u8>() {
+                                format!("0x{n:02X} ({n})")
                             } else {
-                                format!("0x{current_value}")
+                                format!("0x{current_value} (?)")
                             };
                             rendered_value_spans = input_spans(hex_display, state)?;
                         }
@@ -328,10 +328,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
                             let hex_display = if current_value.starts_with("0x") {
                                 current_value.clone()
-                            } else if let Ok(n) = current_value.parse::<u32>() {
-                                format!("0x{n:04X}")
+                            } else if let Ok(n) = current_value.parse::<u16>() {
+                                format!("0x{n:04X} ({n})")
                             } else {
-                                format!("0x{current_value}")
+                                format!("0x{current_value} (?)")
                             };
                             rendered_value_spans = input_spans(hex_display, state)?;
                         }
@@ -380,10 +380,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
                             let hex_display = if current_value.starts_with("0x") {
                                 current_value.clone()
-                            } else if let Ok(n) = current_value.parse::<u32>() {
-                                format!("0x{n:04X}")
+                            } else if let Ok(n) = current_value.parse::<u16>() {
+                                format!("0x{n:04X} ({n})")
                             } else {
-                                format!("0x{current_value}")
+                                format!("0x{current_value} (?)")
                             };
                             rendered_value_spans = input_spans(hex_display, state)?;
                         }
