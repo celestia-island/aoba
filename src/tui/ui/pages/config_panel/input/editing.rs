@@ -21,7 +21,7 @@ use crate::{
 };
 
 use super::{
-    cursor_move::sanitize_configpanel_cursor,
+    navigation::sanitize_configpanel_cursor,
     scroll::{handle_scroll_down, handle_scroll_up},
 };
 

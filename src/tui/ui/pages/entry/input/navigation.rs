@@ -130,3 +130,45 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     }
     Ok(())
 }
+
+pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
+    match cursor {
+        cursor::EntryCursor::Com { index } => {
+            let next = index.saturating_add(1);
+            if next >= read_status(|status| Ok(status.ports.map.len()))? {
+                write_status(|status| {
+                    status.page = Page::Entry {
+                        cursor: Some(types::cursor::EntryCursor::Refresh),
+                    };
+                    Ok(())
+                })?;
+            } else {
+                write_status(|status| {
+                    status.page = Page::Entry {
+                        cursor: Some(types::cursor::EntryCursor::Com { index: next }),
+                    };
+                    Ok(())
+                })?;
+            }
+        }
+        cursor::EntryCursor::Refresh => {
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
+                };
+                Ok(())
+            })?;
+        }
+        cursor::EntryCursor::CreateVirtual => {
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(types::cursor::EntryCursor::About),
+                };
+                Ok(())
+            })?;
+        }
+        cursor::EntryCursor::About => {}
+    }
+
+    Ok(())
+}

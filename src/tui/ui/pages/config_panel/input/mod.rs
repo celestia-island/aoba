@@ -1,7 +1,7 @@
-pub mod cursor_move;
+pub mod navigation;
 pub mod scroll;
-pub mod text_input;
+pub mod editing;
 
-pub use cursor_move::sanitize_configpanel_cursor;
+pub use navigation::sanitize_configpanel_cursor;
 pub use scroll::{handle_scroll_down, handle_scroll_up};
-pub use text_input::handle_input;
+pub use editing::handle_input;
