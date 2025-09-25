@@ -16,7 +16,7 @@ use crate::{
 
 /// Create a register row line that displays 8 registers per line.
 /// row_base is the absolute address of the first slot in this row (i.e. multiple of 8).
-pub fn create_register_row_line(
+pub fn render_register_row_line(
     label: &str,
     slave_index: usize,
     row_base: u16,

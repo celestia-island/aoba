@@ -7,7 +7,7 @@ use crate::{
     protocol::status::{read_status, types},
     tui::ui::{
         components::boxed_paragraph::render_boxed_paragraph,
-        pages::modbus_panel::components::generate_modbus_status_lines,
+        pages::modbus_panel::components::render_modbus_status_lines,
     },
 };
 
@@ -34,7 +34,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
         }
     })?;
 
-    let lines = generate_modbus_status_lines()?;
+    let lines = render_modbus_status_lines()?;
     render_boxed_paragraph(frame, area, lines, view_offset, None, false, true);
 
     Ok(())

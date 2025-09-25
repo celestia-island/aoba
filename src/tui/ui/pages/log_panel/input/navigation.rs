@@ -8,14 +8,14 @@ use crate::tui::utils::bus::Bus;
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::PageUp => {
-            crate::tui::ui::pages::log_panel::components::log_panel_scroll_up(5)?;
+            crate::tui::ui::pages::log_panel::components::handle_scroll_up(5)?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::PageDown => {
-            crate::tui::ui::pages::log_panel::components::log_panel_scroll_down(5)?;
+            crate::tui::ui::pages::log_panel::components::handle_scroll_down(5)?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;

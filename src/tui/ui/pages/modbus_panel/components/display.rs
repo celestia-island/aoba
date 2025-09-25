@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
-use super::table::create_register_row_line;
+use super::table::render_register_row_line;
 use crate::{
     i18n::lang,
     protocol::status::{
@@ -401,7 +401,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     while row < last_row {
                         let label = format!("  0x{row:04X}");
                         if let Ok(line) =
-                            create_register_row_line(&label, index, row, item, current_selection)
+                            render_register_row_line(&label, index, row, item, current_selection)
                         {
                             lines.push(line);
                         }
@@ -421,7 +421,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 }
 
 /// Generate status lines for modbus panel display
-pub fn generate_modbus_status_lines() -> Result<Vec<Line<'static>>> {
+pub fn render_modbus_status_lines() -> Result<Vec<Line<'static>>> {
     let sel_index = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
