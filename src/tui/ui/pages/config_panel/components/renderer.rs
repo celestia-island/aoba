@@ -1,5 +1,5 @@
-use std::sync::{Arc, RwLock};
 use ratatui::{prelude::*, text::Line};
+use std::sync::{Arc, RwLock};
 
 use crate::{
     i18n::lang,
@@ -10,12 +10,10 @@ use crate::{
     },
 };
 
-use types::modbus::ParityOption;
 use super::utilities::{derive_selection, is_port_occupied_by_this};
+use types::modbus::ParityOption;
 
 use anyhow::Result;
-
-
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
@@ -58,8 +56,12 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
             }
         }
 
-        let group_start = if group_i == 0 { 0 } else { group_boundaries[group_i - 1] };
-        
+        let group_start = if group_i == 0 {
+            0
+        } else {
+            group_boundaries[group_i - 1]
+        };
+
         for cursor_i in group_start..group_end {
             if cursor_i < all.len() {
                 let cursor = all[cursor_i];
@@ -117,14 +119,20 @@ fn create_line(
         match cursor_type {
             types::cursor::ConfigPanelCursor::EnablePort => {
                 let is_enabled = is_port_occupied_by_this(port_data);
-                rendered_value_spans = switch_spans(is_enabled, &lang().protocol.common.port_enabled, &lang().protocol.common.port_disabled, text_state)?;
+                rendered_value_spans = switch_spans(
+                    is_enabled,
+                    &lang().protocol.common.port_enabled,
+                    &lang().protocol.common.port_disabled,
+                    text_state,
+                )?;
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {
                 // Use selector_spans for protocol mode selection
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| match &port.config {
                         types::port::PortConfig::Modbus { .. } => 0usize, // Only Modbus RTU for now
-                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port config"))?
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Failed to read port config"))?
                 } else {
                     0usize
                 };
@@ -139,13 +147,21 @@ fn create_line(
                     current_index
                 };
 
-                // For now only one option: Modbus RTU  
+                // For now only one option: Modbus RTU
                 let protocol_options = vec![lang().protocol.common.mode_modbus.clone()];
-                let display_text = protocol_options.get(selected_index).ok_or_else(|| anyhow::anyhow!("Invalid protocol mode index: {}", selected_index))?;
+                let display_text = protocol_options.get(selected_index).ok_or_else(|| {
+                    anyhow::anyhow!("Invalid protocol mode index: {}", selected_index)
+                })?;
                 match text_state {
-                    TextState::Editing => rendered_value_spans = input_spans(display_text.clone(), text_state)?,
-                    TextState::Selected => rendered_value_spans = input_spans(display_text.clone(), text_state)?,
-                    TextState::Normal => rendered_value_spans = vec![Span::raw(display_text.clone())],
+                    TextState::Editing => {
+                        rendered_value_spans = input_spans(display_text.clone(), text_state)?
+                    }
+                    TextState::Selected => {
+                        rendered_value_spans = input_spans(display_text.clone(), text_state)?
+                    }
+                    TextState::Normal => {
+                        rendered_value_spans = vec![Span::raw(display_text.clone())]
+                    }
                 }
             }
             types::cursor::ConfigPanelCursor::ProtocolConfig => {
@@ -157,12 +173,15 @@ fn create_line(
             types::cursor::ConfigPanelCursor::BaudRate => {
                 if let Some(port) = port_data {
                     let current_baud = with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { ref runtime, .. } = &port.state {
+                        if let types::port::PortState::OccupiedByThis { ref runtime, .. } =
+                            &port.state
+                        {
                             runtime.current_cfg.baud
                         } else {
                             9600
                         }
-                    }).unwrap_or(9600);
+                    })
+                    .unwrap_or(9600);
 
                     let current_selector = types::modbus::BaudRateSelector::from_u32(current_baud);
                     let current_index = current_selector.to_index();
@@ -178,19 +197,48 @@ fn create_line(
                     };
 
                     // Check if we're in string editing mode (second phase for custom baud rate)
-                    if matches!(text_state, TextState::Editing) && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. }) {
+                    if matches!(text_state, TextState::Editing)
+                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. })
+                    {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
-                            rendered_value_spans = input_spans(format!("{} baud ({})", custom_value, lang().protocol.common.custom), text_state)?;
+                            rendered_value_spans = input_spans(
+                                format!(
+                                    "{} baud ({})",
+                                    custom_value,
+                                    lang().protocol.common.custom
+                                ),
+                                text_state,
+                            )?;
                         } else {
-                            rendered_value_spans = input_spans(format!("{} baud ({})", current_baud, lang().protocol.common.custom), text_state)?;
+                            rendered_value_spans = input_spans(
+                                format!(
+                                    "{} baud ({})",
+                                    current_baud,
+                                    lang().protocol.common.custom
+                                ),
+                                text_state,
+                            )?;
                         }
-                    } else if (matches!(text_state, TextState::Normal) || matches!(text_state, TextState::Selected)) && matches!(current_selector, types::modbus::BaudRateSelector::Custom { .. }) {
+                    } else if (matches!(text_state, TextState::Normal)
+                        || matches!(text_state, TextState::Selected))
+                        && matches!(
+                            current_selector,
+                            types::modbus::BaudRateSelector::Custom { .. }
+                        )
+                    {
                         // Show custom value when not editing but custom is selected (both Normal and Selected states)
-                        rendered_value_spans = vec![Span::raw(format!("{} baud ({})", current_baud, lang().protocol.common.custom))];
+                        rendered_value_spans = vec![Span::raw(format!(
+                            "{} baud ({})",
+                            current_baud,
+                            lang().protocol.common.custom
+                        ))];
                     } else {
                         // Use selector_spans for first phase (includes custom option selection)
-                        rendered_value_spans = selector_spans::<types::modbus::BaudRateSelector>(selected_index, text_state)?;
+                        rendered_value_spans = selector_spans::<types::modbus::BaudRateSelector>(
+                            selected_index,
+                            text_state,
+                        )?;
                     }
                 } else {
                     rendered_value_spans = vec![Span::raw("9600 baud")];
@@ -199,7 +247,8 @@ fn create_line(
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
+                        {
                             match runtime.current_cfg.data_bits {
                                 5 => 0usize,
                                 6 => 1usize,
@@ -209,7 +258,8 @@ fn create_line(
                         } else {
                             3usize
                         }
-                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
                 } else {
                     3usize
                 };
@@ -224,12 +274,14 @@ fn create_line(
                     current_index
                 };
 
-                rendered_value_spans = selector_spans::<types::modbus::DataBitsOption>(selected_index, text_state)?;
+                rendered_value_spans =
+                    selector_spans::<types::modbus::DataBitsOption>(selected_index, text_state)?;
             }
             types::cursor::ConfigPanelCursor::StopBits => {
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
+                        {
                             match runtime.current_cfg.stop_bits {
                                 1 => 0usize,
                                 _ => 1usize,
@@ -237,7 +289,8 @@ fn create_line(
                         } else {
                             0usize
                         }
-                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
                 } else {
                     0usize
                 };
@@ -252,12 +305,14 @@ fn create_line(
                     current_index
                 };
 
-                rendered_value_spans = selector_spans::<types::modbus::StopBitsOption>(selected_index, text_state)?;
+                rendered_value_spans =
+                    selector_spans::<types::modbus::StopBitsOption>(selected_index, text_state)?;
             }
             types::cursor::ConfigPanelCursor::Parity => {
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
+                        {
                             match runtime.current_cfg.parity {
                                 serialport::Parity::None => 0usize,
                                 serialport::Parity::Odd => 1usize,
@@ -266,7 +321,8 @@ fn create_line(
                         } else {
                             0usize
                         }
-                    }).ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
+                    })
+                    .ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
                 } else {
                     0usize
                 };
@@ -291,31 +347,23 @@ fn create_line(
     render_kv_line(label, text_state, value_closure)
 }
 
-
-
 fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, _occupied_by_this: bool) -> String {
     match cursor {
-        types::cursor::ConfigPanelCursor::EnablePort => {
-            lang().protocol.common.enable_port.clone()
-        }
+        types::cursor::ConfigPanelCursor::EnablePort => lang().protocol.common.enable_port.clone(),
         types::cursor::ConfigPanelCursor::ProtocolMode => {
             lang().protocol.common.protocol_mode.clone()
         }
         types::cursor::ConfigPanelCursor::ProtocolConfig => {
             "进入业务配置页面".to_string() // TODO: Use proper internationalization
         }
-        types::cursor::ConfigPanelCursor::BaudRate => {
-            lang().protocol.common.label_baud.clone()
-        }
+        types::cursor::ConfigPanelCursor::BaudRate => lang().protocol.common.label_baud.clone(),
         types::cursor::ConfigPanelCursor::DataBits { .. } => {
             lang().protocol.common.label_data_bits.clone()
         }
         types::cursor::ConfigPanelCursor::StopBits => {
             lang().protocol.common.label_stop_bits.clone()
         }
-        types::cursor::ConfigPanelCursor::Parity => {
-            lang().protocol.common.label_parity.clone()
-        }
+        types::cursor::ConfigPanelCursor::Parity => lang().protocol.common.label_parity.clone(),
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
             "进入通信日志页面".to_string() // TODO: Use proper internationalization
         }

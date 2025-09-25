@@ -2,10 +2,7 @@ use anyhow::Result;
 
 use crossterm::event::MouseEventKind;
 
-use crate::{
-    protocol::status::types,
-    tui::utils::bus::Bus,
-};
+use crate::{protocol::status::types, tui::utils::bus::Bus};
 
 use super::cursor_move::{handle_move_next, handle_move_prev};
 

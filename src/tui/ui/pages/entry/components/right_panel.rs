@@ -9,10 +9,7 @@ use crate::{
     i18n::lang,
     protocol::status::{
         read_status,
-        types::{
-            self,
-            cursor::EntryCursor,
-        },
+        types::{self, cursor::EntryCursor},
         with_port_read,
     },
     tui::ui::{

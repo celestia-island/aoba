@@ -1,9 +1,7 @@
-use std::sync::{Arc, RwLock};
 use anyhow::Result;
+use std::sync::{Arc, RwLock};
 
-use crate::{
-    protocol::status::{read_status, types, with_port_read},
-};
+use crate::protocol::status::{read_status, types, with_port_read};
 
 /// Derive selection index for config panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {

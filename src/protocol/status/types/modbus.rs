@@ -55,7 +55,9 @@ impl std::fmt::Display for RegisterMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RegisterMode::Coils => write!(f, "{}", lang().protocol.modbus.reg_type_coils),
-            RegisterMode::DiscreteInputs => write!(f, "{}", lang().protocol.modbus.reg_type_discrete_inputs),
+            RegisterMode::DiscreteInputs => {
+                write!(f, "{}", lang().protocol.modbus.reg_type_discrete_inputs)
+            }
             RegisterMode::Holding => write!(f, "{}", lang().protocol.modbus.reg_type_holding),
             RegisterMode::Input => write!(f, "{}", lang().protocol.modbus.reg_type_input),
         }

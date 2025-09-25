@@ -1,12 +1,8 @@
 use anyhow::Result;
 
-use crate::{
-    protocol::status::{
-        types::{
-            self,
-        },
-        with_port_read, write_status,
-    },
+use crate::protocol::status::{
+    types::{self},
+    with_port_read, write_status,
 };
 
 /// Ensure current cursor for ConfigPanel does not point to hidden items when

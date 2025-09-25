@@ -3,9 +3,7 @@ use anyhow::{anyhow, Result};
 use crate::{
     protocol::status::{
         read_status,
-        types::{
-            self,
-        },
+        types::{self},
         with_port_write, write_status,
     },
     tui::utils::bus::{Bus, UiToCore},
@@ -30,7 +28,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             let _sel_index = read_status(|_status| {
                 if let types::cursor::ModbusDashboardCursor::ModbusMode { index } = current_cursor {
                     Ok(index)
-                } else if let types::cursor::ModbusDashboardCursor::RegisterMode { index } = current_cursor {
+                } else if let types::cursor::ModbusDashboardCursor::RegisterMode { index } =
+                    current_cursor
+                {
                     Ok(index)
                 } else {
                     Ok(0)
@@ -105,9 +105,7 @@ fn create_new_modbus_entry() -> Result<()> {
         }
     })?;
 
-    let port_name_opt = read_status(|status| {
-        Ok(status.ports.order.get(selected_port).cloned())
-    })?;
+    let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
 
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {

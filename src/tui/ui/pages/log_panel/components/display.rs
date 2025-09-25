@@ -9,11 +9,7 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{
-        read_status,
-        types,
-        with_port_read,
-    },
+    protocol::status::{read_status, types, with_port_read},
 };
 
 /// Extract log data from current page state
@@ -67,13 +63,11 @@ pub fn render_log_display(
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(
-            " {} {} ",
-            lang().protocol.common.log_monitoring.clone(),
-            if follow_active { "[F]" } else { "" }
-        ));
+    let block = Block::default().borders(Borders::ALL).title(format!(
+        " {} {} ",
+        lang().protocol.common.log_monitoring.clone(),
+        if follow_active { "[F]" } else { "" }
+    ));
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, area);
@@ -88,7 +82,7 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
         .title(format!(" {} ", lang().input.input_label.clone()));
 
     let content = vec![Line::from(format!(
-        "{} | {} | {}", 
+        "{} | {} | {}",
         lang().hotkeys.press_enter_toggle.clone(),
         lang().hotkeys.press_c_clear.clone(),
         lang().hotkeys.press_esc_cancel.clone()

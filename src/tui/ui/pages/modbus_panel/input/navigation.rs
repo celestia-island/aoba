@@ -4,10 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::{
     protocol::status::{
         read_status,
-        types::{
-            self,
-            cursor::Cursor,
-        },
+        types::{self, cursor::Cursor},
         write_status,
     },
     tui::utils::bus::{Bus, UiToCore},

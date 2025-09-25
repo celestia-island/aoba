@@ -1,11 +1,9 @@
 use anyhow::Result;
 
-use crate::{
-    protocol::status::{
-        read_status,
-        types::{self, cursor, Page},
-        write_status,
-    },
+use crate::protocol::status::{
+    read_status,
+    types::{self, cursor, Page},
+    write_status,
 };
 
 pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {

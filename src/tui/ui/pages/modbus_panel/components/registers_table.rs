@@ -5,10 +5,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     protocol::status::{
         read_status,
-        types::{
-            self,
-            modbus::RegisterMode,
-        },
+        types::{self, modbus::RegisterMode},
     },
     tui::ui::components::{
         kv_line::render_kv_line,

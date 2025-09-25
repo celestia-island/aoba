@@ -20,11 +20,14 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-use super::{cursor_move::sanitize_configpanel_cursor, scroll::{handle_scroll_down, handle_scroll_up}};
+use super::{
+    cursor_move::sanitize_configpanel_cursor,
+    scroll::{handle_scroll_down, handle_scroll_up},
+};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     let selected_cursor = super::super::components::derive_selection()?;
-    
+
     sanitize_configpanel_cursor()?;
 
     let in_edit = read_status(|status| Ok(!status.temporarily.input_raw_buffer.is_empty()))?;
@@ -39,7 +42,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-fn handle_editing_input(key: KeyEvent, bus: &Bus, selected_cursor: types::cursor::ConfigPanelCursor) -> Result<()> {
+fn handle_editing_input(
+    key: KeyEvent,
+    bus: &Bus,
+    selected_cursor: types::cursor::ConfigPanelCursor,
+) -> Result<()> {
     let index_choices: Option<usize> = match selected_cursor {
         types::cursor::ConfigPanelCursor::BaudRate => {
             Some(types::modbus::BaudRateSelector::iter().count())
@@ -89,11 +96,10 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus, selected_cursor: types::cursor
                                         } = &mut port.state
                                         {
                                             runtime.current_cfg.baud = parsed;
-                                            let _ = runtime.cmd_tx.send(
-                                                RuntimeCommand::Reconfigure(
+                                            let _ =
+                                                runtime.cmd_tx.send(RuntimeCommand::Reconfigure(
                                                     runtime.current_cfg.clone(),
-                                                ),
-                                            );
+                                                ));
                                             return Some(());
                                         }
                                         None
@@ -130,7 +136,11 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus, selected_cursor: types::cursor
     Ok(())
 }
 
-fn handle_navigation_input(key: KeyEvent, bus: &Bus, selected_cursor: types::cursor::ConfigPanelCursor) -> Result<()> {
+fn handle_navigation_input(
+    key: KeyEvent,
+    bus: &Bus,
+    selected_cursor: types::cursor::ConfigPanelCursor,
+) -> Result<()> {
     match key.code {
         KeyCode::PageUp => {
             handle_scroll_up(5)?;
@@ -280,19 +290,27 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                     match cursor {
                         types::cursor::ConfigPanelCursor::BaudRate => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
-                                    types::modbus::BaudRateSelector::from_u32(runtime.current_cfg.baud).to_index()
+                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                                    &port.state
+                                {
+                                    types::modbus::BaudRateSelector::from_u32(
+                                        runtime.current_cfg.baud,
+                                    )
+                                    .to_index()
                                 } else {
                                     types::modbus::BaudRateSelector::B9600.to_index()
                                 }
                             })
                             .unwrap_or_default();
 
-                            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(index);
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::DataBits { .. } => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                                    &port.state
+                                {
                                     match runtime.current_cfg.data_bits {
                                         5 => 0usize,
                                         6 => 1usize,
@@ -305,11 +323,14 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                             })
                             .unwrap_or_default();
 
-                            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(index);
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::StopBits => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                                    &port.state
+                                {
                                     match runtime.current_cfg.stop_bits {
                                         1 => 0usize,
                                         _ => 1usize,
@@ -320,11 +341,14 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                             })
                             .unwrap_or_default();
 
-                            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(index);
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::Parity => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                                    &port.state
+                                {
                                     match runtime.current_cfg.parity {
                                         serialport::Parity::None => 0usize,
                                         serialport::Parity::Odd => 1usize,
@@ -336,11 +360,13 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                             })
                             .unwrap_or_default();
 
-                            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(index);
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::ProtocolMode => {
                             // Only one option for now: Modbus RTU
-                            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(0);
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::Index(0);
                         }
                         _ => {}
                     }
@@ -352,11 +378,12 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
     Ok(())
 }
 
-fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::cursor::ConfigPanelCursor) -> Result<()> {
-    let idx = read_status(|status| {
-        Ok(status.temporarily.input_raw_buffer.clone())
-    })?;
-    
+fn handle_selector_commit(
+    port: &Arc<RwLock<PortData>>,
+    selected_cursor: types::cursor::ConfigPanelCursor,
+) -> Result<()> {
+    let idx = read_status(|status| Ok(status.temporarily.input_raw_buffer.clone()))?;
+
     if let types::ui::InputRawBuffer::Index(i) = idx {
         match selected_cursor {
             types::cursor::ConfigPanelCursor::BaudRate => {
@@ -364,13 +391,15 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
                 if matches!(sel, types::modbus::BaudRateSelector::Custom { .. }) {
                     // Switch to string input mode for custom baud rate
                     let current_baud = with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
+                        {
                             runtime.current_cfg.baud
                         } else {
                             9600
                         }
-                    }).unwrap_or(9600);
-                    
+                    })
+                    .unwrap_or(9600);
+
                     write_status(|status| {
                         status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
                             bytes: current_baud.to_string().into_bytes(),
@@ -382,9 +411,13 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
                 } else {
                     // Direct commit for non-custom baud rates
                     with_port_write(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                            &mut port.state
+                        {
                             runtime.current_cfg.baud = sel.as_u32();
-                            let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                            let _ = runtime
+                                .cmd_tx
+                                .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
                         }
                     });
                 }
@@ -397,9 +430,12 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
                     _ => 8,
                 };
                 with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state {
+                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
+                    {
                         runtime.current_cfg.data_bits = data_bits;
-                        let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        let _ = runtime
+                            .cmd_tx
+                            .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
                     }
                 });
             }
@@ -409,9 +445,12 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
                     _ => 2u8,
                 };
                 with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state {
+                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
+                    {
                         runtime.current_cfg.stop_bits = stop_bits;
-                        let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        let _ = runtime
+                            .cmd_tx
+                            .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
                     }
                 });
             }
@@ -422,9 +461,12 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
                     _ => serialport::Parity::Even,
                 };
                 with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state {
+                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
+                    {
                         runtime.current_cfg.parity = parity;
-                        let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        let _ = runtime
+                            .cmd_tx
+                            .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
                     }
                 });
             }
