@@ -1,5 +1,5 @@
-pub mod table;
 pub mod display;
+pub mod table;
 
-pub use table::create_register_row_line;
-pub use display::{derive_selection, generate_modbus_status_lines, render_kv_lines_with_indicators};
+pub use display::{derive_selection, render_kv_lines_with_indicators, render_modbus_status_lines};
+pub use table::render_register_row_line;
