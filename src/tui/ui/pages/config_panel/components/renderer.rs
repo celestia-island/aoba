@@ -17,6 +17,16 @@ use super::utilities::{derive_selection, is_port_occupied_by_this};
 
 use anyhow::Result;
 
+/// Helper function to create selector spans from a list of options
+fn selector_spans_with_options(options: &[String], selected_index: usize, text_state: TextState) -> Result<Vec<Span<'static>>> {
+    let display_text = options.get(selected_index).cloned().unwrap_or_default();
+    match text_state {
+        TextState::Editing => input_spans(display_text, text_state),
+        TextState::Selected => input_spans(display_text, text_state),
+        TextState::Normal => Ok(vec![Span::raw(display_text)]),
+    }
+}
+
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
 ///
@@ -134,17 +144,13 @@ fn create_line(
                     current_index
                 };
 
-                // For now only one option: Modbus RTU
+                // For now only one option: Modbus RTU  
                 let protocol_options = vec![lang().protocol.common.mode_modbus.clone()];
-                let display_text = protocol_options.get(selected_index).cloned().unwrap_or_else(|| lang().protocol.common.mode_modbus.clone());
-                
-                let spans = if matches!(text_state, TextState::Editing) {
-                    input_spans(display_text, text_state)?
-                } else if matches!(text_state, TextState::Selected) {
-                    input_spans(display_text, text_state)?
-                } else {
-                    vec![Span::raw(display_text)]
-                };
+                let spans = selector_spans_with_options(&protocol_options, selected_index, text_state)
+                    .unwrap_or_else(|_| {
+                        let display_text = protocol_options.get(selected_index).cloned().unwrap_or_else(|| lang().protocol.common.mode_modbus.clone());
+                        vec![Span::raw(display_text)]
+                    });
                 rendered_value_spans = spans;
             }
             types::cursor::ConfigPanelCursor::ProtocolConfig => {
@@ -176,8 +182,6 @@ fn create_line(
                         current_index
                     };
 
-                    let selected_selector = types::modbus::BaudRateSelector::from_index(selected_index);
-
                     // Check if we're in string editing mode (second phase for custom baud rate)
                     if matches!(text_state, TextState::Editing) && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. }) {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
@@ -186,10 +190,14 @@ fn create_line(
                         } else {
                             rendered_value_spans = input_spans(format!("{} baud (custom)", current_baud), text_state)?;
                         }
+                    } else if matches!(text_state, TextState::Normal) && matches!(current_selector, types::modbus::BaudRateSelector::Custom { .. }) {
+                        // Show custom value when not in editing mode and current baud is custom
+                        rendered_value_spans = vec![Span::raw(format!("{} baud (custom)", current_baud))];
                     } else {
                         // Use selector_spans for first phase (includes custom option selection)
                         let spans = selector_spans::<types::modbus::BaudRateSelector>(selected_index, text_state)
                             .unwrap_or_else(|_| {
+                                let selected_selector = types::modbus::BaudRateSelector::from_index(selected_index);
                                 vec![Span::raw(selected_selector.to_string())]
                             });
                         rendered_value_spans = spans;

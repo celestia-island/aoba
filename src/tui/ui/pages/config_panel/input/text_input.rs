@@ -53,6 +53,9 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus, selected_cursor: types::cursor
         types::cursor::ConfigPanelCursor::Parity => {
             Some(types::modbus::ParityOption::iter().count())
         }
+        types::cursor::ConfigPanelCursor::ProtocolMode => {
+            Some(1) // Only one option: Modbus RTU for now
+        }
         _ => None,
     };
 
@@ -335,6 +338,10 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
 
                             status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(index);
                         }
+                        types::cursor::ConfigPanelCursor::ProtocolMode => {
+                            // Only one option for now: Modbus RTU
+                            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(0);
+                        }
                         _ => {}
                     }
                 }
@@ -420,6 +427,10 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
                         let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
                     }
                 });
+            }
+            types::cursor::ConfigPanelCursor::ProtocolMode => {
+                // For now only Modbus RTU option - no action needed
+                // Future: When MQTT/TCP support is added, handle protocol switching here
             }
             _ => {}
         }

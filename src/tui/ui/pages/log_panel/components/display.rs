@@ -8,6 +8,7 @@ use ratatui::{
 };
 
 use crate::{
+    i18n::lang,
     protocol::status::{
         read_status,
         types,
@@ -70,7 +71,7 @@ pub fn render_log_display(
         .borders(Borders::ALL)
         .title(format!(
             " {} {} ",
-            "Logs",
+            lang().protocol.common.log_monitoring.clone(),
             if follow_active { "[F]" } else { "" }
         ));
 
@@ -84,9 +85,14 @@ pub fn render_log_display(
 pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
     let block = Block::default()
         .borders(Borders::ALL)
-        .title(" Input ");
+        .title(format!(" {} ", lang().input.input_label.clone()));
 
-    let content = vec![Line::from("Press 'f' to toggle follow, 'c' to clear, ESC to exit")];
+    let content = vec![Line::from(format!(
+        "{} | {} | {}", 
+        lang().hotkeys.press_enter_toggle.clone(),
+        lang().hotkeys.press_c_clear.clone(),
+        lang().hotkeys.press_esc_cancel.clone()
+    ))];
 
     let paragraph = Paragraph::new(content).block(block);
     frame.render_widget(paragraph, area);
