@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     protocol::status::{
@@ -11,97 +11,7 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
-    match cursor {
-        cursor::EntryCursor::Com { index } => {
-            let prev = index.saturating_sub(1);
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::Refresh => {
-            let prev = read_status(|status| Ok(status.ports.map.len().saturating_sub(1)))?;
-            if read_status(|status| Ok(status.ports.map.is_empty()))? {
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Refresh),
-                    };
-                    Ok(())
-                })?;
-            } else {
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
-                    };
-                    Ok(())
-                })?;
-            }
-        }
-        cursor::EntryCursor::CreateVirtual => {
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::Refresh),
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::About => {
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
-                };
-                Ok(())
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
-pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
-    match cursor {
-        cursor::EntryCursor::Com { index } => {
-            let next = index.saturating_add(1);
-            if next >= read_status(|status| Ok(status.ports.map.len()))? {
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Refresh),
-                    };
-                    Ok(())
-                })?;
-            } else {
-                write_status(|status| {
-                    status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { index: next }),
-                    };
-                    Ok(())
-                })?;
-            }
-        }
-        cursor::EntryCursor::Refresh => {
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::CreateVirtual => {
-            write_status(|status| {
-                status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::About),
-                };
-                Ok(())
-            })?;
-        }
-        cursor::EntryCursor::About => {}
-    }
-
-    Ok(())
-}
+use super::cursor_move::{handle_move_next, handle_move_prev};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
@@ -215,19 +125,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-pub fn handle_mouse(event: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
-    match event.kind {
-        MouseEventKind::ScrollUp => {
-            handle_move_prev(types::cursor::EntryCursor::Refresh)?;
-        }
-        MouseEventKind::ScrollDown => {
-            handle_move_next(types::cursor::EntryCursor::Refresh)?;
         }
         _ => {}
     }
