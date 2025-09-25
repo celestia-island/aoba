@@ -77,16 +77,19 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
 }
 
 pub fn handle_leave_page(bus: &Bus) -> Result<()> {
-    write_status(|status| {
+    let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-            status.page = types::Page::Entry {
-                cursor: Some(types::cursor::EntryCursor::Com {
-                    index: *selected_port,
-                }),
-            };
+            Ok(*selected_port)
         } else {
-            status.page = types::Page::Entry { cursor: None };
+            Ok(0)
         }
+    })?;
+    write_status(|status| {
+        status.page = types::Page::ConfigPanel {
+            selected_port,
+            view_offset: 0,
+            cursor: types::cursor::ConfigPanelCursor::EnablePort,
+        };
         Ok(())
     })?;
     bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;

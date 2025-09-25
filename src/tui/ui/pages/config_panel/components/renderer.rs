@@ -1,4 +1,5 @@
 use std::sync::{Arc, RwLock};
+use strum::IntoEnumIterator;
 
 use ratatui::{prelude::*, text::Line};
 
@@ -7,11 +8,12 @@ use crate::{
     protocol::status::{read_status, types, with_port_read},
     tui::ui::components::kv_line::render_kv_line,
     tui::ui::components::styled_label::{
-        input_spans, link_spans, switch_spans, TextState,
+        input_spans, link_spans, selector_spans, switch_spans, TextState,
     },
 };
 
-use super::utilities::{derive_selection, is_port_occupied_by_this, get_serial_param_value_by_cursor};
+use types::modbus::ParityOption;
+use super::utilities::{derive_selection, is_port_occupied_by_this};
 
 use anyhow::Result;
 
@@ -136,7 +138,7 @@ fn create_line(
             }
             types::cursor::ConfigPanelCursor::BaudRate => {
                 if let Some(port) = port_data {
-                    let baud_value = with_port_read(port, |port| {
+                    let current_baud = with_port_read(port, |port| {
                         if let types::port::PortState::OccupiedByThis { ref runtime, .. } = &port.state {
                             runtime.current_cfg.baud
                         } else {
@@ -144,62 +146,148 @@ fn create_line(
                         }
                     }).unwrap_or(9600);
 
-                    let sel = types::modbus::BaudRateSelector::from_u32(baud_value);
-                    if matches!(text_state, TextState::Editing) {
+                    let current_selector = types::modbus::BaudRateSelector::from_u32(current_baud);
+                    let current_index = current_selector.to_index();
+
+                    let selected_index = if matches!(text_state, TextState::Editing) {
                         if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                            let selected_sel = types::modbus::BaudRateSelector::from_index(*i);
-                            rendered_value_spans = render_baud_rate_selector(selected_sel, text_state)?;
+                            *i
                         } else {
-                            rendered_value_spans = render_baud_rate_selector(sel, text_state)?;
+                            current_index
                         }
                     } else {
-                        rendered_value_spans = render_baud_rate_selector(sel, text_state)?;
+                        current_index
+                    };
+
+                    let selected_selector = types::modbus::BaudRateSelector::from_index(selected_index);
+
+                    // Check if the selected item is Custom and we need to show input_spans
+                    if matches!(selected_selector, types::modbus::BaudRateSelector::Custom { .. }) && matches!(text_state, TextState::Editing) {
+                        if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
+                            let custom_value = String::from_utf8_lossy(bytes);
+                            rendered_value_spans = input_spans(format!("{} baud (custom)", custom_value), text_state)?;
+                        } else {
+                            rendered_value_spans = input_spans(format!("{} baud (custom)", current_baud), text_state)?;
+                        }
+                    } else {
+                        // Use selector_spans for normal selection
+                        let spans = selector_spans::<types::modbus::BaudRateSelector>(selected_index, text_state)
+                            .unwrap_or_else(|_| {
+                                vec![Span::raw(selected_selector.to_string())]
+                            });
+                        rendered_value_spans = spans;
                     }
                 } else {
                     rendered_value_spans = vec![Span::raw("9600 baud")];
                 }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
-                let data_bits = get_serial_param_value_by_cursor(port_data, cursor_type);
-                if matches!(text_state, TextState::Editing) {
+                let current_index = if let Some(port) = port_data {
+                    with_port_read(port, |port| {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                            match runtime.current_cfg.data_bits {
+                                5 => 0usize,
+                                6 => 1usize,
+                                7 => 2usize,
+                                _ => 3usize,
+                            }
+                        } else {
+                            3usize
+                        }
+                    }).unwrap_or(3usize)
+                } else {
+                    3usize
+                };
+
+                let selected_index = if matches!(text_state, TextState::Editing) {
                     if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        let options = ["5", "6", "7", "8"];
-                        let display_text = options.get(*i).unwrap_or(&"8");
-                        rendered_value_spans = input_spans(format!("{} bits", display_text), text_state)?;
+                        *i
                     } else {
-                        rendered_value_spans = input_spans(format!("{} bits", data_bits), text_state)?;
+                        current_index
                     }
                 } else {
-                    rendered_value_spans = input_spans(format!("{} bits", data_bits), text_state)?;
-                }
+                    current_index
+                };
+
+                let spans = selector_spans::<types::modbus::DataBitsOption>(selected_index, text_state)
+                    .unwrap_or_else(|_| {
+                        vec![Span::raw(
+                            types::modbus::DataBitsOption::from_repr(selected_index as u8)
+                                .unwrap_or(types::modbus::DataBitsOption::Eight)
+                                .to_string(),
+                        )]
+                    });
+                rendered_value_spans = spans;
             }
             types::cursor::ConfigPanelCursor::StopBits => {
-                let stop_bits = get_serial_param_value_by_cursor(port_data, cursor_type);
-                if matches!(text_state, TextState::Editing) {
+                let current_index = if let Some(port) = port_data {
+                    with_port_read(port, |port| {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                            match runtime.current_cfg.stop_bits {
+                                1 => 0usize,
+                                _ => 1usize,
+                            }
+                        } else {
+                            0usize
+                        }
+                    }).unwrap_or(0usize)
+                } else {
+                    0usize
+                };
+
+                let selected_index = if matches!(text_state, TextState::Editing) {
                     if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        let display_text = if *i == 0 { "1" } else { "2" };
-                        rendered_value_spans = input_spans(format!("{} bit", display_text), text_state)?;
+                        *i
                     } else {
-                        rendered_value_spans = input_spans(format!("{} bit", stop_bits), text_state)?;
+                        current_index
                     }
                 } else {
-                    rendered_value_spans = input_spans(format!("{} bit", stop_bits), text_state)?;
-                }
+                    current_index
+                };
+
+                let spans = selector_spans::<types::modbus::StopBitsOption>(selected_index, text_state)
+                    .unwrap_or_else(|_| {
+                        vec![Span::raw(
+                            types::modbus::StopBitsOption::from_repr(selected_index as u8)
+                                .unwrap_or(types::modbus::StopBitsOption::One)
+                                .to_string(),
+                        )]
+                    });
+                rendered_value_spans = spans;
             }
             types::cursor::ConfigPanelCursor::Parity => {
-                if matches!(text_state, TextState::Editing) {
+                let current_index = if let Some(port) = port_data {
+                    with_port_read(port, |port| {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                            match runtime.current_cfg.parity {
+                                serialport::Parity::None => 0usize,
+                                serialport::Parity::Odd => 1usize,
+                                serialport::Parity::Even => 2usize,
+                            }
+                        } else {
+                            0usize
+                        }
+                    }).unwrap_or(0usize)
+                } else {
+                    0usize
+                };
+
+                let selected_index = if matches!(text_state, TextState::Editing) {
                     if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                        let options = ["None", "Odd", "Even"];
-                        let display_text = options.get(*i).unwrap_or(&"None");
-                        rendered_value_spans = input_spans(display_text.to_string(), text_state)?;
+                        *i
                     } else {
-                        let parity = get_serial_param_value_by_cursor(port_data, cursor_type);
-                        rendered_value_spans = input_spans(parity, text_state)?;
+                        current_index
                     }
                 } else {
-                    let parity = get_serial_param_value_by_cursor(port_data, cursor_type);
-                    rendered_value_spans = input_spans(parity, text_state)?;
-                }
+                    current_index
+                };
+
+                let spans = selector_spans::<ParityOption>(selected_index, text_state)
+                    .unwrap_or_else(|_| {
+                        let opts: Vec<String> = ParityOption::iter().map(|p| p.to_string()).collect();
+                        vec![Span::raw(opts.get(selected_index).cloned().unwrap_or_default())]
+                    });
+                rendered_value_spans = spans;
             }
         }
 
@@ -249,7 +337,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, occupied_by_this: 
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
             if occupied_by_this {
-                "View Communication Log".to_string()
+                lang().protocol.common.view_communication_log.clone()
             } else {
                 String::new()
             }

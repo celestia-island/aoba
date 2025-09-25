@@ -354,12 +354,33 @@ fn handle_selector_commit(port: &Arc<RwLock<PortData>>, selected_cursor: types::
         match selected_cursor {
             types::cursor::ConfigPanelCursor::BaudRate => {
                 let sel = types::modbus::BaudRateSelector::from_index(i);
-                with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state {
-                        runtime.current_cfg.baud = sel.as_u32();
-                        let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
-                    }
-                });
+                if matches!(sel, types::modbus::BaudRateSelector::Custom { .. }) {
+                    // Switch to string input mode for custom baud rate
+                    let current_baud = with_port_read(port, |port| {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
+                            runtime.current_cfg.baud
+                        } else {
+                            9600
+                        }
+                    }).unwrap_or(9600);
+                    
+                    write_status(|status| {
+                        status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
+                            bytes: current_baud.to_string().into_bytes(),
+                            offset: current_baud.to_string().len() as isize,
+                        };
+                        Ok(())
+                    })?;
+                    return Ok(()); // Don't commit yet, wait for string input
+                } else {
+                    // Direct commit for non-custom baud rates
+                    with_port_write(port, |port| {
+                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state {
+                            runtime.current_cfg.baud = sel.as_u32();
+                            let _ = runtime.cmd_tx.send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        }
+                    });
+                }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
                 let data_bits = match i {
