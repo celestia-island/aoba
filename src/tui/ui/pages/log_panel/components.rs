@@ -51,14 +51,11 @@ pub fn render_log_display(
     port_log_auto_scroll: bool,
 ) -> Result<()> {
     let total_groups = logs.len();
-    // We'll render a windowed view of log groups. Each group is 3 lines.
     let group_height = 3usize;
 
-    // Inner height inside the block (account for borders)
     let inner_h = area.height.saturating_sub(2) as usize;
     let groups_per_screen = max(1usize, inner_h / group_height);
 
-    // Determine bottom index based on auto-scroll or explicit offset (use per-port settings)
     let bottom = if total_groups == 0 {
         0usize
     } else if port_log_auto_scroll {
@@ -74,10 +71,8 @@ pub fn render_log_display(
         .unwrap_or(0usize)
     };
 
-    // Compute top group so that bottom aligns at the bottom of the visible area
     let top_group = (bottom + 1).saturating_sub(groups_per_screen);
 
-    // Calculate available width for truncation (account for borders and scrollbar)
     let width = if area.width > 4 {
         (area.width - 4) as usize
     } else {
@@ -85,7 +80,7 @@ pub fn render_log_display(
     };
 
     let mut styled_lines: Vec<Line> = Vec::new();
-    for (_index, g) in (top_group..min(total_groups, top_group + groups_per_screen)).enumerate() {
+    for g in top_group..min(total_groups, top_group + groups_per_screen) {
         if let Some(entry) = logs.get(g) {
             let selected = read_status(|status| {
                 if let types::Page::LogPanel { selected_port, .. } = &status.page {
@@ -94,16 +89,14 @@ pub fn render_log_display(
                             if let Some((port_log_auto_scroll, len)) =
                                 with_port_read(port, |pd| (pd.log_auto_scroll, pd.logs.len()))
                             {
-                                // Determine which log entry is currently selected based on auto-scroll and view_offset
                                 let port_log_selected = if port_log_auto_scroll {
                                     len.saturating_sub(1)
+                                } else if let types::Page::LogPanel { view_offset, .. } =
+                                    &status.page
+                                {
+                                    min(len.saturating_sub(1), *view_offset)
                                 } else {
-                                    if let types::Page::LogPanel { view_offset, .. } = &status.page
-                                    {
-                                        min(len.saturating_sub(1), *view_offset)
-                                    } else {
-                                        0usize
-                                    }
+                                    0usize
                                 };
                                 return Ok(g == port_log_selected);
                             }
@@ -114,7 +107,6 @@ pub fn render_log_display(
             })?;
 
             let prefix_text = if selected { "> " } else { "  " };
-            // Direction: try to infer send/recv from parsed summary (best-effort)
             let is_send = entry
                 .parsed
                 .as_ref()
@@ -129,13 +121,11 @@ pub fn render_log_display(
                 lang().tabs.log_dir_recv.as_str()
             };
 
-            // Timestamp line: prefix + timestamp (with milliseconds) + 4 spaces + direction (direction styled bold + color)
             let ts = entry.when.format("%Y-%m-%d %H:%M:%S%.3f").to_string();
             let mut ts_spans: Vec<Span> = Vec::new();
             ts_spans.push(Span::raw(prefix_text));
             ts_spans.push(Span::raw(ts));
             ts_spans.push(Span::raw("    "));
-            // Direction style: bold + colored (green = Send / yellow = Receive). No background applied.
             let dir_span_style = if is_send {
                 Style::default()
                     .add_modifier(Modifier::BOLD)
@@ -148,7 +138,6 @@ pub fn render_log_display(
             ts_spans.push(Span::styled(dir_text, dir_span_style));
             styled_lines.push(Line::from(ts_spans));
 
-            // Raw payload line: prefix + truncated raw
             let raw = entry.raw.replace('\n', " ");
             let raw_display = if raw.len() > width {
                 let mut s = raw[..width].to_string();
@@ -163,7 +152,6 @@ pub fn render_log_display(
             let raw_spans: Vec<Span> = vec![Span::raw(prefix_text), Span::raw(raw_display)];
             styled_lines.push(Line::from(raw_spans));
 
-            // Parsed summary line
             let parsed_str = entry
                 .parsed
                 .clone()
@@ -173,19 +161,16 @@ pub fn render_log_display(
         }
     }
 
-    // Prepare a block with a small progress indicator in the title: " {selected}/{total}"
     let sel_display = if total_groups == 0 {
         0
     } else {
         1 // FIXME: should be selected + 1, but we don't track selected separately now
     };
-    // Compose follow label localized next to progress (e.g. "Follow latest" / "Free view").
     let follow_label = if port_log_auto_scroll {
         lang().tabs.log.hint_follow_on.as_str()
     } else {
         lang().tabs.log.hint_follow_off.as_str()
     };
-    // Single-span title fallback: bold and color entire title depending on follow state.
     let title_text = format!(
         " {}{}/{}    {}",
         " ", sel_display, total_groups, follow_label
@@ -217,7 +202,6 @@ pub fn render_log_display(
 pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
     let mut lines: Vec<Line> = Vec::new();
 
-    // For now, use ASCII mode as default since we don't have per-port input modes
     let input_mode = read_status(|status| {
         if let types::Page::LogPanel { input_mode, .. } = status.page {
             Ok(input_mode)
@@ -226,7 +210,6 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
         }
     })?;
 
-    // Show buffer on the first content line (right under the title)
     let content = if input_mode == InputMode::Hex {
         let mut s = String::new();
         let mut chars = read_status(|status| {
@@ -259,14 +242,11 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
         })?
     };
 
-    // If buffer empty and not editing, show faint gray italic placeholder indicating current input mode
     if content.is_empty() {
-        // Show as: " {input_mode_current} {mode_text}" with a leading space to align with title
         let mode_text = match input_mode {
             InputMode::Ascii => lang().input.input_mode_ascii.as_str(),
             InputMode::Hex => lang().input.input_mode_hex.as_str(),
         };
-        // Add extra leading spaces to align with title
         let placeholder = format!(
             " {} {}",
             lang().input.input_mode_current.as_str(),
@@ -279,32 +259,23 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
                 .add_modifier(Modifier::ITALIC),
         )));
     } else {
-        // Style editing content in yellow (match config page editing color)
-        // Build spans in-place
         let spans = vec![
             Span::raw(" "), // Prefix editing line with single space (log list uses 2 incl. selector; here we keep compact)
             Span::styled(content.clone(), Style::default().fg(Color::Yellow)),
-            // Visual cursor block (green background)
             Span::styled(" ", Style::default().bg(Color::Green).fg(Color::Black)),
         ];
         lines.push(ratatui::text::Line::from(spans));
     }
 
-    // Keep a spare empty middle line so layout remains 3 lines
-    // Spare empty middle line should also keep two spaces for alignment
     lines.push(Line::from(Span::raw(" ")));
 
-    // Hint (short)
-    // Show dual-key hint: Enter / i
     let edit_hint = format!(
         "[Enter / i] {}",
         lang().input.hint_input_edit_short.as_str()
     );
     lines.push(Line::from(Span::raw(format!(" {edit_hint}"))));
 
-    // Choose title and block based on whether we're editing
     let (_title, block) = if !content.is_empty() {
-        // Highlight title when editing (use library green)
         let title = Span::styled(
             format!(" {} ", lang().input.input_label.as_str()),
             Style::default()
@@ -331,8 +302,6 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
 
     Ok(())
 }
-
-// (removed is_in_subpage_editing / is_subpage_active — simplified architecture)
 
 /// Scroll the LogPanel view offset up by `amount` (saturating at 0).
 pub fn log_panel_scroll_up(amount: usize) -> anyhow::Result<()> {

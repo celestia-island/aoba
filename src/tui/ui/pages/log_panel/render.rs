@@ -31,9 +31,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
 
     let logs_area = chunks[0];
 
-    // extract_log_data / is_subpage_active read status internally
     if let Some((logs, port_log_auto_scroll)) = extract_log_data()? {
-        // Use page state view_offset instead of port_log_view_offset
         let _ = render_log_display(frame, logs_area, &logs, port_log_auto_scroll);
     }
 

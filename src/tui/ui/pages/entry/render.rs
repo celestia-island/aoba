@@ -22,7 +22,6 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 
 /// Render the entry page. Only reads from Status, does not mutate.
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
-    // Horizontal split: left ports | right details
     let chunks = ratatui::layout::Layout::default()
         .direction(ratatui::layout::Direction::Horizontal)
         .margin(0)
@@ -35,13 +34,10 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let left = chunks[0];
     let right = chunks[1];
 
-    // Components read status internally now; just derive selection and call them
     let selection = read_status(|app| derive_selection_from_page(&app.page, &app.ports.order))?;
 
-    // LEFT: ports list
     render_ports_list(frame, left, selection)?;
 
-    // RIGHT: content details
     render_details_panel(frame, right)?;
 
     Ok(())

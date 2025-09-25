@@ -12,8 +12,10 @@ use crate::{
 /// - `key` is the KeyEvent being handled.
 /// - `bus` is the UI/Core message bus to send Refresh/ToggleRuntime etc.
 /// - `commit_fn` is a closure that will be called when Enter commits and should
-///    receive the final string (for string-mode edits) or None for index-mode commits.
+///   receive the final string (for string-mode edits) or None for index-mode commits.
+///
 /// Generic input/span handler.
+///
 /// - `index_choices`: optional number of choices for Index buffers; when provided,
 ///   Left/Right will wrap modulo this value. If None, Left will saturate at 0 and
 ///   Right will increment without wrapping.

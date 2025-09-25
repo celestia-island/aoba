@@ -101,9 +101,12 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
 
         for key in to_remove.iter() {
             if let Some(port) = status.ports.map.get(key) {
-                if let Some(opt_rt) = with_port_read(port, |port| match &port.state {
-                    PortState::OccupiedByThis { runtime, .. } => Some(runtime.clone()),
-                    _ => None,
+                if let Some(opt_rt) = with_port_read(port, |port| {
+                    if let PortState::OccupiedByThis { runtime, .. } = &port.state {
+                        Some(runtime.clone())
+                    } else {
+                        None
+                    }
                 }) {
                     if let Some(rt) = opt_rt {
                         // Clone runtime handle for stopping later outside the write lock

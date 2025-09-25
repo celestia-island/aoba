@@ -34,7 +34,7 @@ where
             Style::default().fg(Color::Green),
         )],
         TextState::Editing => {
-            let selected_index = if let Some(index) = read_status(|status| {
+            let selected_index = read_status(|status| {
                 Ok(
                     if let InputRawBuffer::Index(index) = status.temporarily.input_raw_buffer {
                         Some(index)
@@ -42,15 +42,8 @@ where
                         None
                     },
                 )
-            })? {
-                if index < T::iter().len() {
-                    Some(index)
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+            })?
+            .filter(|&index| index < T::iter().len());
             let selected_index = selected_index.unwrap_or(current_index);
 
             vec![

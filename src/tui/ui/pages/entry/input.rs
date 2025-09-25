@@ -118,9 +118,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 .map_err(|err| anyhow!(err))?;
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            // If cursor is None (initial startup), choose behavior based on number of ports:
-            // - if there are at least 2 ports, jump to the second port (index = 1)
-            // - otherwise jump to Refresh
             let cursor_opt = read_status(|status| {
                 if let types::Page::Entry { cursor } = &status.page {
                     Ok(*cursor)
@@ -131,7 +128,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             if cursor_opt.is_none() {
                 if read_status(|status| Ok(status.ports.map.len()))? >= 2 {
-                    // Jump to second port (index 1)
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(types::cursor::EntryCursor::Com { index: 1 }),
@@ -139,7 +135,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         Ok(())
                     })?;
                 } else {
-                    // Default to Refresh when less than 2 ports
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(types::cursor::EntryCursor::Refresh),
@@ -148,7 +143,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     })?;
                 }
             } else {
-                // Existing behavior when cursor already set
                 handle_move_next(cursor_opt.unwrap_or(types::cursor::EntryCursor::Refresh))?;
             }
 
@@ -157,8 +151,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 .map_err(|err| anyhow!(err))?;
         }
         KeyCode::Enter => {
-            // Enter a page or take action depending on selection
-
             let cursor = read_status(|status| {
                 if let types::Page::Entry { cursor } = &status.page {
                     Ok(*cursor)
@@ -168,7 +160,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             })?;
 
             let final_cursor = if cursor.is_none() {
-                // Give a default value for cursor
                 if read_status(|status| Ok(status.ports.map.is_empty()))? {
                     write_status(|status| {
                         status.page = Page::Entry {
@@ -217,7 +208,6 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
         }
         KeyCode::Esc => {
-            // Escape returns to top-level entry cursor cleared (or quit handled by caller)
             write_status(|status| {
                 status.page = types::Page::Entry { cursor: None };
                 Ok(())

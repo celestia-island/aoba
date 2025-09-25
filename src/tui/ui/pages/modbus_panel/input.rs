@@ -86,9 +86,6 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::Enter => {
-            // Special handling: when cursor is on a Register and not editing,
-            // allow immediate toggle for Coils/DiscreteInputs or start string
-            // editing for numeric registers by pre-filling buffer with current value.
             let current_cursor = read_status(|status| {
                 if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
                     Ok(*cursor)
@@ -102,7 +99,6 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 register_index,
             } = current_cursor
             {
-                // locate the item and inspect its mode and value
                 let port_name_opt = read_status(|status| {
                     if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
                         Ok(status.ports.order.get(*selected_port).cloned())
@@ -113,8 +109,6 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                 if let Some(port_name) = port_name_opt {
                     // To avoid deadlocks: do all reads under port read lock, collect
-                    // the intended action, then perform writes after dropping the
-                    // read guard.
                     enum PendingAction {
                         Toggle { new_value: u16 },
                         Prefill { value: u16 },
@@ -143,7 +137,7 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                     _ => {
                                         let current_value =
                                             item.values.get(register_index).copied().unwrap_or(0);
-                                        let _hex = format!("0x{:04X}", current_value);
+                                        let _hex = format!("0x{current_value:04X}");
                                         let _bytes = _hex.clone().into_bytes();
                                         let _offset = _hex.chars().count() as isize;
                                         action = PendingAction::Prefill {
@@ -152,7 +146,6 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                     }
                                 }
                             }
-                            // port_data_guard dropped here when out of scope
                         }
                     }
 
@@ -191,7 +184,7 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                         PendingAction::Prefill { value } => {
                             write_status(|status| {
-                                let hex = format!("0x{:04X}", value);
+                                let hex = format!("0x{value:04X}");
                                 let bytes = hex.clone().into_bytes();
                                 let offset = hex.chars().count() as isize;
                                 status.temporarily.input_raw_buffer =
@@ -209,7 +202,6 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::Left | KeyCode::Char('h') | KeyCode::Right | KeyCode::Char('l') => {
-            // Only handle left/right when current cursor is a Register and not editing
             let current_cursor = read_status(|status| {
                 if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
                     Ok(*cursor)
@@ -223,7 +215,6 @@ fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 register_index,
             } = current_cursor
             {
-                // determine item and its total regs, allow left/right within [0, regs-1]
                 let port_name_opt = read_status(|status| {
                     if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
                         Ok(status.ports.order.get(*selected_port).cloned())
@@ -363,7 +354,6 @@ fn handle_enter_action(bus: &Bus) -> Result<()> {
                             .get(index)
                             .or_else(|| slaves.get(index.saturating_sub(masters.len())))
                         {
-                            // RegisterMode's discriminant is 1..4; map to 0..3
                             sel_index = (item.register_mode as u8 - 1u8) as usize;
                         }
                     }
@@ -392,7 +382,6 @@ fn handle_enter_action(bus: &Bus) -> Result<()> {
             slave_index,
             register_index,
         } => {
-            // When entering register edit from generic Enter, prefill buffer with current value
             let port_name_opt = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     Ok(status.ports.order.get(*selected_port).cloned())
@@ -413,7 +402,7 @@ fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(item) = all_items.get(slave_index) {
                             let current_value =
                                 item.values.get(register_index).copied().unwrap_or(0);
-                            let hex = format!("0x{:04X}", current_value);
+                            let hex = format!("0x{current_value:04X}");
                             write_status(|status| {
                                 let bytes = hex.clone().into_bytes();
                                 let offset = hex.chars().count() as isize;
@@ -506,9 +495,6 @@ fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
         | types::cursor::ModbusDashboardCursor::RegisterLength { .. } => {
-            // Allow hexadecimal characters (0-9, a-f, A-F) and optional signs
-            // Filtering is permissive; parsing/validation occurs on commit.
-            // For StationId we restrict significant hex digits to 2 (max 255)
             input_span_handler::handle_input_span(
                 key,
                 bus,
@@ -629,17 +615,13 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
         if s.is_empty() {
             return None;
         }
-        // Accept optional leading +/-, optional 0x prefix. If no prefix,
-        // treat the value as hex by default per UI requirement.
         if let Some(rest) = s.strip_prefix("-0x") {
-            i64::from_str_radix(rest, 16).ok().map(|v| -(v as i64))
+            i64::from_str_radix(rest, 16).ok().map(|v| -v)
         } else if let Some(rest) = s.strip_prefix("0x") {
             i64::from_str_radix(rest, 16).ok()
         } else if let Some(rest) = s.strip_prefix('-') {
-            // negative without 0x prefix: treat as hex
-            i64::from_str_radix(rest, 16).ok().map(|v| -(v as i64))
+            i64::from_str_radix(rest, 16).ok().map(|v| -v)
         } else {
-            // No prefix: parse as hex
             i64::from_str_radix(s, 16).ok()
         }
     }
@@ -669,7 +651,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                     item.station_id = parsed as u8;
                                     return Some(());
                                 } else {
-                                    log::warn!("station id out of range: {}", parsed);
+                                    log::warn!("station id out of range: {parsed}");
                                 }
                             }
                         }
@@ -686,7 +668,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                     item.register_address = parsed as u16;
                                     return Some(());
                                 } else {
-                                    log::warn!("register start address out of range: {}", parsed);
+                                    log::warn!("register start address out of range: {parsed}");
                                 }
                             }
                         }
@@ -703,7 +685,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                     item.register_length = parsed as u16;
                                     return Some(());
                                 } else {
-                                    log::warn!("register length out of range: {}", parsed);
+                                    log::warn!("register length out of range: {parsed}");
                                 }
                             }
                         }
@@ -733,7 +715,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                     }
                                     return Some(());
                                 } else {
-                                    log::warn!("register value out of range: {}", parsed);
+                                    log::warn!("register value out of range: {parsed}");
                                 }
                             }
                         }

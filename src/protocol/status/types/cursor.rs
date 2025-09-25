@@ -290,7 +290,7 @@ impl Cursor for ModbusDashboardCursor {
         // Walk items, accumulate heights until we reach the target
         for (idx, item) in items_vec.iter().enumerate() {
             let config_rows = 5usize;
-            let reg_rows = ((item.register_length as usize + 7) / 8).max(0usize);
+            let reg_rows = (item.register_length as usize).div_ceil(8).max(0usize);
             let rows = 1 + config_rows + reg_rows;
 
             match self {
@@ -344,37 +344,34 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
     .flatten();
 
     if let Some(port_name) = items_opt {
-        if let Ok(port_entry_opt) =
+        if let Ok(Some(port_entry)) =
             read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
-            if let Some(port_entry) = port_entry_opt {
-                if let Ok(port_data) = port_entry.read() {
-                    let crate::protocol::status::types::port::PortConfig::Modbus {
-                        masters,
-                        slaves,
-                    } = &port_data.config;
-                    for it in masters.iter() {
+            if let Ok(port_data) = port_entry.read() {
+                let crate::protocol::status::types::port::PortConfig::Modbus { masters, slaves } =
+                    &port_data.config;
+                for it in masters.iter() {
+                    items_vec.push(it.clone());
+                }
+                if masters.is_empty() && slaves.is_empty() {
+                    // add a default placeholder only when there are no configured items
+                    let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem {
+                        connection_mode:
+                            crate::protocol::status::types::modbus::ModbusConnectionMode::Slave,
+                        station_id: 1,
+                        register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils,
+                        register_address: 0,
+                        register_length: 8,
+                        req_success: 0,
+                        req_total: 0,
+                        next_poll_at: std::time::Instant::now(),
+                        pending_requests: Vec::new(),
+                        values: Vec::new(),
+                    };
+                    items_vec.push(default_item);
+                } else {
+                    for it in slaves.iter() {
                         items_vec.push(it.clone());
-                    }
-                    if masters.is_empty() && slaves.is_empty() {
-                        // add a default placeholder only when there are no configured items
-                        let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem {
-                            connection_mode: crate::protocol::status::types::modbus::ModbusConnectionMode::Slave,
-                            station_id: 1,
-                            register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils,
-                            register_address: 0,
-                            register_length: 8,
-                            req_success: 0,
-                            req_total: 0,
-                            next_poll_at: std::time::Instant::now(),
-                            pending_requests: Vec::new(),
-                            values: Vec::new(),
-                        };
-                        items_vec.push(default_item);
-                    } else {
-                        for it in slaves.iter() {
-                            items_vec.push(it.clone());
-                        }
                     }
                 }
             }

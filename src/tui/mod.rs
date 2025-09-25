@@ -187,7 +187,7 @@ fn run_core_thread(
                 UiToCore::PausePolling => {
                     polling_enabled = false;
                     if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
-                        log::warn!("ToggleRuntime: failed to send Refreshed: {}", e);
+                        log::warn!("ToggleRuntime: failed to send Refreshed: {e}");
                     }
                 }
                 UiToCore::ResumePolling => {
@@ -202,11 +202,14 @@ fn run_core_thread(
                     let existing_rt = read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
                             // use helper to avoid panics on poisoned locks
-                            if let Some(opt_rt) = with_port_read(port, |port| match &port.state {
-                                types::port::PortState::OccupiedByThis { runtime, .. } => {
+                            if let Some(opt_rt) = with_port_read(port, |port| {
+                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                                    &port.state
+                                {
                                     Some(runtime.clone())
+                                } else {
+                                    None
                                 }
-                                _ => None,
                             }) {
                                 Ok(opt_rt)
                             } else {
@@ -243,7 +246,7 @@ fn run_core_thread(
                             .cmd_tx
                             .send(crate::protocol::runtime::RuntimeCommand::Stop)
                         {
-                            log::warn!("ToggleRuntime: failed to send Stop: {}", e);
+                            log::warn!("ToggleRuntime: failed to send Stop: {e}");
                         }
                         // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
                         let mut stopped = false;
@@ -268,7 +271,7 @@ fn run_core_thread(
                         }
 
                         if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
-                            log::warn!("ToggleRuntime: failed to send Refreshed: {}", e);
+                            log::warn!("ToggleRuntime: failed to send Refreshed: {e}");
                         }
                         continue;
                     }
