@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
+use super::table::create_register_row_line;
 use crate::{
     i18n::lang,
     protocol::status::{
@@ -16,8 +17,6 @@ use crate::{
         styled_label::{input_spans, selector_spans, TextState},
     },
 };
-
-use super::registers_table::create_register_row_line;
 
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {

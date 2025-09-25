@@ -1,4 +1,5 @@
 use anyhow::Result;
+
 use ratatui::{prelude::*, text::Line};
 use unicode_width::UnicodeWidthStr;
 

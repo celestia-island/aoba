@@ -2,12 +2,11 @@ use anyhow::Result;
 
 use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
+use super::scroll::{handle_scroll_down, handle_scroll_up};
 use crate::{
     protocol::status::{types, write_status},
     tui::utils::bus::Bus,
 };
-
-use super::scroll::{handle_scroll_down, handle_scroll_up};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     const PAGE_SIZE: usize = 10;

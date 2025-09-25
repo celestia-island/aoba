@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
+
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::tui::utils::bus::Bus;
-
 use super::actions::{handle_clear_logs, handle_leave_page, handle_toggle_follow};
+use crate::tui::utils::bus::Bus;
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {

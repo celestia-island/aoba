@@ -1,8 +1,8 @@
-use std::sync::{Arc, RwLock};
-
 use anyhow::{anyhow, Result};
-use crossterm::event::{KeyCode, KeyEvent};
+use std::sync::{Arc, RwLock};
 use strum::IntoEnumIterator;
+
+use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     protocol::{

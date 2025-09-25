@@ -1,11 +1,9 @@
 use anyhow::Result;
 
 use crate::protocol::status::{
-    types::{self},
+    types::{self, cursor::Cursor},
     with_port_read, write_status,
 };
-// Import the Cursor trait so we can call view_offset() on cursor values
-use crate::protocol::status::types::cursor::Cursor;
 
 /// Ensure current cursor for ConfigPanel does not point to hidden items when
 /// the selected port is not occupied by this instance. This moves the cursor

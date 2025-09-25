@@ -11,8 +11,6 @@ use crate::{
     tui::utils::bus::Bus,
 };
 
-use super::cursor_move::{handle_move_next, handle_move_prev};
-
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
@@ -128,6 +126,56 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         _ => {}
     }
+    Ok(())
+}
+
+pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
+    match cursor {
+        cursor::EntryCursor::Com { index } => {
+            let prev = index.saturating_sub(1);
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
+                };
+                Ok(())
+            })?;
+        }
+        cursor::EntryCursor::Refresh => {
+            let prev = read_status(|status| Ok(status.ports.map.len().saturating_sub(1)))?;
+            if read_status(|status| Ok(status.ports.map.is_empty()))? {
+                write_status(|status| {
+                    status.page = Page::Entry {
+                        cursor: Some(types::cursor::EntryCursor::Refresh),
+                    };
+                    Ok(())
+                })?;
+            } else {
+                write_status(|status| {
+                    status.page = Page::Entry {
+                        cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
+                    };
+                    Ok(())
+                })?;
+            }
+        }
+        cursor::EntryCursor::CreateVirtual => {
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(types::cursor::EntryCursor::Refresh),
+                };
+                Ok(())
+            })?;
+        }
+        cursor::EntryCursor::About => {
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
+                };
+                Ok(())
+            })?;
+        }
+    }
+
     Ok(())
 }
 

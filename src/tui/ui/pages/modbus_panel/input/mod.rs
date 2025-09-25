@@ -3,6 +3,7 @@ pub mod editing;
 pub mod navigation;
 
 use anyhow::Result;
+
 use crossterm::event::KeyEvent;
 
 use crate::{

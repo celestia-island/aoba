@@ -1,5 +1,6 @@
-use ratatui::{prelude::*, text::Line};
 use std::sync::{Arc, RwLock};
+
+use ratatui::{prelude::*, text::Line};
 
 use crate::{
     i18n::lang,
