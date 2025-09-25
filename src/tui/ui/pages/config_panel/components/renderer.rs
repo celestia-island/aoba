@@ -115,26 +115,43 @@ fn create_line(
                 rendered_value_spans = switch_spans(is_enabled, "Enabled", "Disabled", text_state)?;
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {
-                let val = if let Some(port) = port_data {
-                    if let Some(v) = with_port_read(port, |port| match &port.config {
-                        types::port::PortConfig::Modbus { .. } => {
-                            lang().protocol.common.mode_modbus.clone()
-                        }
-                    }) {
-                        v
+                // Use selector_spans for protocol mode selection
+                let current_index = if let Some(port) = port_data {
+                    with_port_read(port, |port| match &port.config {
+                        types::port::PortConfig::Modbus { .. } => 0usize, // Only Modbus RTU for now
+                    }).unwrap_or(0usize)
+                } else {
+                    0usize
+                };
+
+                let selected_index = if matches!(text_state, TextState::Editing) {
+                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                        *i
                     } else {
-                        lang().protocol.common.mode_modbus.clone()
+                        current_index
                     }
                 } else {
-                    lang().protocol.common.mode_modbus.clone()
+                    current_index
                 };
-                rendered_value_spans = vec![Span::raw(val)];
+
+                // For now only one option: Modbus RTU
+                let protocol_options = vec![lang().protocol.common.mode_modbus.clone()];
+                let display_text = protocol_options.get(selected_index).cloned().unwrap_or_else(|| lang().protocol.common.mode_modbus.clone());
+                
+                let spans = if matches!(text_state, TextState::Editing) {
+                    input_spans(display_text, text_state)?
+                } else if matches!(text_state, TextState::Selected) {
+                    input_spans(display_text, text_state)?
+                } else {
+                    vec![Span::raw(display_text)]
+                };
+                rendered_value_spans = spans;
             }
             types::cursor::ConfigPanelCursor::ProtocolConfig => {
-                rendered_value_spans = link_spans("Configure →", text_state)?;
+                rendered_value_spans = link_spans("", text_state)?; // Remove Configure →
             }
             types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
-                rendered_value_spans = link_spans("View →", text_state)?;
+                rendered_value_spans = link_spans("", text_state)?; // Remove View →
             }
             types::cursor::ConfigPanelCursor::BaudRate => {
                 if let Some(port) = port_data {
@@ -161,8 +178,8 @@ fn create_line(
 
                     let selected_selector = types::modbus::BaudRateSelector::from_index(selected_index);
 
-                    // Check if the selected item is Custom and we need to show input_spans
-                    if matches!(selected_selector, types::modbus::BaudRateSelector::Custom { .. }) && matches!(text_state, TextState::Editing) {
+                    // Check if we're in string editing mode (second phase for custom baud rate)
+                    if matches!(text_state, TextState::Editing) && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. }) {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
                             rendered_value_spans = input_spans(format!("{} baud (custom)", custom_value), text_state)?;
@@ -170,7 +187,7 @@ fn create_line(
                             rendered_value_spans = input_spans(format!("{} baud (custom)", current_baud), text_state)?;
                         }
                     } else {
-                        // Use selector_spans for normal selection
+                        // Use selector_spans for first phase (includes custom option selection)
                         let spans = selector_spans::<types::modbus::BaudRateSelector>(selected_index, text_state)
                             .unwrap_or_else(|_| {
                                 vec![Span::raw(selected_selector.to_string())]
@@ -318,7 +335,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, occupied_by_this: 
         }
         types::cursor::ConfigPanelCursor::ProtocolConfig => {
             if occupied_by_this {
-                lang().protocol.common.business_config.clone()
+                "进入业务配置页面".to_string() // TODO: Use proper internationalization
             } else {
                 String::new()
             }
@@ -337,7 +354,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, occupied_by_this: 
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
             if occupied_by_this {
-                lang().protocol.common.view_communication_log.clone()
+                "进入通信日志页面".to_string() // TODO: Use proper internationalization
             } else {
                 String::new()
             }
