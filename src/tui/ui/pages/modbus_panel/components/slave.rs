@@ -109,9 +109,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             all_items.extend(slaves.clone());
 
             for (index, item) in all_items.iter().enumerate() {
+                let connection_mode_text = match item.connection_mode {
+                    ModbusConnectionMode::Master => lang().protocol.modbus.role_master.clone(),
+                    ModbusConnectionMode::Slave => lang().protocol.modbus.role_slave.clone(),
+                };
                 let group_title = format!(
                     "{} {} - ID: {}",
-                    item.connection_mode,
+                    connection_mode_text,
                     index + 1,
                     item.station_id
                 );

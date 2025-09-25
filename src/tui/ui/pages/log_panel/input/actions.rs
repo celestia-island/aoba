@@ -15,10 +15,10 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     })?;
 
     write_status(|status| {
-        status.page = types::Page::Entry {
-            cursor: Some(types::cursor::EntryCursor::Com {
-                index: selected_port,
-            }),
+        status.page = types::Page::ConfigPanel {
+            cursor: types::cursor::ConfigPanelCursor::ViewCommunicationLog,
+            selected_port,
+            view_offset: 0,
         };
         Ok(())
     })?;

@@ -6,8 +6,9 @@ use crate::{
         read_status,
         types::{
             self,
+            modbus::{ModbusConnectionMode, RegisterMode},
         },
-        write_status,
+        with_port_write, write_status,
     },
     tui::{
         ui::components::input_span_handler::handle_input_span,
@@ -70,34 +71,110 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 }
 
 fn commit_selector_edit(cursor: types::cursor::ModbusDashboardCursor, selected_index: usize) -> Result<()> {
-    // Handle selector edits (connection mode, register mode)
-    match cursor {
-        types::cursor::ModbusDashboardCursor::ModbusMode { index } => {
-            // Apply connection mode changes
-            log::info!("Committing connection mode edit for index {}: {}", index, selected_index);
+    let selected_port = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            Ok(*selected_port)
+        } else {
+            Ok(0)
         }
-        types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
-            // Apply register mode changes
-            log::info!("Committing register mode edit for index {}: {}", index, selected_index);
+    })?;
+
+    let port_name = format!("COM{}", selected_port + 1);
+    
+    if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+        match cursor {
+            types::cursor::ModbusDashboardCursor::ModbusMode { index } => {
+                // Apply connection mode changes
+                let new_mode = if selected_index == 0 {
+                    ModbusConnectionMode::Master
+                } else {
+                    ModbusConnectionMode::Slave
+                };
+                
+                with_port_write(&port, |port| {
+                    if let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config {
+                        let mut all_items: Vec<_> = masters.iter_mut().chain(slaves.iter_mut()).collect();
+                        if let Some(item) = all_items.get_mut(index) {
+                            item.connection_mode = new_mode;
+                            log::info!("Updated connection mode for index {} to {:?}", index, new_mode);
+                        }
+                    }
+                });
+            }
+            types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
+                // Apply register mode changes
+                let new_mode = RegisterMode::from_u8((selected_index as u8) + 1);
+                
+                with_port_write(&port, |port| {
+                    if let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config {
+                        let mut all_items: Vec<_> = masters.iter_mut().chain(slaves.iter_mut()).collect();
+                        if let Some(item) = all_items.get_mut(index) {
+                            item.register_mode = new_mode;
+                            log::info!("Updated register mode for index {} to {:?}", index, new_mode);
+                        }
+                    }
+                });
+            }
+            _ => {}
         }
-        _ => {}
     }
     Ok(())
 }
 
 fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String) -> Result<()> {
-    // Handle text edits (station ID, register address, register length)
-    match cursor {
-        types::cursor::ModbusDashboardCursor::StationId { index } => {
-            log::info!("Committing station ID edit for index {}: {}", index, value);
+    let selected_port = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            Ok(*selected_port)
+        } else {
+            Ok(0)
         }
-        types::cursor::ModbusDashboardCursor::RegisterStartAddress { index } => {
-            log::info!("Committing register start address edit for index {}: {}", index, value);
+    })?;
+
+    let port_name = format!("COM{}", selected_port + 1);
+    
+    if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+        match cursor {
+            types::cursor::ModbusDashboardCursor::StationId { index } => {
+                if let Ok(station_id) = value.parse::<u8>() {
+                    with_port_write(&port, |port| {
+                        if let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config {
+                            let mut all_items: Vec<_> = masters.iter_mut().chain(slaves.iter_mut()).collect();
+                            if let Some(item) = all_items.get_mut(index) {
+                                item.station_id = station_id;
+                                log::info!("Updated station ID for index {} to {}", index, station_id);
+                            }
+                        }
+                    });
+                }
+            }
+            types::cursor::ModbusDashboardCursor::RegisterStartAddress { index } => {
+                if let Ok(start_address) = value.parse::<u16>() {
+                    with_port_write(&port, |port| {
+                        if let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config {
+                            let mut all_items: Vec<_> = masters.iter_mut().chain(slaves.iter_mut()).collect();
+                            if let Some(item) = all_items.get_mut(index) {
+                                item.register_address = start_address;
+                                log::info!("Updated register start address for index {} to {}", index, start_address);
+                            }
+                        }
+                    });
+                }
+            }
+            types::cursor::ModbusDashboardCursor::RegisterLength { index } => {
+                if let Ok(length) = value.parse::<u16>() {
+                    with_port_write(&port, |port| {
+                        if let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config {
+                            let mut all_items: Vec<_> = masters.iter_mut().chain(slaves.iter_mut()).collect();
+                            if let Some(item) = all_items.get_mut(index) {
+                                item.register_length = length;
+                                log::info!("Updated register length for index {} to {}", index, length);
+                            }
+                        }
+                    });
+                }
+            }
+            _ => {}
         }
-        types::cursor::ModbusDashboardCursor::RegisterLength { index } => {
-            log::info!("Committing register length edit for index {}: {}", index, value);
-        }
-        _ => {}
     }
     Ok(())
 }
