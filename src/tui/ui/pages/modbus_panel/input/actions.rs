@@ -110,23 +110,22 @@ fn create_new_modbus_entry() -> Result<()> {
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             with_port_write(&port, |port| {
-                if let types::port::PortConfig::Modbus { masters, .. } = &mut port.config {
-                    // Create a new master entry with default values
-                    let new_entry = types::modbus::ModbusRegisterItem {
-                        connection_mode: types::modbus::ModbusConnectionMode::Master,
-                        station_id: 1,
-                        register_mode: types::modbus::RegisterMode::Holding,
-                        register_address: 0,
-                        register_length: 1,
-                        req_success: 0,
-                        req_total: 0,
-                        next_poll_at: std::time::Instant::now(),
-                        pending_requests: Vec::new(),
-                        values: Vec::new(),
-                    };
-                    masters.push(new_entry);
-                    log::info!("Created new modbus master entry with station_id=1");
-                }
+                let types::port::PortConfig::Modbus { masters, .. } = &mut port.config;
+                // Create a new master entry with default values
+                let new_entry = types::modbus::ModbusRegisterItem {
+                    connection_mode: types::modbus::ModbusConnectionMode::Master,
+                    station_id: 1,
+                    register_mode: types::modbus::RegisterMode::Holding,
+                    register_address: 0,
+                    register_length: 1,
+                    req_success: 0,
+                    req_total: 0,
+                    next_poll_at: std::time::Instant::now(),
+                    pending_requests: Vec::new(),
+                    values: Vec::new(),
+                };
+                masters.push(new_entry);
+                log::info!("Created new modbus master entry with station_id=1");
             });
         }
     }

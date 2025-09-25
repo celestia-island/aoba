@@ -13,7 +13,7 @@ use crate::{
 use super::utilities::{derive_selection, is_port_occupied_by_this};
 use types::modbus::ParityOption;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
@@ -114,17 +114,15 @@ fn create_line(
     };
 
     let value_closure = |_ts: TextState| -> Result<Vec<Span<'static>>> {
-        let mut rendered_value_spans: Vec<Span> = Vec::new();
-
         match cursor_type {
             types::cursor::ConfigPanelCursor::EnablePort => {
                 let is_enabled = is_port_occupied_by_this(port_data);
-                rendered_value_spans = switch_spans(
+                Ok(switch_spans(
                     is_enabled,
                     &lang().protocol.common.port_enabled,
                     &lang().protocol.common.port_disabled,
                     text_state,
-                )?;
+                )?)
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {
                 // Use selector_spans for protocol mode selection
@@ -152,23 +150,17 @@ fn create_line(
                 let display_text = protocol_options.get(selected_index).ok_or_else(|| {
                     anyhow::anyhow!("Invalid protocol mode index: {}", selected_index)
                 })?;
-                match text_state {
-                    TextState::Editing => {
-                        rendered_value_spans = input_spans(display_text.clone(), text_state)?
-                    }
-                    TextState::Selected => {
-                        rendered_value_spans = input_spans(display_text.clone(), text_state)?
-                    }
+                Ok(match text_state {
+                    TextState::Editing => input_spans(display_text.clone(), text_state)?,
+                    TextState::Selected => input_spans(display_text.clone(), text_state)?,
                     TextState::Normal => {
-                        rendered_value_spans = vec![Span::raw(display_text.clone())]
+                        vec![Span::raw(display_text.clone())]
                     }
-                }
+                })
             }
-            types::cursor::ConfigPanelCursor::ProtocolConfig => {
-                rendered_value_spans = link_spans("", text_state)?; // Remove Configure →
-            }
+            types::cursor::ConfigPanelCursor::ProtocolConfig => Ok(link_spans("", text_state)?),
             types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
-                rendered_value_spans = link_spans("", text_state)?; // Remove View →
+                Ok(link_spans("", text_state)?)
             }
             types::cursor::ConfigPanelCursor::BaudRate => {
                 if let Some(port) = port_data {
@@ -181,7 +173,7 @@ fn create_line(
                             9600
                         }
                     })
-                    .unwrap_or(9600);
+                    .ok_or(anyhow!("Failed to read port data"))?;
 
                     let current_selector = types::modbus::BaudRateSelector::from_u32(current_baud);
                     let current_index = current_selector.to_index();
@@ -202,23 +194,23 @@ fn create_line(
                     {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
-                            rendered_value_spans = input_spans(
+                            Ok(input_spans(
                                 format!(
                                     "{} baud ({})",
                                     custom_value,
                                     lang().protocol.common.custom
                                 ),
                                 text_state,
-                            )?;
+                            )?)
                         } else {
-                            rendered_value_spans = input_spans(
+                            Ok(input_spans(
                                 format!(
                                     "{} baud ({})",
                                     current_baud,
                                     lang().protocol.common.custom
                                 ),
                                 text_state,
-                            )?;
+                            )?)
                         }
                     } else if (matches!(text_state, TextState::Normal)
                         || matches!(text_state, TextState::Selected))
@@ -228,20 +220,20 @@ fn create_line(
                         )
                     {
                         // Show custom value when not editing but custom is selected (both Normal and Selected states)
-                        rendered_value_spans = vec![Span::raw(format!(
+                        Ok(vec![Span::raw(format!(
                             "{} baud ({})",
                             current_baud,
                             lang().protocol.common.custom
-                        ))];
+                        ))])
                     } else {
                         // Use selector_spans for first phase (includes custom option selection)
-                        rendered_value_spans = selector_spans::<types::modbus::BaudRateSelector>(
+                        Ok(selector_spans::<types::modbus::BaudRateSelector>(
                             selected_index,
                             text_state,
-                        )?;
+                        )?)
                     }
                 } else {
-                    rendered_value_spans = vec![Span::raw("9600 baud")];
+                    Ok(vec![])
                 }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
@@ -274,8 +266,10 @@ fn create_line(
                     current_index
                 };
 
-                rendered_value_spans =
-                    selector_spans::<types::modbus::DataBitsOption>(selected_index, text_state)?;
+                Ok(selector_spans::<types::modbus::DataBitsOption>(
+                    selected_index,
+                    text_state,
+                )?)
             }
             types::cursor::ConfigPanelCursor::StopBits => {
                 let current_index = if let Some(port) = port_data {
@@ -305,8 +299,10 @@ fn create_line(
                     current_index
                 };
 
-                rendered_value_spans =
-                    selector_spans::<types::modbus::StopBitsOption>(selected_index, text_state)?;
+                Ok(selector_spans::<types::modbus::StopBitsOption>(
+                    selected_index,
+                    text_state,
+                )?)
             }
             types::cursor::ConfigPanelCursor::Parity => {
                 let current_index = if let Some(port) = port_data {
@@ -337,11 +333,9 @@ fn create_line(
                     current_index
                 };
 
-                rendered_value_spans = selector_spans::<ParityOption>(selected_index, text_state)?;
+                Ok(selector_spans::<ParityOption>(selected_index, text_state)?)
             }
         }
-
-        Ok(rendered_value_spans)
     };
 
     render_kv_line(label, text_state, value_closure)
@@ -354,7 +348,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, _occupied_by_this:
             lang().protocol.common.protocol_mode.clone()
         }
         types::cursor::ConfigPanelCursor::ProtocolConfig => {
-            "进入业务配置页面".to_string() // TODO: Use proper internationalization
+            lang().protocol.common.enter_business_config.clone()
         }
         types::cursor::ConfigPanelCursor::BaudRate => lang().protocol.common.label_baud.clone(),
         types::cursor::ConfigPanelCursor::DataBits { .. } => {
@@ -365,7 +359,7 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, _occupied_by_this:
         }
         types::cursor::ConfigPanelCursor::Parity => lang().protocol.common.label_parity.clone(),
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
-            "进入通信日志页面".to_string() // TODO: Use proper internationalization
+            lang().protocol.common.enter_log_page.clone()
         }
     }
 }
