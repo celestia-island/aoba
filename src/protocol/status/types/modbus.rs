@@ -273,7 +273,7 @@ impl std::fmt::Display for BaudRateOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BaudRateOption::Preset(p) => write!(f, "{}", p.as_u32()),
-            BaudRateOption::Custom(v) => write!(f, "{}", v),
+            BaudRateOption::Custom(v) => write!(f, "{v}"),
         }
     }
 }
