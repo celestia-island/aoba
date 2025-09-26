@@ -111,7 +111,7 @@ impl PortRuntimeHandle {
         let initial_cfg = initial.clone();
 
         let handle = std::thread::spawn(move || {
-            boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
+            crate::protocol::daemon::boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
         });
         Ok(Self {
             cmd_tx,
