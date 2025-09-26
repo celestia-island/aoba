@@ -42,7 +42,7 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
                 // the second group, clamp it to the last item of the first
                 // group and update view_offset so it stays visible.
                 let first_group_size = types::cursor::CONFIG_PANEL_GROUP_SIZES
-                    .get(0)
+                    .first()
                     .copied()
                     .unwrap_or(4usize);
 
