@@ -63,11 +63,7 @@ pub fn render_log_display(
         })
         .collect();
 
-    let block = Block::default().borders(Borders::ALL).title(format!(
-        " {} {} ",
-        lang().protocol.common.log_monitoring.clone(),
-        if follow_active { "[F]" } else { "" }
-    ));
+    let block = Block::default().borders(Borders::ALL);
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, area);

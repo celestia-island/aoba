@@ -234,6 +234,7 @@ fn create_new_modbus_entry() -> Result<()> {
                     req_success: 0,
                     req_total: 0,
                     next_poll_at: std::time::Instant::now(),
+                    last_request_time: None,
                     pending_requests: Vec::new(),
                     values: Vec::new(),
                 };

@@ -24,13 +24,8 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 
 /// Render the log panel. Only reads from Status, does not mutate.
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
-    let chunks: [Rect; 2] = ratatui::layout::Layout::vertical([
-        ratatui::layout::Constraint::Min(3),
-        ratatui::layout::Constraint::Length(3),
-    ])
-    .areas(area);
-
-    let logs_area = chunks[0];
+    // Use the entire area for logs display only (no input area)
+    let logs_area = area;
 
     if let Some((logs, port_log_auto_scroll)) = extract_log_data()? {
         let view_offset = read_status(|status| {
@@ -42,8 +37,6 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
         })?;
         let _ = render_log_display(frame, logs_area, &logs, view_offset, port_log_auto_scroll);
     }
-
-    render_log_input(frame, chunks[1])?;
 
     Ok(())
 }
