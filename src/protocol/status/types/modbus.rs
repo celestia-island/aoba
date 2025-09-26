@@ -12,8 +12,8 @@ pub enum ModbusConnectionMode {
 impl std::fmt::Display for ModbusConnectionMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ModbusConnectionMode::Master => write!(f, "Master"),
-            ModbusConnectionMode::Slave => write!(f, "Slave"),
+            ModbusConnectionMode::Master => write!(f, "{}", lang().protocol.modbus.role_master),
+            ModbusConnectionMode::Slave => write!(f, "{}", lang().protocol.modbus.role_slave),
         }
     }
 }
@@ -54,10 +54,12 @@ impl RegisterMode {
 impl std::fmt::Display for RegisterMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RegisterMode::Coils => write!(f, "Coils"),
-            RegisterMode::DiscreteInputs => write!(f, "Discrete Inputs"),
-            RegisterMode::Holding => write!(f, "Holding Registers"),
-            RegisterMode::Input => write!(f, "Input Registers"),
+            RegisterMode::Coils => write!(f, "{}", lang().protocol.modbus.reg_type_coils),
+            RegisterMode::DiscreteInputs => {
+                write!(f, "{}", lang().protocol.modbus.reg_type_discrete_inputs)
+            }
+            RegisterMode::Holding => write!(f, "{}", lang().protocol.modbus.reg_type_holding),
+            RegisterMode::Input => write!(f, "{}", lang().protocol.modbus.reg_type_input),
         }
     }
 }
