@@ -5,7 +5,7 @@ use crate::protocol::status::read_status;
 /// For the config panel we have groups of options separated by blank lines.
 /// Define the sizes of each group so view_offset can account for the
 /// extra blank rows introduced between groups.
-pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[3, 4];
+pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4];
 
 /// Cursor trait to unify cursor behaviour across pages.
 pub trait Cursor {
@@ -121,11 +121,11 @@ impl ConfigPanelCursor {
             ConfigPanelCursor::EnablePort,
             ConfigPanelCursor::ProtocolMode,
             ConfigPanelCursor::ProtocolConfig,
+            ConfigPanelCursor::ViewCommunicationLog,
             ConfigPanelCursor::BaudRate,
             ConfigPanelCursor::DataBits { custom_mode: false },
             ConfigPanelCursor::Parity,
             ConfigPanelCursor::StopBits,
-            ConfigPanelCursor::ViewCommunicationLog,
         ]
     }
 

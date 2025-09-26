@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
@@ -8,8 +9,6 @@ use ratatui::{
     text::{Line, Span},
 };
 use unicode_width::UnicodeWidthStr;
-
-use anyhow::Result;
 
 use crate::{i18n::lang, tui::ui::components::kv_pairs_to_lines};
 
