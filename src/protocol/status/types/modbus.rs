@@ -76,8 +76,8 @@ pub struct ModbusRegisterItem {
     pub req_total: u32,
     pub next_poll_at: std::time::Instant,
     pub last_request_time: Option<std::time::Instant>, // For timeout tracking in slave mode
-    pub pending_requests: Vec<u8>, // simplified type for now
-    pub values: Vec<u16>,          // Register values
+    pub pending_requests: Vec<u8>,                     // simplified type for now
+    pub values: Vec<u16>,                              // Register values
 }
 
 #[repr(u8)]

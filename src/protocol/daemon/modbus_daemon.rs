@@ -95,9 +95,12 @@ pub fn handle_master_mode(
                 // Try to parse and respond to the request
                 if let Ok(response) = generate_modbus_master_response(&frame, stations) {
                     // Send the response
-                    if let Err(e) = runtime
-                        .cmd_tx
-                        .send(crate::protocol::runtime::RuntimeCommand::Write(response.clone()))
+                    if let Err(e) =
+                        runtime
+                            .cmd_tx
+                            .send(crate::protocol::runtime::RuntimeCommand::Write(
+                                response.clone(),
+                            ))
                     {
                         log::warn!("Failed to send modbus master response for {port_name}: {e}");
                         continue;
@@ -142,7 +145,7 @@ pub fn handle_master_mode(
 /// Handle slave mode - periodically send requests and wait for responses with timeout
 pub fn handle_slave_mode(
     port_name: &str,
-    port_arc: &Arc<RwLock<types::port::PortData>>,    
+    port_arc: &Arc<RwLock<types::port::PortData>>,
     stations: &[types::modbus::ModbusRegisterItem],
     now: Instant,
 ) -> Result<()> {
@@ -168,11 +171,12 @@ pub fn handle_slave_mode(
             match request_result {
                 Ok(request_bytes) => {
                     // Send the request
-                    if let Err(e) = runtime
-                        .cmd_tx
-                        .send(crate::protocol::runtime::RuntimeCommand::Write(
-                            request_bytes.clone(),
-                        ))
+                    if let Err(e) =
+                        runtime
+                            .cmd_tx
+                            .send(crate::protocol::runtime::RuntimeCommand::Write(
+                                request_bytes.clone(),
+                            ))
                     {
                         log::warn!(
                             "Failed to send modbus slave request for {port_name} station {}: {e}",
@@ -195,6 +199,7 @@ pub fn handle_slave_mode(
                     };
 
                     // Add log entry to port logs and update station state
+                    // First update logs
                     with_port_write(port_arc, |port| {
                         port.logs.push(log_entry);
                         // Keep only the last 1000 log entries
@@ -202,7 +207,10 @@ pub fn handle_slave_mode(
                             let excess = port.logs.len() - 1000;
                             port.logs.drain(0..excess);
                         }
+                    });
 
+                    // Then update station polling state separately to avoid overlapping mutable borrows
+                    with_port_write(port_arc, |port| {
                         // Update station polling state (1 second interval by default)
                         let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
                         if let Some(station) = stations.get_mut(index) {
@@ -268,31 +276,46 @@ pub fn handle_slave_mode(
     }
 
     // Check for timeouts and log failed requests
+    let mut logs_to_add: Vec<PortLogEntry> = Vec::new();
     with_port_write(port_arc, |port| {
         let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
         for station in stations.iter_mut() {
             if let Some(last_request_time) = station.last_request_time {
                 // Check if request has timed out (3 seconds)
                 if now.duration_since(last_request_time) > Duration::from_secs(3) {
-                    // Log timeout failure
+                    // Prepare timeout log entry to add later
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
-                        raw: format!("Slave Request Timeout: Station {} (3s timeout exceeded)", station.station_id),
+                        raw: format!(
+                            "Slave Request Timeout: Station {} (3s timeout exceeded)",
+                            station.station_id
+                        ),
                         parsed: None,
                     };
 
-                    port.logs.push(log_entry);
-                    if port.logs.len() > 1000 {
-                        let excess = port.logs.len() - 1000;
-                        port.logs.drain(0..excess);
-                    }
+                    logs_to_add.push(log_entry);
 
                     station.last_request_time = None; // Clear timeout tracking
-                    log::warn!("Request timeout for {port_name} station {}", station.station_id);
+                    log::warn!(
+                        "Request timeout for {port_name} station {}",
+                        station.station_id
+                    );
                 }
             }
         }
     });
+
+    if !logs_to_add.is_empty() {
+        with_port_write(port_arc, |port| {
+            for log_entry in logs_to_add.drain(..) {
+                port.logs.push(log_entry);
+            }
+            if port.logs.len() > 1000 {
+                let excess = port.logs.len() - 1000;
+                port.logs.drain(0..excess);
+            }
+        });
+    }
 
     Ok(())
 }
@@ -328,6 +351,7 @@ pub fn generate_modbus_master_response(
     request: &[u8],
     stations: &[types::modbus::ModbusRegisterItem],
 ) -> Result<Vec<u8>> {
+    use rmodbus::server::context::ModbusContext;
     use rmodbus::server::{storage::ModbusStorageSmall, ModbusFrame};
     use rmodbus::ModbusProto;
 
@@ -336,7 +360,7 @@ pub fn generate_modbus_master_response(
     }
 
     let slave_id = request[0];
-    
+
     // Find a station configuration that matches the slave ID
     let _station = stations
         .iter()
@@ -345,7 +369,7 @@ pub fn generate_modbus_master_response(
 
     // Create a simple storage context with some default values
     let mut context = ModbusStorageSmall::new();
-    
+
     // Set some example values for demonstration
     for i in 0..100 {
         let _ = context.set_coil(i, i % 2 == 0);
@@ -388,6 +412,9 @@ pub fn generate_modbus_master_response(
                 Err(anyhow!("Failed to build inputs response"))
             }
         }
-        _ => Err(anyhow!("Unsupported modbus function code: {:?}", frame.func)),
+        _ => Err(anyhow!(
+            "Unsupported modbus function code: {:?}",
+            frame.func
+        )),
     }
 }
