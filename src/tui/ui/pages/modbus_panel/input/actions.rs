@@ -153,7 +153,13 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 Ok(0)
                             })?;
                             
-                            let hex_str = format!("0x{current_value:04X}");
+                            // Format hex string and strip leading zeros
+                            let hex_str = if current_value == 0 {
+                                "0".to_string()
+                            } else {
+                                format!("{:X}", current_value) // No leading zeros, uppercase hex
+                            };
+                            
                             write_status(|status| {
                                 status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
                                     bytes: hex_str.clone().into_bytes(),

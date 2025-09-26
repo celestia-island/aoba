@@ -12,16 +12,36 @@ use crate::{
 };
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
-    Ok(vec![
-        vec![
-            lang().hotkeys.hint_move_vertical.as_str().to_string(),
-            lang().hotkeys.hint_master_enter_edit.as_str().to_string(),
-        ],
-        vec![
-            lang().hotkeys.hint_master_delete.as_str().to_string(),
-            lang().hotkeys.hint_esc_return_home.as_str().to_string(),
-        ],
-    ])
+    // Check if we're in hex editing mode for registers
+    let is_hex_editing = read_status(|status| {
+        let is_editing = !matches!(status.temporarily.input_raw_buffer, types::ui::InputRawBuffer::None);
+        let is_register = matches!(status.page, types::Page::ModbusDashboard { cursor: types::cursor::ModbusDashboardCursor::Register { .. }, .. });
+        let is_string_input = matches!(status.temporarily.input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+        Ok(is_editing && is_register && is_string_input)
+    })?;
+
+    if is_hex_editing {
+        Ok(vec![
+            vec![
+                lang().hotkeys.hint_hex_input_mode.as_str().to_string(),
+                lang().hotkeys.hint_hex_enter_save.as_str().to_string(),
+            ],
+            vec![
+                lang().hotkeys.hint_hex_esc_exit.as_str().to_string(),
+            ],
+        ])
+    } else {
+        Ok(vec![
+            vec![
+                lang().hotkeys.hint_move_vertical.as_str().to_string(),
+                lang().hotkeys.hint_master_enter_edit.as_str().to_string(),
+            ],
+            vec![
+                lang().hotkeys.hint_master_delete.as_str().to_string(),
+                lang().hotkeys.hint_esc_return_home.as_str().to_string(),
+            ],
+        ])
+    }
 }
 
 /// Render the ModBus panel. Only reads from Status, does not mutate.

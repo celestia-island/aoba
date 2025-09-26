@@ -57,6 +57,74 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
             Ok(())
         }
+        KeyCode::Left | KeyCode::Char('h') => {
+            let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+            if let types::ui::InputRawBuffer::Index(current_index) = input_raw_buffer {
+                // Handle selector navigation with proper wrapping
+                let current_cursor = read_status(|status| {
+                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                        Ok(*cursor)
+                    } else {
+                        Ok(types::cursor::ModbusDashboardCursor::AddLine)
+                    }
+                })?;
+                
+                let max_index = match current_cursor {
+                    types::cursor::ModbusDashboardCursor::ModbusMode { .. } => 2, // Master, Slave
+                    types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
+                    _ => 0,
+                };
+                
+                let new_index = if current_index == 0 {
+                    max_index - 1 // wrap to last item
+                } else {
+                    current_index - 1
+                };
+                
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(new_index);
+                    Ok(())
+                })?;
+                bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            } else {
+                handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
+            }
+            Ok(())
+        }
+        KeyCode::Right | KeyCode::Char('l') => {
+            let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+            if let types::ui::InputRawBuffer::Index(current_index) = input_raw_buffer {
+                // Handle selector navigation with proper wrapping
+                let current_cursor = read_status(|status| {
+                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                        Ok(*cursor)
+                    } else {
+                        Ok(types::cursor::ModbusDashboardCursor::AddLine)
+                    }
+                })?;
+                
+                let max_index = match current_cursor {
+                    types::cursor::ModbusDashboardCursor::ModbusMode { .. } => 2, // Master, Slave
+                    types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
+                    _ => 0,
+                };
+                
+                let new_index = if current_index + 1 >= max_index {
+                    0 // wrap to first item
+                } else {
+                    current_index + 1
+                };
+                
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(new_index);
+                    Ok(())
+                })?;
+                bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            } else {
+                handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
+            }
+            Ok(())
+        }
         _ => {
             handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             Ok(())
@@ -189,8 +257,10 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                 // Parse hex value, supporting both 0x prefix and plain hex
                 let parsed_value = if value.starts_with("0x") || value.starts_with("0X") {
                     u16::from_str_radix(&value[2..], 16)
+                } else if value.is_empty() {
+                    Ok(0) // Empty input defaults to 0
                 } else {
-                    value.parse::<u16>().or_else(|_| u16::from_str_radix(&value, 16))
+                    u16::from_str_radix(&value, 16)
                 };
                 
                 if let Ok(register_value) = parsed_value {
