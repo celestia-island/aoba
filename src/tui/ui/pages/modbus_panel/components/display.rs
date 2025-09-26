@@ -88,8 +88,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             if let Some(port_entry) = status.ports.map.get(&format!("COM{}", selected_port + 1)) {
                 if let Ok(port_guard) = port_entry.read() {
                     match &port_guard.config {
-                        types::port::PortConfig::Modbus { masters, slaves } => {
-                            return Ok(!(masters.is_empty() && slaves.is_empty()));
+                        types::port::PortConfig::Modbus { mode: _, stations } => {
+                            return Ok(!stations.is_empty());
                         }
                     }
                 }
@@ -103,9 +103,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
     if let Some(port_entry) = &port_data {
         if let Ok(port_data_guard) = port_entry.read() {
-            let types::port::PortConfig::Modbus { masters, slaves } = &port_data_guard.config;
-            let mut all_items = masters.clone();
-            all_items.extend(slaves.clone());
+            let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
+            let all_items = stations.clone();
 
             for (index, item) in all_items.iter().enumerate() {
                 let connection_mode_text = match item.connection_mode {
@@ -133,13 +132,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
 
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.connection_mode as usize
                                 } else {
                                     0usize // default to Master
@@ -189,12 +185,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.station_id.to_string()
                                 } else {
                                     "?".to_string()
@@ -241,12 +234,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     (item.register_mode as u8 - 1u8) as usize
                                 } else {
                                     2usize // default to Holding
@@ -296,12 +286,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.register_address.to_string()
                                 } else {
                                     "0".to_string()
@@ -348,12 +335,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.register_length.to_string()
                                 } else {
                                     "1".to_string()

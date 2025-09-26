@@ -193,6 +193,8 @@ impl Cursor for ConfigPanelCursor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModbusDashboardCursor {
     AddLine,
+    /// Select the global mode for all stations in this port (Master/Slave)
+    GlobalMode,
 
     ModbusMode {
         index: usize,
@@ -220,6 +222,7 @@ impl Cursor for ModbusDashboardCursor {
         // Build flat ordered list using shared helper to keep behavior consistent
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
+        flat.push(ModbusDashboardCursor::GlobalMode);
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
@@ -248,6 +251,7 @@ impl Cursor for ModbusDashboardCursor {
     fn next(self) -> Self {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
+        flat.push(ModbusDashboardCursor::GlobalMode);
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
@@ -274,16 +278,19 @@ impl Cursor for ModbusDashboardCursor {
     }
 
     fn view_offset(&self) -> usize {
-        // Compute the visual row offset for the cursor. Visual layout has top two rows
-        // reserved (Add line and blank), then each block consumes 1 (title) + N value rows
+        // Compute the visual row offset for the cursor. Visual layout has top three rows
+        // reserved (Add line, Global mode, and blank), then each block consumes 1 (title) + N value rows
         // where N = ceil(length/8).
         let mut offset = 0usize;
-        // Start with top two rows
-        offset += 2;
+        // Start with top three rows
+        offset += 3;
 
         // Build items and walk until we find the current selection
         if *self == ModbusDashboardCursor::AddLine {
             return 0;
+        }
+        if *self == ModbusDashboardCursor::GlobalMode {
+            return 1;
         }
 
         let items_vec = build_modbus_items_vec();
@@ -348,16 +355,18 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
             read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
             if let Ok(port_data) = port_entry.read() {
-                let crate::protocol::status::types::port::PortConfig::Modbus { masters, slaves } =
+                let crate::protocol::status::types::port::PortConfig::Modbus { mode, stations } =
                     &port_data.config;
-                for it in masters.iter() {
-                    items_vec.push(it.clone());
+                for it in stations.iter() {
+                    // Create a copy with the global mode applied
+                    let mut item_copy = it.clone();
+                    item_copy.connection_mode = *mode;
+                    items_vec.push(item_copy);
                 }
-                if masters.is_empty() && slaves.is_empty() {
+                if stations.is_empty() {
                     // add a default placeholder only when there are no configured items
                     let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem {
-                        connection_mode:
-                            crate::protocol::status::types::modbus::ModbusConnectionMode::Slave,
+                        connection_mode: *mode,
                         station_id: 1,
                         register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils,
                         register_address: 0,
@@ -369,10 +378,6 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
                         values: Vec::new(),
                     };
                     items_vec.push(default_item);
-                } else {
-                    for it in slaves.iter() {
-                        items_vec.push(it.clone());
-                    }
                 }
             }
         }
