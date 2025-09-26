@@ -68,21 +68,22 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
                     }
                 })?;
-                
+
                 let max_index = match current_cursor {
                     types::cursor::ModbusDashboardCursor::ModbusMode { .. } => 2, // Master, Slave
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
                 };
-                
+
                 let new_index = if current_index == 0 {
                     max_index - 1 // wrap to last item
                 } else {
                     current_index - 1
                 };
-                
+
                 write_status(|status| {
-                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(new_index);
+                    status.temporarily.input_raw_buffer =
+                        types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
                 bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
@@ -102,21 +103,22 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
                     }
                 })?;
-                
+
                 let max_index = match current_cursor {
                     types::cursor::ModbusDashboardCursor::ModbusMode { .. } => 2, // Master, Slave
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
                 };
-                
+
                 let new_index = if current_index + 1 >= max_index {
                     0 // wrap to first item
                 } else {
                     current_index + 1
                 };
-                
+
                 write_status(|status| {
-                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(new_index);
+                    status.temporarily.input_raw_buffer =
+                        types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
                 bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
@@ -162,11 +164,7 @@ fn commit_selector_edit(
                         masters.iter_mut().chain(slaves.iter_mut()).collect();
                     if let Some(item) = all_items.get_mut(index) {
                         item.connection_mode = new_mode;
-                        log::info!(
-                            "Updated connection mode for index {} to {:?}",
-                            index,
-                            new_mode
-                        );
+                        log::info!("Updated connection mode for index {index} to {new_mode:?}");
                     }
                 });
             }
@@ -180,11 +178,7 @@ fn commit_selector_edit(
                         masters.iter_mut().chain(slaves.iter_mut()).collect();
                     if let Some(item) = all_items.get_mut(index) {
                         item.register_mode = new_mode;
-                        log::info!(
-                            "Updated register mode for index {} to {:?}",
-                            index,
-                            new_mode
-                        );
+                        log::info!("Updated register mode for index {index} to {new_mode:?}");
                     }
                 });
             }
@@ -215,7 +209,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                             masters.iter_mut().chain(slaves.iter_mut()).collect();
                         if let Some(item) = all_items.get_mut(index) {
                             item.station_id = station_id;
-                            log::info!("Updated station ID for index {} to {}", index, station_id);
+                            log::info!("Updated station ID for index {index} to {station_id}");
                         }
                     });
                 }
@@ -228,11 +222,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                             masters.iter_mut().chain(slaves.iter_mut()).collect();
                         if let Some(item) = all_items.get_mut(index) {
                             item.register_address = start_address;
-                            log::info!(
-                                "Updated register start address for index {} to {}",
-                                index,
-                                start_address
-                            );
+                            log::info!("Updated register start address for index {index} to {start_address}");
                         }
                     });
                 }
@@ -245,7 +235,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                             masters.iter_mut().chain(slaves.iter_mut()).collect();
                         if let Some(item) = all_items.get_mut(index) {
                             item.register_length = length;
-                            log::info!("Updated register length for index {} to {}", index, length);
+                            log::info!("Updated register length for index {index} to {length}");
                         }
                     });
                 }
@@ -262,7 +252,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                 } else {
                     u16::from_str_radix(&value, 16)
                 };
-                
+
                 if let Ok(register_value) = parsed_value {
                     with_port_write(&port, |port| {
                         let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config;
@@ -274,12 +264,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                 item.values.push(0);
                             }
                             item.values[register_index] = register_value;
-                            log::info!(
-                                "Updated register value for slave {} register {} to 0x{:04X}",
-                                slave_index,
-                                register_index,
-                                register_value
-                            );
+                            log::info!("Updated register value for slave {slave_index} register {register_index} to 0x{register_value:04X}");
                         }
                     });
                 }

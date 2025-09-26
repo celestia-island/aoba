@@ -147,7 +147,7 @@ fn create_line(
                 };
 
                 // For now only one option: Modbus RTU
-                let protocol_options = vec![lang().protocol.common.mode_modbus.clone()];
+                let protocol_options = [lang().protocol.common.mode_modbus.clone()];
                 let display_text = protocol_options.get(selected_index).ok_or_else(|| {
                     anyhow::anyhow!("Invalid protocol mode index: {}", selected_index)
                 })?;
