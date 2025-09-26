@@ -85,25 +85,45 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     let sep_str: String = std::iter::repeat_n('─', sep_len).collect();
     let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
 
-    // Add global mode selector
+    // Add global mode selector using proper selector_spans
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
-        if let Some(port_entry) = &port_data {
-            if let Ok(port_guard) = port_entry.read() {
-                let types::port::PortConfig::Modbus { mode, stations: _ } = &port_guard.config;
-                let mode_text = match mode {
-                    ModbusConnectionMode::Master => lang().protocol.modbus.role_master.clone(),
-                    ModbusConnectionMode::Slave => lang().protocol.modbus.role_slave.clone(),
-                };
-                return Ok(vec![Span::styled(
-                    mode_text,
-                    Style::default().fg(Color::Yellow),
-                )]);
-            }
+        let mut rendered_value_spans: Vec<Span> = Vec::new();
+        if let Some(port) = port_data.as_ref() {
+            let current_mode = with_port_read(port, |port| {
+                let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
+                *mode as usize
+            })
+            .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
+
+            let selected = matches!(
+                current_selection,
+                types::cursor::ModbusDashboardCursor::ModbusMode
+            );
+
+            let editing = selected
+                && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+
+            let selected_index = if editing {
+                if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                    *i
+                } else {
+                    current_mode
+                }
+            } else {
+                current_mode
+            };
+
+            let state = if editing {
+                TextState::Editing
+            } else if selected {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            };
+
+            rendered_value_spans = selector_spans::<ModbusConnectionMode>(selected_index, state)?;
         }
-        Ok(vec![Span::styled(
-            lang().protocol.modbus.role_master.clone(),
-            Style::default().fg(Color::Gray),
-        )])
+        Ok(rendered_value_spans)
     };
 
     lines.push(create_line(
