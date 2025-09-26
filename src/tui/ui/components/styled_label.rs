@@ -57,7 +57,13 @@ where
                     T::iter()
                         .nth(selected_index)
                         .map(|item| item.to_string())
-                        .unwrap_or_else(|| "Unknown".to_string()),
+                        .unwrap_or_else(|| {
+                            // If the index is out of bounds, wrap to valid range
+                            T::iter()
+                                .nth(selected_index % T::iter().len())
+                                .map(|item| item.to_string())
+                                .unwrap_or_else(|| "Invalid".to_string())
+                        }),
                     Style::default().fg(Color::Yellow),
                 ),
                 Span::styled(
