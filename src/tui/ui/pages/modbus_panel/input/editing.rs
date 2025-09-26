@@ -150,8 +150,8 @@ fn commit_selector_edit(
 
     if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
         match cursor {
-            types::cursor::ModbusDashboardCursor::ModbusMode { index } => {
-                // Apply connection mode changes
+            types::cursor::ModbusDashboardCursor::GlobalMode => {
+                // Apply global mode changes to all stations in this port
                 let new_mode = if selected_index == 0 {
                     ModbusConnectionMode::Master
                 } else {
@@ -159,14 +159,19 @@ fn commit_selector_edit(
                 };
 
                 with_port_write(&port, |port| {
-                    let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
-                    let mut all_items: Vec<_> =
-                        stations.iter_mut().collect();
-                    if let Some(item) = all_items.get_mut(index) {
+                    let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                    *mode = new_mode;
+                    // Also update all existing stations to use the new global mode
+                    for item in stations.iter_mut() {
                         item.connection_mode = new_mode;
-                        log::info!("Updated connection mode for index {index} to {new_mode:?}");
                     }
+                    log::info!("Updated global connection mode to {new_mode:?}");
                 });
+            }
+            types::cursor::ModbusDashboardCursor::ModbusMode { index: _ } => {
+                // Individual station mode selection is no longer supported
+                // All stations now use the global mode
+                log::warn!("Individual station mode selection is deprecated, use GlobalMode instead");
             }
             types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                 // Apply register mode changes

@@ -80,6 +80,44 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         addline_renderer,
     )?);
 
+    // Define separator for later use
+    let sep_len = 64usize;
+    let sep_str: String = std::iter::repeat_n('─', sep_len).collect();
+    let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
+
+    // Add global mode selector
+    let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
+        if let Some(port_entry) = &port_data {
+            if let Ok(port_guard) = port_entry.read() {
+                let types::port::PortConfig::Modbus { mode, stations: _ } = &port_guard.config;
+                let mode_text = match mode {
+                    ModbusConnectionMode::Master => lang().protocol.modbus.role_master.clone(),
+                    ModbusConnectionMode::Slave => lang().protocol.modbus.role_slave.clone(),
+                };
+                return Ok(vec![Span::styled(
+                    mode_text,
+                    Style::default().fg(Color::Yellow),
+                )]);
+            }
+        }
+        Ok(vec![Span::styled(
+            lang().protocol.modbus.role_master.clone(),
+            Style::default().fg(Color::Gray),
+        )])
+    };
+
+    lines.push(create_line(
+        "Global Mode", // TODO: add to language files later
+        matches!(
+            current_selection,
+            types::cursor::ModbusDashboardCursor::GlobalMode
+        ),
+        global_mode_renderer,
+    )?);
+
+    // Add separator before stations
+    lines.push(Line::from(vec![sep.clone()]));
+
     let sep_len = 64usize;
     let sep_str: String = std::iter::repeat_n('─', sep_len).collect();
     let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
@@ -107,13 +145,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             let all_items = stations.clone();
 
             for (index, item) in all_items.iter().enumerate() {
-                let connection_mode_text = match item.connection_mode {
-                    ModbusConnectionMode::Master => lang().protocol.modbus.role_master.clone(),
-                    ModbusConnectionMode::Slave => lang().protocol.modbus.role_slave.clone(),
-                };
                 let group_title = format!(
-                    "{} {} - ID: {}",
-                    connection_mode_text,
+                    "Station {} - ID: {}",
                     index + 1,
                     item.station_id
                 );
@@ -122,58 +155,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     Style::default().add_modifier(Modifier::BOLD),
                 )]));
 
-                lines.push(create_line(
-                    &lang().protocol.modbus.connection_mode,
-                    matches!(
-                        current_selection,
-                        types::cursor::ModbusDashboardCursor::ModbusMode { index: i } if i == index
-                    ),
-                    || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
-                            let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-
-                                if let Some(item) = stations.get(index) {
-                                    item.connection_mode as usize
-                                } else {
-                                    0usize // default to Master
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
-
-                            let selected = matches!(
-                                current_selection,
-                                types::cursor::ModbusDashboardCursor::ModbusMode { index: i } if i == index
-                            );
-
-                            let editing = selected
-                                && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
-
-                            let selected_index = if editing {
-                                if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                                    *i
-                                } else {
-                                    current_mode
-                                }
-                            } else {
-                                current_mode
-                            };
-
-                            let state = if editing {
-                                TextState::Editing
-                            } else if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
-
-                            rendered_value_spans = selector_spans::<ModbusConnectionMode>(selected_index, state)?;
-                        }
-                        Ok(rendered_value_spans)
-                    },
-                )?);
+                // Remove individual connection mode selector since we now have global mode
 
                 lines.push(create_line(
                     &lang().protocol.modbus.station_id,
