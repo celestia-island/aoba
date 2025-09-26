@@ -354,22 +354,6 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
                     item_copy.connection_mode = *mode;
                     items_vec.push(item_copy);
                 }
-                if stations.is_empty() {
-                    // add a default placeholder only when there are no configured items
-                    let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem {
-                        connection_mode: *mode,
-                        station_id: 1,
-                        register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils,
-                        register_address: 0,
-                        register_length: 8,
-                        req_success: 0,
-                        req_total: 0,
-                        next_poll_at: std::time::Instant::now(),
-                        pending_requests: Vec::new(),
-                        values: Vec::new(),
-                    };
-                    items_vec.push(default_item);
-                }
             }
         }
     }
