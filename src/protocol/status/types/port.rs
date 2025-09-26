@@ -71,7 +71,7 @@ impl Default for PortData {
 #[derive(Debug, Clone)]
 pub enum PortConfig {
     Modbus {
-        /// Global master/slave mode for this port. All stations in this port 
+        /// Global master/slave mode for this port. All stations in this port
         /// will operate in the same mode.
         mode: types::modbus::ModbusConnectionMode,
         /// Stores logical entries related to Modbus (using RegisterEntry as a

@@ -8,6 +8,10 @@ use std::{
 
 use serialport::{DataBits, SerialPort, StopBits};
 
+// Read buffer and assembling limits shared by runtime implementation.
+const READ_BUF_SIZE: usize = 256;
+const MAX_ASSEMBLING_LEN: usize = 768; // defensive cap (3 * READ_BUF_SIZE)
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SerialConfig {
     pub baud: u32,
@@ -111,7 +115,13 @@ impl PortRuntimeHandle {
         let initial_cfg = initial.clone();
 
         let handle = std::thread::spawn(move || {
-            crate::protocol::daemon::boot_serial_loop(serial_clone, String::new(), initial_cfg, cmd_rx, evt_tx)
+            crate::protocol::daemon::boot_serial_loop(
+                serial_clone,
+                String::new(),
+                initial_cfg,
+                cmd_rx,
+                evt_tx,
+            )
         });
         Ok(Self {
             cmd_tx,
@@ -151,7 +161,7 @@ fn boot_serial_loop(
     evt_tx: Sender<RuntimeEvent>,
 ) -> Result<()> {
     let mut gap = compute_gap(&initial);
-    let mut assembling: Vec<u8> = Vec::with_capacity(256);
+    let mut assembling: Vec<u8> = Vec::with_capacity(READ_BUF_SIZE);
     let mut last_byte: Option<Instant> = None;
 
     loop {
@@ -190,12 +200,12 @@ fn boot_serial_loop(
             }
         }
         if let Ok(mut g) = serial.lock() {
-            let mut buf = [0u8; 256];
+            let mut buf = [0u8; READ_BUF_SIZE];
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
-                    if assembling.len() > 768 {
+                    if assembling.len() > MAX_ASSEMBLING_LEN {
                         finalize_buffer(&mut assembling, &evt_tx)?;
                         assembling.clear();
                         last_byte = None;

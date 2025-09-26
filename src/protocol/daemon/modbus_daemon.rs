@@ -1,27 +1,28 @@
 use anyhow::{anyhow, Result};
+use std::sync::{Arc, RwLock};
+
 use rmodbus::server::context::ModbusContext;
 
-use crate::{
-    protocol::{
-        modbus::*,
-        status::{
-            read_status,
-            types::{self, port::PortLogEntry},
-            with_port_read, with_port_write,
-        },
+use crate::protocol::{
+    modbus::*,
+    status::{
+        read_status,
+        types::{self, port::PortLogEntry},
+        with_port_read, with_port_write,
     },
 };
 
 /// Handle modbus communication for all active ports
 pub fn handle_modbus_communication() -> Result<()> {
     let now = std::time::Instant::now();
-    
+
     // Get all ports that are currently active
     let active_ports = read_status(|status| {
         let mut ports = Vec::new();
         for (port_name, port_arc) in &status.ports.map {
             if let Ok(port_data) = port_arc.read() {
-                if let types::port::PortState::OccupiedByThis { runtime: _, .. } = &port_data.state {
+                if let types::port::PortState::OccupiedByThis { runtime: _, .. } = &port_data.state
+                {
                     let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
                     if !stations.is_empty() {
                         ports.push((port_name.clone(), port_arc.clone(), *mode, stations.clone()));
@@ -50,7 +51,7 @@ pub fn handle_modbus_communication() -> Result<()> {
 /// Handle master polling for a specific port
 pub fn handle_master_polling(
     port_name: &str,
-    port_arc: &std::sync::Arc<std::sync::RwLock<types::port::PortData>>,
+    port_arc: &Arc<RwLock<types::port::PortData>>,
     stations: &[types::modbus::ModbusRegisterItem],
     now: std::time::Instant,
 ) -> Result<()> {
@@ -72,12 +73,21 @@ pub fn handle_master_polling(
         if now >= station.next_poll_at && station.pending_requests.is_empty() {
             // Time to send a new request
             let request_result = generate_modbus_request(station);
-            
+
             match request_result {
                 Ok(request_bytes) => {
                     // Send the request
-                    if let Err(e) = runtime.cmd_tx.send(crate::protocol::runtime::RuntimeCommand::Write(request_bytes.clone())) {
-                        log::warn!("Failed to send modbus request for {port_name} station {}: {e}", station.station_id);
+                    if let Err(e) =
+                        runtime
+                            .cmd_tx
+                            .send(crate::protocol::runtime::RuntimeCommand::Write(
+                                request_bytes.clone(),
+                            ))
+                    {
+                        log::warn!(
+                            "Failed to send modbus request for {port_name} station {}: {e}",
+                            station.station_id
+                        );
                         continue;
                     }
 
@@ -87,10 +97,10 @@ pub fn handle_master_polling(
                         .map(|b| format!("{b:02x}"))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    
+
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
-                        raw: format!("Master TX: {}", hex_frame),
+                        raw: format!("Master TX: {hex_frame}"),
                         parsed: None,
                     };
 
@@ -109,14 +119,21 @@ pub fn handle_master_polling(
                         let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
                         if let Some(station) = stations.get_mut(index) {
                             station.req_total = station.req_total.saturating_add(1);
-                            station.next_poll_at = now + std::time::Duration::from_millis(2000); // 2 second interval
+                            station.next_poll_at = now + std::time::Duration::from_millis(2000);
+                            // 2 second interval
                         }
                     });
 
-                    log::info!("Sent modbus master request for {port_name} station {}: {hex_frame}", station.station_id);
+                    log::info!(
+                        "Sent modbus master request for {port_name} station {}: {hex_frame}",
+                        station.station_id
+                    );
                 }
                 Err(e) => {
-                    log::warn!("Failed to generate modbus request for {port_name} station {}: {e}", station.station_id);
+                    log::warn!(
+                        "Failed to generate modbus request for {port_name} station {}: {e}",
+                        station.station_id
+                    );
                 }
             }
         }
@@ -134,7 +151,7 @@ pub fn handle_master_polling(
 
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Master RX: {}", hex_frame),
+                    raw: format!("Master RX: {hex_frame}"),
                     parsed: None,
                 };
 
@@ -163,7 +180,7 @@ pub fn handle_master_polling(
 /// Handle slave responses for a specific port
 pub fn handle_slave_responses(
     port_name: &str,
-    port_arc: &std::sync::Arc<std::sync::RwLock<types::port::PortData>>,
+    port_arc: &Arc<RwLock<types::port::PortData>>,
     stations: &[types::modbus::ModbusRegisterItem],
 ) -> Result<()> {
     // Get runtime handle for receiving requests and sending responses
@@ -192,7 +209,7 @@ pub fn handle_slave_responses(
                 // Log the received request
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Slave RX: {}", hex_frame),
+                    raw: format!("Slave RX: {hex_frame}"),
                     parsed: None,
                 };
 
@@ -207,7 +224,13 @@ pub fn handle_slave_responses(
                 // Try to parse and respond to the request
                 if let Ok(response) = generate_modbus_slave_response(&frame, stations) {
                     // Send the response
-                    if let Err(e) = runtime.cmd_tx.send(crate::protocol::runtime::RuntimeCommand::Write(response.clone())) {
+                    if let Err(e) =
+                        runtime
+                            .cmd_tx
+                            .send(crate::protocol::runtime::RuntimeCommand::Write(
+                                response.clone(),
+                            ))
+                    {
                         log::warn!("Failed to send modbus slave response for {port_name}: {e}");
                         continue;
                     }
@@ -218,10 +241,10 @@ pub fn handle_slave_responses(
                         .map(|b| format!("{b:02x}"))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    
+
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
-                        raw: format!("Slave TX: {}", hex_response),
+                        raw: format!("Slave TX: {hex_response}"),
                         parsed: None,
                     };
 
@@ -287,7 +310,7 @@ pub fn generate_modbus_slave_response(
     }
 
     let slave_id = request[0];
-    
+
     // Find a station configuration that matches the slave ID
     let _station = stations
         .iter()
@@ -296,13 +319,13 @@ pub fn generate_modbus_slave_response(
 
     // Create a simple storage context with some default values
     let mut context = ModbusStorageSmall::new();
-    
+
     // Set some example values for demonstration
     for i in 0..100 {
         let _ = context.set_coil(i, i % 2 == 0);
         let _ = context.set_discrete(i, i % 3 == 0);
-        let _ = context.set_holding(i, i as u16 * 10);
-        let _ = context.set_input(i, i as u16 * 20);
+        let _ = context.set_holding(i, i * 10);
+        let _ = context.set_input(i, i * 20);
     }
 
     let mut response = Vec::new();
@@ -339,6 +362,9 @@ pub fn generate_modbus_slave_response(
                 Err(anyhow!("Failed to build inputs response"))
             }
         }
-        _ => Err(anyhow!("Unsupported modbus function code: {:?}", frame.func)),
+        _ => Err(anyhow!(
+            "Unsupported modbus function code: {:?}",
+            frame.func
+        )),
     }
 }

@@ -124,8 +124,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 |port| {
                                     let types::port::PortConfig::Modbus { mode: _, stations } =
                                         &mut port.config;
-                                    let mut all_items: Vec<_> =
-                                        stations.iter_mut().collect();
+                                    let mut all_items: Vec<_> = stations.iter_mut().collect();
                                     if let Some(item) = all_items.get_mut(slave_index) {
                                         if let Some(current_value) =
                                             item.values.get_mut(register_index)
@@ -152,8 +151,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     if let Ok(port_guard) = port_entry.read() {
                                         let types::port::PortConfig::Modbus { mode: _, stations } =
                                             &port_guard.config;
-                                        let all_items: Vec<_> =
-                                            stations.iter().collect();
+                                        let all_items: Vec<_> = stations.iter().collect();
                                         if let Some(item) = all_items.get(slave_index) {
                                             return Ok(item
                                                 .values
