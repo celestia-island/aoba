@@ -107,10 +107,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     };
 
     lines.push(create_line(
-        "Global Mode", // TODO: add to language files later
+        &lang().protocol.modbus.connection_mode,
         matches!(
             current_selection,
-            types::cursor::ModbusDashboardCursor::GlobalMode
+            types::cursor::ModbusDashboardCursor::ModbusMode
         ),
         global_mode_renderer,
     )?);

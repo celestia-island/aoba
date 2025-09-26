@@ -194,11 +194,7 @@ impl Cursor for ConfigPanelCursor {
 pub enum ModbusDashboardCursor {
     AddLine,
     /// Select the global mode for all stations in this port (Master/Slave)
-    GlobalMode,
-
-    ModbusMode {
-        index: usize,
-    },
+    ModbusMode,
     StationId {
         index: usize,
     },
@@ -222,11 +218,10 @@ impl Cursor for ModbusDashboardCursor {
         // Build flat ordered list using shared helper to keep behavior consistent
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
-        flat.push(ModbusDashboardCursor::GlobalMode);
+        flat.push(ModbusDashboardCursor::ModbusMode);
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
-            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
             flat.push(ModbusDashboardCursor::StationId { index: idx });
             flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
             flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
@@ -251,11 +246,10 @@ impl Cursor for ModbusDashboardCursor {
     fn next(self) -> Self {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
-        flat.push(ModbusDashboardCursor::GlobalMode);
+        flat.push(ModbusDashboardCursor::ModbusMode);
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
-            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
             flat.push(ModbusDashboardCursor::StationId { index: idx });
             flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
             flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
@@ -289,32 +283,29 @@ impl Cursor for ModbusDashboardCursor {
         if *self == ModbusDashboardCursor::AddLine {
             return 0;
         }
-        if *self == ModbusDashboardCursor::GlobalMode {
+        if *self == ModbusDashboardCursor::ModbusMode {
             return 1;
         }
 
         let items_vec = build_modbus_items_vec();
         // Walk items, accumulate heights until we reach the target
         for (idx, item) in items_vec.iter().enumerate() {
-            let config_rows = 5usize;
+            let config_rows = 4usize; // Reduced by 1 since we removed individual ModbusMode
             let reg_rows = (item.register_length as usize).div_ceil(8).max(0usize);
             let rows = 1 + config_rows + reg_rows;
 
             match self {
-                ModbusDashboardCursor::ModbusMode { index } if *index == idx => {
+                ModbusDashboardCursor::StationId { index } if *index == idx => {
                     return offset + 1;
                 }
-                ModbusDashboardCursor::StationId { index } if *index == idx => {
+                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
                     return offset + 2;
                 }
-                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
+                ModbusDashboardCursor::RegisterStartAddress { index } if *index == idx => {
                     return offset + 3;
                 }
-                ModbusDashboardCursor::RegisterStartAddress { index } if *index == idx => {
-                    return offset + 4;
-                }
                 ModbusDashboardCursor::RegisterLength { index } if *index == idx => {
-                    return offset + 5;
+                    return offset + 4;
                 }
                 ModbusDashboardCursor::Register {
                     slave_index,

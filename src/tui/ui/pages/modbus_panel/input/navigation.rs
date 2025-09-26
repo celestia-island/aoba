@@ -277,8 +277,8 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     } else {
                         // At bottom row of current slave
                         if has_next_slave {
-                            // Jump to connection mode of next slave
-                            types::cursor::ModbusDashboardCursor::ModbusMode {
+                            // Jump to station ID of next slave
+                            types::cursor::ModbusDashboardCursor::StationId {
                                 index: slave_index + 1,
                             }
                         } else {

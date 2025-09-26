@@ -70,7 +70,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 })?;
 
                 let max_index = match current_cursor {
-                    types::cursor::ModbusDashboardCursor::ModbusMode { .. } => 2, // Master, Slave
+                    types::cursor::ModbusDashboardCursor::ModbusMode => 2, // Master, Slave
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
                 };
@@ -105,7 +105,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 })?;
 
                 let max_index = match current_cursor {
-                    types::cursor::ModbusDashboardCursor::ModbusMode { .. } => 2, // Master, Slave
+                    types::cursor::ModbusDashboardCursor::ModbusMode => 2, // Master, Slave
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
                 };
@@ -150,7 +150,7 @@ fn commit_selector_edit(
 
     if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
         match cursor {
-            types::cursor::ModbusDashboardCursor::GlobalMode => {
+            types::cursor::ModbusDashboardCursor::ModbusMode => {
                 // Apply global mode changes to all stations in this port
                 let new_mode = if selected_index == 0 {
                     ModbusConnectionMode::Master
@@ -167,11 +167,6 @@ fn commit_selector_edit(
                     }
                     log::info!("Updated global connection mode to {new_mode:?}");
                 });
-            }
-            types::cursor::ModbusDashboardCursor::ModbusMode { index: _ } => {
-                // Individual station mode selection is no longer supported
-                // All stations now use the global mode
-                log::warn!("Individual station mode selection is deprecated, use GlobalMode instead");
             }
             types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                 // Apply register mode changes
