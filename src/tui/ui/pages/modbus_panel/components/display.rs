@@ -54,6 +54,16 @@ fn create_line(
 pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'static>>> {
     let mut lines: Vec<Line> = Vec::new();
 
+    // Separator configuration for this file
+    const SEP_LEN: usize = 64usize;
+
+    // Helper: return a full Line containing a separator of given length
+    fn separator_line(len: usize) -> Line<'static> {
+        let sep_str: String = std::iter::repeat_n('─', len).collect();
+        let sep = Span::styled(sep_str, Style::default().fg(Color::DarkGray));
+        Line::from(vec![sep])
+    }
+
     let port_data = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(status
@@ -80,11 +90,6 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         addline_renderer,
     )?);
 
-    // Define separator for later use
-    let sep_len = 64usize;
-    let sep_str: String = std::iter::repeat_n('─', sep_len).collect();
-    let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
-
     // Add global mode selector using proper selector_spans
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
@@ -100,8 +105,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 types::cursor::ModbusDashboardCursor::ModbusMode
             );
 
-            let editing = selected
-                && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+            let editing =
+                selected && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
 
             let selected_index = if editing {
                 if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
@@ -135,12 +140,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         global_mode_renderer,
     )?);
 
-    // Add separator before stations
-    lines.push(Line::from(vec![sep.clone()]));
+    // Separator before stations will be added only when we actually have stations
 
-    let sep_len = 64usize;
-    let sep_str: String = std::iter::repeat_n('─', sep_len).collect();
-    let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
+    // reuse sep_len from above and helper for separator
     let has_any = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_entry) = status.ports.map.get(&format!("COM{}", selected_port + 1)) {
@@ -156,7 +158,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         Ok(false)
     })?;
     if has_any {
-        lines.push(Line::from(vec![sep]));
+        lines.push(separator_line(SEP_LEN));
     }
 
     if let Some(port_entry) = &port_data {
@@ -165,11 +167,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             let all_items = stations.clone();
 
             for (index, item) in all_items.iter().enumerate() {
-                let group_title = format!(
-                    "Station {} - ID: {}",
-                    index + 1,
-                    item.station_id
-                );
+                let group_title = format!("#{} - ID: {}", index + 1, item.station_id);
                 lines.push(Line::from(vec![Span::styled(
                     group_title,
                     Style::default().add_modifier(Modifier::BOLD),
@@ -396,8 +394,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 }
 
                 if index < all_items.len() - 1 {
-                    let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
-                    lines.push(Line::from(vec![sep]));
+                    lines.push(separator_line(SEP_LEN));
                 }
             }
         }
