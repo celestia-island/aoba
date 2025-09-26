@@ -50,7 +50,7 @@ pub struct PortData {
     pub log_clear_pending: bool,
     
     /// Cache for the last ModbusRequest object to avoid recreating it
-    pub last_modbus_request: Option<rmodbus::client::ModbusRequest>,
+    pub last_modbus_request: Option<Arc<Mutex<rmodbus::client::ModbusRequest>>>,
 }
 
 impl Default for PortData {
@@ -88,7 +88,7 @@ pub enum PortConfig {
 impl Default for PortConfig {
     fn default() -> Self {
         PortConfig::Modbus {
-            mode: types::modbus::ModbusConnectionMode::Master,
+            mode: types::modbus::ModbusConnectionMode::default_master(),
             stations: Vec::new(),
         }
     }

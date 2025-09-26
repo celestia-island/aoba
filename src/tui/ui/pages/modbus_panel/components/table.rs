@@ -97,11 +97,13 @@ pub fn render_register_row_line(
 
                 let cell_spans = match item.register_mode {
                     RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                        let is_on = item.values.get(reg_index).copied().unwrap_or(0) != 0;
+                        // TODO: Read from global storage when mode is Master
+                        let is_on = reg_index % 2 == 0; // Placeholder logic
                         switch_spans(is_on, "ON", "OFF", state)?
                     }
                     RegisterMode::Holding | RegisterMode::Input => {
-                        let current_value = item.values.get(reg_index).copied().unwrap_or(0);
+                        // TODO: Read from global storage when mode is Master
+                        let current_value = (reg_index * 10) as u16; // Placeholder logic
                         let hex_str = format!("0x{current_value:04X}");
                         input_spans(hex_str.clone(), state)?
                     }

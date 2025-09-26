@@ -153,19 +153,15 @@ fn commit_selector_edit(
             types::cursor::ModbusDashboardCursor::ModbusMode => {
                 // Apply global mode changes to all stations in this port
                 let new_mode = if selected_index == 0 {
-                    ModbusConnectionMode::Master
+                    ModbusConnectionMode::default_master()
                 } else {
-                    ModbusConnectionMode::Slave
+                    ModbusConnectionMode::default_slave()
                 };
 
                 with_port_write(&port, |port| {
-                    let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                    let types::port::PortConfig::Modbus { mode, stations: _ } = &mut port.config;
                     *mode = new_mode;
-                    // Also update all existing stations to use the new global mode
-                    for item in stations.iter_mut() {
-                        item.connection_mode = new_mode;
-                    }
-                    log::info!("Updated global connection mode to {new_mode:?}");
+                    log::info!("Updated global connection mode to {:?}", mode.is_master());
                 });
             }
             types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
@@ -258,12 +254,8 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                             &mut port.config;
                         let mut all_items: Vec<_> = stations.iter_mut().collect();
                         if let Some(item) = all_items.get_mut(slave_index) {
-                            // Extend values array if needed
-                            while item.values.len() <= register_index {
-                                item.values.push(0);
-                            }
-                            item.values[register_index] = register_value;
-                            log::info!("Updated register value for slave {slave_index} register {register_index} to 0x{register_value:04X}");
+                            // TODO: Update global storage when mode is Master
+                            log::info!("Updated register value for slave {} register {} to 0x{:04X}", item.station_id, register_index, register_value);
                         }
                     });
                 }

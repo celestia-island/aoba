@@ -1,19 +1,77 @@
 use strum::{EnumIter, FromRepr};
+use std::sync::{Arc, Mutex};
+use rmodbus::server::context::ModbusContext;
 
 use crate::i18n::lang;
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
+#[derive(Debug, Clone)]
 pub enum ModbusConnectionMode {
-    Master = 0,
-    Slave = 1,
+    Master { 
+        storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>
+    },
+    Slave { 
+        current_request_at_station_index: usize 
+    },
+}
+
+impl ModbusConnectionMode {
+    pub fn is_master(&self) -> bool {
+        matches!(self, ModbusConnectionMode::Master { .. })
+    }
+    
+    pub fn is_slave(&self) -> bool {
+        matches!(self, ModbusConnectionMode::Slave { .. })
+    }
+    
+    pub fn default_master() -> Self {
+        let storage = Arc::new(Mutex::new(rmodbus::server::storage::ModbusStorageSmall::new()));
+        
+        // Initialize with some example values for demonstration
+        if let Ok(mut context) = storage.lock() {
+            for i in 0..100 {
+                let _ = context.set_coil(i, i % 2 == 0);
+                let _ = context.set_discrete(i, i % 3 == 0);
+                let _ = context.set_holding(i, i as u16 * 10);
+                let _ = context.set_input(i, i as u16 * 20);
+            }
+        }
+        
+        ModbusConnectionMode::Master { storage }
+    }
+    
+    pub fn default_slave() -> Self {
+        ModbusConnectionMode::Slave { 
+            current_request_at_station_index: 0
+        }
+    }
+    
+    // Helper methods for UI compatibility
+    pub fn all_variants() -> &'static [&'static str] {
+        &["Master", "Slave"]
+    }
+    
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => Self::default_master(),
+            1 => Self::default_slave(),
+            _ => Self::default_master(),
+        }
+    }
+    
+    pub fn to_index(&self) -> usize {
+        match self {
+            ModbusConnectionMode::Master { .. } => 0,
+            ModbusConnectionMode::Slave { .. } => 1,
+        }
+    }
 }
 
 impl std::fmt::Display for ModbusConnectionMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ModbusConnectionMode::Master => write!(f, "{}", lang().protocol.modbus.role_master),
-            ModbusConnectionMode::Slave => write!(f, "{}", lang().protocol.modbus.role_slave),
+            ModbusConnectionMode::Master { .. } => write!(f, "{}", lang().protocol.modbus.role_master),
+            ModbusConnectionMode::Slave { .. } => write!(f, "{}", lang().protocol.modbus.role_slave),
         }
     }
 }
@@ -64,7 +122,7 @@ impl std::fmt::Display for RegisterMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct ModbusRegisterItem {
     pub connection_mode: ModbusConnectionMode,
     pub station_id: u8,
@@ -77,7 +135,6 @@ pub struct ModbusRegisterItem {
     pub next_poll_at: std::time::Instant,
     pub last_request_time: Option<std::time::Instant>, // For timeout tracking in slave mode
     pub pending_requests: Vec<u8>,                     // simplified type for now
-    pub values: Vec<u16>,                              // Register values
 }
 
 #[repr(u8)]

@@ -94,9 +94,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
         if let Some(port) = port_data.as_ref() {
-            let current_mode = with_port_read(port, |port| {
+            let (current_mode, mode_obj) = with_port_read(port, |port| {
                 let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
-                *mode as usize
+                (mode.to_index(), mode.clone())
             })
             .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
 
@@ -126,7 +126,24 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 TextState::Normal
             };
 
-            rendered_value_spans = selector_spans::<ModbusConnectionMode>(selected_index, state)?;
+            let variants = ModbusConnectionMode::all_variants();
+            let current_text = format!("{}", mode_obj);
+            
+            match state {
+                TextState::Normal => {
+                    rendered_value_spans = vec![Span::styled(current_text, Style::default().fg(Color::White))];
+                }
+                TextState::Selected => {
+                    rendered_value_spans = vec![Span::styled(current_text, Style::default().fg(Color::Yellow))];
+                }
+                TextState::Editing => {
+                    let mut spans = Vec::new();
+                    spans.push(Span::raw("< "));
+                    spans.push(Span::styled(variants[selected_index], Style::default().fg(Color::Yellow)));
+                    spans.push(Span::raw(" >"));
+                    rendered_value_spans = spans;
+                }
+            }
         }
         Ok(rendered_value_spans)
     };
