@@ -139,7 +139,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 TextState::Editing => {
                     let mut spans = Vec::new();
                     spans.push(Span::raw("< "));
-                    spans.push(Span::styled(variants[selected_index], Style::default().fg(Color::Yellow)));
+                    // Use localized Display implementation instead of hardcoded strings
+                    let selected_variant = variants.get(selected_index).unwrap_or(&variants[0]);
+                    let localized_text = format!("{}", selected_variant);
+                    spans.push(Span::styled(localized_text, Style::default().fg(Color::Yellow)));
                     spans.push(Span::raw(" >"));
                     rendered_value_spans = spans;
                 }

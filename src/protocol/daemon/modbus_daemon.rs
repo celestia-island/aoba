@@ -25,6 +25,9 @@ pub fn handle_modbus_communication() -> Result<()> {
                     let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
                     if !stations.is_empty() {
                         ports.push((port_name.clone(), port_arc.clone(), mode.clone(), stations.clone()));
+                        log::debug!("Found active port {} with {} stations in {:?} mode", 
+                                   port_name, stations.len(), 
+                                   if mode.is_master() { "Master" } else { "Slave" });
                     }
                 }
             }
@@ -65,8 +68,11 @@ pub fn handle_master_mode(
     });
 
     let Some(Some(runtime)) = runtime_handle else {
+        log::debug!("Master mode: no runtime handle for port {}", port_name);
         return Ok(());
     };
+
+    log::debug!("Master mode: processing for port {} with {} stations", port_name, stations.len());
 
     // Process incoming requests from external slaves and generate responses
     while let Ok(event) = runtime.evt_rx.try_recv() {
@@ -172,7 +178,11 @@ pub fn handle_slave_mode(
 
     // Only process the current station
     if let Some(station) = stations.get(current_index) {
+        log::debug!("Slave mode: checking station {} (index {}), next_poll_at: {:?}, now: {:?}", 
+                   station.station_id, current_index, station.next_poll_at, now);
+        
         if now >= station.next_poll_at {
+            log::debug!("Slave mode: time to send request for station {}", station.station_id);
             // Time to send a new request
             let request_result = generate_modbus_request_with_cache(station, port_arc);
 
@@ -242,6 +252,8 @@ pub fn handle_slave_mode(
                 }
             }
         }
+    } else {
+        log::debug!("Slave mode: no station found at index {} (total stations: {})", current_index, stations.len());
     }
 
 

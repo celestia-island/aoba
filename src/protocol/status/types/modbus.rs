@@ -47,8 +47,8 @@ impl ModbusConnectionMode {
     }
     
     // Helper methods for UI compatibility
-    pub fn all_variants() -> &'static [&'static str] {
-        &["Master", "Slave"]
+    pub fn all_variants() -> Vec<Self> {
+        vec![Self::default_master(), Self::default_slave()]
     }
     
     pub fn from_index(index: usize) -> Self {
