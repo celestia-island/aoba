@@ -182,6 +182,38 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                     });
                 }
             }
+            types::cursor::ModbusDashboardCursor::Register {
+                slave_index,
+                register_index,
+            } => {
+                // Parse hex value, supporting both 0x prefix and plain hex
+                let parsed_value = if value.starts_with("0x") || value.starts_with("0X") {
+                    u16::from_str_radix(&value[2..], 16)
+                } else {
+                    value.parse::<u16>().or_else(|_| u16::from_str_radix(&value, 16))
+                };
+                
+                if let Ok(register_value) = parsed_value {
+                    with_port_write(&port, |port| {
+                        let types::port::PortConfig::Modbus { masters, slaves } = &mut port.config;
+                        let mut all_items: Vec<_> =
+                            masters.iter_mut().chain(slaves.iter_mut()).collect();
+                        if let Some(item) = all_items.get_mut(slave_index) {
+                            // Extend values array if needed
+                            while item.values.len() <= register_index {
+                                item.values.push(0);
+                            }
+                            item.values[register_index] = register_value;
+                            log::info!(
+                                "Updated register value for slave {} register {} to 0x{:04X}",
+                                slave_index,
+                                register_index,
+                                register_value
+                            );
+                        }
+                    });
+                }
+            }
             _ => {}
         }
     }
