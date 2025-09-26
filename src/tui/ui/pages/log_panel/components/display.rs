@@ -44,8 +44,22 @@ pub fn render_log_display(
     area: Rect,
     logs: &[types::port::PortLogEntry],
     view_offset: usize,
-    follow_active: bool,
+    _follow_active: bool, // Parameter kept for compatibility but not used
 ) -> Result<()> {
+    // Get the actual log_auto_scroll setting from PortData
+    let auto_scroll = read_status(|status| {
+        if let types::Page::LogPanel { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port) = status.ports.map.get(port_name) {
+                    if let Ok(port_data) = port.read() {
+                        return Ok(port_data.log_auto_scroll);
+                    }
+                }
+            }
+        }
+        Ok(false) // Default to false if we can't get the setting
+    }).unwrap_or(false);
+
     // Simplified rendering logic
     let lines: Vec<Line> = logs
         .iter()
@@ -63,7 +77,14 @@ pub fn render_log_display(
         })
         .collect();
 
-    let block = Block::default().borders(Borders::ALL);
+    // Show auto-scroll indicator in title if enabled
+    let title = if auto_scroll {
+        format!(" {} [Auto] ", lang().protocol.common.log_monitoring.clone())
+    } else {
+        format!(" {} ", lang().protocol.common.log_monitoring.clone())
+    };
+
+    let block = Block::default().borders(Borders::ALL).title(title);
 
     let paragraph = Paragraph::new(lines).block(block);
     frame.render_widget(paragraph, area);

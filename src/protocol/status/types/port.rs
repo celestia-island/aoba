@@ -48,6 +48,9 @@ pub struct PortData {
     pub logs: Vec<PortLogEntry>,
     pub log_auto_scroll: bool,
     pub log_clear_pending: bool,
+    
+    /// Cache for the last ModbusRequest object to avoid recreating it
+    pub last_modbus_request: Option<rmodbus::client::ModbusRequest>,
 }
 
 impl Default for PortData {
@@ -61,6 +64,7 @@ impl Default for PortData {
             logs: Vec::new(),
             log_auto_scroll: true,
             log_clear_pending: false,
+            last_modbus_request: None,
         }
     }
 }

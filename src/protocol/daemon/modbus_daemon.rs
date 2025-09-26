@@ -166,7 +166,7 @@ pub fn handle_slave_mode(
     for (index, station) in stations.iter().enumerate() {
         if now >= station.next_poll_at {
             // Time to send a new request
-            let request_result = generate_modbus_request(station);
+            let request_result = generate_modbus_request_with_cache(station, port_arc);
 
             match request_result {
                 Ok(request_bytes) => {
@@ -320,7 +320,39 @@ pub fn handle_slave_mode(
     Ok(())
 }
 
-/// Generate a modbus request for polling
+/// Generate a modbus request for polling and cache the ModbusRequest object
+pub fn generate_modbus_request_with_cache(
+    station: &types::modbus::ModbusRegisterItem,
+    port_arc: &Arc<RwLock<types::port::PortData>>,
+) -> Result<Vec<u8>> {
+    let length = station.register_length.min(125); // Limit to max modbus length
+    let address = station.register_address;
+    let slave_id = station.station_id;
+
+    let (modbus_request, raw) = match station.register_mode {
+        types::modbus::RegisterMode::Coils => {
+            generate_pull_get_coils_request(slave_id, address, length)?
+        }
+        types::modbus::RegisterMode::DiscreteInputs => {
+            generate_pull_get_discrete_inputs_request(slave_id, address, length)?
+        }
+        types::modbus::RegisterMode::Holding => {
+            generate_pull_get_holdings_request(slave_id, address, length)?
+        }
+        types::modbus::RegisterMode::Input => {
+            generate_pull_get_inputs_request(slave_id, address, length)?
+        }
+    };
+
+    // Cache the ModbusRequest object in PortData
+    with_port_write(port_arc, |port| {
+        port.last_modbus_request = Some(modbus_request);
+    });
+
+    Ok(raw)
+}
+
+/// Generate a modbus request for polling (legacy function for compatibility)
 pub fn generate_modbus_request(station: &types::modbus::ModbusRegisterItem) -> Result<Vec<u8>> {
     let length = station.register_length.min(125); // Limit to max modbus length
     let address = station.register_address;
