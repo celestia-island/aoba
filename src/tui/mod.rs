@@ -167,6 +167,7 @@ fn run_core_thread(
 
     // do_scan extracted to module-level function below
 
+    let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     loop {
         // Drain UI -> core messages
         while let Ok(msg) = ui_rx.try_recv() {
@@ -176,7 +177,7 @@ fn run_core_thread(
                     // Notify UI to quit and then exit core thread
                     core_tx
                         .send(CoreToUi::Quit)
-                        .map_err(|e| anyhow!("failed to send Quit: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to send Quit to UI core: {}", e))?;
                     return Ok(());
                 }
                 UiToCore::Refresh => {
@@ -194,7 +195,7 @@ fn run_core_thread(
                     polling_enabled = true;
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to send Refreshed event to UI core: {}", e))?;
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
@@ -246,28 +247,54 @@ fn run_core_thread(
                             .cmd_tx
                             .send(crate::protocol::runtime::RuntimeCommand::Stop)
                         {
-                            log::warn!("ToggleRuntime: failed to send Stop: {e}");
-                        }
-                        // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
-                        let mut stopped = false;
-                        for _ in 0..10 {
-                            match rt
-                                .evt_rx
-                                .recv_timeout(std::time::Duration::from_millis(100))
-                            {
-                                Ok(evt) => {
-                                    if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
-                                        stopped = true;
-                                        break;
+                            let warn_msg = format!("ToggleRuntime: failed to send Stop: {e}");
+                            log::warn!("{warn_msg}");
+
+                            // Also write to the port's logs so the UI shows the error
+                            write_status(|status| {
+                                if let Some(port) = status.ports.map.get(&port_name) {
+                                    if with_port_write(port, |port| {
+                                        port.logs.push(
+                                            crate::protocol::status::types::port::PortLogEntry {
+                                                when: chrono::Local::now(),
+                                                raw: warn_msg.clone(),
+                                                parsed: None,
+                                            },
+                                        );
+                                        if port.logs.len() > 1000 {
+                                            let excess = port.logs.len() - 1000;
+                                            port.logs.drain(0..excess);
+                                        }
+                                        true
+                                    })
+                                    .is_none()
+                                    {
+                                        // If we couldn't acquire the port write lock, log a warning
+                                        log::warn!("ToggleRuntime: failed to acquire write lock to append stop-warn for {port_name}");
                                     }
                                 }
-                                Err(_) => {
-                                    // timed out waiting this interval - continue waiting
+                                Ok(())
+                            })?;
+                        }
+                        // Wait up to 1s for the runtime thread to emit Stopped. Use a single
+                        // recv_timeout so we avoid short-interval polling while keeping the
+                        // operation bounded. Treat failure non-fatally (log) to match
+                        // surrounding code which tolerates stop failures.
+                        match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                            Ok(evt) => {
+                                if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
+                                    log::warn!(
+                                        "ToggleRuntime: received unexpected event while stopping {port_name}: {:?}",
+                                        evt
+                                    );
                                 }
                             }
-                        }
-                        if !stopped {
-                            log::warn!("ToggleRuntime: stop did not emit Stopped event within timeout for {port_name}");
+                            Err(flume::RecvTimeoutError::Timeout) => {
+                                log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
+                            }
+                            Err(e) => {
+                                log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {e}");
+                            }
                         }
 
                         if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
@@ -330,7 +357,7 @@ fn run_core_thread(
                         // All attempts failed: set transient error for UI
                         write_status(|status| {
                             status.temporarily.error = Some(types::ErrorInfo {
-                                message: format!("failed to start runtime: {e}"),
+                                message: format!("Failed to start runtime: {e}"),
                                 timestamp: chrono::Local::now(),
                             });
                             Ok(())
@@ -357,6 +384,13 @@ fn run_core_thread(
                 status.temporarily.busy.spinner_frame.wrapping_add(1);
             Ok(())
         })?;
+
+        // Handle modbus communication at most once per second to avoid tight loops
+        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_secs(1) {
+            // Update the timestamp first to ensure we don't re-enter while still running
+            last_modbus_run = std::time::Instant::now();
+            crate::protocol::daemon::handle_modbus_communication()?;
+        }
 
         core_tx
             .send(CoreToUi::Tick)

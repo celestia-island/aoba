@@ -54,6 +54,16 @@ fn create_line(
 pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'static>>> {
     let mut lines: Vec<Line> = Vec::new();
 
+    // Separator configuration for this file
+    const SEP_LEN: usize = 64usize;
+
+    // Helper: return a full Line containing a separator of given length
+    fn separator_line(len: usize) -> Line<'static> {
+        let sep_str: String = std::iter::repeat_n('─', len).collect();
+        let sep = Span::styled(sep_str, Style::default().fg(Color::DarkGray));
+        Line::from(vec![sep])
+    }
+
     let port_data = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(status
@@ -80,16 +90,95 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         addline_renderer,
     )?);
 
-    let sep_len = 64usize;
-    let sep_str: String = std::iter::repeat_n('─', sep_len).collect();
-    let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
+    // Add global mode selector using proper selector_spans
+    let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
+        let mut rendered_value_spans: Vec<Span> = Vec::new();
+        if let Some(port) = port_data.as_ref() {
+            let (current_mode, mode_obj) = with_port_read(port, |port| {
+                let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
+                (mode.to_index(), mode.clone())
+            })
+            .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
+
+            let selected = matches!(
+                current_selection,
+                types::cursor::ModbusDashboardCursor::ModbusMode
+            );
+
+            let editing =
+                selected && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+
+            let selected_index = if editing {
+                if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                    *i
+                } else {
+                    current_mode
+                }
+            } else {
+                current_mode
+            };
+
+            let state = if editing {
+                TextState::Editing
+            } else if selected {
+                TextState::Selected
+            } else {
+                TextState::Normal
+            };
+
+            let variants = ModbusConnectionMode::all_variants();
+            let current_text = format!("{}", mode_obj);
+
+            match state {
+                TextState::Normal => {
+                    rendered_value_spans = vec![Span::styled(
+                        current_text,
+                        Style::default().fg(Color::White),
+                    )];
+                }
+                TextState::Selected => {
+                    rendered_value_spans = vec![Span::styled(
+                        current_text,
+                        Style::default().fg(Color::Yellow),
+                    )];
+                }
+                TextState::Editing => {
+                    let mut spans = Vec::new();
+                    spans.push(Span::raw("< "));
+                    // Use localized Display implementation instead of hardcoded strings
+                    let selected_variant = variants.get(selected_index).unwrap_or(&variants[0]);
+                    let localized_text = format!("{}", selected_variant);
+                    spans.push(Span::styled(
+                        localized_text,
+                        Style::default().fg(Color::Yellow),
+                    ));
+                    spans.push(Span::raw(" >"));
+                    rendered_value_spans = spans;
+                }
+            }
+        }
+        Ok(rendered_value_spans)
+    };
+
+    lines.push(create_line(
+        &lang().protocol.modbus.connection_mode,
+        matches!(
+            current_selection,
+            types::cursor::ModbusDashboardCursor::ModbusMode
+        ),
+        global_mode_renderer,
+    )?);
+
+    // Separator before stations will be added only when we actually have stations
+
+    // reuse sep_len from above and helper for separator
     let has_any = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_entry) = status.ports.map.get(&format!("COM{}", selected_port + 1)) {
                 if let Ok(port_guard) = port_entry.read() {
                     match &port_guard.config {
-                        types::port::PortConfig::Modbus { masters, slaves } => {
-                            return Ok(!(masters.is_empty() && slaves.is_empty()));
+                        types::port::PortConfig::Modbus { mode: _, stations } => {
+                            return Ok(!stations.is_empty());
                         }
                     }
                 }
@@ -98,86 +187,22 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         Ok(false)
     })?;
     if has_any {
-        lines.push(Line::from(vec![sep]));
+        lines.push(separator_line(SEP_LEN));
     }
 
     if let Some(port_entry) = &port_data {
         if let Ok(port_data_guard) = port_entry.read() {
-            let types::port::PortConfig::Modbus { masters, slaves } = &port_data_guard.config;
-            let mut all_items = masters.clone();
-            all_items.extend(slaves.clone());
+            let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
+            let all_items = stations.clone();
 
             for (index, item) in all_items.iter().enumerate() {
-                let connection_mode_text = match item.connection_mode {
-                    ModbusConnectionMode::Master => lang().protocol.modbus.role_master.clone(),
-                    ModbusConnectionMode::Slave => lang().protocol.modbus.role_slave.clone(),
-                };
-                let group_title = format!(
-                    "{} {} - ID: {}",
-                    connection_mode_text,
-                    index + 1,
-                    item.station_id
-                );
+                let group_title = format!("#{} - ID: {}", index + 1, item.station_id);
                 lines.push(Line::from(vec![Span::styled(
                     group_title,
                     Style::default().add_modifier(Modifier::BOLD),
                 )]));
 
-                lines.push(create_line(
-                    &lang().protocol.modbus.connection_mode,
-                    matches!(
-                        current_selection,
-                        types::cursor::ModbusDashboardCursor::ModbusMode { index: i } if i == index
-                    ),
-                    || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
-                            let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
-                                    &port.config;
-
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
-                                    item.connection_mode as usize
-                                } else {
-                                    0usize // default to Master
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
-
-                            let selected = matches!(
-                                current_selection,
-                                types::cursor::ModbusDashboardCursor::ModbusMode { index: i } if i == index
-                            );
-
-                            let editing = selected
-                                && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
-
-                            let selected_index = if editing {
-                                if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                                    *i
-                                } else {
-                                    current_mode
-                                }
-                            } else {
-                                current_mode
-                            };
-
-                            let state = if editing {
-                                TextState::Editing
-                            } else if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
-
-                            rendered_value_spans = selector_spans::<ModbusConnectionMode>(selected_index, state)?;
-                        }
-                        Ok(rendered_value_spans)
-                    },
-                )?);
+                // Remove individual connection mode selector since we now have global mode
 
                 lines.push(create_line(
                     &lang().protocol.modbus.station_id,
@@ -189,12 +214,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.station_id.to_string()
                                 } else {
                                     "?".to_string()
@@ -241,12 +263,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     (item.register_mode as u8 - 1u8) as usize
                                 } else {
                                     2usize // default to Holding
@@ -296,12 +315,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.register_address.to_string()
                                 } else {
                                     "0".to_string()
@@ -348,12 +364,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
                             let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port.config;
-                                if let Some(item) = masters
-                                    .get(index)
-                                    .or_else(|| slaves.get(index - masters.len()))
-                                {
+                                if let Some(item) = stations.get(index) {
                                     item.register_length.to_string()
                                 } else {
                                     "1".to_string()
@@ -410,8 +423,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 }
 
                 if index < all_items.len() - 1 {
-                    let sep = Span::styled(sep_str.clone(), Style::default().fg(Color::DarkGray));
-                    lines.push(Line::from(vec![sep]));
+                    lines.push(separator_line(SEP_LEN));
                 }
             }
         }

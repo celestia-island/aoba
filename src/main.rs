@@ -11,17 +11,27 @@ fn spawn_gui_next_to_current_exe() -> bool {
         match Command::new(&exe_path).spawn() {
             Ok(mut child) => {
                 // Give the GUI process a short time to fail fast. If it exits quickly,
-                // Assume startup failed and return false so caller can fallback to TUI.
+                // assume startup failed and return false so caller can fallback to TUI.
                 let mut failed_early = false;
-                for _ in 0..30 {
-                    thread::sleep(Duration::from_millis(100));
+                let start = std::time::Instant::now();
+                let startup_timeout = Duration::from_secs(3);
+                let poll_sleep = Duration::from_millis(100);
+
+                loop {
                     match child.try_wait() {
                         Ok(Some(status)) => {
                             eprintln!("GUI process exited early with status={status}");
                             failed_early = true;
                             break;
                         }
-                        Ok(_) => continue,
+                        Ok(_) => {
+                            if start.elapsed() > startup_timeout {
+                                // No early exit within timeout; assume GUI kept running.
+                                break;
+                            }
+                            thread::sleep(poll_sleep);
+                            continue;
+                        }
                         Err(err) => {
                             eprintln!("Failed to query GUI process status: {err}");
                             failed_early = true;

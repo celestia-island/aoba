@@ -193,10 +193,8 @@ impl Cursor for ConfigPanelCursor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModbusDashboardCursor {
     AddLine,
-
-    ModbusMode {
-        index: usize,
-    },
+    /// Select the global mode for all stations in this port (Master/Slave)
+    ModbusMode,
     StationId {
         index: usize,
     },
@@ -220,10 +218,10 @@ impl Cursor for ModbusDashboardCursor {
         // Build flat ordered list using shared helper to keep behavior consistent
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
+        flat.push(ModbusDashboardCursor::ModbusMode);
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
-            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
             flat.push(ModbusDashboardCursor::StationId { index: idx });
             flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
             flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
@@ -248,10 +246,10 @@ impl Cursor for ModbusDashboardCursor {
     fn next(self) -> Self {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
+        flat.push(ModbusDashboardCursor::ModbusMode);
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
-            flat.push(ModbusDashboardCursor::ModbusMode { index: idx });
             flat.push(ModbusDashboardCursor::StationId { index: idx });
             flat.push(ModbusDashboardCursor::RegisterMode { index: idx });
             flat.push(ModbusDashboardCursor::RegisterStartAddress { index: idx });
@@ -274,40 +272,40 @@ impl Cursor for ModbusDashboardCursor {
     }
 
     fn view_offset(&self) -> usize {
-        // Compute the visual row offset for the cursor. Visual layout has top two rows
-        // reserved (Add line and blank), then each block consumes 1 (title) + N value rows
+        // Compute the visual row offset for the cursor. Visual layout has top three rows
+        // reserved (Add line, Global mode, and blank), then each block consumes 1 (title) + N value rows
         // where N = ceil(length/8).
         let mut offset = 0usize;
-        // Start with top two rows
-        offset += 2;
+        // Start with top three rows
+        offset += 3;
 
         // Build items and walk until we find the current selection
         if *self == ModbusDashboardCursor::AddLine {
             return 0;
         }
+        if *self == ModbusDashboardCursor::ModbusMode {
+            return 1;
+        }
 
         let items_vec = build_modbus_items_vec();
         // Walk items, accumulate heights until we reach the target
         for (idx, item) in items_vec.iter().enumerate() {
-            let config_rows = 5usize;
+            let config_rows = 4usize; // Reduced by 1 since we removed individual ModbusMode
             let reg_rows = (item.register_length as usize).div_ceil(8).max(0usize);
             let rows = 1 + config_rows + reg_rows;
 
             match self {
-                ModbusDashboardCursor::ModbusMode { index } if *index == idx => {
+                ModbusDashboardCursor::StationId { index } if *index == idx => {
                     return offset + 1;
                 }
-                ModbusDashboardCursor::StationId { index } if *index == idx => {
+                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
                     return offset + 2;
                 }
-                ModbusDashboardCursor::RegisterMode { index } if *index == idx => {
+                ModbusDashboardCursor::RegisterStartAddress { index } if *index == idx => {
                     return offset + 3;
                 }
-                ModbusDashboardCursor::RegisterStartAddress { index } if *index == idx => {
-                    return offset + 4;
-                }
                 ModbusDashboardCursor::RegisterLength { index } if *index == idx => {
-                    return offset + 5;
+                    return offset + 4;
                 }
                 ModbusDashboardCursor::Register {
                     slave_index,
@@ -348,31 +346,11 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
             read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
             if let Ok(port_data) = port_entry.read() {
-                let crate::protocol::status::types::port::PortConfig::Modbus { masters, slaves } =
+                let crate::protocol::status::types::port::PortConfig::Modbus { mode: _, stations } =
                     &port_data.config;
-                for it in masters.iter() {
+                for it in stations.iter() {
+                    // Just add the item as-is since the global mode is now stored separately
                     items_vec.push(it.clone());
-                }
-                if masters.is_empty() && slaves.is_empty() {
-                    // add a default placeholder only when there are no configured items
-                    let default_item = crate::protocol::status::types::modbus::ModbusRegisterItem {
-                        connection_mode:
-                            crate::protocol::status::types::modbus::ModbusConnectionMode::Slave,
-                        station_id: 1,
-                        register_mode: crate::protocol::status::types::modbus::RegisterMode::Coils,
-                        register_address: 0,
-                        register_length: 8,
-                        req_success: 0,
-                        req_total: 0,
-                        next_poll_at: std::time::Instant::now(),
-                        pending_requests: Vec::new(),
-                        values: Vec::new(),
-                    };
-                    items_vec.push(default_item);
-                } else {
-                    for it in slaves.iter() {
-                        items_vec.push(it.clone());
-                    }
                 }
             }
         }
