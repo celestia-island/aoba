@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Basic CI checks: format, clippy, tests
+  check:
+    name: Check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        rust: [stable, beta]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.rust }}
+        components: rustfmt, clippy
+    
+    - name: Install system dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Check formatting
+      run: cargo fmt --all -- --check
+    
+    - name: Check compilation
+      run: cargo check --all-targets --all-features
+    
+    - name: Clippy lints
+      run: cargo clippy --all-targets --all-features -- -D warnings
+    
+    - name: Run tests
+      run: cargo test --all-features
+
+  # Smoke tests with virtual serial ports
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+    needs: check
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Build release binaries
+      run: cargo build --release
+    
+    - name: Setup virtual serial ports
+      run: |
+        # Create virtual serial port pair
+        socat -d -d pty,raw,echo=0,link=/tmp/vcom1 pty,raw,echo=0,link=/tmp/vcom2 &
+        SOCAT_PID=$!
+        echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
+        sleep 2
+        
+        # Verify ports were created
+        ls -la /tmp/vcom1 /tmp/vcom2
+        
+        # Make ports accessible
+        sudo chmod 666 /tmp/vcom1 /tmp/vcom2
+    
+    - name: Run smoke tests
+      run: |
+        # Build and run our dedicated smoke test binary
+        cargo build --release --bin smoke_test
+        ./target/release/smoke_test
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        if [ ! -z "$SOCAT_PID" ]; then
+          kill $SOCAT_PID || true
+        fi
+
+  # TUI integration tests
+  tui-integration-test:
+    name: TUI Integration Tests  
+    runs-on: ubuntu-latest
+    needs: check
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+    
+    - name: Cache cargo registry
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+    
+    - name: Build test dependencies
+      run: |
+        # We'll create TUI integration tests in the next step
+        cargo build --release
+    
+    - name: Setup virtual serial ports
+      run: |
+        # Create virtual serial port pair for TUI testing
+        socat -d -d pty,raw,echo=0,link=/tmp/tui_vcom1 pty,raw,echo=0,link=/tmp/tui_vcom2 &
+        SOCAT_PID=$!
+        echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
+        sleep 2
+        
+        # Make ports accessible
+        sudo chmod 666 /tmp/tui_vcom1 /tmp/tui_vcom2
+    
+    - name: Run TUI integration tests
+      run: |
+        # Run TUI integration tests
+        cargo test --test tui_integration_tests -- --nocapture
+        
+        # Also run basic integration tests  
+        cargo test --test integration_tests -- --nocapture
+    
+    - name: Cleanup
+      if: always()
+      run: |
+        if [ ! -z "$SOCAT_PID" ]; then
+          kill $SOCAT_PID || true
+        fi
