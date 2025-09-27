@@ -177,7 +177,7 @@ fn run_core_thread(
                     // Notify UI to quit and then exit core thread
                     core_tx
                         .send(CoreToUi::Quit)
-                        .map_err(|e| anyhow!("failed to send Quit: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to send Quit to UI core: {}", e))?;
                     return Ok(());
                 }
                 UiToCore::Refresh => {
@@ -195,7 +195,7 @@ fn run_core_thread(
                     polling_enabled = true;
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to send Refreshed event to UI core: {}", e))?;
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
@@ -276,26 +276,25 @@ fn run_core_thread(
                                 Ok(())
                             })?;
                         }
-                        // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
-                        let mut stopped = false;
-                        for _ in 0..10 {
-                            match rt
-                                .evt_rx
-                                .recv_timeout(std::time::Duration::from_millis(100))
-                            {
-                                Ok(evt) => {
-                                    if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
-                                        stopped = true;
-                                        break;
-                                    }
-                                }
-                                Err(_) => {
-                                    // timed out waiting this interval - continue waiting
+                        // Wait up to 1s for the runtime thread to emit Stopped. Use a single
+                        // recv_timeout so we avoid short-interval polling while keeping the
+                        // operation bounded. Treat failure non-fatally (log) to match
+                        // surrounding code which tolerates stop failures.
+                        match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                            Ok(evt) => {
+                                if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
+                                    log::warn!(
+                                        "ToggleRuntime: received unexpected event while stopping {port_name}: {:?}",
+                                        evt
+                                    );
                                 }
                             }
-                        }
-                        if !stopped {
-                            log::warn!("ToggleRuntime: stop did not emit Stopped event within timeout for {port_name}");
+                            Err(flume::RecvTimeoutError::Timeout) => {
+                                log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
+                            }
+                            Err(e) => {
+                                log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {e}");
+                            }
                         }
 
                         if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
@@ -358,7 +357,7 @@ fn run_core_thread(
                         // All attempts failed: set transient error for UI
                         write_status(|status| {
                             status.temporarily.error = Some(types::ErrorInfo {
-                                message: format!("failed to start runtime: {e}"),
+                                message: format!("Failed to start runtime: {e}"),
                                 timestamp: chrono::Local::now(),
                             });
                             Ok(())

@@ -119,8 +119,9 @@ pub fn handle_master_mode(
                                 response.clone(),
                             ))
                     {
-                        let warn_msg =
-                            format!("Failed to send modbus master response for {port_name}: {e}");
+                        let warn_msg = format!(
+                            "Failed to send Modbus master response for port {port_name}: {e}"
+                        );
                         log::warn!("{warn_msg}");
 
                         // Also write to port logs
@@ -162,8 +163,10 @@ pub fn handle_master_mode(
                     });
 
                     log::info!("Sent modbus master response for {port_name}: {hex_response}");
-                } else {
-                    log::debug!("Could not generate response for modbus request: {hex_frame}");
+                    } else {
+                    log::debug!(
+                        "Could not generate a response for the Modbus request: {hex_frame}"
+                    );
                 }
             }
             crate::protocol::runtime::RuntimeEvent::Error(error) => {

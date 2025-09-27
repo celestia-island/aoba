@@ -54,7 +54,7 @@ pub enum RuntimeCommand {
     Write(Vec<u8>),
     Stop,
 }
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RuntimeEvent {
     FrameReceived(bytes::Bytes),
     FrameSent(bytes::Bytes),

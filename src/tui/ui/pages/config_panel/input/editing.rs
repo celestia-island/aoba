@@ -89,30 +89,37 @@ fn handle_editing_input(
                         if selected_cursor == types::cursor::ConfigPanelCursor::BaudRate {
                             if let Ok(parsed) = s.trim().parse::<u32>() {
                                 if (1000..=2_000_000).contains(&parsed) {
-                                    if with_port_write(&port, |port| {
+                                    // Prepare command inside lock and send outside to avoid holding write lock during send
+                                    let maybe_cmd = with_port_write(&port, |port| {
                                         if let types::port::PortState::OccupiedByThis {
                                             runtime,
                                             ..
                                         } = &mut port.state
                                         {
                                             runtime.current_cfg.baud = parsed;
-                                            let _ =
-                                                runtime.cmd_tx.send(RuntimeCommand::Reconfigure(
+                                            return Some((
+                                                runtime.cmd_tx.clone(),
+                                                RuntimeCommand::Reconfigure(
                                                     runtime.current_cfg.clone(),
-                                                ));
-                                            return Some(());
+                                                ),
+                                            ));
                                         }
                                         None
                                     })
-                                    .is_none()
-                                    {
-                                        log::warn!("failed to apply custom baud: failed to acquire write lock");
+                                    .and_then(|x| x);
+
+                                    if let Some((sender, cmd)) = maybe_cmd {
+                                        sender.send(cmd).map_err(|err| {
+                                            anyhow!("Failed to send Reconfigure: {}", err)
+                                        })?;
+                                    } else {
+                                        log::warn!("Failed to apply custom baud: could not acquire write lock for the port");
                                     }
                                 } else {
-                                    log::warn!("custom baud out of allowed range: {parsed}");
+                                    log::warn!("Custom baud is out of allowed range: {parsed}");
                                 }
                             } else {
-                                log::warn!("failed to parse custom baud: {s}");
+                                log::warn!("Failed to parse custom baud value: {s}");
                             }
                         }
 
@@ -409,17 +416,25 @@ fn handle_selector_commit(
                     })?;
                     return Ok(()); // Don't commit yet, wait for string input
                 } else {
-                    // Direct commit for non-custom baud rates
-                    with_port_write(port, |port| {
+                    let maybe_cmd = with_port_write(port, |port| {
                         if let types::port::PortState::OccupiedByThis { runtime, .. } =
                             &mut port.state
                         {
                             runtime.current_cfg.baud = sel.as_u32();
-                            let _ = runtime
-                                .cmd_tx
-                                .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                            return Some((
+                                runtime.cmd_tx.clone(),
+                                RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
+                            ));
                         }
-                    });
+                        None
+                    })
+                    .and_then(|x| x);
+
+                    if let Some((sender, cmd)) = maybe_cmd {
+                        sender
+                            .send(cmd)
+                            .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                    }
                 }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
@@ -429,30 +444,48 @@ fn handle_selector_commit(
                     2 => 7,
                     _ => 8,
                 };
-                with_port_write(port, |port| {
+                let maybe_cmd = with_port_write(port, |port| {
                     if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
                     {
                         runtime.current_cfg.data_bits = data_bits;
-                        let _ = runtime
-                            .cmd_tx
-                            .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        return Some((
+                            runtime.cmd_tx.clone(),
+                            RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
+                        ));
                     }
-                });
+                    None
+                })
+                .and_then(|x| x);
+
+                if let Some((sender, cmd)) = maybe_cmd {
+                    sender
+                        .send(cmd)
+                        .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                }
             }
             types::cursor::ConfigPanelCursor::StopBits => {
                 let stop_bits = match i {
                     0 => 1u8,
                     _ => 2u8,
                 };
-                with_port_write(port, |port| {
+                let maybe_cmd = with_port_write(port, |port| {
                     if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
                     {
                         runtime.current_cfg.stop_bits = stop_bits;
-                        let _ = runtime
-                            .cmd_tx
-                            .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        return Some((
+                            runtime.cmd_tx.clone(),
+                            RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
+                        ));
                     }
-                });
+                    None
+                })
+                .and_then(|x| x);
+
+                if let Some((sender, cmd)) = maybe_cmd {
+                    sender
+                        .send(cmd)
+                        .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                }
             }
             types::cursor::ConfigPanelCursor::Parity => {
                 let parity = match i {
@@ -460,15 +493,24 @@ fn handle_selector_commit(
                     1 => serialport::Parity::Odd,
                     _ => serialport::Parity::Even,
                 };
-                with_port_write(port, |port| {
+                let maybe_cmd = with_port_write(port, |port| {
                     if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
                     {
                         runtime.current_cfg.parity = parity;
-                        let _ = runtime
-                            .cmd_tx
-                            .send(RuntimeCommand::Reconfigure(runtime.current_cfg.clone()));
+                        return Some((
+                            runtime.cmd_tx.clone(),
+                            RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
+                        ));
                     }
-                });
+                    None
+                })
+                .and_then(|x| x);
+
+                if let Some((sender, cmd)) = maybe_cmd {
+                    sender
+                        .send(cmd)
+                        .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                }
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {
                 // For now only Modbus RTU option - no action needed

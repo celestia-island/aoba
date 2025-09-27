@@ -54,7 +54,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let input_area = chunks[1];
 
     if let Some((logs, selected_item)) = extract_log_data()? {
-        let _ = render_log_display(frame, logs_area, &logs, selected_item);
+        render_log_display(frame, logs_area, &logs, selected_item)?;
     }
 
     render_log_input(frame, input_area)?;

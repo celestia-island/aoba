@@ -27,7 +27,7 @@ pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Opti
                     {
                         Ok(tuple)
                     } else {
-                        log::warn!("extract_log_data: failed to acquire read lock for {port_name}");
+                        log::warn!("Failed to acquire read lock for port {port_name} while extracting log data");
                         Ok(None)
                     }
                 } else {
@@ -252,7 +252,7 @@ pub fn render_log_display(
         logs.len()
     };
     let total_items = logs.len();
-    let position_text = format!("{} / {}", current_pos, total_items);
+    let position_text = format!(" {} / {} ", current_pos, total_items);
 
     // Render position counter at bottom-right of the frame
     let position_area = Rect {
