@@ -48,6 +48,9 @@ pub struct PortData {
     pub logs: Vec<PortLogEntry>,
     pub log_auto_scroll: bool,
     pub log_clear_pending: bool,
+
+    /// Cache for the last ModbusRequest object to avoid recreating it
+    pub last_modbus_request: Option<Arc<Mutex<rmodbus::client::ModbusRequest>>>,
 }
 
 impl Default for PortData {
@@ -61,6 +64,7 @@ impl Default for PortData {
             logs: Vec::new(),
             log_auto_scroll: true,
             log_clear_pending: false,
+            last_modbus_request: None,
         }
     }
 }
@@ -71,19 +75,21 @@ impl Default for PortData {
 #[derive(Debug, Clone)]
 pub enum PortConfig {
     Modbus {
+        /// Global master/slave mode for this port. All stations in this port
+        /// will operate in the same mode.
+        mode: types::modbus::ModbusConnectionMode,
         /// Stores logical entries related to Modbus (using RegisterEntry as a
-        /// lightweight placeholder for per-endpoint configuration). This can be
-        /// replaced by a more appropriate struct later.
-        masters: Vec<types::modbus::ModbusRegisterItem>,
-        slaves: Vec<types::modbus::ModbusRegisterItem>,
+        /// lightweight placeholder for per-endpoint configuration). The connection_mode
+        /// field in individual items is now derived from the global mode above.
+        stations: Vec<types::modbus::ModbusRegisterItem>,
     },
 }
 
 impl Default for PortConfig {
     fn default() -> Self {
         PortConfig::Modbus {
-            masters: Vec::new(),
-            slaves: Vec::new(),
+            mode: types::modbus::ModbusConnectionMode::default_master(),
+            stations: Vec::new(),
         }
     }
 }

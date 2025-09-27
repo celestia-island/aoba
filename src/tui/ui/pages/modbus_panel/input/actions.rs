@@ -23,19 +23,16 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             create_new_modbus_entry()?;
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
         }
-        types::cursor::ModbusDashboardCursor::ModbusMode { index } => {
-            // Get the current connection mode value from port config
-            let current_value = read_status(|status| {
+        types::cursor::ModbusDashboardCursor::ModbusMode => {
+            // Toggle global mode for this port between Master and Slave
+            let current_mode = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     let port_name = format!("COM{}", selected_port + 1);
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
                         if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { masters, slaves } =
+                            let types::port::PortConfig::Modbus { mode, stations: _ } =
                                 &port_guard.config;
-                            let all_items: Vec<_> = masters.iter().chain(slaves.iter()).collect();
-                            if let Some(item) = all_items.get(index) {
-                                return Ok(item.connection_mode as usize);
-                            }
+                            return Ok(if mode.is_master() { 0 } else { 1 });
                         }
                     }
                 }
@@ -44,7 +41,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
 
             write_status(|status| {
                 status.temporarily.input_raw_buffer =
-                    types::ui::InputRawBuffer::Index(current_value);
+                    types::ui::InputRawBuffer::Index(current_mode);
                 Ok(())
             })?;
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
@@ -56,9 +53,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     let port_name = format!("COM{}", selected_port + 1);
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
                         if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { masters, slaves } =
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port_guard.config;
-                            let all_items: Vec<_> = masters.iter().chain(slaves.iter()).collect();
+                            let all_items: Vec<_> = stations.iter().collect();
                             if let Some(item) = all_items.get(index) {
                                 return Ok((item.register_mode as u8 - 1) as usize);
                             }
@@ -103,9 +100,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 let register_mode = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
                         if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { masters, slaves } =
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port_guard.config;
-                            let all_items: Vec<_> = masters.iter().chain(slaves.iter()).collect();
+                            let all_items: Vec<_> = stations.iter().collect();
                             if let Some(item) = all_items.get(slave_index) {
                                 return Ok(Some(item.register_mode));
                             }
@@ -125,23 +122,17 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 })?
                                 .ok_or(anyhow!("Port not found"))?,
                                 |port| {
-                                    let types::port::PortConfig::Modbus { masters, slaves } =
+                                    let types::port::PortConfig::Modbus { mode: _, stations } =
                                         &mut port.config;
-                                    let mut all_items: Vec<_> =
-                                        masters.iter_mut().chain(slaves.iter_mut()).collect();
+                                    let mut all_items: Vec<_> = stations.iter_mut().collect();
                                     if let Some(item) = all_items.get_mut(slave_index) {
-                                        if let Some(current_value) =
-                                            item.values.get_mut(register_index)
-                                        {
-                                            *current_value =
-                                                if *current_value == 0 { 1 } else { 0 };
-                                        } else {
-                                            // Extend values array if needed
-                                            while item.values.len() <= register_index {
-                                                item.values.push(0);
-                                            }
-                                            item.values[register_index] = 1;
-                                        }
+                                        // TODO: Update global storage when mode is Master
+                                        // For now, just log the action
+                                        log::info!(
+                                            "Toggle register {} for station {}",
+                                            register_index,
+                                            item.station_id
+                                        );
                                     }
                                 },
                             );
@@ -153,16 +144,12 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                             let current_value = read_status(|status| {
                                 if let Some(port_entry) = status.ports.map.get(&port_name) {
                                     if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { masters, slaves } =
+                                        let types::port::PortConfig::Modbus { mode: _, stations } =
                                             &port_guard.config;
-                                        let all_items: Vec<_> =
-                                            masters.iter().chain(slaves.iter()).collect();
-                                        if let Some(item) = all_items.get(slave_index) {
-                                            return Ok(item
-                                                .values
-                                                .get(register_index)
-                                                .copied()
-                                                .unwrap_or(0));
+                                        let all_items: Vec<_> = stations.iter().collect();
+                                        if let Some(_item) = all_items.get(slave_index) {
+                                            // TODO: Read from global storage when mode is Master
+                                            return Ok(0); // Placeholder value
                                         }
                                     }
                                 }
@@ -228,21 +215,21 @@ fn create_new_modbus_entry() -> Result<()> {
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             with_port_write(&port, |port| {
-                let types::port::PortConfig::Modbus { masters, .. } = &mut port.config;
+                let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
                 // Create a new master entry with default values
                 let new_entry = types::modbus::ModbusRegisterItem {
-                    connection_mode: types::modbus::ModbusConnectionMode::Master,
+                    connection_mode: types::modbus::ModbusConnectionMode::default_master(),
                     station_id: 1,
                     register_mode: types::modbus::RegisterMode::Holding,
                     register_address: 0,
                     register_length: 1,
                     req_success: 0,
                     req_total: 0,
-                    next_poll_at: std::time::Instant::now(),
+                    next_poll_at: std::time::Instant::now() - std::time::Duration::from_secs(1), // Start immediately
+                    last_request_time: None,
                     pending_requests: Vec::new(),
-                    values: Vec::new(),
                 };
-                masters.push(new_entry);
+                stations.push(new_entry);
                 log::info!("Created new modbus master entry with station_id=1");
             });
         }

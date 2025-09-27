@@ -24,7 +24,7 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
                     }) {
                         val
                     } else {
-                        log::warn!("sanitize_configpanel_cursor: failed to acquire read lock for {port_name}");
+                        log::warn!("Failed to acquire read lock for port {port_name} while sanitizing the config panel cursor");
                         false
                     }
                 } else {
