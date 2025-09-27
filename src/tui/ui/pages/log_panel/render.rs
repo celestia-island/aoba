@@ -28,7 +28,13 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     let mut second_row = vec![lang().hotkeys.press_esc_cancel.as_str().to_string()];
 
     if show_follow_hint {
-        second_row.insert(0, "v=follow latest logs".to_string());
+        // Use i18n template: hint_kv_template expects {key} and {label}
+        let key = "v";
+        let label = lang().tabs.log.hint_follow_on.as_str();
+        let template = lang().hotkeys.hint_kv_template.as_str();
+        // Replace placeholders {key} and {label}
+        let hint = template.replace("{key}", key).replace("{label}", label);
+        second_row.insert(0, hint);
     }
 
     hints.push(second_row);
@@ -47,8 +53,8 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let logs_area = chunks[0];
     let input_area = chunks[1];
 
-    if let Some((logs, port_log_auto_scroll, selected_item)) = extract_log_data()? {
-        let _ = render_log_display(frame, logs_area, &logs, port_log_auto_scroll, selected_item);
+    if let Some((logs, selected_item)) = extract_log_data()? {
+        let _ = render_log_display(frame, logs_area, &logs, selected_item);
     }
 
     render_log_input(frame, input_area)?;

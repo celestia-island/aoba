@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// Extract log data from current page state
-pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, bool, Option<usize>)>> {
+pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Option<usize>)>> {
     let res = read_status(|status| match &status.page {
         types::Page::LogPanel {
             selected_port,
@@ -22,9 +22,9 @@ pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, bool
         } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(tuple) = with_port_read(port, |pd| {
-                        Some((pd.logs.clone(), pd.log_auto_scroll, *selected_item))
-                    }) {
+                    if let Some(tuple) =
+                        with_port_read(port, |pd| Some((pd.logs.clone(), *selected_item)))
+                    {
                         Ok(tuple)
                     } else {
                         log::warn!("extract_log_data: failed to acquire read lock for {port_name}");
@@ -47,7 +47,6 @@ pub fn render_log_display(
     frame: &mut Frame,
     area: Rect,
     logs: &[types::port::PortLogEntry],
-    auto_scroll: bool,
     selected_item: Option<usize>,
 ) -> Result<()> {
     // Each log entry is rendered as a 3-line block
