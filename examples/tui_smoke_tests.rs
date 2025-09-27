@@ -9,23 +9,23 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔥 Starting TUI Smoke Tests...");
-    
+
     // Test 1: Basic TUI startup and Ctrl+C exit
     println!("✅ Test 1: TUI startup and Ctrl+C exit");
     test_tui_startup_ctrl_c_exit()?;
-    
-    // Test 2: TUI content detection  
+
+    // Test 2: TUI content detection
     println!("✅ Test 2: TUI content detection");
     test_tui_startup_detection()?;
-    
+
     // Test 3: TUI with virtual serial ports
     println!("✅ Test 3: TUI with virtual serial ports");
     test_tui_with_virtual_ports().await?;
-    
+
     // Test 4: Basic expectrl functionality
     println!("✅ Test 4: Basic expectrl functionality");
     test_expectrl_basic_functionality()?;
-    
+
     println!("🎉 All TUI smoke tests passed!");
     Ok(())
 }
@@ -42,12 +42,13 @@ fn test_tui_startup_ctrl_c_exit() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        ).into());
+        )
+        .into());
     }
 
     // Start the TUI application
-    let mut session = spawn("./target/release/aoba --tui")
-        .expect("Failed to spawn TUI application");
+    let mut session =
+        spawn("./target/release/aoba --tui").expect("Failed to spawn TUI application");
 
     // Give the TUI time to initialize (shorter time for CI)
     std::thread::sleep(Duration::from_millis(500));
@@ -74,12 +75,13 @@ fn test_tui_startup_detection() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        ).into());
+        )
+        .into());
     }
 
     // Test TUI startup and look for expected content
-    let mut session = spawn("./target/release/aoba --tui")
-        .expect("Failed to spawn TUI application");
+    let mut session =
+        spawn("./target/release/aoba --tui").expect("Failed to spawn TUI application");
 
     // Give the TUI time to initialize and display its interface
     std::thread::sleep(Duration::from_millis(800));
@@ -90,7 +92,10 @@ fn test_tui_startup_detection() -> Result<(), Box<dyn std::error::Error>> {
 
     match session.expect(expectrl::Regex(r"(AOBA|COMPorts|Press.*quit|Refresh)")) {
         Ok(found) => {
-            println!("   ✓ Successfully detected TUI content: {:?}", found.matches());
+            println!(
+                "   ✓ Successfully detected TUI content: {:?}",
+                found.matches()
+            );
             found_tui_content = true;
         }
         Err(e) => {
@@ -108,7 +113,7 @@ fn test_tui_startup_detection() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("   ⚠ TUI started but content detection was inconclusive");
     }
-    
+
     Ok(())
 }
 
@@ -152,12 +157,13 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
             return Err(format!(
                 "Failed to build application: {}",
                 String::from_utf8_lossy(&build_output.stderr)
-            ).into());
+            )
+            .into());
         }
 
         // Test TUI with virtual ports
-        let mut session = spawn("./target/release/aoba --tui")
-            .expect("Failed to spawn TUI application");
+        let mut session =
+            spawn("./target/release/aoba --tui").expect("Failed to spawn TUI application");
 
         // Give the TUI time to initialize and potentially detect ports
         std::thread::sleep(Duration::from_millis(1000));
@@ -177,7 +183,7 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
     // Remove virtual port files if they exist
     let _ = std::fs::remove_file("/tmp/smoke_vcom1");
     let _ = std::fs::remove_file("/tmp/smoke_vcom2");
-    
+
     Ok(())
 }
 
@@ -200,6 +206,6 @@ fn test_expectrl_basic_functionality() -> Result<(), Box<dyn std::error::Error>>
             return Err(format!("expectrl basic functionality test failed: {:?}", e).into());
         }
     }
-    
+
     Ok(())
 }

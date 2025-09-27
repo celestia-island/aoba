@@ -68,6 +68,9 @@ mod tests {
         let input = "⠋ Loading... 14:30:25 Status: ● Active ○ Idle 2024-01-15 14:30:25";
         let output = filter_dynamic_content(input);
         // The spinner at start gets replaced and trimmed, date-time only gets time replaced
-        assert_eq!(output, "Loading... XX:XX:XX Status:   Active   Idle 2024-01-15 XX:XX:XX");
+        assert_eq!(
+            output,
+            "Loading... XX:XX:XX Status:   Active   Idle 2024-01-15 XX:XX:XX"
+        );
     }
 }

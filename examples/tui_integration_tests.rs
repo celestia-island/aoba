@@ -7,26 +7,26 @@ use std::fs;
 use std::process::Command;
 use std::time::Duration;
 
-#[tokio::main] 
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎭 Starting TUI Integration Tests (User Simulation)...");
-    
+
     // Test 1: Basic TUI startup and shutdown
     println!("✅ Test 1: TUI startup and shutdown");
     test_tui_startup_shutdown().await?;
-    
+
     // Test 2: TUI navigation and interaction
     println!("✅ Test 2: TUI navigation and interaction");
     test_tui_navigation().await?;
-    
+
     // Test 3: TUI with virtual serial port interaction
     println!("✅ Test 3: TUI with virtual serial ports");
     test_tui_serial_port_interaction().await?;
-    
+
     // Test 4: Dynamic content filtering
     println!("✅ Test 4: Dynamic content filtering");
     test_filter_dynamic_content();
-    
+
     println!("🎉 All TUI integration tests passed!");
     Ok(())
 }
@@ -46,7 +46,8 @@ async fn test_tui_startup_shutdown() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        ).into());
+        )
+        .into());
     }
 
     // Spawn the TUI process
@@ -57,7 +58,9 @@ async fn test_tui_startup_shutdown() -> Result<(), Box<dyn std::error::Error>> {
     let _ = session.expect(Regex(".*"));
 
     // Send quit command (typically 'q' or Ctrl+C)
-    session.send_line("q").map_err(|e| format!("Failed to send quit command: {}", e))?;
+    session
+        .send_line("q")
+        .map_err(|e| format!("Failed to send quit command: {}", e))?;
 
     println!("   ✓ TUI startup/shutdown test completed");
 
@@ -79,7 +82,8 @@ async fn test_tui_navigation() -> Result<(), Box<dyn std::error::Error>> {
         return Err(format!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        ).into());
+        )
+        .into());
     }
 
     let mut session = spawn("./target/release/aoba --tui")
@@ -89,30 +93,44 @@ async fn test_tui_navigation() -> Result<(), Box<dyn std::error::Error>> {
     let _ = session.expect(Regex(".*"));
 
     // Test navigation keys
-    session.send("\t").map_err(|e| format!("Failed to send Tab: {}", e))?; // Tab key
+    session
+        .send("\t")
+        .map_err(|e| format!("Failed to send Tab: {}", e))?; // Tab key
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
-    session.send_line("").map_err(|e| format!("Failed to send Enter: {}", e))?; // Enter key
+
+    session
+        .send_line("")
+        .map_err(|e| format!("Failed to send Enter: {}", e))?; // Enter key
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Send arrow keys for navigation
-    session.send("\x1b[A").map_err(|e| format!("Failed to send Up arrow: {}", e))?; // Up arrow
+    session
+        .send("\x1b[A")
+        .map_err(|e| format!("Failed to send Up arrow: {}", e))?; // Up arrow
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
-    session.send("\x1b[B").map_err(|e| format!("Failed to send Down arrow: {}", e))?; // Down arrow
+
+    session
+        .send("\x1b[B")
+        .map_err(|e| format!("Failed to send Down arrow: {}", e))?; // Down arrow
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
-    session.send("\x1b[C").map_err(|e| format!("Failed to send Right arrow: {}", e))?; // Right arrow
+
+    session
+        .send("\x1b[C")
+        .map_err(|e| format!("Failed to send Right arrow: {}", e))?; // Right arrow
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
-    session.send("\x1b[D").map_err(|e| format!("Failed to send Left arrow: {}", e))?; // Left arrow
+
+    session
+        .send("\x1b[D")
+        .map_err(|e| format!("Failed to send Left arrow: {}", e))?; // Left arrow
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Take snapshots of current terminal content would go here
     // For now, we just verify the navigation commands were sent successfully
-    
+
     // Exit gracefully
-    session.send_line("q").map_err(|e| format!("Failed to send quit: {}", e))?;
+    session
+        .send_line("q")
+        .map_err(|e| format!("Failed to send quit: {}", e))?;
     println!("   ✓ TUI navigation test completed");
 
     cleanup_virtual_serial_ports().await?;
@@ -133,7 +151,8 @@ async fn test_tui_serial_port_interaction() -> Result<(), Box<dyn std::error::Er
         return Err(format!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        ).into());
+        )
+        .into());
     }
 
     let mut session = spawn("./target/release/aoba --tui")
@@ -144,10 +163,14 @@ async fn test_tui_serial_port_interaction() -> Result<(), Box<dyn std::error::Er
 
     // Navigate to port configuration (exact keys depend on UI layout)
     // This is a placeholder - adjust based on actual TUI flow
-    session.send("\t").map_err(|e| format!("Failed to navigate: {}", e))?; // Navigate to port list
+    session
+        .send("\t")
+        .map_err(|e| format!("Failed to navigate: {}", e))?; // Navigate to port list
     tokio::time::sleep(Duration::from_millis(100)).await;
-    
-    session.send_line("").map_err(|e| format!("Failed to select: {}", e))?; // Select a port
+
+    session
+        .send_line("")
+        .map_err(|e| format!("Failed to select: {}", e))?; // Select a port
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     // TODO: Add specific interactions based on TUI behavior
@@ -159,7 +182,9 @@ async fn test_tui_serial_port_interaction() -> Result<(), Box<dyn std::error::Er
     // - Verify received data
 
     // Exit
-    session.send_line("q").map_err(|e| format!("Failed to quit: {}", e))?;
+    session
+        .send_line("q")
+        .map_err(|e| format!("Failed to quit: {}", e))?;
     println!("   ✓ TUI serial port test completed");
 
     cleanup_virtual_serial_ports().await?;
@@ -183,14 +208,10 @@ async fn setup_virtual_serial_ports() -> Result<(), Box<dyn std::error::Error>> 
 
     // Set permissions on the virtual ports
     if std::path::Path::new("/tmp/vcom1").exists() {
-        let _ = Command::new("chmod")
-            .args(["666", "/tmp/vcom1"])
-            .output();
+        let _ = Command::new("chmod").args(["666", "/tmp/vcom1"]).output();
     }
     if std::path::Path::new("/tmp/vcom2").exists() {
-        let _ = Command::new("chmod")
-            .args(["666", "/tmp/vcom2"])
-            .output();
+        let _ = Command::new("chmod").args(["666", "/tmp/vcom2"]).output();
     }
 
     Ok(())
@@ -200,11 +221,11 @@ async fn setup_virtual_serial_ports() -> Result<(), Box<dyn std::error::Error>> 
 async fn cleanup_virtual_serial_ports() -> Result<(), Box<dyn std::error::Error>> {
     // Kill any socat processes (basic cleanup)
     let _ = Command::new("pkill").arg("socat").output();
-    
+
     // Remove virtual port files if they exist
     let _ = fs::remove_file("/tmp/vcom1");
     let _ = fs::remove_file("/tmp/vcom2");
-    
+
     Ok(())
 }
 
@@ -240,10 +261,10 @@ fn filter_dynamic_content(content: &str) -> String {
 fn test_filter_dynamic_content() {
     let test_content = "⠋ Loading... 14:30:25 Status: ● Active ○ Idle 2024-01-15 14:30:25";
     let filtered = filter_dynamic_content(test_content);
-    
+
     println!("   ✓ Original: {}", test_content);
     println!("   ✓ Filtered: {}", filtered);
-    
+
     // Verify that dynamic content has been filtered
     assert!(!filtered.contains("⠋"));
     assert!(!filtered.contains("14:30:25"));
@@ -251,6 +272,6 @@ fn test_filter_dynamic_content() {
     assert!(!filtered.contains("○"));
     assert!(filtered.contains("XX:XX:XX"));
     assert!(filtered.contains("XXXX-XX-XX XX:XX:XX"));
-    
+
     println!("   ✓ Dynamic content filtering test passed");
 }
