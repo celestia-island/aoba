@@ -6,10 +6,15 @@ pub mod i18n;
 pub mod protocol;
 
 use anyhow::Result;
+
+#[cfg(debug_assertions)]
 use chrono::Local;
+#[cfg(debug_assertions)]
 use std::{fs::File, io::Write};
 
+#[cfg(debug_assertions)]
 use env_logger::Builder;
+#[cfg(debug_assertions)]
 use log::LevelFilter;
 
 /// Common initialization used by both GUI and TUI entrypoints.

@@ -51,7 +51,9 @@ pub fn get_serial_param_value_by_cursor(
         }) {
             return s;
         } else {
-            log::warn!("Failed to acquire read lock for port while getting serial parameter by cursor");
+            log::warn!(
+                "Failed to acquire read lock for port while getting serial parameter by cursor"
+            );
         }
     }
 
