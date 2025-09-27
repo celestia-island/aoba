@@ -67,7 +67,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 {
                     // updated
                 } else {
-                    log::warn!("scan_ports: failed to acquire write lock for port {name}");
+                    log::warn!("Scan_ports: failed to acquire write lock for port {name}");
                 }
             } else {
                 // Insert a new PortData for newly discovered port (wrap in Arc<RwLock<>>)
@@ -113,7 +113,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                         to_stop.push((key.clone(), rt));
                     }
                 } else {
-                    log::warn!("scan_ports: failed to acquire read lock for port {key}");
+                    log::warn!("Scan_ports: failed to acquire read lock for port {key}");
                 }
             }
             to_remove_names.push(key.clone());
@@ -133,28 +133,26 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     // blocking other status writers. We still collected the runtime handles
     // while holding the write lock above.
     for (name, rt) in to_stop.into_iter() {
-        let _ = rt
-            .cmd_tx
-            .send(crate::protocol::runtime::RuntimeCommand::Stop);
-        let mut stopped = false;
-        for _ in 0..10 {
-            match rt
-                .evt_rx
-                .recv_timeout(std::time::Duration::from_millis(100))
-            {
-                Ok(evt) => {
-                    if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
-                        stopped = true;
-                        break;
-                    }
-                }
-                Err(_) => {
-                    // timeout interval, continue waiting
+        rt.cmd_tx
+            .send(crate::protocol::runtime::RuntimeCommand::Stop)
+            .map_err(|e| anyhow!("failed to send Stop to runtime {name}: {}", e))?;
+        // Wait for the runtime to emit a Stopped event. Use blocking recv so
+        // that if the channel is disconnected we surface an error to the
+        // caller instead of silently retrying timeouts.
+        match rt.evt_rx.recv() {
+            Ok(evt) => {
+                if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
+                    // expected, proceed
+                } else {
+                    log::warn!(
+                        "scan_ports: received unexpected event while stopping {name}: {:?}",
+                        evt
+                    );
                 }
             }
-        }
-        if !stopped {
-            log::warn!("scan_ports: stop did not emit Stopped event within timeout for {name}",);
+            Err(e) => {
+                return Err(anyhow!("failed to receive Stopped event for {name}: {}", e));
+            }
         }
     }
 

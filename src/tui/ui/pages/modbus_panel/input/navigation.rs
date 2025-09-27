@@ -80,10 +80,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         if let Some(port_entry) = status.ports.map.get(&port_name) {
                             if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port_guard.config;
-                                let all_items: Vec<_> =
-                                    masters.iter().chain(slaves.iter()).collect();
+                                let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     return Ok(item.register_length as usize);
                                 }
@@ -145,10 +144,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         if let Some(port_entry) = status.ports.map.get(&port_name) {
                             if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port_guard.config;
-                                let all_items: Vec<_> =
-                                    masters.iter().chain(slaves.iter()).collect();
+                                let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     return Ok((
                                         item.register_length as usize,
@@ -240,10 +238,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         if let Some(port_entry) = status.ports.map.get(&port_name) {
                             if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { masters, slaves } =
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
                                     &port_guard.config;
-                                let all_items: Vec<_> =
-                                    masters.iter().chain(slaves.iter()).collect();
+                                let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
                                     return Ok((
@@ -277,8 +274,8 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     } else {
                         // At bottom row of current slave
                         if has_next_slave {
-                            // Jump to connection mode of next slave
-                            types::cursor::ModbusDashboardCursor::ModbusMode {
+                            // Jump to station ID of next slave
+                            types::cursor::ModbusDashboardCursor::StationId {
                                 index: slave_index + 1,
                             }
                         } else {

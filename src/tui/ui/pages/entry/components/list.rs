@@ -52,7 +52,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
                 {
                     (pn, st)
                 } else {
-                    log::warn!("render_ports_list: failed to acquire read lock for {name}");
+                    log::warn!("Failed to acquire read lock for port {name} while rendering the ports list");
                     (
                         PortData::default().port_name.clone(),
                         PortData::default().state.clone(),
