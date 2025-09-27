@@ -35,6 +35,7 @@ derive_struct! {
                 selected_port: usize,
                 input_mode: InputMode = InputMode::Ascii,
                 view_offset: usize = 0,
+                selected_item: Option<usize> = None,
             },
             About {
                 view_offset: usize,

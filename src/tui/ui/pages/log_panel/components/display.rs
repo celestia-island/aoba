@@ -2,25 +2,24 @@ use anyhow::Result;
 
 use ratatui::{
     prelude::*,
-    style::{Color, Style},
+    style::{Color, Style, Modifier},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 
 use crate::{
     i18n::lang,
     protocol::status::{read_status, types, with_port_read},
-    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
 };
 
 /// Extract log data from current page state
-pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, bool)>> {
+pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, bool, Option<usize>)>> {
     let res = read_status(|status| match &status.page {
-        types::Page::LogPanel { selected_port, .. } => {
+        types::Page::LogPanel { selected_port, selected_item, .. } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
                     if let Some(tuple) =
-                        with_port_read(port, |pd| Some((pd.logs.clone(), pd.log_auto_scroll)))
+                        with_port_read(port, |pd| Some((pd.logs.clone(), pd.log_auto_scroll, *selected_item)))
                     {
                         Ok(tuple)
                     } else {
@@ -47,26 +46,25 @@ pub fn render_log_display(
     view_offset: usize,
     _follow_active: bool, // Parameter kept for compatibility but not used
 ) -> Result<()> {
-    // Get the actual log_auto_scroll setting from PortData
-    let auto_scroll = read_status(|status| {
-        if let types::Page::LogPanel { selected_port, .. } = &status.page {
+    // Get the actual log_auto_scroll setting and selected_item from PortData
+    let (auto_scroll, selected_item) = read_status(|status| {
+        if let types::Page::LogPanel { selected_port, selected_item, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
                     if let Ok(port_data) = port.read() {
-                        return Ok(port_data.log_auto_scroll);
+                        return Ok((port_data.log_auto_scroll, *selected_item));
                     }
                 }
             }
         }
-        Ok(false) // Default to false if we can't get the setting
+        Ok((false, None)) // Default values if we can't get the setting
     })
-    .unwrap_or(false);
+    .unwrap_or((false, None));
 
     // Each log entry is rendered as a 3-line block
-    // left column: two characters reserved; when selected show a marker
-    let total_lines = area.height as usize;
     let lines_per_item = 3usize;
-    let items_visible = std::cmp::max(1, total_lines / lines_per_item);
+    let content_height = area.height.saturating_sub(2) as usize; // Reserve space for borders
+    let items_visible = std::cmp::max(1, content_height / lines_per_item);
 
     // view_offset is treated as index into log entries (item index)
     let mut rendered_lines: Vec<Line> = Vec::new();
@@ -171,8 +169,8 @@ pub fn render_log_display(
         if let Some(entry) = logs.get(idx) {
             let (l1, l2, l3) = format_entry(entry);
 
-            // Determine if this item is selected (we treat the topmost visible item as selected)
-            let selected = i == 0;
+            // Determine if this item is selected
+            let selected = selected_item.map_or(false, |sel_idx| sel_idx == idx);
 
             // Prefix: two-space area; show '>' in green when selected, otherwise two spaces
             let prefix_span = if selected {
@@ -197,30 +195,75 @@ pub fn render_log_display(
         }
     }
 
-    let lines = rendered_lines;
-
-    let title = if auto_scroll {
-        Some(format!(
-            " {} [Auto] ",
-            lang().protocol.common.log_monitoring.clone()
-        ))
+    // Build the title with internationalized text
+    let log_title = Span::styled(
+        lang().tabs.tab_log.clone(),
+        Style::default().add_modifier(Modifier::BOLD)
+    );
+    
+    let follow_status = if auto_scroll {
+        Span::styled(
+            format!(" ({})", lang().tabs.log.hint_follow_on.clone()),
+            Style::default().fg(Color::Green)
+        )
     } else {
-        Some(format!(
-            " {} ",
-            lang().protocol.common.log_monitoring.clone()
-        ))
+        Span::styled(
+            format!(" ({})", lang().tabs.log.hint_follow_off.clone()), 
+            Style::default().fg(Color::Yellow)
+        )
     };
 
-    // Use the project's boxed paragraph helper which includes padding and optional scrollbar
-    render_boxed_paragraph(
-        frame,
-        area,
-        lines,
-        view_offset,
-        title.as_deref(),
-        false,
-        true,
-    );
+    // Calculate current position info: current_item/total_items
+    let current_pos = selected_item.map_or(1, |sel| sel + 1);
+    let total_items = logs.len();
+    let position_info = Span::raw(format!(" {}/{}", current_pos, total_items));
+
+    let title_line = Line::from(vec![
+        Span::raw(" "),
+        log_title,
+        follow_status,
+        position_info,
+        Span::raw(" ")
+    ]);
+
+    // Create block with custom border and title
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(title_line);
+
+    // Create inner area with 1 character left padding
+    let inner = block.inner(area);
+    let padded_area = Rect {
+        x: inner.x + 1,
+        y: inner.y,
+        width: inner.width.saturating_sub(1),
+        height: inner.height,
+    };
+
+    // Render the block first
+    frame.render_widget(block, area);
+
+    // Then render the content with padding
+    let paragraph = Paragraph::new(rendered_lines);
+    frame.render_widget(paragraph, padded_area);
+
+    // Add scrollbar if needed
+    if logs.len() > items_visible {
+        let scrollbar = Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+        
+        let mut scrollbar_state = ScrollbarState::default()
+            .content_length(logs.len())
+            .position(view_offset);
+        
+        frame.render_stateful_widget(
+            scrollbar,
+            inner,
+            &mut scrollbar_state,
+        );
+    }
 
     Ok(())
 }

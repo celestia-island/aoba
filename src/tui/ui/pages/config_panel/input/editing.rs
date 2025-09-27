@@ -252,6 +252,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                         selected_port: *selected_port,
                         input_mode: types::ui::InputMode::Ascii,
                         view_offset: 0,
+                        selected_item: None,
                     };
                 }
                 Ok(())

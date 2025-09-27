@@ -34,7 +34,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let logs_area = chunks[0];
     let input_area = chunks[1];
 
-    if let Some((logs, port_log_auto_scroll)) = extract_log_data()? {
+    if let Some((logs, port_log_auto_scroll, _selected_item)) = extract_log_data()? {
         let view_offset = read_status(|status| {
             if let types::Page::LogPanel { view_offset, .. } = &status.page {
                 Ok(*view_offset)
