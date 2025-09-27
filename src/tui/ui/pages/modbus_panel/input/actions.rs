@@ -128,7 +128,11 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     if let Some(item) = all_items.get_mut(slave_index) {
                                         // TODO: Update global storage when mode is Master
                                         // For now, just log the action
-                                        log::info!("Toggle register {} for station {}", register_index, item.station_id);
+                                        log::info!(
+                                            "Toggle register {} for station {}",
+                                            register_index,
+                                            item.station_id
+                                        );
                                     }
                                 },
                             );

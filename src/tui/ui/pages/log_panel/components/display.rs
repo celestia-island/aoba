@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use ratatui::{
     prelude::*,
-    style::{Color, Style, Modifier},
+    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
@@ -15,12 +15,16 @@ use crate::{
 /// Extract log data from current page state
 pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, bool, Option<usize>)>> {
     let res = read_status(|status| match &status.page {
-        types::Page::LogPanel { selected_port, selected_item, .. } => {
+        types::Page::LogPanel {
+            selected_port,
+            selected_item,
+            ..
+        } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(tuple) =
-                        with_port_read(port, |pd| Some((pd.logs.clone(), pd.log_auto_scroll, *selected_item)))
-                    {
+                    if let Some(tuple) = with_port_read(port, |pd| {
+                        Some((pd.logs.clone(), pd.log_auto_scroll, *selected_item))
+                    }) {
                         Ok(tuple)
                     } else {
                         log::warn!("extract_log_data: failed to acquire read lock for {port_name}");
@@ -200,19 +204,19 @@ pub fn render_log_display(
     // Build the title with internationalized text
     let log_title = Span::styled(
         lang().tabs.tab_log.clone(),
-        Style::default().add_modifier(Modifier::BOLD)
+        Style::default().add_modifier(Modifier::BOLD),
     );
-    
+
     // Fix: Use selected_item to determine follow status, not auto_scroll
     let follow_status = if selected_item.is_none() {
         Span::styled(
             format!(" ({})", lang().tabs.log.hint_follow_on.clone()),
-            Style::default().fg(Color::Green)
+            Style::default().fg(Color::Green),
         )
     } else {
         Span::styled(
-            format!(" ({})", lang().tabs.log.hint_follow_off.clone()), 
-            Style::default().fg(Color::Yellow)
+            format!(" ({})", lang().tabs.log.hint_follow_off.clone()),
+            Style::default().fg(Color::Yellow),
         )
     };
 
@@ -220,13 +224,11 @@ pub fn render_log_display(
         Span::raw(" "),
         log_title,
         follow_status,
-        Span::raw(" ")
+        Span::raw(" "),
     ]);
 
     // Create block with custom border and title
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(title_line);
+    let block = Block::default().borders(Borders::ALL).title(title_line);
 
     // Create inner area with 1 character left padding
     let inner = block.inner(area);
@@ -252,7 +254,7 @@ pub fn render_log_display(
     };
     let total_items = logs.len();
     let position_text = format!("{} / {}", current_pos, total_items);
-    
+
     // Render position counter at bottom-right of the frame
     let position_area = Rect {
         x: area.x + area.width.saturating_sub(position_text.len() as u16 + 2),
@@ -260,9 +262,9 @@ pub fn render_log_display(
         width: position_text.len() as u16 + 1,
         height: 1,
     };
-    
-    let position_paragraph = Paragraph::new(position_text)
-        .style(Style::default().fg(Color::DarkGray));
+
+    let position_paragraph =
+        Paragraph::new(position_text).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(position_paragraph, position_area);
 
     Ok(())

@@ -31,7 +31,12 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
     // Toggle auto-follow by switching selected_item between None and Some
     write_status(|status| {
-        if let types::Page::LogPanel { selected_item, selected_port, .. } = &mut status.page {
+        if let types::Page::LogPanel {
+            selected_item,
+            selected_port,
+            ..
+        } = &mut status.page
+        {
             match selected_item {
                 None => {
                     // Currently in auto-follow mode, switch to manual mode

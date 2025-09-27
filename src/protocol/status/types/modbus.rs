@@ -1,17 +1,17 @@
-use strum::{EnumIter, FromRepr};
-use std::sync::{Arc, Mutex};
 use rmodbus::server::context::ModbusContext;
+use std::sync::{Arc, Mutex};
+use strum::{EnumIter, FromRepr};
 
 use crate::i18n::lang;
 
 #[repr(u8)]
 #[derive(Debug, Clone)]
 pub enum ModbusConnectionMode {
-    Master { 
-        storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>
+    Master {
+        storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     },
-    Slave { 
-        current_request_at_station_index: usize 
+    Slave {
+        current_request_at_station_index: usize,
     },
 }
 
@@ -19,14 +19,16 @@ impl ModbusConnectionMode {
     pub fn is_master(&self) -> bool {
         matches!(self, ModbusConnectionMode::Master { .. })
     }
-    
+
     pub fn is_slave(&self) -> bool {
         matches!(self, ModbusConnectionMode::Slave { .. })
     }
-    
+
     pub fn default_master() -> Self {
-        let storage = Arc::new(Mutex::new(rmodbus::server::storage::ModbusStorageSmall::new()));
-        
+        let storage = Arc::new(Mutex::new(
+            rmodbus::server::storage::ModbusStorageSmall::new(),
+        ));
+
         // Initialize with some example values for demonstration
         if let Ok(mut context) = storage.lock() {
             for i in 0..100 {
@@ -36,21 +38,21 @@ impl ModbusConnectionMode {
                 let _ = context.set_input(i, i as u16 * 20);
             }
         }
-        
+
         ModbusConnectionMode::Master { storage }
     }
-    
+
     pub fn default_slave() -> Self {
-        ModbusConnectionMode::Slave { 
-            current_request_at_station_index: 0
+        ModbusConnectionMode::Slave {
+            current_request_at_station_index: 0,
         }
     }
-    
+
     // Helper methods for UI compatibility
     pub fn all_variants() -> Vec<Self> {
         vec![Self::default_master(), Self::default_slave()]
     }
-    
+
     pub fn from_index(index: usize) -> Self {
         match index {
             0 => Self::default_master(),
@@ -58,7 +60,7 @@ impl ModbusConnectionMode {
             _ => Self::default_master(),
         }
     }
-    
+
     pub fn to_index(&self) -> usize {
         match self {
             ModbusConnectionMode::Master { .. } => 0,
@@ -70,8 +72,12 @@ impl ModbusConnectionMode {
 impl std::fmt::Display for ModbusConnectionMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ModbusConnectionMode::Master { .. } => write!(f, "{}", lang().protocol.modbus.role_master),
-            ModbusConnectionMode::Slave { .. } => write!(f, "{}", lang().protocol.modbus.role_slave),
+            ModbusConnectionMode::Master { .. } => {
+                write!(f, "{}", lang().protocol.modbus.role_master)
+            }
+            ModbusConnectionMode::Slave { .. } => {
+                write!(f, "{}", lang().protocol.modbus.role_slave)
+            }
         }
     }
 }

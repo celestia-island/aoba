@@ -255,7 +255,12 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                         let mut all_items: Vec<_> = stations.iter_mut().collect();
                         if let Some(item) = all_items.get_mut(slave_index) {
                             // TODO: Update global storage when mode is Master
-                            log::info!("Updated register value for slave {} register {} to 0x{:04X}", item.station_id, register_index, register_value);
+                            log::info!(
+                                "Updated register value for slave {} register {} to 0x{:04X}",
+                                item.station_id,
+                                register_index,
+                                register_value
+                            );
                         }
                     });
                 }

@@ -17,18 +17,15 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
         } else {
             Ok(false)
         }
-    }).unwrap_or(false);
+    })
+    .unwrap_or(false);
 
-    let mut hints = vec![
-        vec![
-            lang().hotkeys.hint_move_vertical.as_str().to_string(),
-            lang().hotkeys.press_c_clear.as_str().to_string(),
-        ]
-    ];
+    let mut hints = vec![vec![
+        lang().hotkeys.hint_move_vertical.as_str().to_string(),
+        lang().hotkeys.press_c_clear.as_str().to_string(),
+    ]];
 
-    let mut second_row = vec![
-        lang().hotkeys.press_esc_cancel.as_str().to_string(),
-    ];
+    let mut second_row = vec![lang().hotkeys.press_esc_cancel.as_str().to_string()];
 
     if show_follow_hint {
         second_row.insert(0, "v=follow latest logs".to_string());

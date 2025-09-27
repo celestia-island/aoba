@@ -48,7 +48,7 @@ pub struct PortData {
     pub logs: Vec<PortLogEntry>,
     pub log_auto_scroll: bool,
     pub log_clear_pending: bool,
-    
+
     /// Cache for the last ModbusRequest object to avoid recreating it
     pub last_modbus_request: Option<Arc<Mutex<rmodbus::client::ModbusRequest>>>,
 }

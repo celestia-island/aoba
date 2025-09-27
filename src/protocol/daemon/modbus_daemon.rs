@@ -237,9 +237,13 @@ pub fn handle_slave_mode(
                 match generate_modbus_request_with_cache(station, port_arc) {
                     Ok(request_bytes) => {
                         // Try to send the request
-                        if let Err(e) = runtime.cmd_tx.send(
-                            crate::protocol::runtime::RuntimeCommand::Write(request_bytes.clone()),
-                        ) {
+                        if let Err(e) =
+                            runtime
+                                .cmd_tx
+                                .send(crate::protocol::runtime::RuntimeCommand::Write(
+                                    request_bytes.clone(),
+                                ))
+                        {
                             let warn_msg = format!(
                                 "Failed to send modbus slave request for {port_name} station {}: {e}",
                                 station.station_id
@@ -260,7 +264,8 @@ pub fn handle_slave_mode(
                                 }
 
                                 // Ensure we clear station.last_request_time if we had set it earlier
-                                let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &mut port.config;
                                 if let Some(station_mut) = stations.get_mut(current_index) {
                                     station_mut.last_request_time = None;
                                 }
@@ -287,7 +292,8 @@ pub fn handle_slave_mode(
                                 }
 
                                 // Update the station's next poll time (1 second interval)
-                                let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &mut port.config;
                                 if let Some(station_mut) = stations.get_mut(current_index) {
                                     station_mut.next_poll_at = now + Duration::from_secs(1);
                                     station_mut.last_request_time = Some(now);
@@ -296,12 +302,14 @@ pub fn handle_slave_mode(
 
                             // Move to next station for the next poll cycle in a separate write
                             with_port_write(port_arc, |port| {
-                                let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                                let types::port::PortConfig::Modbus { mode, stations } =
+                                    &mut port.config;
                                 if let types::modbus::ModbusConnectionMode::Slave {
                                     current_request_at_station_index,
                                 } = mode
                                 {
-                                    *current_request_at_station_index = (current_index + 1) % stations.len();
+                                    *current_request_at_station_index =
+                                        (current_index + 1) % stations.len();
                                 }
                             });
 
