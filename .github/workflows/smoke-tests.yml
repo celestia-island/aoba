@@ -63,12 +63,14 @@ jobs:
         # Make ports accessible
         sudo chmod 666 /tmp/vcom1 /tmp/vcom2
     
-    # Run the dedicated smoke test binary that validates CLI functionality
+    # Run the dedicated smoke test example and CLI integration tests
     - name: Run smoke tests
       run: |
-        # Build and run our dedicated smoke test binary
-        cargo build --release --bin smoke_test
-        ./target/release/smoke_test
+        # Run our dedicated smoke test example
+        cargo run --example smoke_test
+        
+        # Run CLI integration tests example
+        cargo run --example cli_integration_tests
     
     # Clean up virtual ports
     - name: Cleanup
