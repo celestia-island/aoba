@@ -167,6 +167,7 @@ fn run_core_thread(
 
     // do_scan extracted to module-level function below
 
+    let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     loop {
         // Drain UI -> core messages
         while let Ok(msg) = ui_rx.try_recv() {
@@ -246,7 +247,34 @@ fn run_core_thread(
                             .cmd_tx
                             .send(crate::protocol::runtime::RuntimeCommand::Stop)
                         {
-                            log::warn!("ToggleRuntime: failed to send Stop: {e}");
+                            let warn_msg = format!("ToggleRuntime: failed to send Stop: {e}");
+                            log::warn!("{warn_msg}");
+
+                            // Also write to the port's logs so the UI shows the error
+                            write_status(|status| {
+                                if let Some(port) = status.ports.map.get(&port_name) {
+                                    if with_port_write(port, |port| {
+                                        port.logs.push(
+                                            crate::protocol::status::types::port::PortLogEntry {
+                                                when: chrono::Local::now(),
+                                                raw: warn_msg.clone(),
+                                                parsed: None,
+                                            },
+                                        );
+                                        if port.logs.len() > 1000 {
+                                            let excess = port.logs.len() - 1000;
+                                            port.logs.drain(0..excess);
+                                        }
+                                        true
+                                    })
+                                    .is_none()
+                                    {
+                                        // If we couldn't acquire the port write lock, log a warning
+                                        log::warn!("ToggleRuntime: failed to acquire write lock to append stop-warn for {port_name}");
+                                    }
+                                }
+                                Ok(())
+                            })?;
                         }
                         // Wait up to 1s for the runtime thread to emit Stopped, polling in 100ms intervals
                         let mut stopped = false;
@@ -358,8 +386,10 @@ fn run_core_thread(
             Ok(())
         })?;
 
-        // Handle modbus communication
-        if polling_enabled {
+        // Handle modbus communication at most once per second to avoid tight loops
+        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_secs(1) {
+            // Update the timestamp first to ensure we don't re-enter while still running
+            last_modbus_run = std::time::Instant::now();
             crate::protocol::daemon::handle_modbus_communication()?;
         }
 
