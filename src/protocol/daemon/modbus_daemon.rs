@@ -163,7 +163,7 @@ pub fn handle_master_mode(
                     });
 
                     log::info!("Sent modbus master response for {port_name}: {hex_response}");
-                    } else {
+                } else {
                     log::debug!(
                         "Could not generate a response for the Modbus request: {hex_frame}"
                     );

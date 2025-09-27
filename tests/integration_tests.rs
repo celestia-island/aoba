@@ -7,7 +7,7 @@ fn test_cli_help() {
         .arg("--help")
         .output()
         .expect("Failed to execute aoba binary");
-    
+
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Usage: aoba"));
@@ -19,7 +19,7 @@ fn test_cli_list_ports() {
         .arg("--list-ports")
         .output()
         .expect("Failed to execute aoba binary");
-    
+
     assert!(output.status.success());
 }
 
@@ -30,6 +30,6 @@ fn test_cli_list_ports_json() {
         .arg("--json")
         .output()
         .expect("Failed to execute aoba binary");
-    
+
     assert!(output.status.success());
 }
