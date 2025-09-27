@@ -203,7 +203,8 @@ pub fn render_log_display(
         Style::default().add_modifier(Modifier::BOLD)
     );
     
-    let follow_status = if auto_scroll {
+    // Fix: Use selected_item to determine follow status, not auto_scroll
+    let follow_status = if selected_item.is_none() {
         Span::styled(
             format!(" ({})", lang().tabs.log.hint_follow_on.clone()),
             Style::default().fg(Color::Green)
@@ -215,20 +216,10 @@ pub fn render_log_display(
         )
     };
 
-    // Calculate current position info: current_item/total_items with better spacing
-    let current_pos = if let Some(sel_idx) = selected_item {
-        sel_idx + 1
-    } else {
-        logs.len()
-    };
-    let total_items = logs.len();
-    let position_info = Span::raw(format!(" {} / {}", current_pos, total_items));
-
     let title_line = Line::from(vec![
         Span::raw(" "),
         log_title,
         follow_status,
-        position_info,
         Span::raw(" ")
     ]);
 
@@ -252,6 +243,27 @@ pub fn render_log_display(
     // Then render the content with padding
     let paragraph = Paragraph::new(rendered_lines);
     frame.render_widget(paragraph, padded_area);
+
+    // Add position counter at the bottom of the frame
+    let current_pos = if let Some(sel_idx) = selected_item {
+        sel_idx + 1
+    } else {
+        logs.len()
+    };
+    let total_items = logs.len();
+    let position_text = format!("{} / {}", current_pos, total_items);
+    
+    // Render position counter at bottom-right of the frame
+    let position_area = Rect {
+        x: area.x + area.width.saturating_sub(position_text.len() as u16 + 2),
+        y: area.y + area.height.saturating_sub(1),
+        width: position_text.len() as u16 + 1,
+        height: 1,
+    };
+    
+    let position_paragraph = Paragraph::new(position_text)
+        .style(Style::default().fg(Color::DarkGray));
+    frame.render_widget(position_paragraph, position_area);
 
     Ok(())
 }

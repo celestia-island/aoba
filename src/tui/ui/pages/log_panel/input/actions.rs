@@ -62,8 +62,20 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
 }
 
 pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
-    // Clear logs functionality - simplified for now
-    log::info!("Clear logs functionality");
+    // Clear logs functionality - actually clear the logs for the current port
+    write_status(|status| {
+        if let types::Page::LogPanel { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port) = status.ports.map.get(port_name) {
+                    if let Ok(mut port_data) = port.write() {
+                        port_data.logs.clear();
+                        log::info!("Cleared logs for port: {}", port_name);
+                    }
+                }
+            }
+        }
+        Ok(())
+    })?;
     bus.ui_tx
         .send(UiToCore::Refresh)
         .map_err(|err| anyhow!(err))?;

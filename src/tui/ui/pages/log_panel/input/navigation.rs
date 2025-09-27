@@ -70,7 +70,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             handle_leave_page(bus)?;
             Ok(())
         }
-        KeyCode::Char('f') => {
+        KeyCode::Char('v') => {
             handle_toggle_follow(bus)?;
             Ok(())
         }

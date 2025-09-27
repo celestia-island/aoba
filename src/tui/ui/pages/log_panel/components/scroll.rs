@@ -19,9 +19,10 @@ pub fn handle_scroll_up(amount: usize) -> anyhow::Result<()> {
                             return Ok(());
                         }
 
+                        // Any scroll action switches to manual mode
                         match selected_item {
                             None => {
-                                // Auto-follow mode: move to second-to-last item
+                                // Auto-follow mode: switch to manual mode at second-to-last item
                                 *selected_item = Some(log_count.saturating_sub(2));
                             }
                             Some(current_idx) => {
@@ -57,20 +58,16 @@ pub fn handle_scroll_down(amount: usize) -> anyhow::Result<()> {
                             return Ok(());
                         }
 
+                        // Any scroll action switches to manual mode
                         match selected_item {
                             None => {
-                                // Auto-follow mode: stay at the last item (no change)
-                                // selected_item remains None
+                                // Auto-follow mode: switch to manual mode at first item  
+                                *selected_item = Some(0);
                             }
                             Some(current_idx) => {
-                                // Manual mode: move down by amount
+                                // Manual mode: move down by amount, but stay in manual mode
                                 let new_idx = current_idx.saturating_add(amount);
-                                if new_idx >= log_count.saturating_sub(1) {
-                                    // If we reach or go past the last item, return to auto-follow mode
-                                    *selected_item = None;
-                                } else {
-                                    *selected_item = Some(new_idx);
-                                }
+                                *selected_item = Some(std::cmp::min(new_idx, log_count.saturating_sub(1)));
                             }
                         }
                     }
