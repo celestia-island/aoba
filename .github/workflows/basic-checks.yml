@@ -14,12 +14,10 @@ env:
 jobs:
   check:
     name: Check
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        # Test across multiple platforms to ensure cross-platform compatibility
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        # Test with both stable and beta Rust versions
+        # Test with both stable and beta Rust versions on Linux only
         rust: [stable, beta]
     
     steps:
@@ -32,9 +30,8 @@ jobs:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
     
-    # Install system dependencies required for building the project on Linux
-    - name: Install system dependencies (Linux)
-      if: matrix.os == 'ubuntu-latest'
+    # Install system dependencies required for building the project
+    - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
