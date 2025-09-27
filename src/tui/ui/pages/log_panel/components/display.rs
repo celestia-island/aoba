@@ -4,7 +4,7 @@ use ratatui::{
     prelude::*,
     style::{Color, Style, Modifier},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::{
@@ -43,30 +43,27 @@ pub fn render_log_display(
     frame: &mut Frame,
     area: Rect,
     logs: &[types::port::PortLogEntry],
-    view_offset: usize,
-    _follow_active: bool, // Parameter kept for compatibility but not used
+    auto_scroll: bool,
+    selected_item: Option<usize>,
 ) -> Result<()> {
-    // Get the actual log_auto_scroll setting and selected_item from PortData
-    let (auto_scroll, selected_item) = read_status(|status| {
-        if let types::Page::LogPanel { selected_port, selected_item, .. } = &status.page {
-            if let Some(port_name) = status.ports.order.get(*selected_port) {
-                if let Some(port) = status.ports.map.get(port_name) {
-                    if let Ok(port_data) = port.read() {
-                        return Ok((port_data.log_auto_scroll, *selected_item));
-                    }
-                }
-            }
-        }
-        Ok((false, None)) // Default values if we can't get the setting
-    })
-    .unwrap_or((false, None));
-
     // Each log entry is rendered as a 3-line block
     let lines_per_item = 3usize;
     let content_height = area.height.saturating_sub(2) as usize; // Reserve space for borders
     let items_visible = std::cmp::max(1, content_height / lines_per_item);
 
-    // view_offset is treated as index into log entries (item index)
+    // Calculate which items to show based on selected_item
+    let start_index = if let Some(selected_idx) = selected_item {
+        // Manual mode: show selected item as first item
+        selected_idx
+    } else {
+        // Auto-follow mode: show last items
+        if logs.len() <= items_visible {
+            0
+        } else {
+            logs.len() - items_visible
+        }
+    };
+
     let mut rendered_lines: Vec<Line> = Vec::new();
 
     // Helper: parse a log entry into (line1, line2, line3) as Strings
@@ -165,12 +162,17 @@ pub fn render_log_display(
     }
 
     for i in 0..items_visible {
-        let idx = view_offset.saturating_add(i);
+        let idx = start_index.saturating_add(i);
         if let Some(entry) = logs.get(idx) {
             let (l1, l2, l3) = format_entry(entry);
 
             // Determine if this item is selected
-            let selected = selected_item.map_or(false, |sel_idx| sel_idx == idx);
+            let selected = if let Some(sel_idx) = selected_item {
+                sel_idx == idx
+            } else {
+                // Auto-follow mode: select the last item
+                idx == logs.len().saturating_sub(1)
+            };
 
             // Prefix: two-space area; show '>' in green when selected, otherwise two spaces
             let prefix_span = if selected {
@@ -213,10 +215,14 @@ pub fn render_log_display(
         )
     };
 
-    // Calculate current position info: current_item/total_items
-    let current_pos = selected_item.map_or(1, |sel| sel + 1);
+    // Calculate current position info: current_item/total_items with better spacing
+    let current_pos = if let Some(sel_idx) = selected_item {
+        sel_idx + 1
+    } else {
+        logs.len()
+    };
     let total_items = logs.len();
-    let position_info = Span::raw(format!(" {}/{}", current_pos, total_items));
+    let position_info = Span::raw(format!(" {} / {}", current_pos, total_items));
 
     let title_line = Line::from(vec![
         Span::raw(" "),
@@ -246,24 +252,6 @@ pub fn render_log_display(
     // Then render the content with padding
     let paragraph = Paragraph::new(rendered_lines);
     frame.render_widget(paragraph, padded_area);
-
-    // Add scrollbar if needed
-    if logs.len() > items_visible {
-        let scrollbar = Scrollbar::default()
-            .orientation(ScrollbarOrientation::VerticalRight)
-            .begin_symbol(Some("↑"))
-            .end_symbol(Some("↓"));
-        
-        let mut scrollbar_state = ScrollbarState::default()
-            .content_length(logs.len())
-            .position(view_offset);
-        
-        frame.render_stateful_widget(
-            scrollbar,
-            inner,
-            &mut scrollbar_state,
-        );
-    }
 
     Ok(())
 }

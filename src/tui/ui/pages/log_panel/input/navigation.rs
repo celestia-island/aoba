@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::actions::{handle_clear_logs, handle_leave_page, handle_toggle_follow};
-use crate::tui::utils::bus::Bus;
+use crate::{tui::utils::bus::Bus, protocol::status::write_status};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
@@ -30,6 +30,23 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Down => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_down(1)?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
+        KeyCode::Enter => {
+            // Handle Enter key for input area editing
+            write_status(|status| {
+                // Set input mode to editing or toggle between modes
+                if let crate::protocol::status::types::Page::LogPanel { input_mode, .. } = &mut status.page {
+                    *input_mode = match input_mode {
+                        crate::protocol::status::types::ui::InputMode::Ascii => crate::protocol::status::types::ui::InputMode::Hex,
+                        crate::protocol::status::types::ui::InputMode::Hex => crate::protocol::status::types::ui::InputMode::Ascii,
+                    };
+                }
+                Ok(())
+            })?;
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;

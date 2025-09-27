@@ -3,7 +3,6 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
     tui::ui::pages::log_panel::components::{
         extract_log_data, render_log_display, render_log_input,
     },
@@ -34,15 +33,8 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let logs_area = chunks[0];
     let input_area = chunks[1];
 
-    if let Some((logs, port_log_auto_scroll, _selected_item)) = extract_log_data()? {
-        let view_offset = read_status(|status| {
-            if let types::Page::LogPanel { view_offset, .. } = &status.page {
-                Ok(*view_offset)
-            } else {
-                Ok(0)
-            }
-        })?;
-        let _ = render_log_display(frame, logs_area, &logs, view_offset, port_log_auto_scroll);
+    if let Some((logs, port_log_auto_scroll, selected_item)) = extract_log_data()? {
+        let _ = render_log_display(frame, logs_area, &logs, port_log_auto_scroll, selected_item);
     }
 
     render_log_input(frame, input_area)?;
