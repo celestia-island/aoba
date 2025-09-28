@@ -9,6 +9,18 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/basic-checks.yml?branch=master&label=CI&logo=github" alt="CI Status" />
+  </a>
+  <a href="https://github.com/celestia-island/aoba/blob/master/LICENSE">
+    <img src="https://img.shields.io/github/license/celestia-island/aoba?color=blue" alt="License" />
+  </a>
+  <a href="https://github.com/celestia-island/aoba/releases/latest">
+    <img src="https://img.shields.io/github/v/tag/celestia-island/aoba?label=version&sort=semver" alt="Latest Version" />
+  </a>
+</p>
+
+<p align="center">
   EN | <a href="./README_zh.md">ZH</a>
 </p>
 

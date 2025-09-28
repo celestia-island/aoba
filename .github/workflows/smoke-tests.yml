@@ -1,0 +1,56 @@
+# Smoke tests with virtual serial ports for black-box CLI testing
+# These tests validate basic functionality quickly without deep integration
+name: Smoke Tests
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  smoke-test:
+    name: Smoke Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Use stable Rust for consistent smoke test results
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Install system dependencies (socat no longer needed)
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+      # Cache Cargo registry to speed up builds
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Build release binaries for testing
+      - name: Build release binaries
+        run: cargo build --release
+
+      # Run the dedicated smoke test binary and CLI integration tests example
+      # Note: Tests now use existing ttyS devices present in CI environment
+      - name: Run smoke tests
+        run: |
+          # Run our dedicated smoke test binary
+          cargo run --bin smoke_test
+
+          # Run CLI integration tests example
+          cargo run --example cli_integration_tests
