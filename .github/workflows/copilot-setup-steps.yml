@@ -1,25 +1,24 @@
-# Copilot development environment setup
-# This workflow provides a ready-to-use environment for GitHub Copilot agents
-# Includes Rust toolchain, virtual serial ports, and virtual terminals
-name: Copilot Environment
+name: "Copilot Setup Steps"
 
 on:
-  # Manual trigger for setting up Copilot development environment
   workflow_dispatch:
-  # Also run on schedule to keep environment fresh
-  schedule:
-    - cron: "0 6 * * 1" # Every Monday at 6 AM UTC
-
-env:
-  CARGO_TERM_COLOR: always
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
 
 jobs:
   copilot-setup-steps:
-    name: Setup Copilot Environment
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v5
 
       # Use stable Rust for consistent smoke test results
       - name: Install Rust toolchain
