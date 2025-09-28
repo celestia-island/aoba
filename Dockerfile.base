@@ -1,0 +1,48 @@
+# Base image for CI workflows with Rust and virtual serial port support
+# This provides a common foundation for all CI workflows that need virtual ports
+FROM ubuntu:22.04
+
+LABEL description="Base CI image with Rust toolchain and virtual serial port support"
+LABEL version="1.0"
+
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    # Essential build tools
+    build-essential \
+    curl \
+    git \
+    # Rust/Cargo dependencies
+    pkg-config \
+    # AOBA system dependencies
+    libudev-dev \
+    libx11-dev \
+    libxcb-shape0-dev \
+    libxcb-xfixes0-dev \
+    # Virtual serial port support
+    socat \
+    # Utilities for testing
+    timeout \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Verify Rust installation
+RUN rustc --version && cargo --version
+
+# Pre-warm cargo registry (optional optimization)
+RUN cargo search --limit 1 serde > /dev/null 2>&1 || true
+
+# Set working directory
+WORKDIR /workspace
+
+# Create directory for shared scripts
+RUN mkdir -p /workspace/tests
+
+# Default command
+CMD ["/bin/bash"]
