@@ -45,22 +45,31 @@ jobs:
       - name: Build release binaries
         run: cargo build --release
 
-      # Set up virtual serial ports using socat
-      # Creates /tmp/vcom1 and /tmp/vcom2 connected to each other
+      # Set up virtual serial ports
+      # Creates /dev/ttyV1 and /dev/ttyV2 connected to each other
       - name: Setup virtual serial ports
         run: |
-          # Create virtual serial port pair
-          socat -d -d pty,raw,echo=0,link=/tmp/vcom1 pty,raw,echo=0,link=/tmp/vcom2 &
+          # Start socat as root so it can create device nodes under /dev
+          sudo socat -d -d pty,raw,echo=0,link=/dev/ttyV1 pty,raw,echo=0,link=/dev/ttyV2 &
           SOCAT_PID=$!
           echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
-          sleep 2
 
-          # Verify ports were created
-          ls -la /tmp/vcom1 /tmp/vcom2
+          # Wait for device files to appear (timeout after 10s)
+          for i in {1..10}; do
+            if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
+              break
+            fi
+            sleep 1
+          done
 
-          # Make ports accessible (wait for socat to create them first)
-          timeout 10 bash -c 'while [ ! -e /tmp/vcom1 ] || [ ! -e /tmp/vcom2 ]; do sleep 0.1; done'
-          sudo chmod 666 /tmp/vcom1 /tmp/vcom2 || true
+          # Double-check existence and try to change permissions as sudo to avoid Permission denied
+          if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
+            sudo chmod 666 /dev/ttyV1 /dev/ttyV2 || true
+          else
+            echo "Virtual serial devices not created: /dev/ttyV1 or /dev/ttyV2 missing"
+            ps aux | grep socat || true
+            exit 1
+          fi
 
       # Run the dedicated smoke test binary and CLI integration tests example
       - name: Run smoke tests

@@ -21,19 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Install latest stable Rust with all necessary components
+      # Use stable Rust for consistent smoke test results
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy, rust-src
 
-      # Install all system dependencies needed for development
+      # Install system dependencies including socat for virtual serial ports
       - name: Install system dependencies
         run: |
-          sudo apt-get update -y
-          # Core build dependencies and developer tools
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev \
-            socat minicom screen tmux expect git curl wget build-essential
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
       # Cache Cargo registry for faster builds
       - name: Cache cargo registry
@@ -47,50 +43,31 @@ jobs:
           restore-keys: |
             copilot-env-cargo-
 
-      # Pre-build the project to warm up the cache
-      - name: Pre-build project
+      # Set up virtual serial ports
+      # Creates /dev/ttyV1 and /dev/ttyV2 connected to each other
+      - name: Setup virtual serial ports
         run: |
-          # Single release build; avoid duplicate builds to reduce CI time
-          cargo build --release --all-targets
-          cargo test --no-run --workspace || true
+          # Start socat as root so it can create device nodes under /dev
+          sudo socat -d -d pty,raw,echo=0,link=/dev/ttyV1 pty,raw,echo=0,link=/dev/ttyV2 &
+          SOCAT_PID=$!
+          echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
 
-      # Set up persistent virtual serial ports for development
-      - name: Setup development virtual serial ports
-        run: |
-          mkdir -p /tmp/copilot-ports
+          # Wait for device files to appear (timeout after 10s)
+          for i in {1..10}; do
+            if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
+              break
+            fi
+            sleep 1
+          done
 
-          # Start socat pairs in background and record PIDs
-          socat pty,raw,echo=0,link=/tmp/copilot-ports/vcom1 pty,raw,echo=0,link=/tmp/copilot-ports/vcom2 &
-          echo $! > /tmp/copilot-ports/socat1.pid || true
-
-          socat pty,raw,echo=0,link=/tmp/copilot-ports/vcom3 pty,raw,echo=0,link=/tmp/copilot-ports/vcom4 &
-          echo $! > /tmp/copilot-ports/socat2.pid || true
-
-          # Ensure ports are usable
-          sudo chmod a+rw /tmp/copilot-ports/vcom* || true
-
-      # Set up virtual terminal environment for TUI testing
-      - name: Setup virtual terminal environment
-        run: |
-          mkdir -p /tmp/copilot-scripts
-
-          # Script to start TUI in background (minimal output)
-          cat > /tmp/copilot-scripts/start-tui.sh << 'EOF'
-          #!/bin/bash
-          cd /home/runner/work/aoba/aoba
-          screen -dmS aoba-tui ./target/release/aoba --tui
-          EOF
-
-          # Script to run smoke tests (minimal output)
-          cat > /tmp/copilot-scripts/run-smoke-tests.sh << 'EOF'
-          #!/bin/bash
-          cd /home/runner/work/aoba/aoba
-          export VCOM1=/tmp/copilot-ports/vcom1
-          export VCOM2=/tmp/copilot-ports/vcom2
-          ./target/release/smoke_test
-          EOF
-
-          chmod +x /tmp/copilot-scripts/*.sh
+          # Double-check existence and try to change permissions as sudo to avoid Permission denied
+          if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
+            sudo chmod 666 /dev/ttyV1 /dev/ttyV2 || true
+          else
+            echo "Virtual serial devices not created: /dev/ttyV1 or /dev/ttyV2 missing"
+            ps aux | grep socat || true
+            exit 1
+          fi
 
       # Test the environment to ensure everything works
       - name: Test environment (sanity checks)
@@ -104,19 +81,3 @@ jobs:
 
           # Quick cargo check (non-failing to avoid CI breakage)
           cargo check --all-targets || true
-
-      # Keep the environment alive for a while for development
-      - name: Keep environment alive
-        run: |
-          echo "Environment setup complete."
-
-      # Cleanup (optional, runs even if previous steps fail)
-      - name: Cleanup
-        if: always()
-        run: |
-          if [ -f /tmp/copilot-ports/socat1.pid ]; then
-            kill $(cat /tmp/copilot-ports/socat1.pid) 2>/dev/null || true
-          fi
-          if [ -f /tmp/copilot-ports/socat2.pid ]; then
-            kill $(cat /tmp/copilot-ports/socat2.pid) 2>/dev/null || true
-          fi
