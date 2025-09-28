@@ -142,7 +142,7 @@ pub fn render_log_display(
                 .map(|s| s.to_string())
                 .collect();
             // Keep a few tokens as fallback
-            if parts.len() > 0 {
+            if !parts.is_empty() {
                 let take = std::cmp::min(4, parts.len());
                 let join = parts[..take].join(" ");
                 details.push(join);

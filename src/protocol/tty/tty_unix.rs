@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use serialport::{SerialPortInfo, SerialPortType};
 
-use super::PortExtra;
+use super::{PortExtra, VidPidSerial};
 
 // Utility functions for parsing debug strings (shared with Windows)
 fn parse_string_after(s: &str, key: &str) -> Option<String> {
@@ -138,10 +138,13 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         }
     }
 
-    // Priority sort: USB / ACM first, then ttys
+    // Priority sort: Virtual ports (socat) first, then USB / ACM, then ttys
     fn priority(name: &str) -> i32 {
         let n = name.to_lowercase();
-        if n.contains("ttyusb") || n.contains("usb") {
+        if n.contains("vcom") || n.contains("tptyv") || n.contains("pts") && n.contains("v") {
+            // Virtual ports created by socat get highest priority for testing
+            -1
+        } else if n.contains("ttyusb") || n.contains("usb") {
             0
         } else if n.contains("acm") {
             1
@@ -168,12 +171,12 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 /// Try to extract vid / pid / serial from a SerialPortType on Unix platforms.
 pub fn try_extract_vid_pid_serial(
     pt: &serialport::SerialPortType,
-) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
+) -> Option<VidPidSerial> {
     match pt {
         serialport::SerialPortType::UsbPort(info) => {
-            let sn = info.serial_number.as_ref().map(|s| s.clone());
-            let m = info.manufacturer.as_ref().map(|s| s.clone());
-            let p = info.product.as_ref().map(|s| s.clone());
+            let sn = info.serial_number.clone();
+            let m = info.manufacturer.clone();
+            let p = info.product.clone();
             Some((info.vid, info.pid, sn, m, p))
         }
         // Some serialport versions have different field names; try to fall back

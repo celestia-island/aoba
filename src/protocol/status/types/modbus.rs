@@ -34,8 +34,8 @@ impl ModbusConnectionMode {
             for i in 0..100 {
                 let _ = context.set_coil(i, i % 2 == 0);
                 let _ = context.set_discrete(i, i % 3 == 0);
-                let _ = context.set_holding(i, i as u16 * 10);
-                let _ = context.set_input(i, i as u16 * 20);
+                let _ = context.set_holding(i, i * 10);
+                let _ = context.set_input(i, i * 20);
             }
         }
 

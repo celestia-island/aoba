@@ -23,11 +23,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Install system dependencies (socat no longer needed)
+      # Install system dependencies including socat for virtual serial ports
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
       # Cache Cargo registry to speed up builds
       - name: Cache cargo registry
@@ -45,8 +45,34 @@ jobs:
       - name: Build release binaries
         run: cargo build --release
 
+      # Create virtual serial port pairs using socat for modbus testing
+      - name: Setup virtual serial ports
+        run: |
+          # Create virtual serial port pair using socat in background
+          socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &
+          echo $! > /tmp/socat.pid
+          
+          # Wait for the virtual ports to be created
+          timeout=10
+          count=0
+          while [ $count -lt $timeout ] && ([ ! -e /dev/vcom1 ] || [ ! -e /dev/vcom2 ]); do
+            sleep 1
+            count=$((count + 1))
+          done
+          
+          # Verify both ports exist
+          if [ -e /dev/vcom1 ] && [ -e /dev/vcom2 ]; then
+            echo "Virtual serial ports created successfully:"
+            ls -la /dev/vcom1 /dev/vcom2
+            # Make sure the ports are accessible
+            sudo chmod 666 /dev/vcom1 /dev/vcom2
+          else
+            echo "Failed to create virtual serial ports"
+            exit 1
+          fi
+
       # Run the dedicated smoke test binary and CLI integration tests example
-      # Note: Tests now use existing ttyS devices present in CI environment
+      # Note: Tests now use socat-created virtual port pairs /dev/vcom1 and /dev/vcom2
       - name: Run smoke tests
         run: |
           # Run our dedicated smoke test binary
@@ -54,3 +80,16 @@ jobs:
 
           # Run CLI integration tests example
           cargo run --example cli_integration_tests
+
+      # Clean up virtual serial ports
+      - name: Cleanup virtual ports
+        if: always()
+        run: |
+          # Kill socat process if it exists
+          if [ -f /tmp/socat.pid ]; then
+            kill $(cat /tmp/socat.pid) || true
+            rm -f /tmp/socat.pid
+          fi
+          
+          # Remove virtual port links if they exist
+          sudo rm -f /dev/vcom1 /dev/vcom2 || true

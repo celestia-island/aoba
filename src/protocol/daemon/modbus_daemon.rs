@@ -497,28 +497,28 @@ pub fn generate_modbus_master_response(
     // Use the existing modbus helper functions to build responses
     match frame.func {
         rmodbus::consts::ModbusFunction::GetCoils => {
-            if let Ok(Some(ret)) = build_slave_coils_response(&mut frame, &mut *context) {
+            if let Ok(Some(ret)) = build_slave_coils_response(&mut frame, &mut context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build coils response"))
             }
         }
         rmodbus::consts::ModbusFunction::GetDiscretes => {
-            if let Ok(Some(ret)) = build_slave_discrete_inputs_response(&mut frame, &mut *context) {
+            if let Ok(Some(ret)) = build_slave_discrete_inputs_response(&mut frame, &mut context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build discrete inputs response"))
             }
         }
         rmodbus::consts::ModbusFunction::GetHoldings => {
-            if let Ok(Some(ret)) = build_slave_holdings_response(&mut frame, &mut *context) {
+            if let Ok(Some(ret)) = build_slave_holdings_response(&mut frame, &mut context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build holdings response"))
             }
         }
         rmodbus::consts::ModbusFunction::GetInputs => {
-            if let Ok(Some(ret)) = build_slave_inputs_response(&mut frame, &mut *context) {
+            if let Ok(Some(ret)) = build_slave_inputs_response(&mut frame, &mut context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build inputs response"))

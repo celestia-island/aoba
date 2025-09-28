@@ -56,7 +56,7 @@ fn test_tui_startup_ctrl_c_exit() -> Result<()> {
 
     // Send Ctrl+C to terminate the application
     session
-        .send(&[3u8])
+        .send([3u8])
         .map_err(|err| anyhow!("Failed to send Ctrl+C: {}", err))?; // Send ASCII 3 (Ctrl+C)
 
     // Give it time to shut down gracefully
@@ -125,8 +125,8 @@ fn test_tui_startup_detection() -> Result<()> {
 async fn test_tui_with_virtual_ports() -> Result<()> {
     // Note: examples must not spawn system providers (like socat) on CI runners.
     // Instead we only detect whether virtual ports exist and skip the test if not.
-    let port1_exists = std::path::Path::new("/dev/ttyV1").exists();
-    let port2_exists = std::path::Path::new("/dev/ttyV2").exists();
+    let port1_exists = std::path::Path::new("/dev/vcom1").exists();
+    let port2_exists = std::path::Path::new("/dev/vcom2").exists();
 
     if port1_exists && port2_exists {
         log::info!("   ✓ Virtual serial ports detected (created by CI or manually)");
@@ -156,19 +156,19 @@ async fn test_tui_with_virtual_ports() -> Result<()> {
         let mut found_v2 = false;
 
         // Try to read some output and search for the device names
-        match session.expect(expectrl::Regex(r"/dev/ttyV1")) {
+        match session.expect(expectrl::Regex(r"/dev/vcom1")) {
             Ok(_) => found_v1 = true,
-            Err(_) => log::info!("/dev/ttyV1 not immediately visible in TUI output"),
+            Err(_) => log::info!("/dev/vcom1 not immediately visible in TUI output"),
         }
-        match session.expect(expectrl::Regex(r"/dev/ttyV2")) {
+        match session.expect(expectrl::Regex(r"/dev/vcom2")) {
             Ok(_) => found_v2 = true,
-            Err(_) => log::info!("/dev/ttyV2 not immediately visible in TUI output"),
+            Err(_) => log::info!("/dev/vcom2 not immediately visible in TUI output"),
         }
 
         // If either device isn't shown, fail the test per requirements
         if !found_v1 || !found_v2 {
             return Err(anyhow!(
-                "TUI did not display both /dev/ttyV1 and /dev/ttyV2"
+                "TUI did not display both /dev/vcom1 and /dev/vcom2"
             ));
         }
 

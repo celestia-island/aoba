@@ -1,4 +1,5 @@
-// Platform-dispatched TTY helpers
+/// Unified type for vid/pid/serial extraction: (vid, pid, serial, manufacturer, product)
+pub type VidPidSerial = (u16, u16, Option<String>, Option<String>, Option<String>);
 
 #[cfg(windows)]
 mod tty_windows;
@@ -40,6 +41,6 @@ pub fn available_ports_enriched() -> Vec<(serialport::SerialPortInfo, PortExtra)
 #[cfg(not(any(unix, windows)))]
 pub fn try_extract_vid_pid_serial(
     _pt: &serialport::SerialPortType,
-) -> Option<(u16, u16, Option<String>)> {
+) -> Option<VidPidSerial> {
     None
 }

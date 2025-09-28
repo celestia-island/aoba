@@ -175,18 +175,18 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
     let mut found_v1 = false;
     let mut found_v2 = false;
 
-    match session.expect(Regex(r"/dev/ttyV1")) {
+    match session.expect(Regex(r"/dev/vcom1")) {
         Ok(_) => found_v1 = true,
-        Err(_) => log::info!("/dev/ttyV1 not visible in TUI output"),
+        Err(_) => log::info!("/dev/vcom1 not visible in TUI output"),
     }
-    match session.expect(Regex(r"/dev/ttyV2")) {
+    match session.expect(Regex(r"/dev/vcom2")) {
         Ok(_) => found_v2 = true,
-        Err(_) => log::info!("/dev/ttyV2 not visible in TUI output"),
+        Err(_) => log::info!("/dev/vcom2 not visible in TUI output"),
     }
 
     if !found_v1 || !found_v2 {
         return Err(anyhow!(
-            "TUI did not display both /dev/ttyV1 and /dev/ttyV2"
+            "TUI did not display both /dev/vcom1 and /dev/vcom2"
         ));
     }
 
@@ -216,7 +216,6 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
 /// virtual devices exist. This keeps CI clean and avoids leaving resident
 /// processes behind.
 // setup_virtual_serial_ports removed: examples must not spawn system providers
-
 /// Cleanup virtual serial ports
 ///
 /// NOTE: Instead of attempting to remove device files or pkill providers,
@@ -224,7 +223,6 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
 /// to rely on killing provider processes explicitly if needed (outside this
 /// example), or the CI job/container teardown to clean resources.
 // cleanup_virtual_serial_ports removed: examples must not attempt to clean system state
-
 /// Filter out dynamic content like spinners and timestamps
 fn filter_dynamic_content(content: &str) -> String {
     let mut filtered = content.to_string();
