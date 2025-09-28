@@ -284,8 +284,7 @@ fn run_core_thread(
                             Ok(evt) => {
                                 if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
                                     log::warn!(
-                                        "ToggleRuntime: received unexpected event while stopping {port_name}: {:?}",
-                                        evt
+                                        "ToggleRuntime: received unexpected event while stopping {port_name}: {evt:?}"
                                     );
                                 }
                             }

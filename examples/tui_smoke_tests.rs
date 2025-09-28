@@ -56,7 +56,7 @@ fn test_tui_startup_ctrl_c_exit() -> Result<()> {
 
     // Send Ctrl+C to terminate the application
     session
-        .send(&[3u8])
+        .send([3u8])
         .map_err(|err| anyhow!("Failed to send Ctrl+C: {}", err))?; // Send ASCII 3 (Ctrl+C)
 
     // Give it time to shut down gracefully
@@ -95,13 +95,13 @@ fn test_tui_startup_detection() -> Result<()> {
     match session.expect(expectrl::Regex(r"(AOBA|COMPorts|Press.*quit|Refresh)")) {
         Ok(found) => {
             log::info!(
-                "   ✓ Successfully detected TUI content: {:?}",
+                "   ✓ Successfully detected TUI content: {:#?}",
                 found.matches()
             );
             found_tui_content = true;
         }
         Err(err) => {
-            log::info!("   ⚠ Could not detect specific TUI content: {:?}", err);
+            log::info!("   ⚠ Could not detect specific TUI content: {err:?}");
             // Even if we can't detect specific content, the TUI might still be running
         }
     }
