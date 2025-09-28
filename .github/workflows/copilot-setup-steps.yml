@@ -25,11 +25,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Install system dependencies including socat for virtual serial ports
+      # Install system dependencies (socat no longer needed for virtual ports)
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
 
       # Cache Cargo registry for faster builds
       - name: Cache cargo registry
@@ -43,44 +43,19 @@ jobs:
           restore-keys: |
             copilot-env-cargo-
 
-      # Set up virtual serial ports
-      # Creates /dev/ttyV1 and /dev/ttyV2 connected to each other
-      - name: Setup virtual serial ports
-        run: |
-          # Start socat as root so it can create device nodes under /dev
-          sudo socat -d -d pty,raw,echo=0,link=/dev/ttyV1 pty,raw,echo=0,link=/dev/ttyV2 &
-          SOCAT_PID=$!
-          echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
-
-          # Wait for device files to appear (timeout after 10s)
-          for i in {1..10}; do
-            if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
-              break
-            fi
-            sleep 1
-          done
-
-          # Double-check existence and try to change permissions as sudo to avoid Permission denied
-          if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
-            sudo chmod 666 /dev/ttyV1 /dev/ttyV2 || true
-          else
-            echo "Virtual serial devices not created: /dev/ttyV1 or /dev/ttyV2 missing"
-            ps aux | grep socat || true
-            exit 1
-          fi
-
       # Test the environment to ensure everything works
+      # Note: Environment uses existing ttyS devices present in CI
       - name: Test environment (sanity checks)
         run: |
           rustc --version || true
           cargo --version || true
 
-          # Sanity check: ensure helper scripts and ports exist
-          [ -d /tmp/copilot-ports ] || exit 0
-          [ -d /tmp/copilot-scripts ] || exit 0
-
           # Quick cargo check (non-failing to avoid CI breakage)
           cargo check --all-targets || true
+
+          # Verify serial ports are available for testing
+          echo "Available serial ports for testing:"
+          find /dev -name "ttyS*" | head -5
 
       # Clean up virtual ports/processes (ensure socat is killed if started)
       - name: Cleanup

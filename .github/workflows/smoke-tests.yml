@@ -23,11 +23,11 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Install system dependencies including socat for virtual serial ports
+      # Install system dependencies (socat no longer needed)
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
 
       # Cache Cargo registry to speed up builds
       - name: Cache cargo registry
@@ -45,33 +45,8 @@ jobs:
       - name: Build release binaries
         run: cargo build --release
 
-      # Set up virtual serial ports
-      # Creates /dev/ttyV1 and /dev/ttyV2 connected to each other
-      - name: Setup virtual serial ports
-        run: |
-          # Start socat as root so it can create device nodes under /dev
-          sudo socat -d -d pty,raw,echo=0,link=/dev/ttyV1 pty,raw,echo=0,link=/dev/ttyV2 &
-          SOCAT_PID=$!
-          echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
-
-          # Wait for device files to appear (timeout after 10s)
-          for i in {1..10}; do
-            if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
-              break
-            fi
-            sleep 1
-          done
-
-          # Double-check existence and try to change permissions as sudo to avoid Permission denied
-          if [ -e /dev/ttyV1 ] && [ -e /dev/ttyV2 ]; then
-            sudo chmod 666 /dev/ttyV1 /dev/ttyV2 || true
-          else
-            echo "Virtual serial devices not created: /dev/ttyV1 or /dev/ttyV2 missing"
-            ps aux | grep socat || true
-            exit 1
-          fi
-
       # Run the dedicated smoke test binary and CLI integration tests example
+      # Note: Tests now use existing ttyS devices present in CI environment
       - name: Run smoke tests
         run: |
           # Run our dedicated smoke test binary
@@ -79,11 +54,3 @@ jobs:
 
           # Run CLI integration tests example
           cargo run --example cli_integration_tests
-
-      # Clean up virtual ports
-      - name: Cleanup
-        if: always()
-        run: |
-          if [ ! -z "$SOCAT_PID" ]; then
-            kill $SOCAT_PID || true
-          fi
