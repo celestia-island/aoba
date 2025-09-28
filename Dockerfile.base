@@ -1,6 +1,6 @@
 # Base image for CI workflows with Rust and virtual serial port support
 # This provides a common foundation for all CI workflows that need virtual ports
-FROM ubuntu:22.04
+FROM rust:1.70-slim
 
 LABEL description="Base CI image with Rust toolchain and virtual serial port support"
 LABEL version="1.0"
@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     git \
+    ca-certificates \
     # Rust/Cargo dependencies
     pkg-config \
     # AOBA system dependencies
@@ -24,15 +25,11 @@ RUN apt-get update && apt-get install -y \
     # Virtual serial port support
     socat \
     # Utilities for testing
-    timeout \
     procps \
+    coreutils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust toolchain
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-# Verify Rust installation
+# Verify Rust installation (already installed in the rust:slim image)
 RUN rustc --version && cargo --version
 
 # Pre-warm cargo registry (optional optimization)
