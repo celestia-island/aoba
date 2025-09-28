@@ -58,8 +58,12 @@ jobs:
         echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
         sleep 2
         
-        # Make ports accessible
-        sudo chmod 666 /tmp/tui_vcom1 /tmp/tui_vcom2
+        # Verify ports were created
+        ls -la /tmp/tui_vcom1 /tmp/tui_vcom2
+        
+        # Make ports accessible (wait for socat to create them first)
+        timeout 10 bash -c 'while [ ! -e /tmp/tui_vcom1 ] || [ ! -e /tmp/tui_vcom2 ]; do sleep 0.1; done'
+        sudo chmod 666 /tmp/tui_vcom1 /tmp/tui_vcom2 || true
     
     # Run TUI integration tests using dedicated examples for terminal automation
     # These tests simulate user input and validate TUI functionality
