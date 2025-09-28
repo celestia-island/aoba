@@ -4,80 +4,78 @@ name: TUI Integration Tests
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [master, main]
   pull_request:
-    branches: [ master, main ]
+    branches: [master, main]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   tui-integration-test:
-    name: TUI Integration Tests  
+    name: TUI Integration Tests
     runs-on: ubuntu-latest
-    # Only run after basic checks pass
-    needs: []
-    
+
     steps:
-    - uses: actions/checkout@v4
-    
-    # Use stable Rust for consistent test results
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
-    
-    # Install system dependencies including socat for virtual serial ports
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
-    
-    # Cache Cargo registry to speed up builds
-    - name: Cache cargo registry
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-          ~/.cargo/git/db/
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-cargo-
-    
-    # Build the application for testing
-    - name: Build test dependencies
-      run: |
-        cargo build --release
-    
-    # Set up virtual serial ports for TUI testing
-    # Creates /tmp/tui_vcom1 and /tmp/tui_vcom2 connected to each other
-    - name: Setup virtual serial ports
-      run: |
-        # Create virtual serial port pair for TUI testing
-        socat -d -d pty,raw,echo=0,link=/tmp/tui_vcom1 pty,raw,echo=0,link=/tmp/tui_vcom2 &
-        SOCAT_PID=$!
-        echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
-        sleep 2
-        
-        # Make ports accessible
-        sudo chmod 666 /tmp/tui_vcom1 /tmp/tui_vcom2
-    
-    # Run TUI integration tests using dedicated examples for terminal automation
-    # These tests simulate user input and validate TUI functionality
-    - name: Run TUI integration tests
-      run: |
-        # Run the new TUI smoke tests example (basic startup/shutdown with Ctrl+C)
-        timeout 120 cargo run --example tui_smoke_tests || echo "TUI smoke tests completed"
-        
-        # Run comprehensive TUI integration tests example (user simulation and black-box testing)
-        timeout 180 cargo run --example tui_integration_tests || echo "TUI integration tests completed"
-        
-        # Run unit tests for content filtering and helper functions
-        cargo test --test tui_unit_tests -- --nocapture
-    
-    # Clean up virtual ports
-    - name: Cleanup
-      if: always()
-      run: |
-        if [ ! -z "$SOCAT_PID" ]; then
-          kill $SOCAT_PID || true
-        fi
+      - uses: actions/checkout@v4
+
+      # Use stable Rust for consistent test results
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      # Install system dependencies including socat for virtual serial ports
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+
+      # Cache Cargo registry to speed up builds
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Build the application for testing
+      - name: Build test dependencies
+        run: |
+          cargo build --release
+
+      # Set up virtual serial ports for TUI testing
+      # Creates /tmp/tui_vcom1 and /tmp/tui_vcom2 connected to each other
+      - name: Setup virtual serial ports
+        run: |
+          # Create virtual serial port pair for TUI testing
+          socat -d -d pty,raw,echo=0,link=/tmp/tui_vcom1 pty,raw,echo=0,link=/tmp/tui_vcom2 &
+          SOCAT_PID=$!
+          echo "SOCAT_PID=$SOCAT_PID" >> $GITHUB_ENV
+          sleep 2
+
+          # Make ports accessible
+          sudo chmod 666 /tmp/tui_vcom1 /tmp/tui_vcom2
+
+      # Run TUI integration tests using dedicated examples for terminal automation
+      # These tests simulate user input and validate TUI functionality
+      - name: Run TUI integration tests
+        run: |
+          # Run the new TUI smoke tests example (basic startup/shutdown with Ctrl+C)
+          timeout 120 cargo run --example tui_smoke_tests || echo "TUI smoke tests completed"
+
+          # Run comprehensive TUI integration tests example (user simulation and black-box testing)
+          timeout 180 cargo run --example tui_integration_tests || echo "TUI integration tests completed"
+
+          # Run unit tests for content filtering and helper functions
+          cargo test --test tui_unit_tests -- --nocapture
+
+      # Clean up virtual ports
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ ! -z "$SOCAT_PID" ]; then
+            kill $SOCAT_PID || true
+          fi
