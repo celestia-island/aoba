@@ -112,19 +112,20 @@ fn test_cli_list_ports() -> Result<()> {
     log::info!("   ✓ List ports command works correctly");
     // Flexible check: ensure some serial ports are available (CI environment has ttyS devices)
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let port_count = stdout.lines().filter(|line| line.contains("/dev/tty")).count();
-    
-    if port_count < 2 {
+    if !stdout.contains("/dev/ttyV1") || !stdout.contains("/dev/ttyV2") {
         log::error!(
-            "Expected at least 2 serial ports to be available for testing; got {} ports in output: {stdout}",
-            port_count
+            "Expected /dev/ttyV1 and /dev/ttyV2 to be present in list-ports output; got: {}",
+            stdout
         );
         return Err(anyhow!(
-            "Insufficient serial ports available for testing"
+            "Virtual serial ports not found in list-ports output"
         ));
     }
-    
-    log::info!("   ✓ Found {} serial ports available for testing", port_count);
+
+    log::info!(
+        "   ✓ Found {} serial ports available for testing",
+        port_count
+    );
     Ok(())
 }
 
@@ -160,18 +161,19 @@ fn test_cli_list_ports_json() -> Result<()> {
     log::info!("   ✓ JSON output command works correctly");
     // Flexible check for JSON output: ensure sufficient serial ports are available
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let port_count = stdout.matches("/dev/tty").count();
-    
-    if port_count < 2 {
+    if !stdout.contains("/dev/ttyV1") || !stdout.contains("/dev/ttyV2") {
         log::error!(
-            "Expected at least 2 serial ports to be available for testing in JSON output; got {} ports in output: {stdout}",
-            port_count
+            "Expected /dev/ttyV1 and /dev/ttyV2 in JSON list-ports output; got: {}",
+            stdout
         );
         return Err(anyhow!(
-            "Insufficient serial ports available for JSON testing"
+            "Virtual serial ports not found in JSON list-ports output"
         ));
     }
-    
-    log::info!("   ✓ Found {} serial ports available for JSON testing", port_count);
+
+    log::info!(
+        "   ✓ Found {} serial ports available for JSON testing",
+        port_count
+    );
     Ok(())
 }

@@ -96,7 +96,7 @@ pub fn handle_master_mode(
                 // Log the received request
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Master RX: {hex_frame}"),
+                    raw: format!("Master RX: {}", hex_frame),
                     parsed: None,
                 };
 
@@ -150,7 +150,7 @@ pub fn handle_master_mode(
 
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
-                        raw: format!("Master TX: {hex_response}"),
+                        raw: format!("Master TX: {}", hex_response),
                         parsed: None,
                     };
 
@@ -283,7 +283,7 @@ pub fn handle_slave_mode(
 
                             let log_entry = PortLogEntry {
                                 when: chrono::Local::now(),
-                                raw: format!("Slave TX: {hex_frame}"),
+                                raw: format!("Slave TX: {}", hex_frame),
                                 parsed: None,
                             };
 
@@ -352,7 +352,7 @@ pub fn handle_slave_mode(
                 // Log the received response (Slave RX)
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Slave RX: {hex_frame}"),
+                    raw: format!("Slave RX: {}", hex_frame),
                     parsed: None,
                 };
 
@@ -497,33 +497,36 @@ pub fn generate_modbus_master_response(
     // Use the existing modbus helper functions to build responses
     match frame.func {
         rmodbus::consts::ModbusFunction::GetCoils => {
-            if let Ok(Some(ret)) = build_slave_coils_response(&mut frame, &mut context) {
+            if let Ok(Some(ret)) = build_slave_coils_response(&mut frame, &mut *context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build coils response"))
             }
         }
         rmodbus::consts::ModbusFunction::GetDiscretes => {
-            if let Ok(Some(ret)) = build_slave_discrete_inputs_response(&mut frame, &mut context) {
+            if let Ok(Some(ret)) = build_slave_discrete_inputs_response(&mut frame, &mut *context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build discrete inputs response"))
             }
         }
         rmodbus::consts::ModbusFunction::GetHoldings => {
-            if let Ok(Some(ret)) = build_slave_holdings_response(&mut frame, &mut context) {
+            if let Ok(Some(ret)) = build_slave_holdings_response(&mut frame, &mut *context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build holdings response"))
             }
         }
         rmodbus::consts::ModbusFunction::GetInputs => {
-            if let Ok(Some(ret)) = build_slave_inputs_response(&mut frame, &mut context) {
+            if let Ok(Some(ret)) = build_slave_inputs_response(&mut frame, &mut *context) {
                 Ok(ret)
             } else {
                 Err(anyhow!("Failed to build inputs response"))
             }
         }
-        _ => Err(anyhow!("Unsupported modbus function code: {frame_func:?}", frame_func = frame.func)),
+        _ => Err(anyhow!(
+            "Unsupported modbus function code: {:?}",
+            frame.func
+        )),
     }
 }

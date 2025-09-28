@@ -208,18 +208,22 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
     Ok(())
 }
 
-// Setup virtual serial ports for testing
-// NOTE: In CI we should avoid creating system-level virtual serial ports or
-// spawning background providers like `socat` from examples. Instead this
-// function performs a non-invasive check and logs whether the expected
-// virtual devices exist. This keeps CI clean and avoids leaving resident
-// processes behind.
+/// Setup virtual serial ports for testing
+///
+/// NOTE: In CI we should avoid creating system-level virtual serial ports or
+/// spawning background providers like `socat` from examples. Instead this
+/// function performs a non-invasive check and logs whether the expected
+/// virtual devices exist. This keeps CI clean and avoids leaving resident
+/// processes behind.
+// setup_virtual_serial_ports removed: examples must not spawn system providers
 
-// Cleanup virtual serial ports
-// NOTE: Instead of attempting to remove device files or pkill providers,
-// this function intentionally does not modify system state. In CI we prefer
-// to rely on killing provider processes explicitly if needed (outside this
-// example), or the CI job/container teardown to clean resources.
+/// Cleanup virtual serial ports
+///
+/// NOTE: Instead of attempting to remove device files or pkill providers,
+/// this function intentionally does not modify system state. In CI we prefer
+/// to rely on killing provider processes explicitly if needed (outside this
+/// example), or the CI job/container teardown to clean resources.
+// cleanup_virtual_serial_ports removed: examples must not attempt to clean system state
 
 /// Filter out dynamic content like spinners and timestamps
 fn filter_dynamic_content(content: &str) -> String {
@@ -254,8 +258,8 @@ fn test_filter_dynamic_content() {
     let test_content = "⠋ Loading... 14:30:25 Status: ● Active ○ Idle 2024-01-15 14:30:25";
     let filtered = filter_dynamic_content(test_content);
 
-    log::info!("   ✓ Original: {test_content}");
-    log::info!("   ✓ Filtered: {filtered}");
+    log::info!("   ✓ Original: {}", test_content);
+    log::info!("   ✓ Filtered: {}", filtered);
 
     // Verify that dynamic content has been filtered
     assert!(!filtered.contains("⠋"));

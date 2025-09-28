@@ -41,7 +41,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     let ports = available_ports_enriched();
     let scan_text = ports
         .iter()
-        .map(|(info, extra)| format!("{info} {extra:?}", info = info.port_name, extra = extra))
+        .map(|(info, extra)| format!("{} {:?}", info.port_name, extra))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -145,7 +145,8 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     // expected, proceed
                 } else {
                     log::warn!(
-                        "scan_ports: received unexpected event while stopping {name}: {evt:?}"
+                        "scan_ports: received unexpected event while stopping {name}: {:?}",
+                        evt
                     );
                 }
             }

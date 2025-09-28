@@ -74,7 +74,7 @@ pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
                 if let Some(port) = status.ports.map.get(port_name) {
                     if let Ok(mut port_data) = port.write() {
                         port_data.logs.clear();
-                        log::info!("Cleared logs for port: {port_name}");
+                        log::info!("Cleared logs for port: {}", port_name);
                     }
                 }
             }
