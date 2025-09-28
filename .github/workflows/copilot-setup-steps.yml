@@ -81,3 +81,18 @@ jobs:
 
           # Quick cargo check (non-failing to avoid CI breakage)
           cargo check --all-targets || true
+
+      # Clean up virtual ports/processes (ensure socat is killed if started)
+      - name: Cleanup
+        if: always()
+        run: |
+          if [ ! -z "$SOCAT_PID" ]; then
+            sudo kill $SOCAT_PID || true
+          fi
+
+          if [ -e /dev/ttyV1 ]; then
+            sudo rm -f /dev/ttyV1 || true
+          fi
+          if [ -e /dev/ttyV2 ]; then
+            sudo rm -f /dev/ttyV2 || true
+          fi

@@ -123,33 +123,13 @@ fn test_tui_startup_detection() -> Result<()> {
 
 /// Test TUI startup with virtual serial ports available
 async fn test_tui_with_virtual_ports() -> Result<()> {
-    // Set up virtual serial ports using socat
-    let socat_output = Command::new("socat")
-        .args([
-            "-d",
-            "-d",
-            "pty,raw,echo=0,link=/tmp/smoke_vcom1",
-            "pty,raw,echo=0,link=/tmp/smoke_vcom2",
-        ])
-        .spawn()
-        .map_err(|err| anyhow!("Failed to start socat for virtual ports: {}", err))?;
-
-    let socat_pid = socat_output.id();
-
-    // Wait for ports to be created
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    // Verify ports were created
-    let port1_exists = std::path::Path::new("/tmp/smoke_vcom1").exists();
-    let port2_exists = std::path::Path::new("/tmp/smoke_vcom2").exists();
+    // Note: examples must not spawn system providers (like socat) on CI runners.
+    // Instead we only detect whether virtual ports exist and skip the test if not.
+    let port1_exists = std::path::Path::new("/dev/ttyV1").exists();
+    let port2_exists = std::path::Path::new("/dev/ttyV2").exists();
 
     if port1_exists && port2_exists {
-        log::info!("   ✓ Virtual serial ports created successfully");
-
-        // Make ports accessible
-        let _ = Command::new("chmod")
-            .args(["666", "/tmp/smoke_vcom1", "/tmp/smoke_vcom2"])
-            .output();
+        log::info!("   ✓ Virtual serial ports detected (created by CI or manually)");
 
         // Build the application first
         let build_output = Command::new("cargo")
@@ -171,21 +151,35 @@ async fn test_tui_with_virtual_ports() -> Result<()> {
         // Give the TUI time to initialize and potentially detect ports
         std::thread::sleep(Duration::from_millis(1000));
 
+        // Try to detect the listed virtual ports in the TUI output
+        let mut found_v1 = false;
+        let mut found_v2 = false;
+
+        // Try to read some output and search for the device names
+        match session.expect(expectrl::Regex(r"/dev/ttyV1")) {
+            Ok(_) => found_v1 = true,
+            Err(_) => log::info!("/dev/ttyV1 not immediately visible in TUI output"),
+        }
+        match session.expect(expectrl::Regex(r"/dev/ttyV2")) {
+            Ok(_) => found_v2 = true,
+            Err(_) => log::info!("/dev/ttyV2 not immediately visible in TUI output"),
+        }
+
+        // If either device isn't shown, fail the test per requirements
+        if !found_v1 || !found_v2 {
+            return Err(anyhow!(
+                "TUI did not display both /dev/ttyV1 and /dev/ttyV2"
+            ));
+        }
+
         // Send 'q' to quit gracefully
         session.send_line("q").expect("Failed to send 'q' command");
         std::thread::sleep(Duration::from_millis(300));
 
-        log::info!("   ✓ TUI with virtual ports test completed");
+        log::info!("   ✓ TUI with virtual ports test completed (ports visible)");
     } else {
-        log::info!("   ⚠ Virtual ports not created, skipping test");
+        log::info!("   ⚠ Virtual ports not detected, skipping test (CI-safe)");
     }
-
-    // Cleanup: kill socat process
-    let _ = Command::new("kill").arg(socat_pid.to_string()).output();
-
-    // Remove virtual port files if they exist
-    let _ = std::fs::remove_file("/tmp/smoke_vcom1");
-    let _ = std::fs::remove_file("/tmp/smoke_vcom2");
 
     Ok(())
 }

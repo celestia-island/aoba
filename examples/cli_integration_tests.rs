@@ -110,6 +110,12 @@ fn test_cli_list_ports() -> Result<()> {
     }
 
     log::info!("   ✓ List ports command works correctly");
+    // Strict check: ensure CI-created virtual ports are present
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !stdout.contains("/dev/ttyV1") || !stdout.contains("/dev/ttyV2") {
+        log::error!("Expected /dev/ttyV1 and /dev/ttyV2 to be present in list-ports output; got: {}", stdout);
+        return Err(anyhow!("Virtual serial ports not found in list-ports output"));
+    }
     Ok(())
 }
 
@@ -143,5 +149,11 @@ fn test_cli_list_ports_json() -> Result<()> {
     }
 
     log::info!("   ✓ JSON output command works correctly");
+    // Strict check for JSON output: ensure /dev/ttyV1 and /dev/ttyV2 are present
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if !stdout.contains("/dev/ttyV1") || !stdout.contains("/dev/ttyV2") {
+        log::error!("Expected /dev/ttyV1 and /dev/ttyV2 in JSON list-ports output; got: {}", stdout);
+        return Err(anyhow!("Virtual serial ports not found in JSON list-ports output"));
+    }
     Ok(())
 }
