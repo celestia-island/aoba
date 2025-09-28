@@ -2,86 +2,88 @@
 // This is a dedicated example for testing TUI functionality, not for production release
 // Run with: cargo run --example tui_smoke_tests
 
+use anyhow::{anyhow, Result};
+use std::{process::Command, time::Duration};
+
 use expectrl::spawn;
-use std::process::Command;
-use std::time::Duration;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔥 Starting TUI Smoke Tests...");
+async fn main() -> Result<()> {
+    let _ = env_logger::try_init();
+    log::info!("🔥 Starting TUI Smoke Tests...");
 
     // Test 1: Basic TUI startup and Ctrl+C exit
-    println!("✅ Test 1: TUI startup and Ctrl+C exit");
+    log::info!("✅ Test 1: TUI startup and Ctrl+C exit");
     test_tui_startup_ctrl_c_exit()?;
 
     // Test 2: TUI content detection
-    println!("✅ Test 2: TUI content detection");
+    log::info!("✅ Test 2: TUI content detection");
     test_tui_startup_detection()?;
 
     // Test 3: TUI with virtual serial ports
-    println!("✅ Test 3: TUI with virtual serial ports");
+    log::info!("✅ Test 3: TUI with virtual serial ports");
     test_tui_with_virtual_ports().await?;
 
     // Test 4: Basic expectrl functionality
-    println!("✅ Test 4: Basic expectrl functionality");
+    log::info!("✅ Test 4: Basic expectrl functionality");
     test_expectrl_basic_functionality()?;
 
-    println!("🎉 All TUI smoke tests passed!");
+    log::info!("🎉 All TUI smoke tests passed!");
     Ok(())
 }
 
 /// Test that the TUI application starts and can be terminated with Ctrl+C
-fn test_tui_startup_ctrl_c_exit() -> Result<(), Box<dyn std::error::Error>> {
+fn test_tui_startup_ctrl_c_exit() -> Result<()> {
     // Build the application first to ensure we have the binary
     let build_output = Command::new("cargo")
         .args(["build", "--release"])
         .output()
-        .expect("Failed to execute cargo build");
+        .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
 
     if !build_output.status.success() {
-        return Err(format!(
+        return Err(anyhow!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        )
-        .into());
+        ));
     }
 
     // Start the TUI application
-    let mut session =
-        spawn("./target/release/aoba --tui").expect("Failed to spawn TUI application");
+    let mut session = spawn("./target/release/aoba --tui")
+        .map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
 
     // Give the TUI time to initialize (shorter time for CI)
     std::thread::sleep(Duration::from_millis(500));
 
     // Send Ctrl+C to terminate the application
-    session.send(&[3u8]).expect("Failed to send Ctrl+C"); // Send ASCII 3 (Ctrl+C)
+    session
+        .send(&[3u8])
+        .map_err(|err| anyhow!("Failed to send Ctrl+C: {}", err))?; // Send ASCII 3 (Ctrl+C)
 
     // Give it time to shut down gracefully
     std::thread::sleep(Duration::from_millis(300));
 
-    println!("   ✓ TUI startup and Ctrl+C exit test completed successfully");
+    log::info!("   ✓ TUI startup and Ctrl+C exit test completed successfully");
     Ok(())
 }
 
 /// Test that we can start the TUI and detect it's running by looking for expected output
-fn test_tui_startup_detection() -> Result<(), Box<dyn std::error::Error>> {
+fn test_tui_startup_detection() -> Result<()> {
     // Build the application first
     let build_output = Command::new("cargo")
         .args(["build", "--release"])
         .output()
-        .expect("Failed to execute cargo build");
+        .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
 
     if !build_output.status.success() {
-        return Err(format!(
+        return Err(anyhow!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        )
-        .into());
+        ));
     }
 
     // Test TUI startup and look for expected content
-    let mut session =
-        spawn("./target/release/aoba --tui").expect("Failed to spawn TUI application");
+    let mut session = spawn("./target/release/aoba --tui")
+        .map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
 
     // Give the TUI time to initialize and display its interface
     std::thread::sleep(Duration::from_millis(800));
@@ -92,33 +94,35 @@ fn test_tui_startup_detection() -> Result<(), Box<dyn std::error::Error>> {
 
     match session.expect(expectrl::Regex(r"(AOBA|COMPorts|Press.*quit|Refresh)")) {
         Ok(found) => {
-            println!(
+            log::info!(
                 "   ✓ Successfully detected TUI content: {:?}",
                 found.matches()
             );
             found_tui_content = true;
         }
-        Err(e) => {
-            println!("   ⚠ Could not detect specific TUI content: {:?}", e);
+        Err(err) => {
+            log::info!("   ⚠ Could not detect specific TUI content: {:?}", err);
             // Even if we can't detect specific content, the TUI might still be running
         }
     }
 
     // Send 'q' to quit
-    session.send_line("q").expect("Failed to send 'q' command");
+    session
+        .send_line("q")
+        .map_err(|err| anyhow!("Failed to send 'q' command: {}", err))?;
     std::thread::sleep(Duration::from_millis(300));
 
     if found_tui_content {
-        println!("   ✓ TUI startup detection test completed successfully");
+        log::info!("   ✓ TUI startup detection test completed successfully");
     } else {
-        println!("   ⚠ TUI started but content detection was inconclusive");
+        log::info!("   ⚠ TUI started but content detection was inconclusive");
     }
 
     Ok(())
 }
 
 /// Test TUI startup with virtual serial ports available
-async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_tui_with_virtual_ports() -> Result<()> {
     // Set up virtual serial ports using socat
     let socat_output = Command::new("socat")
         .args([
@@ -128,7 +132,7 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
             "pty,raw,echo=0,link=/tmp/smoke_vcom2",
         ])
         .spawn()
-        .expect("Failed to start socat for virtual ports");
+        .map_err(|err| anyhow!("Failed to start socat for virtual ports: {}", err))?;
 
     let socat_pid = socat_output.id();
 
@@ -140,7 +144,7 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
     let port2_exists = std::path::Path::new("/tmp/smoke_vcom2").exists();
 
     if port1_exists && port2_exists {
-        println!("   ✓ Virtual serial ports created successfully");
+        log::info!("   ✓ Virtual serial ports created successfully");
 
         // Make ports accessible
         let _ = Command::new("chmod")
@@ -151,14 +155,13 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
         let build_output = Command::new("cargo")
             .args(["build", "--release"])
             .output()
-            .expect("Failed to execute cargo build");
+            .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
 
         if !build_output.status.success() {
-            return Err(format!(
+            return Err(anyhow!(
                 "Failed to build application: {}",
                 String::from_utf8_lossy(&build_output.stderr)
-            )
-            .into());
+            ));
         }
 
         // Test TUI with virtual ports
@@ -172,9 +175,9 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
         session.send_line("q").expect("Failed to send 'q' command");
         std::thread::sleep(Duration::from_millis(300));
 
-        println!("   ✓ TUI with virtual ports test completed");
+        log::info!("   ✓ TUI with virtual ports test completed");
     } else {
-        println!("   ⚠ Virtual ports not created, skipping test");
+        log::info!("   ⚠ Virtual ports not created, skipping test");
     }
 
     // Cleanup: kill socat process
@@ -188,22 +191,25 @@ async fn test_tui_with_virtual_ports() -> Result<(), Box<dyn std::error::Error>>
 }
 
 /// Basic test to verify expectrl can capture terminal output from simple commands
-fn test_expectrl_basic_functionality() -> Result<(), Box<dyn std::error::Error>> {
-    let mut session =
-        spawn("echo 'Hello from AOBA TUI test'").expect("Failed to spawn echo command");
+fn test_expectrl_basic_functionality() -> Result<()> {
+    let mut session = spawn("echo 'Hello from AOBA TUI test'")
+        .map_err(|err| anyhow!("Failed to spawn echo command: {}", err))?;
 
     match session.expect(expectrl::Regex(r"Hello.*AOBA.*test")) {
         Ok(found) => {
-            println!("   ✓ expectrl basic functionality test passed");
-            println!("   ✓ Captured: {:?}", found.matches());
+            log::info!("   ✓ expectrl basic functionality test passed");
+            log::info!("   ✓ Captured: {:?}", found.matches());
             let before_bytes = found.before();
             let before_str = String::from_utf8_lossy(before_bytes);
             if !before_str.is_empty() {
-                println!("   ✓ Before content captured successfully");
+                log::info!("   ✓ Before content captured successfully");
             }
         }
-        Err(e) => {
-            return Err(format!("expectrl basic functionality test failed: {:?}", e).into());
+        Err(err) => {
+            return Err(anyhow!(
+                "expectrl basic functionality test failed: {:?}",
+                err
+            ));
         }
     }
 

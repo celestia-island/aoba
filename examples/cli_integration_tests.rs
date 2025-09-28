@@ -2,93 +2,146 @@
 // This is a dedicated example for testing CLI functionality, not for production release
 // Run with: cargo run --example cli_integration_tests
 
+use anyhow::{anyhow, Result};
 use std::process::Command;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔧 Starting CLI Integration Tests...");
+fn main() -> Result<()> {
+    // Initialize logger so CI can capture structured output. Honor RUST_LOG env var.
+    let _ = env_logger::try_init();
+
+    log::info!("🔧 Starting CLI Integration Tests...");
 
     // Build the application first to ensure we have the binary
-    println!("Building application...");
+    log::info!("Building application...");
     let build_output = Command::new("cargo")
         .args(["build", "--release"])
         .output()
-        .expect("Failed to execute cargo build");
+        .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
+
+    // Log raw build stdout/stderr for CI visibility
+    log::debug!(
+        "build stdout: {}",
+        String::from_utf8_lossy(&build_output.stdout)
+    );
+    log::debug!(
+        "build stderr: {}",
+        String::from_utf8_lossy(&build_output.stderr)
+    );
 
     if !build_output.status.success() {
-        return Err(format!(
+        log::error!(
+            "Failed to build application: status={}",
+            build_output.status
+        );
+        return Err(anyhow!(
             "Failed to build application: {}",
             String::from_utf8_lossy(&build_output.stderr)
-        )
-        .into());
+        ));
     }
 
     // Test 1: CLI help command
-    println!("✅ Test 1: CLI help command");
+    log::info!("✅ Test 1: CLI help command");
     test_cli_help()?;
 
     // Test 2: CLI list ports
-    println!("✅ Test 2: CLI list ports command");
+    log::info!("✅ Test 2: CLI list ports command");
     test_cli_list_ports()?;
 
     // Test 3: CLI list ports with JSON output
-    println!("✅ Test 3: CLI list ports with JSON output");
+    log::info!("✅ Test 3: CLI list ports with JSON output");
     test_cli_list_ports_json()?;
 
-    println!("🎉 All CLI integration tests passed!");
+    log::info!("🎉 All CLI integration tests passed!");
     Ok(())
 }
 
 /// Test CLI help command functionality
-fn test_cli_help() -> Result<(), Box<dyn std::error::Error>> {
+fn test_cli_help() -> Result<()> {
     let output = Command::new("./target/release/aoba")
         .arg("--help")
         .output()
-        .map_err(|e| format!("Failed to execute aoba binary: {}", e))?;
+        .map_err(|err| anyhow!("Failed to execute aoba binary: {}", err))?;
+
+    // Log raw stdout/stderr for debugging in CI
+    log::debug!("help stdout: {}", String::from_utf8_lossy(&output.stdout));
+    log::debug!("help stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     if !output.status.success() {
-        return Err(format!("Help command failed with status: {}", output.status).into());
+        log::error!("Help command failed with status: {}", output.status);
+        return Err(anyhow!(
+            "Help command failed with status: {}",
+            output.status
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !stdout.contains("Usage: aoba") {
-        return Err("Help output doesn't contain expected usage text".into());
+        log::error!("Help output doesn't contain expected usage text");
+        return Err(anyhow!("Help output doesn't contain expected usage text"));
     }
 
-    println!("   ✓ Help command works correctly");
+    log::info!("   ✓ Help command works correctly");
     Ok(())
 }
 
 /// Test CLI list ports command
-fn test_cli_list_ports() -> Result<(), Box<dyn std::error::Error>> {
+fn test_cli_list_ports() -> Result<()> {
     let output = Command::new("./target/release/aoba")
         .arg("--list-ports")
         .output()
-        .map_err(|e| format!("Failed to execute aoba binary: {}", e))?;
+        .map_err(|err| anyhow!("Failed to execute aoba binary: {}", err))?;
+
+    // Log raw stdout/stderr for CI visibility
+    log::debug!(
+        "list-ports stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    log::debug!(
+        "list-ports stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     if !output.status.success() {
-        return Err(format!("List ports command failed with status: {}", output.status).into());
+        log::error!("List ports command failed with status: {}", output.status);
+        return Err(anyhow!(
+            "List ports command failed with status: {}",
+            output.status
+        ));
     }
 
-    println!("   ✓ List ports command works correctly");
+    log::info!("   ✓ List ports command works correctly");
     Ok(())
 }
 
 /// Test CLI list ports with JSON output
-fn test_cli_list_ports_json() -> Result<(), Box<dyn std::error::Error>> {
+fn test_cli_list_ports_json() -> Result<()> {
     let output = Command::new("./target/release/aoba")
         .arg("--list-ports")
         .arg("--json")
         .output()
-        .map_err(|e| format!("Failed to execute aoba binary: {}", e))?;
+        .map_err(|err| anyhow!("Failed to execute aoba binary: {}", err))?;
+
+    // Log raw stdout/stderr for CI visibility
+    log::debug!(
+        "list-ports-json stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    log::debug!(
+        "list-ports-json stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     if !output.status.success() {
-        return Err(format!(
+        log::error!(
             "List ports JSON command failed with status: {}",
             output.status
-        )
-        .into());
+        );
+        return Err(anyhow!(
+            "List ports JSON command failed with status: {}",
+            output.status
+        ));
     }
 
-    println!("   ✓ JSON output command works correctly");
+    log::info!("   ✓ JSON output command works correctly");
     Ok(())
 }
