@@ -49,9 +49,9 @@ jobs:
       # Create virtual serial port pairs using socat for TUI testing
       - name: Setup virtual serial ports
         run: |
-          # Create virtual serial port pair using socat in background
-          socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &
-          echo $! > /tmp/socat.pid
+          # Create virtual serial port pair using socat in background with sudo
+          sudo bash -c 'socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &'
+          sleep 2  # Give socat time to start
           
           # Wait for the virtual ports to be created
           timeout=10
@@ -87,11 +87,8 @@ jobs:
       - name: Cleanup virtual ports
         if: always()
         run: |
-          # Kill socat process if it exists
-          if [ -f /tmp/socat.pid ]; then
-            kill $(cat /tmp/socat.pid) || true
-            rm -f /tmp/socat.pid
-          fi
+          # Kill socat processes if they exist
+          sudo pkill socat || true
           
           # Remove virtual port links if they exist
           sudo rm -f /dev/vcom1 /dev/vcom2 || true

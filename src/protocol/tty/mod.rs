@@ -39,8 +39,6 @@ pub fn available_ports_enriched() -> Vec<(serialport::SerialPortInfo, PortExtra)
 }
 
 #[cfg(not(any(unix, windows)))]
-pub fn try_extract_vid_pid_serial(
-    _pt: &serialport::SerialPortType,
-) -> Option<VidPidSerial> {
+pub fn try_extract_vid_pid_serial(_pt: &serialport::SerialPortType) -> Option<VidPidSerial> {
     None
 }

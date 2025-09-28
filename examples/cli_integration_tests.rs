@@ -117,9 +117,7 @@ fn test_cli_list_ports() -> Result<()> {
             "Expected /dev/vcom1 and /dev/vcom2 to be present in list-ports output; got: {}",
             stdout
         );
-        log::info!(
-            "   ⚠ Virtual serial ports not found (may be expected if socat not set up)"
-        );
+        log::info!("   ⚠ Virtual serial ports not found (may be expected if socat not set up)");
     } else {
         log::info!("   ✓ Found virtual serial ports in list-ports output");
     }

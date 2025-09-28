@@ -169,9 +169,7 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 }
 
 /// Try to extract vid / pid / serial from a SerialPortType on Unix platforms.
-pub fn try_extract_vid_pid_serial(
-    pt: &serialport::SerialPortType,
-) -> Option<VidPidSerial> {
+pub fn try_extract_vid_pid_serial(pt: &serialport::SerialPortType) -> Option<VidPidSerial> {
     match pt {
         serialport::SerialPortType::UsbPort(info) => {
             let sn = info.serial_number.clone();
