@@ -1,0 +1,66 @@
+# Basic CI checks: formatting, linting, and unit tests
+# This workflow runs on every push and pull request to ensure code quality
+name: Basic Checks
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Test with both stable and nightly Rust versions on Linux only
+        rust: [stable, nightly]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install Rust toolchain with formatting and linting tools
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+
+      # Install system dependencies required for building the project
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+      # Cache Cargo registry to speed up builds
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      # Ensure code is properly formatted
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      # Check that the code compiles
+      - name: Check compilation
+        run: cargo check --all-targets --all-features
+
+      # Run clippy for additional linting (allow warnings for now to not block CI)
+      - name: Clippy lints
+        run: cargo clippy --all-targets --all-features -- -D warnings
+        continue-on-error: true
+
+      # Run unit tests only (no integration tests or smoke tests)
+      - name: Run unit tests
+        run: cargo test --lib
