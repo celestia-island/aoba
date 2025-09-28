@@ -14,7 +14,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  setup-copilot-env:
+  copilot-setup-steps:
     name: Setup Copilot Environment
     runs-on: ubuntu-latest
 
