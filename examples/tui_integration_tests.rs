@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
 /// Test basic TUI startup and shutdown
 async fn test_tui_startup_shutdown(bin_path: &str) -> Result<()> {
     // Spawn the TUI process
-    let spawn_cmd = format!("{} --tui", bin_path);
+    let spawn_cmd = format!("{bin_path} --tui");
     let mut session =
         spawn(spawn_cmd).map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
     // Wait for TUI to start (look for some expected content)
@@ -77,7 +77,7 @@ async fn test_tui_startup_shutdown(bin_path: &str) -> Result<()> {
 
 /// Test TUI navigation and basic interaction
 async fn test_tui_navigation(bin_path: &str) -> Result<()> {
-    let spawn_cmd = format!("{} --tui", bin_path);
+    let spawn_cmd = format!("{bin_path} --tui");
     let mut session =
         spawn(spawn_cmd).map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
     // Wait for initial UI
@@ -123,7 +123,7 @@ async fn test_tui_navigation(bin_path: &str) -> Result<()> {
 
 /// Test TUI with virtual serial port interaction
 async fn test_tui_serial_port_interaction(bin_path: &str) -> Result<()> {
-    let spawn_cmd = format!("{} --tui", bin_path);
+    let spawn_cmd = format!("{bin_path} --tui");
     let mut session =
         spawn(spawn_cmd).map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
 
@@ -164,6 +164,9 @@ async fn test_tui_serial_port_interaction(bin_path: &str) -> Result<()> {
     // Keep pressing up until we reach the first item (cursor should be at index 0)
     log::info!("🧪 Navigating to first item using up arrow keys...");
 
+    // Compile the cursor regex once and reuse inside the loop
+    let cursor_rx = Regex::new(r"> /dev/vcom[12]").unwrap();
+
     // Press up multiple times to ensure we reach the first item
     for i in 0..10 {
         // Send up arrow key as escape sequence
@@ -176,15 +179,13 @@ async fn test_tui_serial_port_interaction(bin_path: &str) -> Result<()> {
 
         // Check if we can find the cursor indicator at the first item
         // Look for "> /dev/vcom" pattern indicating cursor is on a virtual port
-        if Regex::new(r"> /dev/vcom[12]").unwrap().is_match(&screen) {
+        if cursor_rx.is_match(&screen) {
             log::info!("🧪 Cursor found at virtual port after {} up presses", i + 1);
             let _ = cap.capture(&mut session, "cursor found at virtual port")?;
             break;
-        } else {
-            if i == 9 {
-                log::warn!("Could not locate cursor at first virtual port after 10 attempts");
-                let _ = cap.capture(&mut session, "final navigation attempt")?;
-            }
+        } else if i == 9 {
+            log::warn!("Could not locate cursor at first virtual port after 10 attempts");
+            let _ = cap.capture(&mut session, "final navigation attempt")?;
         }
     }
 
