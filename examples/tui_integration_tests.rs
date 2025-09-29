@@ -157,31 +157,27 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
         .map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
 
     // Wait for UI to load
-    let _ = session.expect(Regex(".*"));
+    tokio::time::sleep(Duration::from_millis(1500)).await;
 
-    // Navigate to port configuration (exact keys depend on UI layout)
-    // This is a placeholder - adjust based on actual TUI flow
-    session
-        .send("\t")
-        .map_err(|err| anyhow!("Failed to navigate: {}", err))?; // Navigate to port list
-    tokio::time::sleep(Duration::from_millis(100)).await;
-
-    session
-        .send_line("")
-        .map_err(|err| anyhow!("Failed to select: {}", err))?; // Select a port
-    tokio::time::sleep(Duration::from_millis(100)).await;
-
-    // After UI navigation, try to detect the virtual ports displayed on screen
+    // First check if virtual ports are visible in the output
     let mut found_v1 = false;
     let mut found_v2 = false;
 
+    // Try to capture current screen content
     match session.expect(Regex(r"/dev/vcom1")) {
-        Ok(_) => found_v1 = true,
-        Err(_) => log::info!("/dev/vcom1 not visible in TUI output"),
+        Ok(_) => {
+            found_v1 = true;
+            log::info!("✓ Found /dev/vcom1 in TUI output");
+        }
+        Err(_) => log::info!("⚠ /dev/vcom1 not visible in TUI output"),
     }
+
     match session.expect(Regex(r"/dev/vcom2")) {
-        Ok(_) => found_v2 = true,
-        Err(_) => log::info!("/dev/vcom2 not visible in TUI output"),
+        Ok(_) => {
+            found_v2 = true;
+            log::info!("✓ Found /dev/vcom2 in TUI output");
+        }
+        Err(_) => log::info!("⚠ /dev/vcom2 not visible in TUI output"),
     }
 
     if !found_v1 || !found_v2 {
@@ -190,21 +186,92 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
         ));
     }
 
-    // TODO: Add specific interactions based on TUI behavior
-    // For example:
-    // - Select virtual port
-    // - Configure baud rate
-    // - Open connection
-    // - Send test data
-    // - Verify received data
+    // Navigate to first item using up arrow keys
+    // Keep pressing up until we reach the first item (cursor should be at index 0)
+    log::info!("Navigating to first item using up arrow keys...");
 
-    // Exit
+    // Press up multiple times to ensure we reach the first item
+    for i in 0..10 {
+        // Send up arrow key as escape sequence
+        session
+            .send("\x1b[A") // Up arrow escape sequence
+            .map_err(|err| anyhow!("Failed to send up arrow: {}", err))?;
+        
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Check if we can find the cursor indicator at the first item
+        // Look for "> /dev/vcom" pattern indicating cursor is on a virtual port
+        match session.expect(Regex(r"> /dev/vcom[12]")) {
+            Ok(_) => {
+                log::info!("✓ Cursor found at virtual port after {} up presses", i + 1);
+                break;
+            }
+            Err(_) => {
+                if i == 9 {
+                    log::warn!("Could not locate cursor at first virtual port after 10 attempts");
+                }
+            }
+        }
+    }
+
+    // Press Enter to select the port
+    log::info!("Pressing Enter to select the port...");
     session
-        .send_line("q")
-        .map_err(|err| anyhow!("Failed to quit: {}", err))?;
-    log::info!("   ✓ TUI serial port test completed");
+        .send("\r") // Enter key
+        .map_err(|err| anyhow!("Failed to send Enter: {}", err))?;
 
-    // (removed: cleanup of virtual serial ports)
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+
+    // Check for crashes or error messages
+    // If the application crashed, the session would be terminated
+    // If there are error messages, they would typically contain keywords like "error", "failed", "panic"
+
+    let mut has_errors = false;
+
+    // Try to interact with the session to see if it's still responsive
+    match session.send("q") {
+        Ok(_) => {
+            log::info!("✓ Application still responsive after Enter press");
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            // Check if we can capture any error messages in the output
+            // We'll try a simple expect to see if there are any error patterns
+            match session.expect(Regex(r"(?i)(error|failed|panic|crash)")) {
+                Ok(_) => {
+                    has_errors = true;
+                    log::warn!("⚠ Detected error-like messages in TUI output");
+                }
+                Err(_) => {
+                    log::info!("✓ No error messages detected in TUI output");
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("✗ Application became unresponsive: {}", err);
+            return Err(anyhow!(
+                "TUI application crashed or became unresponsive after pressing Enter"
+            ));
+        }
+    }
+
+    // Final quit attempt
+    match session.send("q") {
+        Ok(_) => {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            log::info!("✓ TUI exited gracefully");
+        }
+        Err(_) => {
+            log::info!("Application may have already exited");
+        }
+    }
+
+    if has_errors {
+        return Err(anyhow!(
+            "TUI interaction test detected errors or unresponsive behavior"
+        ));
+    }
+
+    log::info!("   ✓ TUI serial port interaction test completed successfully");
     Ok(())
 }
 
