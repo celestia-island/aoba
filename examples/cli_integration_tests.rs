@@ -7,7 +7,7 @@ use std::process::Command;
 
 fn main() -> Result<()> {
     // Initialize logger so CI can capture structured output. Honor RUST_LOG env var.
-    let _ = env_logger::try_init();
+    env_logger::try_init()?;
 
     log::info!("🔧 Starting CLI Integration Tests...");
 

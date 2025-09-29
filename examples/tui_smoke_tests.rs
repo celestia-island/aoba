@@ -9,7 +9,7 @@ use expectrl::spawn;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _ = env_logger::try_init();
+    env_logger::try_init()?;
     log::info!("🔥 Starting TUI Smoke Tests...");
 
     // Test 1: Basic TUI startup and Ctrl+C exit

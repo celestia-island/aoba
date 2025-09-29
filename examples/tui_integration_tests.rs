@@ -9,7 +9,7 @@ use expectrl::{spawn, Regex};
 
 /// Helper function to log screen capture attempts for debugging
 fn log_screen_capture(_session: &mut expectrl::Session, step_description: &str) -> Result<()> {
-    log::debug!("📺 Screen capture point: {}", step_description);
+    log::debug!("📺 Screen capture point: {step_description}");
     Ok(())
 }
 
@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
     if std::env::var("RUST_LOG").is_err() {
         std::env::set_var("RUST_LOG", "debug");
     }
-    let _ = env_logger::try_init();
+    env_logger::try_init()?;
     log::info!("🎭 Starting TUI Integration Tests (User Simulation)...");
 
     // Test 1: Basic TUI startup and shutdown
@@ -65,7 +65,7 @@ async fn test_tui_startup_shutdown() -> Result<()> {
         .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
 
     // Wait for TUI to start (look for some expected content)
-    let _ = session.expect(Regex(".*"));
+    session.expect(Regex(".*"))?;
 
     // Send quit command (typically 'q' or Ctrl+C)
     session
@@ -99,7 +99,7 @@ async fn test_tui_navigation() -> Result<()> {
         .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
 
     // Wait for initial UI
-    let _ = session.expect(Regex(".*"));
+    session.expect(Regex(".*"))?;
 
     // Test navigation keys
     session
@@ -273,7 +273,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
             }
         }
         Err(err) => {
-            log::error!("✗ Application became unresponsive: {}", err);
+            log::error!("✗ Application became unresponsive: {err}");
             log_screen_capture(&mut session, "application unresponsive")?;
             return Err(anyhow!(
                 "TUI application crashed or became unresponsive after pressing Enter"
