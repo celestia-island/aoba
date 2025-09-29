@@ -9,21 +9,21 @@ fn main() -> Result<()> {
     // Initialize logger so CI can capture structured output. Honor RUST_LOG env var.
     env_logger::try_init()?;
 
-    log::info!("🔧 Starting CLI Integration Tests...");
+    log::info!("🧪 Starting CLI Integration Tests...");
 
     // Build the application first to ensure we have the binary
     log::info!("Building application...");
     let build_output = Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build"])
         .output()
         .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
 
     // Log raw build stdout/stderr for CI visibility
-    log::debug!(
+    log::info!(
         "build stdout: {}",
         String::from_utf8_lossy(&build_output.stdout)
     );
-    log::debug!(
+    log::info!(
         "build stderr: {}",
         String::from_utf8_lossy(&build_output.stderr)
     );
@@ -40,18 +40,18 @@ fn main() -> Result<()> {
     }
 
     // Test 1: CLI help command
-    log::info!("✅ Test 1: CLI help command");
+    log::info!("🧪 Test 1: CLI help command");
     test_cli_help()?;
 
     // Test 2: CLI list ports
-    log::info!("✅ Test 2: CLI list ports command");
+    log::info!("🧪 Test 2: CLI list ports command");
     test_cli_list_ports()?;
 
     // Test 3: CLI list ports with JSON output
-    log::info!("✅ Test 3: CLI list ports with JSON output");
+    log::info!("🧪 Test 3: CLI list ports with JSON output");
     test_cli_list_ports_json()?;
 
-    log::info!("🎉 All CLI integration tests passed!");
+    log::info!("🧪 All CLI integration tests passed!");
     Ok(())
 }
 
@@ -62,9 +62,9 @@ fn test_cli_help() -> Result<()> {
         .output()
         .map_err(|err| anyhow!("Failed to execute aoba binary: {}", err))?;
 
-    // Log raw stdout/stderr for debugging in CI
-    log::debug!("help stdout: {}", String::from_utf8_lossy(&output.stdout));
-    log::debug!("help stderr: {}", String::from_utf8_lossy(&output.stderr));
+    // Log raw stdout/stderr for infoging in CI
+    log::info!("help stdout: {}", String::from_utf8_lossy(&output.stdout));
+    log::info!("help stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     if !output.status.success() {
         log::error!("Help command failed with status: {}", output.status);
@@ -80,7 +80,7 @@ fn test_cli_help() -> Result<()> {
         return Err(anyhow!("Help output doesn't contain expected usage text"));
     }
 
-    log::info!("   ✓ Help command works correctly");
+    log::info!("🧪 Help command works correctly");
     Ok(())
 }
 
@@ -92,11 +92,11 @@ fn test_cli_list_ports() -> Result<()> {
         .map_err(|err| anyhow!("Failed to execute aoba binary: {}", err))?;
 
     // Log raw stdout/stderr for CI visibility
-    log::debug!(
+    log::info!(
         "list-ports stdout: {}",
         String::from_utf8_lossy(&output.stdout)
     );
-    log::debug!(
+    log::info!(
         "list-ports stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -109,19 +109,19 @@ fn test_cli_list_ports() -> Result<()> {
         ));
     }
 
-    log::info!("   ✓ List ports command works correctly");
+    log::info!("🧪 List ports command works correctly");
     // Flexible check: ensure virtual serial ports are available (created by socat in CI)
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !stdout.contains("/dev/vcom1") || !stdout.contains("/dev/vcom2") {
         log::warn!(
             "Expected /dev/vcom1 and /dev/vcom2 to be present in list-ports output; got: {stdout}",
         );
-        log::info!("   ⚠ Virtual serial ports not found (may be expected if socat not set up)");
+        log::info!("🧪 Virtual serial ports not found (may be expected if socat not set up)");
     } else {
-        log::info!("   ✓ Found virtual serial ports in list-ports output");
+        log::info!("🧪 Found virtual serial ports in list-ports output");
     }
 
-    log::info!("   ✓ List ports command completed successfully");
+    log::info!("🧪 List ports command completed successfully");
     Ok(())
 }
 
@@ -134,11 +134,11 @@ fn test_cli_list_ports_json() -> Result<()> {
         .map_err(|err| anyhow!("Failed to execute aoba binary: {}", err))?;
 
     // Log raw stdout/stderr for CI visibility
-    log::debug!(
+    log::info!(
         "list-ports-json stdout: {}",
         String::from_utf8_lossy(&output.stdout)
     );
-    log::debug!(
+    log::info!(
         "list-ports-json stderr: {}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -154,18 +154,18 @@ fn test_cli_list_ports_json() -> Result<()> {
         ));
     }
 
-    log::info!("   ✓ JSON output command works correctly");
+    log::info!("🧪 JSON output command works correctly");
     // Flexible check for JSON output: ensure virtual serial ports are available
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !stdout.contains("/dev/vcom1") || !stdout.contains("/dev/vcom2") {
         log::warn!("Expected /dev/vcom1 and /dev/vcom2 in JSON list-ports output; got: {stdout}",);
         log::info!(
-            "   ⚠ Virtual serial ports not found in JSON (may be expected if socat not set up)"
+            "🧪 Virtual serial ports not found in JSON (may be expected if socat not set up)"
         );
     } else {
-        log::info!("   ✓ Found virtual serial ports in JSON list-ports output");
+        log::info!("🧪 Found virtual serial ports in JSON list-ports output");
     }
 
-    log::info!("   ✓ JSON list-ports command completed successfully");
+    log::info!("🧪 JSON list-ports command completed successfully");
     Ok(())
 }
