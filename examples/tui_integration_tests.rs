@@ -196,7 +196,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
         session
             .send("\x1b[A") // Up arrow escape sequence
             .map_err(|err| anyhow!("Failed to send up arrow: {}", err))?;
-        
+
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Check if we can find the cursor indicator at the first item
@@ -247,7 +247,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
             }
         }
         Err(err) => {
-            log::error!("✗ Application became unresponsive: {}", err);
+            log::error!("✗ Application became unresponsive: {err}");
             return Err(anyhow!(
                 "TUI application crashed or became unresponsive after pressing Enter"
             ));
