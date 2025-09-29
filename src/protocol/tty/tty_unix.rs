@@ -1,8 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::os::unix::fs::FileTypeExt;
+use std::path::Path;
 
 use serialport::{SerialPortInfo, SerialPortType};
 
-use super::PortExtra;
+use super::{PortExtra, VidPidSerial};
 
 // Utility functions for parsing debug strings (shared with Windows)
 fn parse_string_after(s: &str, key: &str) -> Option<String> {
@@ -62,9 +65,47 @@ fn parse_serial_after(s: &str, key: &str) -> Option<String> {
     None
 }
 
+/// Detect virtual serial ports created by socat or similar tools
+fn detect_virtual_ports() -> Vec<SerialPortInfo> {
+    let mut virtual_ports = Vec::new();
+
+    // Common locations for virtual serial ports
+    let virtual_port_paths = [
+        "/dev/vcom1",
+        "/dev/vcom2",
+        "/dev/vcom3",
+        "/dev/vcom4",
+        "/tmp/vcom1",
+        "/tmp/vcom2",
+        "/tmp/vcom3",
+        "/tmp/vcom4",
+    ];
+
+    for port_path in &virtual_port_paths {
+        if Path::new(port_path).exists() {
+            // Check if it's a symlink to a pts device or a character device
+            if let Ok(metadata) = fs::symlink_metadata(port_path) {
+                if metadata.file_type().is_symlink() || metadata.file_type().is_char_device() {
+                    virtual_ports.push(SerialPortInfo {
+                        port_name: port_path.to_string(),
+                        port_type: SerialPortType::Unknown,
+                    });
+                }
+            }
+        }
+    }
+
+    virtual_ports
+}
+
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
-    let raw_ports = serialport::available_ports().unwrap_or_default();
+    let mut raw_ports = serialport::available_ports().unwrap_or_default();
+
+    // Add virtual ports created by socat or similar tools
+    let virtual_ports = detect_virtual_ports();
+    raw_ports.extend(virtual_ports);
+
     sort_and_dedup_ports(raw_ports)
 }
 
@@ -138,10 +179,13 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
         }
     }
 
-    // Priority sort: USB / ACM first, then ttys
+    // Priority sort: Virtual ports (socat) first, then USB / ACM, then ttys
     fn priority(name: &str) -> i32 {
         let n = name.to_lowercase();
-        if n.contains("ttyusb") || n.contains("usb") {
+        if n.contains("vcom") || n.contains("tptyv") || n.contains("pts") && n.contains("v") {
+            // Virtual ports created by socat get highest priority for testing
+            -1
+        } else if n.contains("ttyusb") || n.contains("usb") {
             0
         } else if n.contains("acm") {
             1
@@ -166,14 +210,12 @@ pub(crate) fn sort_and_dedup_ports(raw_ports: Vec<SerialPortInfo>) -> Vec<Serial
 }
 
 /// Try to extract vid / pid / serial from a SerialPortType on Unix platforms.
-pub fn try_extract_vid_pid_serial(
-    pt: &serialport::SerialPortType,
-) -> Option<(u16, u16, Option<String>, Option<String>, Option<String>)> {
+pub fn try_extract_vid_pid_serial(pt: &serialport::SerialPortType) -> Option<VidPidSerial> {
     match pt {
         serialport::SerialPortType::UsbPort(info) => {
-            let sn = info.serial_number.as_ref().map(|s| s.clone());
-            let m = info.manufacturer.as_ref().map(|s| s.clone());
-            let p = info.product.as_ref().map(|s| s.clone());
+            let sn = info.serial_number.clone();
+            let m = info.manufacturer.clone();
+            let p = info.product.clone();
             Some((info.vid, info.pid, sn, m, p))
         }
         // Some serialport versions have different field names; try to fall back
