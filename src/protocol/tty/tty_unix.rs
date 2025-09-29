@@ -1,4 +1,7 @@
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::os::unix::fs::FileTypeExt;
+use std::path::Path;
 
 use serialport::{SerialPortInfo, SerialPortType};
 
@@ -62,9 +65,47 @@ fn parse_serial_after(s: &str, key: &str) -> Option<String> {
     None
 }
 
+/// Detect virtual serial ports created by socat or similar tools
+fn detect_virtual_ports() -> Vec<SerialPortInfo> {
+    let mut virtual_ports = Vec::new();
+
+    // Common locations for virtual serial ports
+    let virtual_port_paths = [
+        "/dev/vcom1",
+        "/dev/vcom2",
+        "/dev/vcom3",
+        "/dev/vcom4",
+        "/tmp/vcom1",
+        "/tmp/vcom2",
+        "/tmp/vcom3",
+        "/tmp/vcom4",
+    ];
+
+    for port_path in &virtual_port_paths {
+        if Path::new(port_path).exists() {
+            // Check if it's a symlink to a pts device or a character device
+            if let Ok(metadata) = fs::symlink_metadata(port_path) {
+                if metadata.file_type().is_symlink() || metadata.file_type().is_char_device() {
+                    virtual_ports.push(SerialPortInfo {
+                        port_name: port_path.to_string(),
+                        port_type: SerialPortType::Unknown,
+                    });
+                }
+            }
+        }
+    }
+
+    virtual_ports
+}
+
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
-    let raw_ports = serialport::available_ports().unwrap_or_default();
+    let mut raw_ports = serialport::available_ports().unwrap_or_default();
+
+    // Add virtual ports created by socat or similar tools
+    let virtual_ports = detect_virtual_ports();
+    raw_ports.extend(virtual_ports);
+
     sort_and_dedup_ports(raw_ports)
 }
 
