@@ -145,8 +145,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     // expected, proceed
                 } else {
                     log::warn!(
-                        "scan_ports: received unexpected event while stopping {name}: {:?}",
-                        evt
+                        "scan_ports: received unexpected event while stopping {name}: {evt:?}"
                     );
                 }
             }
