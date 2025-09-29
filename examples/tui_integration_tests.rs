@@ -7,8 +7,18 @@ use std::{process::Command, time::Duration};
 
 use expectrl::{spawn, Regex};
 
+/// Helper function to log screen capture attempts for debugging
+fn log_screen_capture(_session: &mut expectrl::Session, step_description: &str) -> Result<()> {
+    log::debug!("📺 Screen capture point: {}", step_description);
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Set RUST_LOG to debug if not already set
+    if std::env::var("RUST_LOG").is_err() {
+        std::env::set_var("RUST_LOG", "debug");
+    }
     let _ = env_logger::try_init();
     log::info!("🎭 Starting TUI Integration Tests (User Simulation)...");
 
@@ -62,7 +72,7 @@ async fn test_tui_startup_shutdown() -> Result<()> {
         .send_line("q")
         .map_err(|err| anyhow!("Failed to send quit command: {}", err))?;
 
-    log::info!("   ✓ TUI startup/shutdown test completed");
+    log::info!("✓ TUI startup/shutdown test completed");
 
     // (removed: cleanup of virtual serial ports)
     Ok(())
@@ -130,7 +140,7 @@ async fn test_tui_navigation() -> Result<()> {
     session
         .send_line("q")
         .map_err(|err| anyhow!("Failed to send quit: {}", err))?;
-    log::info!("   ✓ TUI navigation test completed");
+    log::info!("✓ TUI navigation test completed");
 
     // (removed: cleanup of virtual serial ports)
     Ok(())
@@ -159,6 +169,9 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
     // Wait for UI to load
     tokio::time::sleep(Duration::from_millis(1500)).await;
 
+    // Capture initial screen state
+    log_screen_capture(&mut session, "TUI startup")?;
+
     // First check if virtual ports are visible in the output
     let mut found_v1 = false;
     let mut found_v2 = false;
@@ -181,6 +194,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
     }
 
     if !found_v1 || !found_v2 {
+        log_screen_capture(&mut session, "port detection failure")?;
         return Err(anyhow!(
             "TUI did not display both /dev/vcom1 and /dev/vcom2"
         ));
@@ -199,16 +213,21 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
 
         tokio::time::sleep(Duration::from_millis(100)).await;
 
+        // Capture screen content after each key press
+        log_screen_capture(&mut session, &format!("up arrow press #{}", i + 1))?;
+
         // Check if we can find the cursor indicator at the first item
         // Look for "> /dev/vcom" pattern indicating cursor is on a virtual port
         match session.expect(Regex(r"> /dev/vcom[12]")) {
             Ok(_) => {
                 log::info!("✓ Cursor found at virtual port after {} up presses", i + 1);
+                log_screen_capture(&mut session, "cursor found at virtual port")?;
                 break;
             }
             Err(_) => {
                 if i == 9 {
                     log::warn!("Could not locate cursor at first virtual port after 10 attempts");
+                    log_screen_capture(&mut session, "final navigation attempt")?;
                 }
             }
         }
@@ -222,6 +241,9 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
 
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
+    // Capture screen after Enter press
+    log_screen_capture(&mut session, "Enter key press")?;
+
     // Check for crashes or error messages
     // If the application crashed, the session would be terminated
     // If there are error messages, they would typically contain keywords like "error", "failed", "panic"
@@ -234,12 +256,16 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
             log::info!("✓ Application still responsive after Enter press");
             tokio::time::sleep(Duration::from_millis(500)).await;
 
+            // Capture screen after q press
+            log_screen_capture(&mut session, "q key press for testing responsiveness")?;
+
             // Check if we can capture any error messages in the output
             // We'll try a simple expect to see if there are any error patterns
             match session.expect(Regex(r"(?i)(error|failed|panic|crash)")) {
                 Ok(_) => {
                     has_errors = true;
                     log::warn!("⚠ Detected error-like messages in TUI output");
+                    log_screen_capture(&mut session, "error detection")?;
                 }
                 Err(_) => {
                     log::info!("✓ No error messages detected in TUI output");
@@ -247,7 +273,8 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
             }
         }
         Err(err) => {
-            log::error!("✗ Application became unresponsive: {err}");
+            log::error!("✗ Application became unresponsive: {}", err);
+            log_screen_capture(&mut session, "application unresponsive")?;
             return Err(anyhow!(
                 "TUI application crashed or became unresponsive after pressing Enter"
             ));
@@ -259,6 +286,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
         Ok(_) => {
             tokio::time::sleep(Duration::from_millis(300)).await;
             log::info!("✓ TUI exited gracefully");
+            log_screen_capture(&mut session, "final quit attempt")?;
         }
         Err(_) => {
             log::info!("Application may have already exited");
@@ -271,7 +299,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
         ));
     }
 
-    log::info!("   ✓ TUI serial port interaction test completed successfully");
+    log::info!("✓ TUI serial port interaction test completed successfully");
     Ok(())
 }
 
@@ -323,8 +351,8 @@ fn test_filter_dynamic_content() {
     let test_content = "⠋ Loading... 14:30:25 Status: ● Active ○ Idle 2024-01-15 14:30:25";
     let filtered = filter_dynamic_content(test_content);
 
-    log::info!("   ✓ Original: {test_content}");
-    log::info!("   ✓ Filtered: {filtered}");
+    log::info!("✓ Original: {test_content}");
+    log::info!("✓ Filtered: {filtered}");
 
     // Verify that dynamic content has been filtered
     assert!(!filtered.contains("⠋"));
@@ -334,5 +362,5 @@ fn test_filter_dynamic_content() {
     assert!(filtered.contains("XX:XX:XX"));
     assert!(filtered.contains("XXXX-XX-XX XX:XX:XX"));
 
-    log::info!("   ✓ Dynamic content filtering test passed");
+    log::info!("✓ Dynamic content filtering test passed");
 }
