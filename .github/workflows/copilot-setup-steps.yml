@@ -73,6 +73,16 @@ jobs:
           echo "Available serial ports for testing:"
           find /dev -name "ttyS*" | head -5
 
+      # Run the Copilot CI environment validation test
+      - name: Validate Copilot CI Container Environment
+        run: |
+          if [ -f "./ci_test.sh" ]; then
+            echo "Running Copilot CI environment validation..."
+            ./ci_test.sh
+          else
+            echo "✅ Copilot CI environment validation script not found (may be expected for older branches)"
+          fi
+
       # Clean up virtual ports/processes (ensure socat is killed if started)
       - name: Cleanup
         if: always()

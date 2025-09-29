@@ -41,6 +41,16 @@
 2. `cargo build --bins`
 3. `cargo run` 或运行生成的可执行文件
 
+## CI 测试
+
+验证 CI 环境（特别适用于 Copilot 开发）：
+
+```bash
+./ci_test.sh
+```
+
+此脚本验证 CI 容器环境具有所有必要的依赖项并能编译 Rust 代码。
+
 ## 贡献
 
 欢迎提交 issue 或 PR！

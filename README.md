@@ -41,6 +41,16 @@ Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, T
 2. `cargo build --bins`
 3. `cargo run` or run the generated executable
 
+## CI Testing
+
+For validating the CI environment (especially useful for Copilot development):
+
+```bash
+./ci_test.sh
+```
+
+This script validates that the CI container environment has all necessary dependencies and can compile Rust code.
+
 ## Contribution
 
 Feel free to submit issues or PRs!
