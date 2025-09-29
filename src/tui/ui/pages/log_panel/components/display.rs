@@ -83,7 +83,7 @@ pub fn render_log_display(
                 "[OK]"
             };
 
-        let line1 = format!("{} {}", time_str, status);
+        let line1 = format!("{time_str} {status}");
 
         // Try to parse hex bytes from raw
         let mut bytes: Vec<u8> = Vec::new();
@@ -132,7 +132,7 @@ pub fn render_log_display(
                 _ => "Func",
             };
             let end = addr.saturating_add(qty.saturating_sub(1));
-            details.push(format!("{} {}-{}", reg_type, addr, end));
+            details.push(format!("{reg_type} {addr}-{end}"));
         } else {
             // Fallback: include raw trimmed tokens as detail items
             let parts: Vec<String> = entry
@@ -156,7 +156,7 @@ pub fn render_log_display(
         let mut data_items: Vec<String> = Vec::new();
         if !bytes.is_empty() {
             for b in &bytes {
-                data_items.push(format!("{:02X}", b));
+                data_items.push(format!("{b:02X}"));
             }
         }
         let line3 = format!("[{}]", data_items.join(", "));
@@ -252,7 +252,7 @@ pub fn render_log_display(
         logs.len()
     };
     let total_items = logs.len();
-    let position_text = format!(" {} / {} ", current_pos, total_items);
+    let position_text = format!(" {current_pos} / {total_items} ");
 
     // Render position counter at bottom-right of the frame
     let position_area = Rect {

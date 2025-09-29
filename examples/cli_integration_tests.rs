@@ -114,8 +114,7 @@ fn test_cli_list_ports() -> Result<()> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !stdout.contains("/dev/vcom1") || !stdout.contains("/dev/vcom2") {
         log::warn!(
-            "Expected /dev/vcom1 and /dev/vcom2 to be present in list-ports output; got: {}",
-            stdout
+            "Expected /dev/vcom1 and /dev/vcom2 to be present in list-ports output; got: {stdout}",
         );
         log::info!("   ⚠ Virtual serial ports not found (may be expected if socat not set up)");
     } else {
@@ -159,10 +158,7 @@ fn test_cli_list_ports_json() -> Result<()> {
     // Flexible check for JSON output: ensure virtual serial ports are available
     let stdout = String::from_utf8_lossy(&output.stdout);
     if !stdout.contains("/dev/vcom1") || !stdout.contains("/dev/vcom2") {
-        log::warn!(
-            "Expected /dev/vcom1 and /dev/vcom2 in JSON list-ports output; got: {}",
-            stdout
-        );
+        log::warn!("Expected /dev/vcom1 and /dev/vcom2 in JSON list-ports output; got: {stdout}",);
         log::info!(
             "   ⚠ Virtual serial ports not found in JSON (may be expected if socat not set up)"
         );

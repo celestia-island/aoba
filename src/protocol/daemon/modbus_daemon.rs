@@ -96,7 +96,7 @@ pub fn handle_master_mode(
                 // Log the received request
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Master RX: {}", hex_frame),
+                    raw: format!("Master RX: {hex_frame}"),
                     parsed: None,
                 };
 
@@ -150,7 +150,7 @@ pub fn handle_master_mode(
 
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
-                        raw: format!("Master TX: {}", hex_response),
+                        raw: format!("Master TX: {hex_response}"),
                         parsed: None,
                     };
 
@@ -283,7 +283,7 @@ pub fn handle_slave_mode(
 
                             let log_entry = PortLogEntry {
                                 when: chrono::Local::now(),
-                                raw: format!("Slave TX: {}", hex_frame),
+                                raw: format!("Slave TX: {hex_frame}"),
                                 parsed: None,
                             };
 
@@ -352,7 +352,7 @@ pub fn handle_slave_mode(
                 // Log the received response (Slave RX)
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Slave RX: {}", hex_frame),
+                    raw: format!("Slave RX: {hex_frame}"),
                     parsed: None,
                 };
 

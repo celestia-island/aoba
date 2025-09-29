@@ -101,7 +101,7 @@ fn test_tui_startup_detection() -> Result<()> {
             found_tui_content = true;
         }
         Err(err) => {
-            log::info!("   ⚠ Could not detect specific TUI content: {:?}", err);
+            log::info!("   ⚠ Could not detect specific TUI content: {err:?}");
             // Even if we can't detect specific content, the TUI might still be running
         }
     }

@@ -57,14 +57,14 @@ jobs:
           socat PTY,link=/tmp/test_vcom1,raw,echo=0 PTY,link=/tmp/test_vcom2,raw,echo=0 &
           SOCAT_TEST_PID=$!
           sleep 2
-          
+
           if [ -e /tmp/test_vcom1 ] && [ -e /tmp/test_vcom2 ]; then
             echo "✓ socat virtual serial ports working"
             ls -la /tmp/test_vcom1 /tmp/test_vcom2
           else
             echo "⚠ socat virtual serial ports not created"
           fi
-          
+
           # Clean up test ports
           kill $SOCAT_TEST_PID || true
           rm -f /tmp/test_vcom1 /tmp/test_vcom2 || true
@@ -79,7 +79,7 @@ jobs:
         run: |
           # Kill any remaining socat processes
           pkill socat || true
-          
+
           # Remove any remaining virtual port links
           sudo rm -f /dev/vcom1 /dev/vcom2 || true
           sudo rm -f /tmp/test_vcom1 /tmp/test_vcom2 || true

@@ -107,7 +107,7 @@ fn test_virtual_ports() -> Result<(), Box<dyn std::error::Error>> {
                 println!("   ✓ Virtual ports detected by aoba");
             } else {
                 println!("   ⚠ Virtual ports not detected in output (may be expected)");
-                println!("   Output: {}", stdout);
+                println!("   Output: {stdout}");
             }
         }
     } else {

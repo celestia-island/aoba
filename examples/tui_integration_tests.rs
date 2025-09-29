@@ -256,8 +256,8 @@ fn test_filter_dynamic_content() {
     let test_content = "⠋ Loading... 14:30:25 Status: ● Active ○ Idle 2024-01-15 14:30:25";
     let filtered = filter_dynamic_content(test_content);
 
-    log::info!("   ✓ Original: {}", test_content);
-    log::info!("   ✓ Filtered: {}", filtered);
+    log::info!("   ✓ Original: {test_content}");
+    log::info!("   ✓ Filtered: {filtered}");
 
     // Verify that dynamic content has been filtered
     assert!(!filtered.contains("⠋"));
