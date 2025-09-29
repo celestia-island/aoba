@@ -17,17 +17,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Use stable Rust for consistent test results
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Install system dependencies (socat no longer needed for virtual ports)
+      # Install system dependencies including socat for virtual serial ports
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
       # Cache Cargo registry to speed up builds
       - name: Cache cargo registry
@@ -46,9 +46,35 @@ jobs:
         run: |
           cargo build --release
 
+      # Create virtual serial port pairs using socat for TUI testing
+      - name: Setup virtual serial ports
+        run: |
+          # Create virtual serial port pair using socat in background with sudo
+          sudo bash -c 'socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &'
+          sleep 2  # Give socat time to start
+
+          # Wait for the virtual ports to be created
+          timeout=10
+          count=0
+          while [ $count -lt $timeout ] && ([ ! -e /dev/vcom1 ] || [ ! -e /dev/vcom2 ]); do
+            sleep 1
+            count=$((count + 1))
+          done
+
+          # Verify both ports exist
+          if [ -e /dev/vcom1 ] && [ -e /dev/vcom2 ]; then
+            echo "Virtual serial ports created successfully:"
+            ls -la /dev/vcom1 /dev/vcom2
+            # Make sure the ports are accessible
+            sudo chmod 666 /dev/vcom1 /dev/vcom2
+          else
+            echo "Failed to create virtual serial ports"
+            exit 1
+          fi
+
       # Run TUI integration tests using dedicated examples for terminal automation
       # These tests simulate user input and validate TUI functionality
-      # Note: Tests use existing ttyS devices present in CI environment
+      # Note: Tests now use socat-created virtual port pairs /dev/vcom1 and /dev/vcom2
       - name: Run TUI integration tests
         run: |
           # Run the new TUI smoke tests example (basic startup/shutdown with Ctrl+C)
@@ -56,3 +82,13 @@ jobs:
 
           # Run comprehensive TUI integration tests example (user simulation and black-box testing)
           timeout 180 cargo run --example tui_integration_tests || echo "TUI integration tests completed"
+
+      # Clean up virtual serial ports
+      - name: Cleanup virtual ports
+        if: always()
+        run: |
+          # Kill socat processes if they exist
+          sudo pkill socat || true
+
+          # Remove virtual port links if they exist
+          sudo rm -f /dev/vcom1 /dev/vcom2 || true

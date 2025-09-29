@@ -89,9 +89,9 @@ fn test_json_output() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn test_virtual_ports() -> Result<(), Box<dyn std::error::Error>> {
-    // Check if we have virtual ports set up by CI
-    let vcom1_exists = fs::metadata("/tmp/vcom1").is_ok();
-    let vcom2_exists = fs::metadata("/tmp/vcom2").is_ok();
+    // Check if we have virtual ports set up by CI (using socat)
+    let vcom1_exists = fs::metadata("/dev/vcom1").is_ok();
+    let vcom2_exists = fs::metadata("/dev/vcom2").is_ok();
 
     if vcom1_exists && vcom2_exists {
         println!("   ✓ Virtual serial ports are available");
@@ -103,10 +103,11 @@ fn test_virtual_ports() -> Result<(), Box<dyn std::error::Error>> {
 
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            if stdout.contains("/tmp/vcom") {
+            if stdout.contains("/dev/vcom") {
                 println!("   ✓ Virtual ports detected by aoba");
             } else {
                 println!("   ⚠ Virtual ports not detected in output (may be expected)");
+                println!("   Output: {stdout}");
             }
         }
     } else {

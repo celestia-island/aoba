@@ -127,7 +127,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             };
 
             let variants = ModbusConnectionMode::all_variants();
-            let current_text = format!("{}", mode_obj);
+            let current_text = format!("{mode_obj}");
 
             match state {
                 TextState::Normal => {
@@ -147,7 +147,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     spans.push(Span::raw("< "));
                     // Use localized Display implementation instead of hardcoded strings
                     let selected_variant = variants.get(selected_index).unwrap_or(&variants[0]);
-                    let localized_text = format!("{}", selected_variant);
+                    let localized_text = format!("{selected_variant}");
                     spans.push(Span::styled(
                         localized_text,
                         Style::default().fg(Color::Yellow),
