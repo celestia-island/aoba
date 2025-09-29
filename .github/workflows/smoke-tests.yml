@@ -41,9 +41,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      # Build release binaries for testing
-      - name: Build release binaries
-        run: cargo build --release
+      # Build binaries for testing
+      - name: Build binaries
+        run: cargo build
 
       # Create virtual serial port pairs using socat for modbus testing
       - name: Setup virtual serial ports

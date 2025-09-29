@@ -3,198 +3,158 @@
 // Run with: cargo run --example tui_integration_tests
 
 use anyhow::{anyhow, Result};
-use std::{process::Command, time::Duration};
+use std::{
+    process::{Command, Stdio},
+    time::Duration,
+};
 
-use expectrl::{spawn, Regex};
+use expectrl::{spawn, Expect};
+use regex::Regex;
 
-/// Helper function to log screen capture attempts for debugging
-fn log_screen_capture(_session: &mut expectrl::Session, step_description: &str) -> Result<()> {
-    log::debug!("📺 Screen capture point: {step_description}");
-    Ok(())
-}
+use aoba::test_utils::TerminalCapture;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Set RUST_LOG to debug if not already set
+    // Set RUST_LOG to info if not already set
     if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", "debug");
+        std::env::set_var("RUST_LOG", "info");
     }
     env_logger::try_init()?;
-    log::info!("🎭 Starting TUI Integration Tests (User Simulation)...");
+    log::info!("🧪 Starting TUI Integration Tests (User Simulation)...");
+    // Build the application once at startup and reuse the binary path for all tests
+    log::info!("🧪 Building application once for all integration tests...");
 
-    // Test 1: Basic TUI startup and shutdown
-    log::info!("✅ Test 1: TUI startup and shutdown");
-    test_tui_startup_shutdown().await?;
+    // Spawn cargo build and let it inherit the parent's stdio so output goes directly to this process's
+    // stdout/stderr (useful for CI to capture build logs as-is).
+    let status = Command::new("cargo")
+        .args(["build"])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .map_err(|e| anyhow!("Failed to execute cargo build: {}", e))?;
 
-    // Test 2: TUI navigation and interaction
-    log::info!("✅ Test 2: TUI navigation and interaction");
-    test_tui_navigation().await?;
+    if !status.success() {
+        return Err(anyhow!("cargo build failed with status: {}", status));
+    }
 
-    // Test 3: TUI with virtual serial port interaction
-    log::info!("✅ Test 3: TUI with virtual serial ports");
-    test_tui_serial_port_interaction().await?;
+    // Path to the built binary; on Windows the executable has .exe
+    #[cfg(windows)]
+    let bin_path = "./target/debug/aoba.exe";
+    #[cfg(not(windows))]
+    let bin_path = "./target/debug/aoba";
 
-    // Test 4: Dynamic content filtering
-    log::info!("✅ Test 4: Dynamic content filtering");
-    test_filter_dynamic_content();
+    log::info!("🧪 Test 1: TUI startup and shutdown");
+    test_tui_startup_shutdown(bin_path).await?;
 
-    log::info!("🎉 All TUI integration tests passed!");
+    log::info!("🧪 Test 2: TUI navigation and interaction");
+    test_tui_navigation(bin_path).await?;
+
+    log::info!("🧪 Test 3: TUI with virtual serial ports");
+    test_tui_serial_port_interaction(bin_path).await?;
+
+    log::info!("🧪 All TUI integration tests passed!");
     Ok(())
 }
 
 /// Test basic TUI startup and shutdown
-async fn test_tui_startup_shutdown() -> Result<()> {
-    // Setup virtual serial ports for testing
-    // (removed: setup of virtual serial ports to avoid starting system providers in examples)
-
-    // Build the application first
-    let build_output = Command::new("cargo")
-        .args(["build", "--release"])
-        .output()
-        .expect("Failed to execute cargo build");
-
-    if !build_output.status.success() {
-        return Err(anyhow!(
-            "Failed to build application: {}",
-            String::from_utf8_lossy(&build_output.stderr)
-        ));
-    }
-
+async fn test_tui_startup_shutdown(bin_path: &str) -> Result<()> {
     // Spawn the TUI process
-    let mut session = spawn("./target/release/aoba --tui")
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
-
+    let spawn_cmd = format!("{} --tui", bin_path);
+    let mut session =
+        spawn(spawn_cmd).map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
     // Wait for TUI to start (look for some expected content)
-    session.expect(Regex(".*"))?;
+    let mut cap = TerminalCapture::new(24, 80);
+    let _ = cap.capture(&mut session, "Waiting for TUI to start")?;
 
     // Send quit command (typically 'q' or Ctrl+C)
     session
         .send_line("q")
         .map_err(|err| anyhow!("Failed to send quit command: {}", err))?;
 
-    log::info!("✓ TUI startup/shutdown test completed");
-
-    // (removed: cleanup of virtual serial ports)
+    log::info!("🧪 TUI startup/shutdown test completed");
     Ok(())
 }
 
 /// Test TUI navigation and basic interaction
-async fn test_tui_navigation() -> Result<()> {
-    // (removed: setup of virtual serial ports)
-
-    // Build the application first
-    let build_output = Command::new("cargo")
-        .args(["build", "--release"])
-        .output()
-        .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
-
-    if !build_output.status.success() {
-        return Err(anyhow!(
-            "Failed to build application: {}",
-            String::from_utf8_lossy(&build_output.stderr)
-        ));
-    }
-
-    let mut session = spawn("./target/release/aoba --tui")
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
-
+async fn test_tui_navigation(bin_path: &str) -> Result<()> {
+    let spawn_cmd = format!("{} --tui", bin_path);
+    let mut session =
+        spawn(spawn_cmd).map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
     // Wait for initial UI
-    session.expect(Regex(".*"))?;
+    let mut cap = TerminalCapture::new(24, 80);
+    let _ = cap.capture(&mut session, "Waiting for TUI to start")?;
 
     // Test navigation keys
     session
         .send("\t")
         .map_err(|err| anyhow!("Failed to send Tab: {}", err))?; // Tab key
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     session
         .send_line("")
         .map_err(|err| anyhow!("Failed to send Enter: {}", err))?; // Enter key
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Send arrow keys for navigation
     session
         .send("\x1b[A")
         .map_err(|err| anyhow!("Failed to send Up arrow: {}", err))?; // Up arrow
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     session
         .send("\x1b[B")
         .map_err(|err| anyhow!("Failed to send Down arrow: {}", err))?; // Down arrow
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     session
         .send("\x1b[C")
         .map_err(|err| anyhow!("Failed to send Right arrow: {}", err))?; // Right arrow
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     session
         .send("\x1b[D")
         .map_err(|err| anyhow!("Failed to send Left arrow: {}", err))?; // Left arrow
-    tokio::time::sleep(Duration::from_millis(100)).await;
 
     // Take snapshots of current terminal content would go here
-    // For now, we just verify the navigation commands were sent successfully
+    let _ = cap.capture(&mut session, "After navigation keys")?;
 
     // Exit gracefully
     session
         .send_line("q")
         .map_err(|err| anyhow!("Failed to send quit: {}", err))?;
-    log::info!("✓ TUI navigation test completed");
-
-    // (removed: cleanup of virtual serial ports)
+    log::info!("🧪 TUI navigation test completed");
     Ok(())
 }
 
 /// Test TUI with virtual serial port interaction
-async fn test_tui_serial_port_interaction() -> Result<()> {
-    // (removed: setup of virtual serial ports)
-
-    // Build the application first
-    let build_output = Command::new("cargo")
-        .args(["build", "--release"])
-        .output()
-        .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
-
-    if !build_output.status.success() {
-        return Err(anyhow!(
-            "Failed to build application: {}",
-            String::from_utf8_lossy(&build_output.stderr)
-        ));
-    }
-
-    let mut session = spawn("./target/release/aoba --tui")
-        .map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
+async fn test_tui_serial_port_interaction(bin_path: &str) -> Result<()> {
+    let spawn_cmd = format!("{} --tui", bin_path);
+    let mut session =
+        spawn(spawn_cmd).map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
 
     // Wait for UI to load
-    tokio::time::sleep(Duration::from_millis(1500)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Capture initial screen state
-    log_screen_capture(&mut session, "TUI startup")?;
+    let mut cap = TerminalCapture::new(24, 80);
+    let screen = cap.capture(&mut session, "TUI startup")?;
 
     // First check if virtual ports are visible in the output
     let mut found_v1 = false;
     let mut found_v2 = false;
 
     // Try to capture current screen content
-    match session.expect(Regex(r"/dev/vcom1")) {
-        Ok(_) => {
-            found_v1 = true;
-            log::info!("✓ Found /dev/vcom1 in TUI output");
-        }
-        Err(_) => log::info!("⚠ /dev/vcom1 not visible in TUI output"),
+    if Regex::new(r"/dev/vcom1").unwrap().is_match(&screen) {
+        found_v1 = true;
+        log::info!("🧪 Found /dev/vcom1 in TUI output");
+    } else {
+        log::info!("🧪 /dev/vcom1 not visible in TUI output");
     }
 
-    match session.expect(Regex(r"/dev/vcom2")) {
-        Ok(_) => {
-            found_v2 = true;
-            log::info!("✓ Found /dev/vcom2 in TUI output");
-        }
-        Err(_) => log::info!("⚠ /dev/vcom2 not visible in TUI output"),
+    if Regex::new(r"/dev/vcom2").unwrap().is_match(&screen) {
+        found_v2 = true;
+        log::info!("🧪 Found /dev/vcom2 in TUI output");
+    } else {
+        log::info!("🧪 /dev/vcom2 not visible in TUI output");
     }
 
     if !found_v1 || !found_v2 {
-        log_screen_capture(&mut session, "port detection failure")?;
+        let _ = cap.capture(&mut session, "port detection failure")?;
         return Err(anyhow!(
             "TUI did not display both /dev/vcom1 and /dev/vcom2"
         ));
@@ -202,7 +162,7 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
 
     // Navigate to first item using up arrow keys
     // Keep pressing up until we reach the first item (cursor should be at index 0)
-    log::info!("Navigating to first item using up arrow keys...");
+    log::info!("🧪 Navigating to first item using up arrow keys...");
 
     // Press up multiple times to ensure we reach the first item
     for i in 0..10 {
@@ -211,38 +171,33 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
             .send("\x1b[A") // Up arrow escape sequence
             .map_err(|err| anyhow!("Failed to send up arrow: {}", err))?;
 
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
         // Capture screen content after each key press
-        log_screen_capture(&mut session, &format!("up arrow press #{}", i + 1))?;
+        let screen = cap.capture(&mut session, &format!("up arrow press #{}", i + 1))?;
 
         // Check if we can find the cursor indicator at the first item
         // Look for "> /dev/vcom" pattern indicating cursor is on a virtual port
-        match session.expect(Regex(r"> /dev/vcom[12]")) {
-            Ok(_) => {
-                log::info!("✓ Cursor found at virtual port after {} up presses", i + 1);
-                log_screen_capture(&mut session, "cursor found at virtual port")?;
-                break;
-            }
-            Err(_) => {
-                if i == 9 {
-                    log::warn!("Could not locate cursor at first virtual port after 10 attempts");
-                    log_screen_capture(&mut session, "final navigation attempt")?;
-                }
+        if Regex::new(r"> /dev/vcom[12]").unwrap().is_match(&screen) {
+            log::info!("🧪 Cursor found at virtual port after {} up presses", i + 1);
+            let _ = cap.capture(&mut session, "cursor found at virtual port")?;
+            break;
+        } else {
+            if i == 9 {
+                log::warn!("Could not locate cursor at first virtual port after 10 attempts");
+                let _ = cap.capture(&mut session, "final navigation attempt")?;
             }
         }
     }
 
     // Press Enter to select the port
-    log::info!("Pressing Enter to select the port...");
+    log::info!("🧪 Pressing Enter to select the port...");
     session
         .send("\r") // Enter key
         .map_err(|err| anyhow!("Failed to send Enter: {}", err))?;
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    tokio::time::sleep(Duration::from_millis(500)).await;
 
     // Capture screen after Enter press
-    log_screen_capture(&mut session, "Enter key press")?;
+    let _ = cap.capture(&mut session, "Enter key press")?;
 
     // Check for crashes or error messages
     // If the application crashed, the session would be terminated
@@ -253,28 +208,28 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
     // Try to interact with the session to see if it's still responsive
     match session.send("q") {
         Ok(_) => {
-            log::info!("✓ Application still responsive after Enter press");
+            log::info!("🧪 Application still responsive after Enter press");
             tokio::time::sleep(Duration::from_millis(500)).await;
 
             // Capture screen after q press
-            log_screen_capture(&mut session, "q key press for testing responsiveness")?;
+            let screen = cap.capture(&mut session, "q key press for testing responsiveness")?;
 
-            // Check if we can capture any error messages in the output
-            // We'll try a simple expect to see if there are any error patterns
-            match session.expect(Regex(r"(?i)(error|failed|panic|crash)")) {
-                Ok(_) => {
-                    has_errors = true;
-                    log::warn!("⚠ Detected error-like messages in TUI output");
-                    log_screen_capture(&mut session, "error detection")?;
-                }
-                Err(_) => {
-                    log::info!("✓ No error messages detected in TUI output");
-                }
+            // Check if we can capture any error messages in the output by
+            // running a regex against the captured screen string.
+            if Regex::new(r"(?i)(error|failed|panic|crash)")
+                .unwrap()
+                .is_match(&screen)
+            {
+                has_errors = true;
+                log::warn!("🧪 Detected error-like messages in TUI output");
+                let _ = cap.capture(&mut session, "error detection")?;
+            } else {
+                log::info!("🧪 No error messages detected in TUI output");
             }
         }
         Err(err) => {
-            log::error!("✗ Application became unresponsive: {err}");
-            log_screen_capture(&mut session, "application unresponsive")?;
+            log::error!("🧪 Application became unresponsive: {err}");
+            let _ = cap.capture(&mut session, "application unresponsive")?;
             return Err(anyhow!(
                 "TUI application crashed or became unresponsive after pressing Enter"
             ));
@@ -285,11 +240,11 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
     match session.send("q") {
         Ok(_) => {
             tokio::time::sleep(Duration::from_millis(300)).await;
-            log::info!("✓ TUI exited gracefully");
-            log_screen_capture(&mut session, "final quit attempt")?;
+            log::info!("🧪 TUI exited gracefully");
+            let _ = cap.capture(&mut session, "final quit attempt")?;
         }
         Err(_) => {
-            log::info!("Application may have already exited");
+            log::info!("🧪 Application may have already exited");
         }
     }
 
@@ -299,68 +254,6 @@ async fn test_tui_serial_port_interaction() -> Result<()> {
         ));
     }
 
-    log::info!("✓ TUI serial port interaction test completed successfully");
+    log::info!("🧪 TUI serial port interaction test completed successfully");
     Ok(())
-}
-
-/// Setup virtual serial ports for testing
-///
-/// NOTE: In CI we should avoid creating system-level virtual serial ports or
-/// spawning background providers like `socat` from examples. Instead this
-/// function performs a non-invasive check and logs whether the expected
-/// virtual devices exist. This keeps CI clean and avoids leaving resident
-/// processes behind.
-// setup_virtual_serial_ports removed: examples must not spawn system providers
-/// Cleanup virtual serial ports
-///
-/// NOTE: Instead of attempting to remove device files or pkill providers,
-/// this function intentionally does not modify system state. In CI we prefer
-/// to rely on killing provider processes explicitly if needed (outside this
-/// example), or the CI job/container teardown to clean resources.
-// cleanup_virtual_serial_ports removed: examples must not attempt to clean system state
-/// Filter out dynamic content like spinners and timestamps
-fn filter_dynamic_content(content: &str) -> String {
-    let mut filtered = content.to_string();
-
-    // Remove common spinner characters
-    let spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-    for &c in &spinner_chars {
-        filtered = filtered.replace(c, " ");
-    }
-
-    // Remove timestamps (basic pattern matching)
-    // Pattern: HH:MM:SS or YYYY-MM-DD HH:MM:SS
-    let re = regex::Regex::new(r"\d{2}:\d{2}:\d{2}").unwrap();
-    filtered = re.replace_all(&filtered, "XX:XX:XX").to_string();
-
-    let re = regex::Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
-    filtered = re.replace_all(&filtered, "XXXX-XX-XX XX:XX:XX").to_string();
-
-    // Remove other common dynamic indicators
-    filtered = filtered.replace("●", " "); // dots
-    filtered = filtered.replace("○", " "); // circles
-
-    // Normalize whitespace
-    filtered = filtered.trim().to_string();
-
-    filtered
-}
-
-/// Test the content filtering functionality
-fn test_filter_dynamic_content() {
-    let test_content = "⠋ Loading... 14:30:25 Status: ● Active ○ Idle 2024-01-15 14:30:25";
-    let filtered = filter_dynamic_content(test_content);
-
-    log::info!("✓ Original: {test_content}");
-    log::info!("✓ Filtered: {filtered}");
-
-    // Verify that dynamic content has been filtered
-    assert!(!filtered.contains("⠋"));
-    assert!(!filtered.contains("14:30:25"));
-    assert!(!filtered.contains("●"));
-    assert!(!filtered.contains("○"));
-    assert!(filtered.contains("XX:XX:XX"));
-    assert!(filtered.contains("XXXX-XX-XX XX:XX:XX"));
-
-    log::info!("✓ Dynamic content filtering test passed");
 }

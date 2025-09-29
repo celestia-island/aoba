@@ -44,7 +44,7 @@ jobs:
       # Build the application for testing
       - name: Build test dependencies
         run: |
-          cargo build --release
+          cargo build
 
       # Create virtual serial port pairs using socat for TUI testing
       - name: Setup virtual serial ports
