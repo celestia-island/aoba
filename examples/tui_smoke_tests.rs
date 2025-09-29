@@ -5,30 +5,33 @@
 use anyhow::{anyhow, Result};
 use std::{process::Command, time::Duration};
 
-use expectrl::spawn;
+use expectrl::{spawn, Expect};
+use regex::Regex;
+
+use aoba::test_utils::TerminalCapture;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::try_init()?;
-    log::info!("🔥 Starting TUI Smoke Tests...");
+    log::info!("🧪 Starting TUI Smoke Tests...");
 
     // Test 1: Basic TUI startup and Ctrl+C exit
-    log::info!("✅ Test 1: TUI startup and Ctrl+C exit");
+    log::info!("🧪 Test 1: TUI startup and Ctrl+C exit");
     test_tui_startup_ctrl_c_exit()?;
 
     // Test 2: TUI content detection
-    log::info!("✅ Test 2: TUI content detection");
+    log::info!("🧪 Test 2: TUI content detection");
     test_tui_startup_detection()?;
 
     // Test 3: TUI with virtual serial ports
-    log::info!("✅ Test 3: TUI with virtual serial ports");
+    log::info!("🧪 Test 3: TUI with virtual serial ports");
     test_tui_with_virtual_ports().await?;
 
     // Test 4: Basic expectrl functionality
-    log::info!("✅ Test 4: Basic expectrl functionality");
+    log::info!("🧪 Test 4: Basic expectrl functionality");
     test_expectrl_basic_functionality()?;
 
-    log::info!("🎉 All TUI smoke tests passed!");
+    log::info!("🧪 All TUI smoke tests passed!");
     Ok(())
 }
 
@@ -36,7 +39,7 @@ async fn main() -> Result<()> {
 fn test_tui_startup_ctrl_c_exit() -> Result<()> {
     // Build the application first to ensure we have the binary
     let build_output = Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build"])
         .output()
         .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
 
@@ -48,7 +51,7 @@ fn test_tui_startup_ctrl_c_exit() -> Result<()> {
     }
 
     // Start the TUI application
-    let mut session = spawn("./target/release/aoba --tui")
+    let mut session = spawn("./target/debug/aoba --tui")
         .map_err(|err| anyhow!("Failed to spawn TUI application: {}", err))?;
 
     // Give the TUI time to initialize (shorter time for CI)
@@ -62,7 +65,7 @@ fn test_tui_startup_ctrl_c_exit() -> Result<()> {
     // Give it time to shut down gracefully
     std::thread::sleep(Duration::from_millis(300));
 
-    log::info!("   ✓ TUI startup and Ctrl+C exit test completed successfully");
+    log::info!("🧪 TUI startup and Ctrl+C exit test completed successfully");
     Ok(())
 }
 
@@ -70,7 +73,7 @@ fn test_tui_startup_ctrl_c_exit() -> Result<()> {
 fn test_tui_startup_detection() -> Result<()> {
     // Build the application first
     let build_output = Command::new("cargo")
-        .args(["build", "--release"])
+        .args(["build"])
         .output()
         .map_err(|err| anyhow!("Failed to execute cargo build: {}", err))?;
 
@@ -91,19 +94,16 @@ fn test_tui_startup_detection() -> Result<()> {
     // Try to capture some output that should be present in the TUI
     // We're looking for typical TUI elements like "AOBA" or "Refresh" or "Press q to quit"
     let mut found_tui_content = false;
-
-    match session.expect(expectrl::Regex(r"(AOBA|COMPorts|Press.*quit|Refresh)")) {
-        Ok(found) => {
-            log::info!(
-                "   ✓ Successfully detected TUI content: {:?}",
-                found.matches()
-            );
-            found_tui_content = true;
-        }
-        Err(err) => {
-            log::info!("   ⚠ Could not detect specific TUI content: {err:?}");
-            // Even if we can't detect specific content, the TUI might still be running
-        }
+    let mut cap = TerminalCapture::new(24, 80);
+    let screen = cap.capture(&mut session, "startup detection")?;
+    if Regex::new(r"(AOBA|COMPorts|Press.*quit|Refresh)")
+        .unwrap()
+        .is_match(&screen)
+    {
+        log::info!("🧪 Successfully detected TUI content (via screen capture)");
+        found_tui_content = true;
+    } else {
+        log::info!("🧪 Could not detect specific TUI content via screen capture");
     }
 
     // Send 'q' to quit
@@ -113,9 +113,9 @@ fn test_tui_startup_detection() -> Result<()> {
     std::thread::sleep(Duration::from_millis(300));
 
     if found_tui_content {
-        log::info!("   ✓ TUI startup detection test completed successfully");
+        log::info!("🧪 TUI startup detection test completed successfully");
     } else {
-        log::info!("   ⚠ TUI started but content detection was inconclusive");
+        log::info!("🧪 TUI started but content detection was inconclusive");
     }
 
     Ok(())
@@ -129,7 +129,7 @@ async fn test_tui_with_virtual_ports() -> Result<()> {
     let port2_exists = std::path::Path::new("/dev/vcom2").exists();
 
     if port1_exists && port2_exists {
-        log::info!("   ✓ Virtual serial ports detected (created by CI or manually)");
+        log::info!("🧪 Virtual serial ports detected (created by CI or manually)");
 
         // Build the application first
         let build_output = Command::new("cargo")
@@ -146,7 +146,7 @@ async fn test_tui_with_virtual_ports() -> Result<()> {
 
         // Test TUI with virtual ports
         let mut session =
-            spawn("./target/release/aoba --tui").expect("Failed to spawn TUI application");
+            spawn("./target/debug/aoba --tui").expect("Failed to spawn TUI application");
 
         // Give the TUI time to initialize and potentially detect ports
         std::thread::sleep(Duration::from_millis(1000));
@@ -156,13 +156,17 @@ async fn test_tui_with_virtual_ports() -> Result<()> {
         let mut found_v2 = false;
 
         // Try to read some output and search for the device names
-        match session.expect(expectrl::Regex(r"/dev/vcom1")) {
-            Ok(_) => found_v1 = true,
-            Err(_) => log::info!("/dev/vcom1 not immediately visible in TUI output"),
+        let mut cap = TerminalCapture::new(24, 80);
+        let screen = cap.capture(&mut session, "virtual port detection")?;
+        if Regex::new(r"/dev/vcom1").unwrap().is_match(&screen) {
+            found_v1 = true;
+        } else {
+            log::info!("🧪 /dev/vcom1 not immediately visible in TUI output");
         }
-        match session.expect(expectrl::Regex(r"/dev/vcom2")) {
-            Ok(_) => found_v2 = true,
-            Err(_) => log::info!("/dev/vcom2 not immediately visible in TUI output"),
+        if Regex::new(r"/dev/vcom2").unwrap().is_match(&screen) {
+            found_v2 = true;
+        } else {
+            log::info!("🧪 /dev/vcom2 not immediately visible in TUI output");
         }
 
         // If either device isn't shown, fail the test per requirements
@@ -176,9 +180,9 @@ async fn test_tui_with_virtual_ports() -> Result<()> {
         session.send_line("q").expect("Failed to send 'q' command");
         std::thread::sleep(Duration::from_millis(300));
 
-        log::info!("   ✓ TUI with virtual ports test completed (ports visible)");
+        log::info!("🧪 TUI with virtual ports test completed (ports visible)");
     } else {
-        log::info!("   ⚠ Virtual ports not detected, skipping test (CI-safe)");
+        log::info!("🧪 Virtual ports not detected, skipping test (CI-safe)");
     }
 
     Ok(())
@@ -189,22 +193,15 @@ fn test_expectrl_basic_functionality() -> Result<()> {
     let mut session = spawn("echo 'Hello from AOBA TUI test'")
         .map_err(|err| anyhow!("Failed to spawn echo command: {}", err))?;
 
-    match session.expect(expectrl::Regex(r"Hello.*AOBA.*test")) {
-        Ok(found) => {
-            log::info!("   ✓ expectrl basic functionality test passed");
-            log::info!("   ✓ Captured: {:?}", found.matches());
-            let before_bytes = found.before();
-            let before_str = String::from_utf8_lossy(before_bytes);
-            if !before_str.is_empty() {
-                log::info!("   ✓ Before content captured successfully");
-            }
-        }
-        Err(err) => {
-            return Err(anyhow!(
-                "expectrl basic functionality test failed: {:?}",
-                err
-            ));
-        }
+    let mut cap = TerminalCapture::new(24, 80);
+    let screen = cap.capture(&mut session, "expectrl basic functionality")?;
+    if Regex::new(r"Hello.*AOBA.*test").unwrap().is_match(&screen) {
+        log::info!("🧪 expectrl basic functionality test passed (via screen capture)");
+        log::info!("🧪 Captured screen snippet: {}", &screen);
+    } else {
+        return Err(anyhow!(
+            "expectrl basic functionality test failed: pattern not found"
+        ));
     }
 
     Ok(())
