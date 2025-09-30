@@ -78,8 +78,8 @@ jobs:
           # Run our dedicated smoke test binary
           cargo run --bin smoke_test
 
-          # Run CLI integration tests example
-          cargo run --example cli_integration_tests
+          # Run CLI integration tests example (target package/binary explicitly)
+          cargo run -p aoba_cli_integration_tests --bin cli_integration_tests
 
       # Clean up virtual serial ports
       - name: Cleanup virtual ports

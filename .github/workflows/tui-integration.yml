@@ -78,10 +78,10 @@ jobs:
       - name: Run TUI integration tests
         run: |
           # Run the new TUI smoke tests example (basic startup/shutdown with Ctrl+C)
-          timeout 120 cargo run --example tui_smoke_tests || echo "TUI smoke tests completed"
+          timeout 120 cargo run -p aoba_tui_smoke_tests --bin tui_smoke_tests || echo "TUI smoke tests completed"
 
           # Run comprehensive TUI integration tests example (user simulation and black-box testing)
-          timeout 180 cargo run --example tui_integration_tests || echo "TUI integration tests completed"
+          timeout 180 cargo run -p aoba_tui_integration_tests --bin tui_integration_tests || echo "TUI integration tests completed"
 
       # Clean up virtual serial ports
       - name: Cleanup virtual ports
