@@ -57,7 +57,10 @@ pub fn render_title_ui(ui: &mut Ui) -> Result<()> {
                 .clicked()
             {
                 write_status(|g| {
-                    g.page = types::Page::Entry { cursor: None };
+                    g.page = types::Page::Entry {
+                        cursor: None,
+                        view_offset: 0,
+                    };
                     Ok(())
                 })
                 .unwrap_or(());
