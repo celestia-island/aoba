@@ -12,6 +12,7 @@ pub enum ModbusConnectionMode {
     },
     Slave {
         current_request_at_station_index: usize,
+        storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     },
 }
 
@@ -43,8 +44,13 @@ impl ModbusConnectionMode {
     }
 
     pub fn default_slave() -> Self {
+        let storage = Arc::new(Mutex::new(
+            rmodbus::server::storage::ModbusStorageSmall::new(),
+        ));
+        
         ModbusConnectionMode::Slave {
             current_request_at_station_index: 0,
+            storage,
         }
     }
 

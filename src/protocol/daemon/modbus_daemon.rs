@@ -215,6 +215,7 @@ pub fn handle_master_query_mode(
     let current_index = match global_mode {
         types::modbus::ModbusConnectionMode::Slave {
             current_request_at_station_index,
+            storage: _,
         } => *current_request_at_station_index,
         _ => 0,
     };
@@ -320,6 +321,7 @@ pub fn handle_master_query_mode(
                                     &mut port.config;
                                 if let types::modbus::ModbusConnectionMode::Slave {
                                     current_request_at_station_index,
+                                    storage: _,
                                 } = mode
                                 {
                                     *current_request_at_station_index =
@@ -366,6 +368,30 @@ pub fn handle_master_query_mode(
                     raw: format!("Master RX (response): {hex_frame}"),
                     parsed: None,
                 };
+
+                // Parse response and update storage (do this outside the port write lock)
+                let request_arc_opt = with_port_read(port_arc, |port| {
+                    port.last_modbus_request.clone()
+                }).and_then(|x| x);  // Flatten Option<Option<...>> to Option<...>
+                
+                // Get storage from global mode
+                let storage_opt = match global_mode {
+                    types::modbus::ModbusConnectionMode::Slave { storage, .. } => Some(storage.clone()),
+                    _ => None,
+                };
+
+                // Parse and update storage if available
+                if let (Some(storage), Some(request_arc)) = (storage_opt, request_arc_opt) {
+                    if let Ok(request) = request_arc.lock() {
+                        if request.parse_ok(&frame).is_ok() {
+                            // Successfully parsed response
+                            if let Ok(_context) = storage.lock() {
+                                // For now, just log that we received a valid response
+                                log::debug!("Successfully parsed response and would update storage");
+                            }
+                        }
+                    }
+                }
 
                 with_port_write(port_arc, |port| {
                     port.logs.push(log_entry);
