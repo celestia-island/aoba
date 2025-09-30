@@ -1,4 +1,4 @@
-name: Basic Checks
+name: CI Basic Checks
 
 on:
   push:
@@ -10,12 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Check
+  examples-check:
+    name: Check examples/**
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: [stable, nightly]
+        package: [aoba_cli_integration_tests, aoba_tui_integration_tests]
 
     steps:
       - uses: actions/checkout@v5
@@ -23,7 +23,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Install system dependencies
@@ -42,15 +42,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Run fmt check for package
+        run: cargo fmt -p ${{ matrix.package }} -- --check
 
-      - name: Check compilation
-        run: cargo check --all-targets --all-features
+      - name: Run cargo check for package
+        run: cargo check -p ${{ matrix.package }} --all-targets --all-features
 
-      - name: Clippy lints
-        run: cargo clippy --all-targets --all-features -- -D warnings
-        continue-on-error: true
-
-      - name: Run unit tests
-        run: cargo test --lib
+      - name: Run clippy for package
+        run: cargo clippy -p ${{ matrix.package }} --all-targets --all-features -- -D warnings

@@ -84,7 +84,7 @@ pub async fn test_tui_serial_port_interaction() -> Result<()> {
                 ));
             }
         }
-        Err(err) => {
+        Err(_err) => {
             let _ = cap.capture(&mut session, "application unresponsive")?;
             return Err(anyhow!(
                 "TUI application crashed or became unresponsive after pressing Enter"

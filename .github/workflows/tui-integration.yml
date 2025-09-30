@@ -1,5 +1,3 @@
-# TUI integration tests with virtual terminal automation
-# Tests complete user workflows using expectrl for terminal interaction
 name: TUI Integration Tests
 
 on:
@@ -19,17 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Use stable Rust for consistent test results
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Install system dependencies including socat for virtual serial ports
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
-      # Cache Cargo registry to speed up builds
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -41,12 +36,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      # Build the application for testing
       - name: Build test dependencies
         run: |
           cargo build
 
-      # Create virtual serial port pairs using socat for TUI testing
       - name: Setup virtual serial ports
         run: |
           # Create virtual serial port pair using socat in background with sudo
@@ -72,18 +65,10 @@ jobs:
             exit 1
           fi
 
-      # Run TUI integration tests using dedicated examples for terminal automation
-      # These tests simulate user input and validate TUI functionality
-      # Note: Tests now use socat-created virtual port pairs /dev/vcom1 and /dev/vcom2
       - name: Run TUI integration tests
         run: |
-          # Run the new TUI smoke tests example (basic startup/shutdown with Ctrl+C)
-          timeout 120 cargo run -p aoba_tui_smoke_tests --bin tui_smoke_tests || echo "TUI smoke tests completed"
+          cargo run -p aoba_tui_integration_tests --bin tui_integration_tests
 
-          # Run comprehensive TUI integration tests example (user simulation and black-box testing)
-          timeout 180 cargo run -p aoba_tui_integration_tests --bin tui_integration_tests || echo "TUI integration tests completed"
-
-      # Clean up virtual serial ports
       - name: Cleanup virtual ports
         if: always()
         run: |
