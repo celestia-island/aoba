@@ -24,9 +24,7 @@ pub async fn test_port_list_scrolling() -> Result<()> {
 
 /// Test navigation and verify scrolling works correctly
 async fn test_navigation_and_scrolling(rows: u16, cols: u16, test_name: &str) -> Result<()> {
-    log::info!(
-        "  📝 Testing navigation and scrolling ({rows}x{cols}): {test_name}"
-    );
+    log::info!("📝 Testing navigation and scrolling ({rows}x{cols}): {test_name}");
 
     let args = vec!["--tui"];
     let mut session = spawn_expect_process(&args)
