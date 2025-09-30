@@ -5,7 +5,10 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 use super::scroll::{handle_scroll_down, handle_scroll_up};
 use crate::{
     protocol::status::{read_status, types, write_status},
-    tui::{ui::pages::entry::calculate_special_items_offset, utils::bus::Bus},
+    tui::{
+        ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
+        utils::bus::Bus,
+    },
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -35,7 +38,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         KeyCode::Esc => {
             let new_cursor = types::cursor::EntryCursor::About;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = calculate_special_items_offset(ports_count);
+            let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
             write_status(|status| {
                 status.page = types::Page::Entry {
                     cursor: Some(new_cursor),

@@ -180,11 +180,18 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             0
         };
 
-        Ok((lines, view_offset))
+        // Calculate viewport height (inner area minus borders)
+        let viewport_height = area.height.saturating_sub(2) as usize;
+        
+        // Determine if scrollbar should be shown
+        let ports_count = status.ports.order.len();
+        let show_scrollbar = crate::tui::ui::pages::entry::should_show_scrollbar(ports_count, viewport_height);
+
+        Ok((lines, view_offset, show_scrollbar))
     });
 
     match res {
-        Ok((lines, view_offset)) => {
+        Ok((lines, view_offset, show_scrollbar)) => {
             render_boxed_paragraph(
                 frame,
                 area,
@@ -192,7 +199,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
                 view_offset,
                 Some(lang().index.com_ports.as_str()),
                 false,
-                true, // Show scrollbar
+                show_scrollbar,
             );
             Ok(())
         }
