@@ -11,6 +11,7 @@ async fn main() -> Result<()> {
 
     tests::test_tui_startup_shutdown().await?;
     tests::test_tui_navigation().await?;
+    tests::test_port_list_scrolling().await?;
     tests::test_tui_serial_port_interaction().await?;
 
     log::info!("🧪 All TUI integration tests passed!");
