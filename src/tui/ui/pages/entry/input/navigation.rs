@@ -51,7 +51,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 } else {
                     let new_cursor = types::cursor::EntryCursor::Refresh;
                     let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+                    let offset =
+                        calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(new_cursor),
@@ -81,7 +82,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 if read_status(|status| Ok(status.ports.map.is_empty()))? {
                     let new_cursor = types::cursor::EntryCursor::Refresh;
                     let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+                    let offset =
+                        calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(new_cursor),
@@ -168,7 +170,8 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
             if read_status(|status| Ok(status.ports.map.is_empty()))? {
                 let new_cursor = types::cursor::EntryCursor::Refresh;
                 let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+                let offset =
+                    calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
@@ -224,7 +227,8 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
             if next >= read_status(|status| Ok(status.ports.map.len()))? {
                 let new_cursor = types::cursor::EntryCursor::Refresh;
                 let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+                let offset =
+                    calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),

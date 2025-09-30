@@ -16,8 +16,7 @@ use crate::{
         with_port_read,
     },
     tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph,
-        pages::entry::SPECIAL_ITEMS_COUNT,
+        components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
     },
 };
 
@@ -132,8 +131,11 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             lang().index.about_label.as_str().to_string(),
         ];
         // Ensure the number of extras matches the constant
-        debug_assert_eq!(extras.len(), SPECIAL_ITEMS_COUNT, 
-            "Number of special items must match SPECIAL_ITEMS_COUNT constant");
+        debug_assert_eq!(
+            extras.len(),
+            SPECIAL_ITEMS_COUNT,
+            "Number of special items must match SPECIAL_ITEMS_COUNT constant"
+        );
         let inner_h = area.height.saturating_sub(2) as usize;
         let used = lines.len();
         let extras_len = extras.len();
@@ -182,10 +184,11 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
 
         // Calculate viewport height (inner area minus borders)
         let viewport_height = area.height.saturating_sub(2) as usize;
-        
+
         // Determine if scrollbar should be shown
         let ports_count = status.ports.order.len();
-        let show_scrollbar = crate::tui::ui::pages::entry::should_show_scrollbar(ports_count, viewport_height);
+        let show_scrollbar =
+            crate::tui::ui::pages::entry::should_show_scrollbar(ports_count, viewport_height);
 
         Ok((lines, view_offset, show_scrollbar))
     });

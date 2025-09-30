@@ -201,14 +201,15 @@ fn handle_navigation_input(
             // Return to entry page
             // First, get the selected_port and ports_count outside the write lock
             let (selected_port_opt, _ports_count) = read_status(|status| {
-                let selected_port = if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
-                    Some(*selected_port)
-                } else {
-                    None
-                };
+                let selected_port =
+                    if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
+                        Some(*selected_port)
+                    } else {
+                        None
+                    };
                 Ok((selected_port, status.ports.order.len()))
             })?;
-            
+
             write_status(|status| {
                 if let Some(selected_port) = selected_port_opt {
                     let new_cursor = types::cursor::EntryCursor::Com {

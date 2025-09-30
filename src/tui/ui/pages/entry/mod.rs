@@ -14,7 +14,7 @@ pub const SPECIAL_ITEMS_COUNT: usize = 3;
 ///
 /// This function determines whether scrolling is needed by checking if
 /// all content (ports + special items + padding) would fit in the viewport.
-/// 
+///
 /// Parameters:
 /// - `ports_count`: Number of serial ports
 /// - `viewport_height`: Height of the viewport in lines. When called from navigation
@@ -26,7 +26,7 @@ pub const SPECIAL_ITEMS_COUNT: usize = 3;
 pub fn calculate_special_items_offset(ports_count: usize, viewport_height: usize) -> usize {
     // Total content = ports + special items
     let total_items = ports_count + SPECIAL_ITEMS_COUNT;
-    
+
     // If all items fit in viewport, no offset needed
     if total_items <= viewport_height {
         0
