@@ -19,6 +19,10 @@ async fn main() -> Result<()> {
     tests::test_port_list_scrolling().await?;
     tests::test_tui_serial_port_interaction().await?;
 
+    // Modbus master-slave tests
+    tests::test_modbus_smoke_dual_process().await?;
+    tests::test_modbus_master_slave_communication().await?;
+
     log::info!("🧪 All TUI integration tests passed!");
     Ok(())
 }
