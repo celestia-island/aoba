@@ -201,13 +201,18 @@ fn handle_navigation_input(
             // Return to entry page
             write_status(|status| {
                 if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
+                    let new_cursor = types::cursor::EntryCursor::Com {
+                        index: *selected_port,
+                    };
                     status.page = types::Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com {
-                            index: *selected_port,
-                        }),
+                        cursor: Some(new_cursor),
+                        view_offset: new_cursor.view_offset(),
                     };
                 } else {
-                    status.page = types::Page::Entry { cursor: None };
+                    status.page = types::Page::Entry {
+                        cursor: None,
+                        view_offset: 0,
+                    };
                 }
                 Ok(())
             })?;

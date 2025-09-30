@@ -20,6 +20,7 @@ derive_struct! {
         page: enum Page {
             Entry {
                 cursor?: cursor::EntryCursor,
+                view_offset: usize = 0,
             },
             ConfigPanel {
                 selected_port: usize,
@@ -39,7 +40,7 @@ derive_struct! {
             About {
                 view_offset: usize,
             }
-        } = Entry { cursor: None },
+        } = Entry { cursor: None, view_offset: 0 },
 
         temporarily: {
             // Short-lived UI state. Only place truly transient values here.

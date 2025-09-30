@@ -2,7 +2,6 @@ use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -16,6 +15,7 @@ use crate::{
         },
         with_port_read,
     },
+    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
 };
 
 use anyhow::Result;
@@ -23,7 +23,7 @@ use anyhow::Result;
 /// Helper function to derive selection from page state (entry page specific)
 pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> Result<usize> {
     let res = match page {
-        types::Page::Entry { cursor } => match cursor {
+        types::Page::Entry { cursor, .. } => match cursor {
             Some(types::cursor::EntryCursor::Com { index }) => *index,
             Some(types::cursor::EntryCursor::Refresh) => ports_order.len(),
             Some(types::cursor::EntryCursor::CreateVirtual) => ports_order.len().saturating_add(1),
@@ -130,11 +130,23 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         let inner_h = area.height.saturating_sub(2) as usize;
         let used = lines.len();
         let extras_len = extras.len();
-        let pad_lines = if inner_h > used + extras_len {
+        
+        // Calculate padding based on the requirements:
+        // If ports - 4 doesn't fill the screen, add padding to keep last 3 items at bottom
+        // If ports - 4 exceeds screen, add only 1 space before last 3 items
+        let total_content = used + extras_len;
+        let pad_lines = if total_content.saturating_add(4) < inner_h {
+            // Case 1: Not enough content to fill screen minus 4
+            // Fill middle with padding and keep last 3 items at bottom
             inner_h - used - extras_len
+        } else if used > inner_h.saturating_sub(extras_len).saturating_sub(1) {
+            // Case 2: Too much content - add only 1 space between ports and extras
+            1
         } else {
+            // Normal case: fits comfortably
             0
         };
+        
         for _ in 0..pad_lines {
             lines.push(Line::from(Span::raw("")));
         }
@@ -154,21 +166,40 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             }
         }
 
-        let left_block = Block::default()
-            .borders(Borders::ALL)
-            .title(Span::raw(format!(" {}", lang().index.com_ports.as_str())));
-        let left_para = Paragraph::new(lines).block(left_block);
-        frame.render_widget(left_para, area);
-        Ok(())
+        // Get view_offset from page state
+        let view_offset = if let types::Page::Entry { view_offset, .. } = &status.page {
+            *view_offset
+        } else {
+            0
+        };
+
+        Ok((lines, view_offset))
     });
 
-    if res.is_err() {
-        let input_block = Block::default()
-            .borders(Borders::ALL)
-            .title(Span::raw(format!(" {}", lang().index.com_ports.as_str())));
-        let left_para = Paragraph::new(Vec::<Line>::new()).block(input_block);
-        frame.render_widget(left_para, area);
+    match res {
+        Ok((lines, view_offset)) => {
+            render_boxed_paragraph(
+                frame,
+                area,
+                lines,
+                view_offset,
+                Some(lang().index.com_ports.as_str()),
+                false,
+                true, // Show scrollbar
+            );
+            Ok(())
+        }
+        Err(_) => {
+            render_boxed_paragraph(
+                frame,
+                area,
+                Vec::<Line>::new(),
+                0,
+                Some(lang().index.com_ports.as_str()),
+                false,
+                false,
+            );
+            Ok(())
+        }
     }
-
-    Ok(())
 }

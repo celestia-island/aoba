@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::{
     protocol::status::{
         read_status,
-        types::{self, cursor, Page},
+        types::{self, cursor, cursor::Cursor, Page},
         write_status,
     },
     tui::utils::bus::Bus,
@@ -15,7 +15,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             handle_move_prev(read_status(|status| {
-                if let types::Page::Entry { cursor } = &status.page {
+                if let types::Page::Entry { cursor, .. } = &status.page {
                     Ok(cursor.unwrap_or(cursor::EntryCursor::Refresh))
                 } else {
                     Ok(cursor::EntryCursor::Refresh)
@@ -27,7 +27,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             let cursor_opt = read_status(|status| {
-                if let types::Page::Entry { cursor } = &status.page {
+                if let types::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(None)
@@ -36,16 +36,20 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             if cursor_opt.is_none() {
                 if read_status(|status| Ok(status.ports.map.len()))? >= 2 {
+                    let new_cursor = types::cursor::EntryCursor::Com { index: 1 };
                     write_status(|status| {
                         status.page = Page::Entry {
-                            cursor: Some(types::cursor::EntryCursor::Com { index: 1 }),
+                            cursor: Some(new_cursor),
+                            view_offset: new_cursor.view_offset(),
                         };
                         Ok(())
                     })?;
                 } else {
+                    let new_cursor = types::cursor::EntryCursor::Refresh;
                     write_status(|status| {
                         status.page = Page::Entry {
-                            cursor: Some(types::cursor::EntryCursor::Refresh),
+                            cursor: Some(new_cursor),
+                            view_offset: new_cursor.view_offset(),
                         };
                         Ok(())
                     })?;
@@ -60,7 +64,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Enter => {
             let cursor = read_status(|status| {
-                if let types::Page::Entry { cursor } = &status.page {
+                if let types::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(None)
@@ -69,21 +73,25 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let final_cursor = if cursor.is_none() {
                 if read_status(|status| Ok(status.ports.map.is_empty()))? {
+                    let new_cursor = types::cursor::EntryCursor::Refresh;
                     write_status(|status| {
                         status.page = Page::Entry {
-                            cursor: Some(types::cursor::EntryCursor::Refresh),
+                            cursor: Some(new_cursor),
+                            view_offset: new_cursor.view_offset(),
                         };
                         Ok(())
                     })?;
-                    Some(types::cursor::EntryCursor::Refresh)
+                    Some(new_cursor)
                 } else {
+                    let new_cursor = types::cursor::EntryCursor::Com { index: 0 };
                     write_status(|status| {
                         status.page = Page::Entry {
-                            cursor: Some(types::cursor::EntryCursor::Com { index: 0 }),
+                            cursor: Some(new_cursor),
+                            view_offset: new_cursor.view_offset(),
                         };
                         Ok(())
                     })?;
-                    Some(types::cursor::EntryCursor::Com { index: 0 })
+                    Some(new_cursor)
                 }
             } else {
                 cursor
@@ -117,7 +125,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc => {
             write_status(|status| {
-                status.page = types::Page::Entry { cursor: None };
+                status.page = types::Page::Entry {
+                    cursor: None,
+                    view_offset: 0,
+                };
                 Ok(())
             })?;
             bus.ui_tx
@@ -133,9 +144,11 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
     match cursor {
         cursor::EntryCursor::Com { index } => {
             let prev = index.saturating_sub(1);
+            let new_cursor = types::cursor::EntryCursor::Com { index: prev };
             write_status(|status| {
                 status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
+                    cursor: Some(new_cursor),
+                    view_offset: new_cursor.view_offset(),
                 };
                 Ok(())
             })?;
@@ -143,33 +156,41 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::Refresh => {
             let prev = read_status(|status| Ok(status.ports.map.len().saturating_sub(1)))?;
             if read_status(|status| Ok(status.ports.map.is_empty()))? {
+                let new_cursor = types::cursor::EntryCursor::Refresh;
                 write_status(|status| {
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Refresh),
+                        cursor: Some(new_cursor),
+                        view_offset: new_cursor.view_offset(),
                     };
                     Ok(())
                 })?;
             } else {
+                let new_cursor = types::cursor::EntryCursor::Com { index: prev };
                 write_status(|status| {
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { index: prev }),
+                        cursor: Some(new_cursor),
+                        view_offset: new_cursor.view_offset(),
                     };
                     Ok(())
                 })?;
             }
         }
         cursor::EntryCursor::CreateVirtual => {
+            let new_cursor = types::cursor::EntryCursor::Refresh;
             write_status(|status| {
                 status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::Refresh),
+                    cursor: Some(new_cursor),
+                    view_offset: new_cursor.view_offset(),
                 };
                 Ok(())
             })?;
         }
         cursor::EntryCursor::About => {
+            let new_cursor = types::cursor::EntryCursor::CreateVirtual;
             write_status(|status| {
                 status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
+                    cursor: Some(new_cursor),
+                    view_offset: new_cursor.view_offset(),
                 };
                 Ok(())
             })?;
@@ -184,33 +205,41 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::Com { index } => {
             let next = index.saturating_add(1);
             if next >= read_status(|status| Ok(status.ports.map.len()))? {
+                let new_cursor = types::cursor::EntryCursor::Refresh;
                 write_status(|status| {
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Refresh),
+                        cursor: Some(new_cursor),
+                        view_offset: new_cursor.view_offset(),
                     };
                     Ok(())
                 })?;
             } else {
+                let new_cursor = types::cursor::EntryCursor::Com { index: next };
                 write_status(|status| {
                     status.page = Page::Entry {
-                        cursor: Some(types::cursor::EntryCursor::Com { index: next }),
+                        cursor: Some(new_cursor),
+                        view_offset: new_cursor.view_offset(),
                     };
                     Ok(())
                 })?;
             }
         }
         cursor::EntryCursor::Refresh => {
+            let new_cursor = types::cursor::EntryCursor::CreateVirtual;
             write_status(|status| {
                 status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::CreateVirtual),
+                    cursor: Some(new_cursor),
+                    view_offset: new_cursor.view_offset(),
                 };
                 Ok(())
             })?;
         }
         cursor::EntryCursor::CreateVirtual => {
+            let new_cursor = types::cursor::EntryCursor::About;
             write_status(|status| {
                 status.page = Page::Entry {
-                    cursor: Some(types::cursor::EntryCursor::About),
+                    cursor: Some(new_cursor),
+                    view_offset: new_cursor.view_offset(),
                 };
                 Ok(())
             })?;
