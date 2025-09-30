@@ -130,7 +130,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         let inner_h = area.height.saturating_sub(2) as usize;
         let used = lines.len();
         let extras_len = extras.len();
-        
+
         // Calculate padding based on the requirements:
         // If ports - 4 doesn't fill the screen, add padding to keep last 3 items at bottom
         // If ports - 4 exceeds screen, add only 1 space before last 3 items
@@ -146,7 +146,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             // Normal case: fits comfortably
             0
         };
-        
+
         for _ in 0..pad_lines {
             lines.push(Line::from(Span::raw("")));
         }

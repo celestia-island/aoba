@@ -40,13 +40,13 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
     }
 
     let exe_name = if cfg!(windows) {
-        format!("{}.exe", bin_name)
+        format!("{bin_name}.exe")
     } else {
         bin_name.to_string()
     };
 
     let bin_path = workspace_root.join("target").join("debug").join(exe_name);
-    
+
     if !bin_path.exists() {
         return Err(anyhow!("Binary not found at: {}", bin_path.display()));
     }
