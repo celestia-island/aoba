@@ -39,50 +39,56 @@ async fn navigate_to_port<T: Expect>(
     let initial_screen = cap.capture(session, &format!("{} - initial screen", session_name))?;
     log::info!("{} initial screen:\n{}", session_name, initial_screen);
 
-    // Find the port position
-    let port_position = find_port_position(&initial_screen, port_name);
+    // Check if cursor is already on the target port
+    if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
+        .unwrap()
+        .is_match(&initial_screen)
+    {
+        log::info!("✓ Cursor already positioned at {} in {}", port_name, session_name);
+        return Ok(());
+    }
 
-    if let Some(line_number) = port_position {
-        log::info!("Found {} at approximate line {}", port_name, line_number);
+    // Find the port position in the screen
+    let port_line = find_port_position(&initial_screen, port_name);
+    
+    if port_line.is_none() {
+        return Err(anyhow!("Port {} not found in screen output for {}", port_name, session_name));
+    }
+    
+    let line_number = port_line.unwrap();
+    log::info!("Found {} at line {} in {}", port_name, line_number, session_name);
 
-        // Navigate down to the port
-        // Start from top by going up many times first
-        for _ in 0..50 {
-            session.send_arrow(ArrowKey::Up)?;
-        }
-        aoba::ci::sleep_a_while().await;
-
-        // Now navigate down to the target
-        // Use the line number as a rough guide, but verify with screen capture
-        for i in 0..line_number + 5 {
-            session.send_arrow(ArrowKey::Down)?;
-            if i % 5 == 0 {
-                aoba::ci::sleep_a_while().await;
-                let screen = cap.capture(session, &format!("{} - navigating", session_name))?;
-                // Check if cursor is on the target port
-                if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
-                    .unwrap()
-                    .is_match(&screen)
-                {
-                    log::info!("✓ Cursor positioned at {} in {}", port_name, session_name);
-                    return Ok(());
-                }
-            }
-        }
-
-        // If we didn't find it yet, do a more careful search
-        log::info!("Fine-tuning navigation to {}", port_name);
-        for _ in 0..20 {
-            let screen = cap.capture(session, &format!("{} - fine-tuning", session_name))?;
+    // Strategy: Navigate carefully, checking the cursor position frequently
+    // First, try going up to see if the port is above the current position
+    for attempt in 0..50 {
+        session.send_arrow(ArrowKey::Up)?;
+        if attempt % 3 == 0 {
+            aoba::ci::sleep_a_while().await;
+            let screen = cap.capture(session, &format!("{} - searching up", session_name))?;
             if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
                 .unwrap()
                 .is_match(&screen)
             {
-                log::info!("✓ Cursor positioned at {} in {}", port_name, session_name);
+                log::info!("✓ Found {} by navigating up in {}", port_name, session_name);
                 return Ok(());
             }
-            session.send_arrow(ArrowKey::Down)?;
+        }
+    }
+
+    // If not found going up, navigate down from the top
+    log::info!("Searching down from top for {} in {}", port_name, session_name);
+    for attempt in 0..100 {
+        session.send_arrow(ArrowKey::Down)?;
+        if attempt % 3 == 0 {
             aoba::ci::sleep_a_while().await;
+            let screen = cap.capture(session, &format!("{} - searching down", session_name))?;
+            if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
+                .unwrap()
+                .is_match(&screen)
+            {
+                log::info!("✓ Found {} by navigating down in {}", port_name, session_name);
+                return Ok(());
+            }
         }
     }
 
