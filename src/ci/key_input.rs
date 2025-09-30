@@ -66,7 +66,6 @@ impl<T: Expect> ExpectKeyExt for T {
 }
 
 /// Convenience functions for common key sequences
-
 /// Send multiple arrow keys in sequence
 pub fn send_arrows<T: Expect>(session: &mut T, direction: ArrowKey, count: usize) -> Result<()> {
     for _ in 0..count {
