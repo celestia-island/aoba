@@ -88,7 +88,19 @@ impl Cursor for EntryCursor {
     fn view_offset(&self) -> usize {
         match self {
             EntryCursor::Com { index } => *index,
-            _ => 0,
+            EntryCursor::Refresh => {
+                // When scrolling to the last 3 items, add +1 offset
+                let ports_count = read_status(|status| Ok(status.ports.order.len())).unwrap_or(0);
+                ports_count.saturating_add(1)
+            }
+            EntryCursor::CreateVirtual => {
+                let ports_count = read_status(|status| Ok(status.ports.order.len())).unwrap_or(0);
+                ports_count.saturating_add(2)
+            }
+            EntryCursor::About => {
+                let ports_count = read_status(|status| Ok(status.ports.order.len())).unwrap_or(0);
+                ports_count.saturating_add(3)
+            }
         }
     }
 }

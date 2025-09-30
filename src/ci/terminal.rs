@@ -11,8 +11,25 @@ use std::{
 pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
     log::info!("🔧 Building debug binary for: {bin_name}");
 
+    // Try to find the workspace root by looking for Cargo.toml with [workspace]
+    let workspace_root = std::env::current_dir()?
+        .ancestors()
+        .find(|p| {
+            let cargo_toml = p.join("Cargo.toml");
+            if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
+                content.contains("[workspace]") || content.contains("name = \"aoba\"")
+            } else {
+                false
+            }
+        })
+        .map(|p| p.to_path_buf())
+        .ok_or_else(|| anyhow!("Could not find workspace root"))?;
+
+    log::info!("🔍 Workspace root: {}", workspace_root.display());
+
     let status = Command::new("cargo")
         .args(["build", "--bin", bin_name])
+        .current_dir(&workspace_root)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
@@ -23,12 +40,18 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
     }
 
     let exe_name = if cfg!(windows) {
-        format!("{}{}.exe", "target/debug/", bin_name)
+        format!("{bin_name}.exe")
     } else {
-        format!("{}{}", "target/debug/", bin_name)
+        bin_name.to_string()
     };
 
-    Ok(PathBuf::from(exe_name))
+    let bin_path = workspace_root.join("target").join("debug").join(exe_name);
+
+    if !bin_path.exists() {
+        return Err(anyhow!("Binary not found at: {}", bin_path.display()));
+    }
+
+    Ok(bin_path)
 }
 
 /// Run a binary synchronously and return its Output. `bin_path` should point to the built
