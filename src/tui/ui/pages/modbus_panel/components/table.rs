@@ -98,7 +98,8 @@ pub fn render_register_row_line(
                 let cell_spans = match item.register_mode {
                     RegisterMode::Coils | RegisterMode::DiscreteInputs => {
                         // TODO: Read from global storage when mode is Master
-                        let is_on = reg_index % 2 == 0; // Placeholder logic
+                        // Use is_multiple_of to satisfy clippy::manual-is-multiple-of
+                        let is_on = reg_index.is_multiple_of(2); // Placeholder logic
                         switch_spans(is_on, "ON", "OFF", state)?
                     }
                     RegisterMode::Holding | RegisterMode::Input => {
