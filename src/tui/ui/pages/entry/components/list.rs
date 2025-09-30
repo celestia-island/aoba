@@ -45,12 +45,6 @@ pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) ->
 pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Result<()> {
     let res = read_status(|status| {
         let width = area.width as usize;
-        let viewport_height = area.height.saturating_sub(2) as usize;
-        let ports_count = status.ports.order.len();
-        
-        // Determine early if scrollbar will be shown to adjust width accordingly
-        let will_show_scrollbar = crate::tui::ui::pages::entry::should_show_scrollbar(ports_count, viewport_height);
-        
         let mut lines: Vec<Line> = Vec::new();
         let default_pd = PortData::default();
 
@@ -85,9 +79,8 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             };
 
             let prefix = if i == selection { "> " } else { "  " };
-            // Account for scrollbar only if it will be shown
-            let scrollbar_width = if will_show_scrollbar { 1 } else { 0 };
-            let inner = width.saturating_sub(2 + scrollbar_width); // Border (2) + Scrollbar (0 or 1)
+            // Account for scrollbar (1 char) when calculating available width
+            let inner = width.saturating_sub(3); // Border (2) + Scrollbar (1)
             let name_w = UnicodeWidthStr::width(name.as_str()) + UnicodeWidthStr::width(prefix);
             let state_w = UnicodeWidthStr::width(state_text.as_str());
             let pad = if inner > name_w + state_w {
@@ -145,25 +138,20 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         let used = lines.len();
         let extras_len = extras.len();
 
-        // Calculate padding based on the requirements and viewport size:
-        // The goal is to keep the last 3 items at the bottom when possible
+        // Calculate padding based on the requirements:
+        // If ports - 4 doesn't fill the screen, add padding to keep last 3 items at bottom
+        // If ports - 4 exceeds screen, add only 1 space before last 3 items
         let total_content = used + extras_len;
-        
-        // Determine minimum gap needed (1 line minimum for separation)
-        let min_gap = 1;
-        
-        let pad_lines = if total_content + min_gap < inner_h {
-            // Case 1: Content fits with room to spare
-            // Fill middle with padding to keep last 3 items at bottom
+        let pad_lines = if total_content.saturating_add(4) < inner_h {
+            // Case 1: Not enough content to fill screen minus 4
+            // Fill middle with padding and keep last 3 items at bottom
             inner_h - used - extras_len
-        } else if total_content < inner_h {
-            // Case 2: Content fits exactly or with minimal gap
-            // Add at least 1 line gap between ports and extras
-            inner_h - used - extras_len
+        } else if used > inner_h.saturating_sub(extras_len).saturating_sub(1) {
+            // Case 2: Too much content - add only 1 space between ports and extras
+            1
         } else {
-            // Case 3: Content exceeds viewport - add minimal spacing
-            // Just add the minimum gap (1 line) between ports and extras
-            min_gap
+            // Normal case: fits comfortably
+            0
         };
 
         for _ in 0..pad_lines {
@@ -191,9 +179,13 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         } else {
             0
         };
+
+        // Calculate viewport height (inner area minus borders)
+        let viewport_height = area.height.saturating_sub(2) as usize;
         
-        // Use the scrollbar decision we made earlier
-        let show_scrollbar = will_show_scrollbar;
+        // Determine if scrollbar should be shown
+        let ports_count = status.ports.order.len();
+        let show_scrollbar = crate::tui::ui::pages::entry::should_show_scrollbar(ports_count, viewport_height);
 
         Ok((lines, view_offset, show_scrollbar))
     });
