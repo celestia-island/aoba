@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use super::scroll::{handle_scroll_down, handle_scroll_up};
 use crate::{
-    protocol::status::{types, types::cursor::Cursor, write_status},
+    protocol::status::{read_status, types, write_status},
     tui::utils::bus::Bus,
 };
 
@@ -34,10 +34,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc => {
             let new_cursor = types::cursor::EntryCursor::About;
+            let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
+            let offset = ports_count.saturating_add(3);
             write_status(|status| {
                 status.page = types::Page::Entry {
                     cursor: Some(new_cursor),
-                    view_offset: new_cursor.view_offset(),
+                    view_offset: offset,
                 };
                 Ok(())
             })?;

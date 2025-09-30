@@ -199,14 +199,24 @@ fn handle_navigation_input(
         }
         KeyCode::Esc => {
             // Return to entry page
+            // First, get the selected_port and ports_count outside the write lock
+            let (selected_port_opt, _ports_count) = read_status(|status| {
+                let selected_port = if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
+                    Some(*selected_port)
+                } else {
+                    None
+                };
+                Ok((selected_port, status.ports.order.len()))
+            })?;
+            
             write_status(|status| {
-                if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
+                if let Some(selected_port) = selected_port_opt {
                     let new_cursor = types::cursor::EntryCursor::Com {
-                        index: *selected_port,
+                        index: selected_port,
                     };
                     status.page = types::Page::Entry {
                         cursor: Some(new_cursor),
-                        view_offset: new_cursor.view_offset(),
+                        view_offset: selected_port, // For Com cursor, offset equals index
                     };
                 } else {
                     status.page = types::Page::Entry {
