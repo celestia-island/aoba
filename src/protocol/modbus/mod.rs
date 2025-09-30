@@ -141,7 +141,7 @@ pub fn boot_modbus_slave_service(
         }
 
         // Check if data_total is an integer multiple of reported_bc (2x or 3x)
-        if reported_bc == 0 || data_total % reported_bc != 0 {
+        if reported_bc == 0 || !data_total.is_multiple_of(reported_bc) {
             return Err(anyhow!("Frame too short to trim duplicates"));
         }
         let mult = data_total / reported_bc;
