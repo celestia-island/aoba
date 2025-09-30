@@ -3,9 +3,9 @@ mod tests;
 use anyhow::Result;
 
 fn main() -> Result<()> {
-    // Inline of tests::runner::run_all()
-    // Initialize logger
-    let _ = env_logger::try_init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     log::info!("🧪 Starting CLI Integration Tests...");
 
     tests::test_cli_help()?;

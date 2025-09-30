@@ -4,8 +4,9 @@ use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Inline of tests::runner::run_all()
-    let _ = env_logger::try_init();
+    env_logger::builder()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     log::info!("🧪 Starting TUI Integration Tests (User Simulation)...");
 
     tests::test_tui_startup_shutdown().await?;
