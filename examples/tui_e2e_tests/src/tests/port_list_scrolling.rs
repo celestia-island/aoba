@@ -1,6 +1,6 @@
-use aoba::ci::{ArrowKey, ExpectKeyExt};
 use anyhow::{anyhow, Result};
 use aoba::ci::{spawn_expect_process, TerminalCapture};
+use aoba::ci::{ArrowKey, ExpectKeyExt};
 
 /// Test port list scrolling with different virtual port counts
 pub async fn test_port_list_scrolling() -> Result<()> {

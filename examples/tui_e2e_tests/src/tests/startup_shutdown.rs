@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use aoba::ci::{ExpectKeyExt, spawn_expect_process, TerminalCapture};
+use aoba::ci::{spawn_expect_process, ExpectKeyExt, TerminalCapture};
 
 pub async fn test_tui_startup_shutdown() -> Result<()> {
     let mut session = spawn_expect_process(&["--tui"])?;

@@ -1,6 +1,6 @@
-use aoba::ci::{ArrowKey, ExpectKeyExt};
 use anyhow::{anyhow, Result};
 use aoba::ci::{spawn_expect_process, TerminalCapture};
+use aoba::ci::{ArrowKey, ExpectKeyExt};
 
 /// Test that navigation to Refresh item (first special item) doesn't cause deadlock
 /// This is a regression test for the issue where navigating to Refresh would freeze the TUI

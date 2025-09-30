@@ -34,24 +34,24 @@ async fn navigate_to_port<T: Expect>(
     session_name: &str,
 ) -> Result<()> {
     log::info!("🧪 Navigating to {} in {}", port_name, session_name);
-    
+
     // First capture the initial screen to see all ports
     let initial_screen = cap.capture(session, &format!("{} - initial screen", session_name))?;
     log::info!("{} initial screen:\n{}", session_name, initial_screen);
-    
+
     // Find the port position
     let port_position = find_port_position(&initial_screen, port_name);
-    
+
     if let Some(line_number) = port_position {
         log::info!("Found {} at approximate line {}", port_name, line_number);
-        
+
         // Navigate down to the port
         // Start from top by going up many times first
         for _ in 0..50 {
             session.send_arrow(ArrowKey::Up)?;
         }
         aoba::ci::sleep_a_while().await;
-        
+
         // Now navigate down to the target
         // Use the line number as a rough guide, but verify with screen capture
         for i in 0..line_number + 5 {
@@ -69,7 +69,7 @@ async fn navigate_to_port<T: Expect>(
                 }
             }
         }
-        
+
         // If we didn't find it yet, do a more careful search
         log::info!("Fine-tuning navigation to {}", port_name);
         for _ in 0..20 {
@@ -85,8 +85,12 @@ async fn navigate_to_port<T: Expect>(
             aoba::ci::sleep_a_while().await;
         }
     }
-    
-    Err(anyhow!("Failed to navigate to {} in {}", port_name, session_name))
+
+    Err(anyhow!(
+        "Failed to navigate to {} in {}",
+        port_name,
+        session_name
+    ))
 }
 
 /// Smoke test: verify that we can spawn two TUI processes and occupy both vcom ports
@@ -104,7 +108,7 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
 
     aoba::ci::sleep_a_while().await;
     let mut cap1 = TerminalCapture::new(24, 80);
-    
+
     // Spawn second TUI process
     let mut session2 = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn second TUI process: {}", err))?;
@@ -168,7 +172,13 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     let vmatch = vcom_matchers();
 
     // ========== Navigate master to vcom1 ==========
-    navigate_to_port(&mut master_session, &mut master_cap, &vmatch.port1_name, "master").await?;
+    navigate_to_port(
+        &mut master_session,
+        &mut master_cap,
+        &vmatch.port1_name,
+        "master",
+    )
+    .await?;
 
     // Press Enter to go to ConfigPanel
     master_session.send_enter()?;
@@ -176,7 +186,13 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     let _ = master_cap.capture(&mut master_session, "master after Enter")?;
 
     // ========== Navigate slave to vcom2 ==========
-    navigate_to_port(&mut slave_session, &mut slave_cap, &vmatch.port2_name, "slave").await?;
+    navigate_to_port(
+        &mut slave_session,
+        &mut slave_cap,
+        &vmatch.port2_name,
+        "slave",
+    )
+    .await?;
 
     // Press Enter to go to ConfigPanel
     slave_session.send_enter()?;

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use aoba::ci::{ArrowKey, ExpectKeyExt, spawn_expect_process, TerminalCapture};
+use aoba::ci::{spawn_expect_process, ArrowKey, ExpectKeyExt, TerminalCapture};
 
 pub async fn test_tui_navigation() -> Result<()> {
     let mut session = spawn_expect_process(&["--tui"])
@@ -16,7 +16,7 @@ pub async fn test_tui_navigation() -> Result<()> {
             aoba::ci::sleep_a_while().await;
         }
     }
-    
+
     let screen = cap.capture(&mut session, "At bottom of list")?;
     log::info!("Screen at bottom:\n{}", screen);
 
@@ -24,7 +24,7 @@ pub async fn test_tui_navigation() -> Result<()> {
     log::info!("🧪 Entering About page...");
     session.send_enter()?;
     aoba::ci::sleep_a_while().await;
-    
+
     let about_screen = cap.capture(&mut session, "In About page")?;
     log::info!("About page:\n{}", about_screen);
 
@@ -32,7 +32,7 @@ pub async fn test_tui_navigation() -> Result<()> {
     log::info!("🧪 Pressing Escape to return to main page...");
     session.send_escape()?;
     aoba::ci::sleep_a_while().await;
-    
+
     let main_screen = cap.capture(&mut session, "Back to main page")?;
     log::info!("Back to main page:\n{}", main_screen);
 
