@@ -44,19 +44,32 @@ async fn navigate_to_port<T: Expect>(
         .unwrap()
         .is_match(&initial_screen)
     {
-        log::info!("✓ Cursor already positioned at {} in {}", port_name, session_name);
+        log::info!(
+            "✓ Cursor already positioned at {} in {}",
+            port_name,
+            session_name
+        );
         return Ok(());
     }
 
     // Find the port position in the screen
     let port_line = find_port_position(&initial_screen, port_name);
-    
+
     if port_line.is_none() {
-        return Err(anyhow!("Port {} not found in screen output for {}", port_name, session_name));
+        return Err(anyhow!(
+            "Port {} not found in screen output for {}",
+            port_name,
+            session_name
+        ));
     }
-    
+
     let line_number = port_line.unwrap();
-    log::info!("Found {} at line {} in {}", port_name, line_number, session_name);
+    log::info!(
+        "Found {} at line {} in {}",
+        port_name,
+        line_number,
+        session_name
+    );
 
     // Strategy: Navigate carefully, checking the cursor position frequently
     // First, try going up to see if the port is above the current position
@@ -76,7 +89,11 @@ async fn navigate_to_port<T: Expect>(
     }
 
     // If not found going up, navigate down from the top
-    log::info!("Searching down from top for {} in {}", port_name, session_name);
+    log::info!(
+        "Searching down from top for {} in {}",
+        port_name,
+        session_name
+    );
     for attempt in 0..100 {
         session.send_arrow(ArrowKey::Down)?;
         if attempt % 3 == 0 {
@@ -86,7 +103,11 @@ async fn navigate_to_port<T: Expect>(
                 .unwrap()
                 .is_match(&screen)
             {
-                log::info!("✓ Found {} by navigating down in {}", port_name, session_name);
+                log::info!(
+                    "✓ Found {} by navigating down in {}",
+                    port_name,
+                    session_name
+                );
                 return Ok(());
             }
         }
