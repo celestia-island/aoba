@@ -40,39 +40,27 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
 
     // Navigate to vcom1 in first process
     log::info!("🧪 Navigating to {} in first process", vmatch.port1_name);
-    for _ in 0..10 {
+    for _ in 0..15 {
         session1
             .send("\x1b[A") // Up arrow
             .map_err(|err| anyhow!("Failed to send up arrow to session1: {}", err))?;
         aoba::ci::sleep_a_while().await;
-        let screen = cap1.capture(&mut session1, "session1 up arrow")?;
-        if Regex::new(&format!(r"> ?{}", regex::escape(&vmatch.port1_name)))
-            .unwrap()
-            .is_match(&screen)
-        {
-            log::info!("🧪 Found cursor at {} in first process", vmatch.port1_name);
-            break;
-        }
     }
+    let screen1 = cap1.capture(&mut session1, "session1 after navigation")?;
+    log::info!("Screen1 after navigation:\n{}", screen1);
 
     // Navigate to vcom2 in second process
     log::info!("🧪 Navigating to {} in second process", vmatch.port2_name);
-    for _ in 0..10 {
+    for _ in 0..15 {
         session2
             .send("\x1b[A") // Up arrow
             .map_err(|err| anyhow!("Failed to send up arrow to session2: {}", err))?;
         aoba::ci::sleep_a_while().await;
-        let screen = cap2.capture(&mut session2, "session2 up arrow")?;
-        if Regex::new(&format!(r"> ?{}", regex::escape(&vmatch.port2_name)))
-            .unwrap()
-            .is_match(&screen)
-        {
-            log::info!("🧪 Found cursor at {} in second process", vmatch.port2_name);
-            break;
-        }
     }
+    let screen2 = cap2.capture(&mut session2, "session2 after navigation")?;
+    log::info!("Screen2 after navigation:\n{}", screen2);
 
-    // Press Enter on both to occupy ports
+    // Press Enter on both to open ConfigPanel
     session1
         .send("\r")
         .map_err(|err| anyhow!("Failed to send Enter to session1: {}", err))?;
@@ -83,8 +71,10 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
         .map_err(|err| anyhow!("Failed to send Enter to session2: {}", err))?;
     aoba::ci::sleep_a_while().await;
 
-    let _ = cap1.capture(&mut session1, "session1 after Enter")?;
-    let _ = cap2.capture(&mut session2, "session2 after Enter")?;
+    let screen1 = cap1.capture(&mut session1, "session1 in ConfigPanel")?;
+    let screen2 = cap2.capture(&mut session2, "session2 in ConfigPanel")?;
+    log::info!("Screen1 in ConfigPanel:\n{}", screen1);
+    log::info!("Screen2 in ConfigPanel:\n{}", screen2);
 
     // Quit both processes
     session1
