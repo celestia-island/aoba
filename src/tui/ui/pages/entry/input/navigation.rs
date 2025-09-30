@@ -48,7 +48,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 } else {
                     let new_cursor = types::cursor::EntryCursor::Refresh;
                     let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    let offset = ports_count.saturating_add(1);
+                    // Keep at bottom
+                    let offset = ports_count;
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(new_cursor),
@@ -78,7 +79,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 if read_status(|status| Ok(status.ports.map.is_empty()))? {
                     let new_cursor = types::cursor::EntryCursor::Refresh;
                     let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    let offset = ports_count.saturating_add(1);
+                    // Keep at bottom
+                    let offset = ports_count;
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(new_cursor),
@@ -165,7 +167,8 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
             if read_status(|status| Ok(status.ports.map.is_empty()))? {
                 let new_cursor = types::cursor::EntryCursor::Refresh;
                 let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                let offset = ports_count.saturating_add(1);
+                // Keep at bottom
+                let offset = ports_count;
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
@@ -188,7 +191,8 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::CreateVirtual => {
             let new_cursor = types::cursor::EntryCursor::Refresh;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = ports_count.saturating_add(1);
+            // Keep at bottom
+            let offset = ports_count;
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
@@ -200,7 +204,8 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::About => {
             let new_cursor = types::cursor::EntryCursor::CreateVirtual;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = ports_count.saturating_add(2);
+            // Keep at bottom
+            let offset = ports_count;
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
@@ -221,7 +226,10 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
             if next >= read_status(|status| Ok(status.ports.map.len()))? {
                 let new_cursor = types::cursor::EntryCursor::Refresh;
                 let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                let offset = ports_count.saturating_add(1);
+                // For the last 3 items, we want to keep them at the bottom
+                // The offset should be at most such that all 3 items are visible
+                // We use a simple heuristic: offset shouldn't exceed ports_count
+                let offset = ports_count;
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
@@ -244,7 +252,8 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::Refresh => {
             let new_cursor = types::cursor::EntryCursor::CreateVirtual;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = ports_count.saturating_add(2);
+            // Keep offset same as Refresh to keep all 3 items visible at bottom
+            let offset = ports_count;
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
@@ -256,7 +265,8 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::CreateVirtual => {
             let new_cursor = types::cursor::EntryCursor::About;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = ports_count.saturating_add(3);
+            // Keep offset same to keep all 3 items visible at bottom
+            let offset = ports_count;
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),

@@ -35,7 +35,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         KeyCode::Esc => {
             let new_cursor = types::cursor::EntryCursor::About;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            let offset = ports_count.saturating_add(3);
+            // Keep at bottom
+            let offset = ports_count;
             write_status(|status| {
                 status.page = types::Page::Entry {
                     cursor: Some(new_cursor),

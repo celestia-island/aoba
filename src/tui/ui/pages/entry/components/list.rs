@@ -76,7 +76,8 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             };
 
             let prefix = if i == selection { "> " } else { "  " };
-            let inner = width.saturating_sub(2);
+            // Account for scrollbar (1 char) when calculating available width
+            let inner = width.saturating_sub(3); // Border (2) + Scrollbar (1)
             let name_w = UnicodeWidthStr::width(name.as_str()) + UnicodeWidthStr::width(prefix);
             let state_w = UnicodeWidthStr::width(state_text.as_str());
             let pad = if inner > name_w + state_w {
