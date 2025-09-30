@@ -6,7 +6,7 @@ pub mod i18n;
 pub mod protocol;
 
 #[doc(hidden)]
-pub mod test_utils;
+pub mod ci;
 
 use anyhow::Result;
 
