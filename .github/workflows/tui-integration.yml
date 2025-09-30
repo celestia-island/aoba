@@ -1,4 +1,4 @@
-name: TUI Integration Tests
+name: TUI E2E Tests
 
 on:
   push:
@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  tui-integration-test:
-    name: TUI Integration Tests
+  tui-e2e-test:
+    name: TUI E2E Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -65,9 +65,9 @@ jobs:
             exit 1
           fi
 
-      - name: Run TUI integration tests
+      - name: Run TUI E2E tests
         run: |
-          cargo run -p aoba_tui_integration_tests --bin tui_integration_tests
+          cargo run -p aoba_tui_e2e_tests --bin tui_e2e_tests
 
       - name: Cleanup virtual ports
         if: always()

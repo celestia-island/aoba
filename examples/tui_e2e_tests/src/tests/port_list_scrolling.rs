@@ -1,6 +1,6 @@
+use super::key_input::{ArrowKey, ExpectKeyExt};
 use anyhow::{anyhow, Result};
 use aoba::ci::{spawn_expect_process, TerminalCapture};
-use expectrl::Expect;
 
 /// Test port list scrolling with different virtual port counts
 pub async fn test_port_list_scrolling() -> Result<()> {
@@ -50,9 +50,7 @@ async fn test_navigation_and_scrolling(rows: u16, cols: u16, test_name: &str) ->
     // Test navigation down
     log::info!("    Testing downward navigation...");
     for i in 0..8 {
-        session
-            .send("\x1b[B") // Down arrow
-            .map_err(|err| anyhow!("Failed to send Down arrow: {}", err))?;
+        session.send_arrow(ArrowKey::Down)?;
 
         aoba::ci::sleep_a_while().await;
 
@@ -71,9 +69,7 @@ async fn test_navigation_and_scrolling(rows: u16, cols: u16, test_name: &str) ->
     // Test navigation up
     log::info!("    Testing upward navigation...");
     for i in 0..5 {
-        session
-            .send("\x1b[A") // Up arrow
-            .map_err(|err| anyhow!("Failed to send Up arrow: {}", err))?;
+        session.send_arrow(ArrowKey::Up)?;
 
         aoba::ci::sleep_a_while().await;
 
@@ -81,9 +77,7 @@ async fn test_navigation_and_scrolling(rows: u16, cols: u16, test_name: &str) ->
     }
 
     // Exit
-    session
-        .send_line("q")
-        .map_err(|err| anyhow!("Failed to send quit: {}", err))?;
+    session.send_char('q')?;
 
     log::info!("    ✓ Navigation test '{test_name}' passed");
     Ok(())
@@ -108,9 +102,7 @@ async fn test_bottom_navigation(rows: u16, cols: u16) -> Result<()> {
     // Navigate down many times to reach the bottom items
     log::info!("    Navigating to bottom...");
     for _ in 0..50 {
-        session
-            .send("\x1b[B") // Down arrow
-            .map_err(|err| anyhow!("Failed to send Down arrow: {}", err))?;
+        session.send_arrow(ArrowKey::Down)?;
         aoba::ci::sleep_a_while().await;
     }
 
@@ -127,34 +119,24 @@ async fn test_bottom_navigation(rows: u16, cols: u16) -> Result<()> {
     log::info!("    Testing selection of each bottom item...");
 
     // Navigate up one to previous item
-    session
-        .send("\x1b[A")
-        .map_err(|err| anyhow!("Failed to send Up arrow: {}", err))?;
+    session.send_arrow(ArrowKey::Up)?;
     aoba::ci::sleep_a_while().await;
     cap.capture(&mut session, "Bottom nav - Second to last")?;
 
     // Navigate up one more
-    session
-        .send("\x1b[A")
-        .map_err(|err| anyhow!("Failed to send Up arrow: {}", err))?;
+    session.send_arrow(ArrowKey::Up)?;
     aoba::ci::sleep_a_while().await;
     cap.capture(&mut session, "Bottom nav - Third to last")?;
 
     // Navigate back down
-    session
-        .send("\x1b[B")
-        .map_err(|err| anyhow!("Failed to send Down arrow: {}", err))?;
+    session.send_arrow(ArrowKey::Down)?;
     aoba::ci::sleep_a_while().await;
-    session
-        .send("\x1b[B")
-        .map_err(|err| anyhow!("Failed to send Down arrow: {}", err))?;
+    session.send_arrow(ArrowKey::Down)?;
     aoba::ci::sleep_a_while().await;
     cap.capture(&mut session, "Bottom nav - Back to bottom")?;
 
     // Exit
-    session
-        .send_line("q")
-        .map_err(|err| anyhow!("Failed to send quit: {}", err))?;
+    session.send_char('q')?;
 
     log::info!("    ✓ Bottom navigation test passed");
     Ok(())

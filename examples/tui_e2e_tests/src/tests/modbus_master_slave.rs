@@ -1,3 +1,4 @@
+use super::key_input::{ArrowKey, ExpectKeyExt};
 // Integration test for modbus master-slave communication between two virtual serial ports.
 // This test spawns two TUI processes:
 // - Process 1 occupies vcom1 and acts as a Modbus master
@@ -42,7 +43,7 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
     log::info!("🧪 Navigating to {} in first process", vmatch.port1_name);
     for _ in 0..15 {
         session1
-            .send("\x1b[A") // Up arrow
+            .send_arrow(ArrowKey::Up) // Up arrow
             .map_err(|err| anyhow!("Failed to send up arrow to session1: {}", err))?;
         aoba::ci::sleep_a_while().await;
     }
@@ -53,7 +54,7 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
     log::info!("🧪 Navigating to {} in second process", vmatch.port2_name);
     for _ in 0..15 {
         session2
-            .send("\x1b[A") // Up arrow
+            .send_arrow(ArrowKey::Up) // Up arrow
             .map_err(|err| anyhow!("Failed to send up arrow to session2: {}", err))?;
         aoba::ci::sleep_a_while().await;
     }
@@ -62,12 +63,12 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
 
     // Press Enter on both to open ConfigPanel
     session1
-        .send("\r")
+        .send_enter()
         .map_err(|err| anyhow!("Failed to send Enter to session1: {}", err))?;
     aoba::ci::sleep_a_while().await;
 
     session2
-        .send("\r")
+        .send_enter()
         .map_err(|err| anyhow!("Failed to send Enter to session2: {}", err))?;
     aoba::ci::sleep_a_while().await;
 
@@ -121,7 +122,7 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Navigating master to {}", vmatch.port1_name);
     for _ in 0..10 {
         master_session
-            .send("\x1b[A")
+            .send_arrow(ArrowKey::Up)
             .map_err(|err| anyhow!("Failed to send up arrow to master: {}", err))?;
         aoba::ci::sleep_a_while().await;
         let screen = master_cap.capture(&mut master_session, "master up arrow")?;
@@ -135,7 +136,7 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
 
     // Press Enter to go to ConfigPanel
     master_session
-        .send("\r")
+        .send_enter()
         .map_err(|err| anyhow!("Failed to send Enter to master: {}", err))?;
     aoba::ci::sleep_a_while().await;
     let _ = master_cap.capture(&mut master_session, "master after Enter")?;
@@ -144,7 +145,7 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Navigating slave to {}", vmatch.port2_name);
     for _ in 0..10 {
         slave_session
-            .send("\x1b[A")
+            .send_arrow(ArrowKey::Up)
             .map_err(|err| anyhow!("Failed to send up arrow to slave: {}", err))?;
         aoba::ci::sleep_a_while().await;
         let screen = slave_cap.capture(&mut slave_session, "slave up arrow")?;
@@ -158,7 +159,7 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
 
     // Press Enter to go to ConfigPanel
     slave_session
-        .send("\r")
+        .send_enter()
         .map_err(|err| anyhow!("Failed to send Enter to slave: {}", err))?;
     aoba::ci::sleep_a_while().await;
     let _ = slave_cap.capture(&mut slave_session, "slave after Enter")?;
@@ -168,12 +169,12 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     // In ConfigPanel, navigate down to Modbus option and press Enter
     for _ in 0..5 {
         master_session
-            .send("\x1b[B") // Down arrow
+            .send_arrow(ArrowKey::Down) // Down arrow
             .map_err(|err| anyhow!("Failed to send down arrow to master: {}", err))?;
         aoba::ci::sleep_a_while().await;
     }
     master_session
-        .send("\r")
+        .send_enter()
         .map_err(|err| anyhow!("Failed to send Enter to master: {}", err))?;
     aoba::ci::sleep_a_while().await;
     let _ = master_cap.capture(&mut master_session, "master in Modbus panel")?;
@@ -182,12 +183,12 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Navigating slave to Modbus panel");
     for _ in 0..5 {
         slave_session
-            .send("\x1b[B")
+            .send_arrow(ArrowKey::Down)
             .map_err(|err| anyhow!("Failed to send down arrow to slave: {}", err))?;
         aoba::ci::sleep_a_while().await;
     }
     slave_session
-        .send("\r")
+        .send_enter()
         .map_err(|err| anyhow!("Failed to send Enter to slave: {}", err))?;
     aoba::ci::sleep_a_while().await;
     let _ = slave_cap.capture(&mut slave_session, "slave in Modbus panel")?;
@@ -196,13 +197,13 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Configuring master as Modbus Master");
     // Add a new modbus entry
     master_session
-        .send("\r") // Enter on "Add Master/Slave"
+        .send_enter() // Enter on "Add Master/Slave"
         .map_err(|err| anyhow!("Failed to add entry on master: {}", err))?;
     aoba::ci::sleep_a_while().await;
 
     // Navigate to Mode selection and ensure it's Master (default is Master, so just verify)
     master_session
-        .send("\x1b[B") // Down to Mode
+        .send_arrow(ArrowKey::Down) // Down to Mode
         .map_err(|err| anyhow!("Failed to navigate to mode on master: {}", err))?;
     aoba::ci::sleep_a_while().await;
     let _ = master_cap.capture(&mut master_session, "master mode selection")?;
@@ -211,25 +212,25 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Configuring slave as Modbus Slave");
     // Add a new modbus entry
     slave_session
-        .send("\r") // Enter on "Add Master/Slave"
+        .send_enter() // Enter on "Add Master/Slave"
         .map_err(|err| anyhow!("Failed to add entry on slave: {}", err))?;
     aoba::ci::sleep_a_while().await;
 
     // Navigate to Mode selection and toggle to Slave
     slave_session
-        .send("\x1b[B") // Down to Mode
+        .send_arrow(ArrowKey::Down) // Down to Mode
         .map_err(|err| anyhow!("Failed to navigate to mode on slave: {}", err))?;
     aoba::ci::sleep_a_while().await;
     slave_session
-        .send("\r") // Enter to toggle mode
+        .send_enter() // Enter to toggle mode
         .map_err(|err| anyhow!("Failed to toggle mode on slave: {}", err))?;
     aoba::ci::sleep_a_while().await;
     slave_session
-        .send("\x1b[B") // Down to select Slave
+        .send_arrow(ArrowKey::Down) // Down to select Slave
         .map_err(|err| anyhow!("Failed to select Slave on slave: {}", err))?;
     aoba::ci::sleep_a_while().await;
     slave_session
-        .send("\r") // Confirm selection
+        .send_enter() // Confirm selection
         .map_err(|err| anyhow!("Failed to confirm Slave selection: {}", err))?;
     aoba::ci::sleep_a_while().await;
     let _ = slave_cap.capture(&mut slave_session, "slave mode set to Slave")?;

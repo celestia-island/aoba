@@ -1,6 +1,6 @@
+use super::key_input::{ArrowKey, ExpectKeyExt};
 use anyhow::{anyhow, Result};
 use aoba::ci::{spawn_expect_process, TerminalCapture};
-use expectrl::Expect;
 
 /// Test that navigation to Refresh item (first special item) doesn't cause deadlock
 /// This is a regression test for the issue where navigating to Refresh would freeze the TUI
@@ -24,7 +24,7 @@ pub async fn test_navigation_to_refresh_no_deadlock() -> Result<()> {
     log::info!("    Navigating down to Refresh item...");
     for i in 0..50 {
         session
-            .send("\x1b[B") // Down arrow
+            .send_arrow(ArrowKey::Down) // Down arrow
             .map_err(|err| anyhow!("Failed to send Down arrow at iteration {}: {}", i, err))?;
         aoba::ci::sleep_a_while().await;
     }
@@ -34,7 +34,7 @@ pub async fn test_navigation_to_refresh_no_deadlock() -> Result<()> {
 
     // Verify we can still interact with the UI (not frozen)
     session
-        .send("\x1b[A") // Up arrow
+        .send_arrow(ArrowKey::Up) // Up arrow
         .map_err(|err| anyhow!("Failed to send Up arrow: {}", err))?;
     aoba::ci::sleep_a_while().await;
 
@@ -42,8 +42,7 @@ pub async fn test_navigation_to_refresh_no_deadlock() -> Result<()> {
 
     // Exit
     session
-        .send_line("q")
-        .map_err(|err| anyhow!("Failed to send quit: {}", err))?;
+        .send_char('q')?;
 
     log::info!("    ✓ Navigation to Refresh item completed without deadlock");
 
@@ -76,7 +75,7 @@ pub async fn test_navigation_with_no_ports() -> Result<()> {
     log::info!("    Testing immediate down navigation...");
     for i in 0..5 {
         session
-            .send("\x1b[B") // Down arrow
+            .send_arrow(ArrowKey::Down) // Down arrow
             .map_err(|err| anyhow!("Failed to send Down arrow {}: {}", i, err))?;
         aoba::ci::sleep_a_while().await;
     }
@@ -87,7 +86,7 @@ pub async fn test_navigation_with_no_ports() -> Result<()> {
     // Navigate up
     for i in 0..3 {
         session
-            .send("\x1b[A") // Up arrow
+            .send_arrow(ArrowKey::Up) // Up arrow
             .map_err(|err| anyhow!("Failed to send Up arrow {}: {}", i, err))?;
         aoba::ci::sleep_a_while().await;
     }
@@ -96,8 +95,7 @@ pub async fn test_navigation_with_no_ports() -> Result<()> {
 
     // Exit
     session
-        .send_line("q")
-        .map_err(|err| anyhow!("Failed to send quit: {}", err))?;
+        .send_char('q')?;
 
     log::info!("    ✓ Navigation with no/few ports works correctly");
 

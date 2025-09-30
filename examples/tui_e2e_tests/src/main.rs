@@ -7,7 +7,7 @@ async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    log::info!("🧪 Starting TUI Integration Tests (User Simulation)...");
+    log::info!("🧪 Starting TUI E2E Tests (End-to-End User Simulation)...");
 
     tests::test_tui_startup_shutdown().await?;
     tests::test_tui_navigation().await?;
@@ -23,6 +23,6 @@ async fn main() -> Result<()> {
     tests::test_modbus_smoke_dual_process().await?;
     tests::test_modbus_master_slave_communication().await?;
 
-    log::info!("🧪 All TUI integration tests passed!");
+    log::info!("🧪 All TUI E2E tests passed!");
     Ok(())
 }

@@ -1,4 +1,4 @@
-// This integration test checks that the TUI lists two virtual serial ports and
+// This E2E test checks that the TUI lists two virtual serial ports and
 // allows selecting one. On Unix CI we expect `/dev/vcom1` and `/dev/vcom2`
 // (created by the CI using socat or similar). On Windows there is no `/dev`
 // namespace; users running these tests locally should prepare `COM1` and
@@ -11,9 +11,9 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 
-use expectrl::Expect;
 
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
+use super::key_input::{ArrowKey, ExpectKeyExt};
 
 pub async fn test_tui_serial_port_interaction() -> Result<()> {
     let mut session = spawn_expect_process(&["--tui"])
@@ -52,9 +52,7 @@ pub async fn test_tui_serial_port_interaction() -> Result<()> {
 
     let cursor_rx = vmatch.cursor_rx;
     for i in 0..10 {
-        session
-            .send("\x1b[A")
-            .map_err(|err| anyhow!("Failed to send up arrow: {}", err))?;
+        session.send_arrow(ArrowKey::Up)?;
         let screen = cap.capture(&mut session, &format!("up arrow press #{}", i + 1))?;
         if cursor_rx.is_match(&screen) {
             log::info!("🧪 Cursor found at virtual port after {} up presses", i + 1);
@@ -64,14 +62,12 @@ pub async fn test_tui_serial_port_interaction() -> Result<()> {
     }
 
     log::info!("🧪 Pressing Enter to select the port...");
-    session
-        .send("\r")
-        .map_err(|err| anyhow!("Failed to send Enter: {}", err))?;
+    session.send_enter()?;
 
     aoba::ci::sleep_a_while().await;
     let _ = cap.capture(&mut session, "Enter key press")?;
 
-    match session.send("q") {
+    match session.send_char('q') {
         Ok(_) => {
             aoba::ci::sleep_a_while().await;
             let screen = cap.capture(&mut session, "q key press for testing responsiveness")?;
