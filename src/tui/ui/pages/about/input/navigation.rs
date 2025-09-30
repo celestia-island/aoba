@@ -35,8 +35,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         KeyCode::Esc => {
             let new_cursor = types::cursor::EntryCursor::About;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            // Keep at bottom
-            let offset = ports_count;
+            // Only set offset if there are enough items to require scrolling
+            let offset = if ports_count > 10 {
+                ports_count
+            } else {
+                0
+            };
             write_status(|status| {
                 status.page = types::Page::Entry {
                     cursor: Some(new_cursor),
