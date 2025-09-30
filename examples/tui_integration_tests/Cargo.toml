@@ -1,0 +1,20 @@
+[package]
+name = "aoba_tui_integration_tests"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = { version = "^1", features = ["backtrace"] }
+tokio = { version = "^1", features = ["rt-multi-thread", "macros"] }
+env_logger = "^0.11"
+log = "^0.4"
+expectrl = "^0.8"
+regex = "^1"
+
+[dependencies.aoba]
+path = "../../"
+
+[[bin]]
+name = "tui_integration_tests"
+path = "src/main.rs"
