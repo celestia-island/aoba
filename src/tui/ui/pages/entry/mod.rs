@@ -37,9 +37,10 @@ pub fn calculate_special_items_offset(ports_count: usize, viewport_height: usize
 }
 
 /// Conservative estimate of viewport height for navigation calculations
-/// Most terminals provide at least 24 lines, minus borders (2) and bottom hints (2-3)
-/// leaves about 20 lines available for the port list.
-pub const CONSERVATIVE_VIEWPORT_HEIGHT: usize = 20;
+/// We use a very conservative estimate to handle even small terminals (15-20 lines).
+/// A 15-line terminal minus borders (2) and bottom hints (2) leaves about 11 lines.
+/// We use 12 as a safe minimum to ensure proper behavior on small terminals.
+pub const CONSERVATIVE_VIEWPORT_HEIGHT: usize = 12;
 
 /// Check if scrollbar is needed based on content size and viewport height
 ///
