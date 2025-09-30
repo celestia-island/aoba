@@ -23,10 +23,6 @@ impl TerminalCapture {
     /// Read available bytes from the expectrl session, feed them to the
     /// internal vt100 parser (so cursor moves / clears are applied), log a
     /// snapshot, and return the current rendered screen contents.
-    ///
-    /// Note: this function is the only place that should call
-    /// `session.expect(...)` in examples/tests to avoid multiple consumers
-    /// of the same pty output.
     pub fn capture(&mut self, session: &mut impl Expect, step_description: &str) -> Result<String> {
         log::info!("📺 Screen capture point: {step_description}");
 

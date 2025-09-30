@@ -14,6 +14,9 @@ opt-level = 'z'
 codegen-units = 1
 panic = "abort"
 
+[workspace]
+members = ["examples/*"]
+
 [dependencies]
 anyhow = { version = "^1", features = ["backtrace"] }
 async-trait = "^0.1"
