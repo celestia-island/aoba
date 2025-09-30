@@ -47,7 +47,7 @@ impl ModbusConnectionMode {
         let storage = Arc::new(Mutex::new(
             rmodbus::server::storage::ModbusStorageSmall::new(),
         ));
-        
+
         ModbusConnectionMode::Slave {
             current_request_at_station_index: 0,
             storage,

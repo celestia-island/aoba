@@ -52,7 +52,7 @@ pub fn handle_modbus_communication() -> Result<()> {
         // NOTE: The naming is counter-intuitive but kept for backwards compatibility:
         // - "Master" mode acts as a Modbus Slave (Server): listens and responds with data from storage
         // - "Slave" mode acts as a Modbus Master (Client): sends requests to query/write data
-        // 
+        //
         // For proper Modbus Master/Slave behavior, we swap the handler calls:
         match &global_mode {
             types::modbus::ModbusConnectionMode::Master { .. } => {
@@ -370,13 +370,15 @@ pub fn handle_master_query_mode(
                 };
 
                 // Parse response and update storage (do this outside the port write lock)
-                let request_arc_opt = with_port_read(port_arc, |port| {
-                    port.last_modbus_request.clone()
-                }).and_then(|x| x);  // Flatten Option<Option<...>> to Option<...>
-                
+                let request_arc_opt =
+                    with_port_read(port_arc, |port| port.last_modbus_request.clone())
+                        .and_then(|x| x); // Flatten Option<Option<...>> to Option<...>
+
                 // Get storage from global mode
                 let storage_opt = match global_mode {
-                    types::modbus::ModbusConnectionMode::Slave { storage, .. } => Some(storage.clone()),
+                    types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
+                        Some(storage.clone())
+                    }
                     _ => None,
                 };
 
@@ -387,7 +389,9 @@ pub fn handle_master_query_mode(
                             // Successfully parsed response
                             if let Ok(_context) = storage.lock() {
                                 // For now, just log that we received a valid response
-                                log::debug!("Successfully parsed response and would update storage");
+                                log::debug!(
+                                    "Successfully parsed response and would update storage"
+                                );
                             }
                         }
                     }

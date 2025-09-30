@@ -1,8 +1,7 @@
 use anyhow::{anyhow, Result};
 
-
-use aoba::ci::{spawn_expect_process, TerminalCapture};
 use super::key_input::{ArrowKey, ExpectKeyExt};
+use aoba::ci::{spawn_expect_process, TerminalCapture};
 
 pub async fn test_tui_navigation() -> Result<()> {
     let mut session = spawn_expect_process(&["--tui"])

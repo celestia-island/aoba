@@ -1,8 +1,7 @@
 /// Helper module for sending semantic key inputs to TUI sessions
-/// 
+///
 /// This module provides a clean API for sending keyboard input to TUI applications
 /// using semantic names instead of hardcoded escape sequences.
-
 use anyhow::{anyhow, Result};
 use expectrl::Expect;
 
@@ -10,16 +9,16 @@ use expectrl::Expect;
 pub trait ExpectKeyExt {
     /// Send an arrow key
     fn send_arrow(&mut self, direction: ArrowKey) -> Result<()>;
-    
+
     /// Send Enter key
     fn send_enter(&mut self) -> Result<()>;
-    
+
     /// Send Tab key
     fn send_tab(&mut self) -> Result<()>;
-    
+
     /// Send Escape key
     fn send_escape(&mut self) -> Result<()>;
-    
+
     /// Send a character key
     fn send_char(&mut self, ch: char) -> Result<()>;
 }
@@ -69,11 +68,7 @@ impl<T: Expect> ExpectKeyExt for T {
 /// Convenience functions for common key sequences
 
 /// Send multiple arrow keys in sequence
-pub fn send_arrows<T: Expect>(
-    session: &mut T,
-    direction: ArrowKey,
-    count: usize,
-) -> Result<()> {
+pub fn send_arrows<T: Expect>(session: &mut T, direction: ArrowKey, count: usize) -> Result<()> {
     for _ in 0..count {
         session.send_arrow(direction)?;
     }

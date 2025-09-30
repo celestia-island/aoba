@@ -11,9 +11,8 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 
-
-use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
 use super::key_input::{ArrowKey, ExpectKeyExt};
+use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
 
 pub async fn test_tui_serial_port_interaction() -> Result<()> {
     let mut session = spawn_expect_process(&["--tui"])
