@@ -8,7 +8,10 @@ use crate::{
         types::{self, cursor, Page},
         write_status,
     },
-    tui::utils::bus::Bus,
+    tui::{
+        ui::pages::entry::calculate_special_items_offset,
+        utils::bus::Bus,
+    },
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -48,12 +51,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 } else {
                     let new_cursor = types::cursor::EntryCursor::Refresh;
                     let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    // Only set offset if there are enough items to require scrolling
-                    let offset = if ports_count > 10 {
-                        ports_count
-                    } else {
-                        0
-                    };
+                    let offset = calculate_special_items_offset(ports_count);
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(new_cursor),
@@ -83,12 +81,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 if read_status(|status| Ok(status.ports.map.is_empty()))? {
                     let new_cursor = types::cursor::EntryCursor::Refresh;
                     let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                    // Only set offset if there are enough items to require scrolling
-                    let offset = if ports_count > 10 {
-                        ports_count
-                    } else {
-                        0
-                    };
+                    let offset = calculate_special_items_offset(ports_count);
                     write_status(|status| {
                         status.page = Page::Entry {
                             cursor: Some(new_cursor),
@@ -175,12 +168,7 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
             if read_status(|status| Ok(status.ports.map.is_empty()))? {
                 let new_cursor = types::cursor::EntryCursor::Refresh;
                 let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                // Only set offset if there are enough items to require scrolling
-                let offset = if ports_count > 10 {
-                    ports_count
-                } else {
-                    0
-                };
+                let offset = calculate_special_items_offset(ports_count);
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
@@ -203,12 +191,7 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::CreateVirtual => {
             let new_cursor = types::cursor::EntryCursor::Refresh;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            // Only set offset if there are enough items to require scrolling
-            let offset = if ports_count > 10 {
-                ports_count
-            } else {
-                0
-            };
+            let offset = calculate_special_items_offset(ports_count);
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
@@ -220,12 +203,7 @@ pub fn handle_move_prev(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::About => {
             let new_cursor = types::cursor::EntryCursor::CreateVirtual;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            // Only set offset if there are enough items to require scrolling
-            let offset = if ports_count > 10 {
-                ports_count
-            } else {
-                0
-            };
+            let offset = calculate_special_items_offset(ports_count);
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
@@ -246,13 +224,7 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
             if next >= read_status(|status| Ok(status.ports.map.len()))? {
                 let new_cursor = types::cursor::EntryCursor::Refresh;
                 let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-                // Only set offset if there are enough items to require scrolling
-                // If few items, keep offset at 0 to avoid extra blank line at bottom
-                let offset = if ports_count > 10 {
-                    ports_count
-                } else {
-                    0
-                };
+                let offset = calculate_special_items_offset(ports_count);
                 write_status(|status| {
                     status.page = Page::Entry {
                         cursor: Some(new_cursor),
@@ -275,12 +247,7 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::Refresh => {
             let new_cursor = types::cursor::EntryCursor::CreateVirtual;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            // Only set offset if there are enough items to require scrolling
-            let offset = if ports_count > 10 {
-                ports_count
-            } else {
-                0
-            };
+            let offset = calculate_special_items_offset(ports_count);
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),
@@ -292,12 +259,7 @@ pub fn handle_move_next(cursor: cursor::EntryCursor) -> Result<()> {
         cursor::EntryCursor::CreateVirtual => {
             let new_cursor = types::cursor::EntryCursor::About;
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
-            // Only set offset if there are enough items to require scrolling
-            let offset = if ports_count > 10 {
-                ports_count
-            } else {
-                0
-            };
+            let offset = calculate_special_items_offset(ports_count);
             write_status(|status| {
                 status.page = Page::Entry {
                     cursor: Some(new_cursor),

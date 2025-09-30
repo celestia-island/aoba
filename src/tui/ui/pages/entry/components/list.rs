@@ -15,7 +15,10 @@ use crate::{
         },
         with_port_read,
     },
-    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
+    tui::ui::{
+        components::boxed_paragraph::render_boxed_paragraph,
+        pages::entry::SPECIAL_ITEMS_COUNT,
+    },
 };
 
 use anyhow::Result;
@@ -128,6 +131,9 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             lang().index.manual_specify_label.as_str().to_string(),
             lang().index.about_label.as_str().to_string(),
         ];
+        // Ensure the number of extras matches the constant
+        debug_assert_eq!(extras.len(), SPECIAL_ITEMS_COUNT, 
+            "Number of special items must match SPECIAL_ITEMS_COUNT constant");
         let inner_h = area.height.saturating_sub(2) as usize;
         let used = lines.len();
         let extras_len = extras.len();
