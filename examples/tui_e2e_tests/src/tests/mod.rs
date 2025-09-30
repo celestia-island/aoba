@@ -1,5 +1,4 @@
 mod deadlock_test;
-mod key_input;
 mod modbus_master_slave;
 mod navigation;
 mod port_list_scrolling;

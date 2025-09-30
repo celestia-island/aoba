@@ -1,5 +1,5 @@
-use super::key_input::{ArrowKey, ExpectKeyExt};
-// Integration test for modbus master-slave communication between two virtual serial ports.
+use aoba::ci::{ArrowKey, ExpectKeyExt};
+// E2E test for modbus master-slave communication between two virtual serial ports.
 // This test spawns two TUI processes:
 // - Process 1 occupies vcom1 and acts as a Modbus master
 // - Process 2 occupies vcom2 and acts as a Modbus slave
@@ -11,6 +11,83 @@ use regex::Regex;
 use expectrl::Expect;
 
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
+
+/// Helper function to find and navigate to a specific port in the TUI
+/// Returns the number of down presses needed to reach the port
+fn find_port_position(screen: &str, port_name: &str) -> Option<usize> {
+    // Split screen into lines and find the line with the port
+    let lines: Vec<&str> = screen.lines().collect();
+    for (idx, line) in lines.iter().enumerate() {
+        if line.contains(port_name) {
+            // Return approximate position (line number can be used as guide)
+            return Some(idx);
+        }
+    }
+    None
+}
+
+/// Navigate to a specific port by name
+async fn navigate_to_port<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    port_name: &str,
+    session_name: &str,
+) -> Result<()> {
+    log::info!("🧪 Navigating to {} in {}", port_name, session_name);
+    
+    // First capture the initial screen to see all ports
+    let initial_screen = cap.capture(session, &format!("{} - initial screen", session_name))?;
+    log::info!("{} initial screen:\n{}", session_name, initial_screen);
+    
+    // Find the port position
+    let port_position = find_port_position(&initial_screen, port_name);
+    
+    if let Some(line_number) = port_position {
+        log::info!("Found {} at approximate line {}", port_name, line_number);
+        
+        // Navigate down to the port
+        // Start from top by going up many times first
+        for _ in 0..50 {
+            session.send_arrow(ArrowKey::Up)?;
+        }
+        aoba::ci::sleep_a_while().await;
+        
+        // Now navigate down to the target
+        // Use the line number as a rough guide, but verify with screen capture
+        for i in 0..line_number + 5 {
+            session.send_arrow(ArrowKey::Down)?;
+            if i % 5 == 0 {
+                aoba::ci::sleep_a_while().await;
+                let screen = cap.capture(session, &format!("{} - navigating", session_name))?;
+                // Check if cursor is on the target port
+                if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
+                    .unwrap()
+                    .is_match(&screen)
+                {
+                    log::info!("✓ Cursor positioned at {} in {}", port_name, session_name);
+                    return Ok(());
+                }
+            }
+        }
+        
+        // If we didn't find it yet, do a more careful search
+        log::info!("Fine-tuning navigation to {}", port_name);
+        for _ in 0..20 {
+            let screen = cap.capture(session, &format!("{} - fine-tuning", session_name))?;
+            if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
+                .unwrap()
+                .is_match(&screen)
+            {
+                log::info!("✓ Cursor positioned at {} in {}", port_name, session_name);
+                return Ok(());
+            }
+            session.send_arrow(ArrowKey::Down)?;
+            aoba::ci::sleep_a_while().await;
+        }
+    }
+    
+    Err(anyhow!("Failed to navigate to {} in {}", port_name, session_name))
+}
 
 /// Smoke test: verify that we can spawn two TUI processes and occupy both vcom ports
 pub async fn test_modbus_smoke_dual_process() -> Result<()> {
@@ -27,49 +104,27 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
 
     aoba::ci::sleep_a_while().await;
     let mut cap1 = TerminalCapture::new(24, 80);
-    let _ = cap1.capture(&mut session1, "First TUI startup")?;
-
+    
     // Spawn second TUI process
     let mut session2 = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn second TUI process: {}", err))?;
 
     aoba::ci::sleep_a_while().await;
     let mut cap2 = TerminalCapture::new(24, 80);
-    let _ = cap2.capture(&mut session2, "Second TUI startup")?;
 
     let vmatch = vcom_matchers();
 
     // Navigate to vcom1 in first process
-    log::info!("🧪 Navigating to {} in first process", vmatch.port1_name);
-    for _ in 0..15 {
-        session1
-            .send_arrow(ArrowKey::Up) // Up arrow
-            .map_err(|err| anyhow!("Failed to send up arrow to session1: {}", err))?;
-        aoba::ci::sleep_a_while().await;
-    }
-    let screen1 = cap1.capture(&mut session1, "session1 after navigation")?;
-    log::info!("Screen1 after navigation:\n{}", screen1);
+    navigate_to_port(&mut session1, &mut cap1, &vmatch.port1_name, "session1").await?;
 
     // Navigate to vcom2 in second process
-    log::info!("🧪 Navigating to {} in second process", vmatch.port2_name);
-    for _ in 0..15 {
-        session2
-            .send_arrow(ArrowKey::Up) // Up arrow
-            .map_err(|err| anyhow!("Failed to send up arrow to session2: {}", err))?;
-        aoba::ci::sleep_a_while().await;
-    }
-    let screen2 = cap2.capture(&mut session2, "session2 after navigation")?;
-    log::info!("Screen2 after navigation:\n{}", screen2);
+    navigate_to_port(&mut session2, &mut cap2, &vmatch.port2_name, "session2").await?;
 
     // Press Enter on both to open ConfigPanel
-    session1
-        .send_enter()
-        .map_err(|err| anyhow!("Failed to send Enter to session1: {}", err))?;
+    session1.send_enter()?;
     aoba::ci::sleep_a_while().await;
 
-    session2
-        .send_enter()
-        .map_err(|err| anyhow!("Failed to send Enter to session2: {}", err))?;
+    session2.send_enter()?;
     aoba::ci::sleep_a_while().await;
 
     let screen1 = cap1.capture(&mut session1, "session1 in ConfigPanel")?;
@@ -78,12 +133,8 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
     log::info!("Screen2 in ConfigPanel:\n{}", screen2);
 
     // Quit both processes
-    session1
-        .send("q")
-        .map_err(|err| anyhow!("Failed to send quit to session1: {}", err))?;
-    session2
-        .send("q")
-        .map_err(|err| anyhow!("Failed to send quit to session2: {}", err))?;
+    session1.send_char('q')?;
+    session2.send_char('q')?;
 
     aoba::ci::sleep_a_while().await;
 
@@ -106,7 +157,6 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
 
     aoba::ci::sleep_a_while().await;
     let mut master_cap = TerminalCapture::new(24, 80);
-    let _ = master_cap.capture(&mut master_session, "Master TUI startup")?;
 
     // Spawn second TUI process (will be slave on vcom2)
     let mut slave_session = spawn_expect_process(&["--tui"])
@@ -114,53 +164,22 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
 
     aoba::ci::sleep_a_while().await;
     let mut slave_cap = TerminalCapture::new(24, 80);
-    let _ = slave_cap.capture(&mut slave_session, "Slave TUI startup")?;
 
     let vmatch = vcom_matchers();
 
     // ========== Navigate master to vcom1 ==========
-    log::info!("🧪 Navigating master to {}", vmatch.port1_name);
-    for _ in 0..10 {
-        master_session
-            .send_arrow(ArrowKey::Up)
-            .map_err(|err| anyhow!("Failed to send up arrow to master: {}", err))?;
-        aoba::ci::sleep_a_while().await;
-        let screen = master_cap.capture(&mut master_session, "master up arrow")?;
-        if Regex::new(&format!(r"> ?{}", regex::escape(&vmatch.port1_name)))
-            .unwrap()
-            .is_match(&screen)
-        {
-            break;
-        }
-    }
+    navigate_to_port(&mut master_session, &mut master_cap, &vmatch.port1_name, "master").await?;
 
     // Press Enter to go to ConfigPanel
-    master_session
-        .send_enter()
-        .map_err(|err| anyhow!("Failed to send Enter to master: {}", err))?;
+    master_session.send_enter()?;
     aoba::ci::sleep_a_while().await;
     let _ = master_cap.capture(&mut master_session, "master after Enter")?;
 
     // ========== Navigate slave to vcom2 ==========
-    log::info!("🧪 Navigating slave to {}", vmatch.port2_name);
-    for _ in 0..10 {
-        slave_session
-            .send_arrow(ArrowKey::Up)
-            .map_err(|err| anyhow!("Failed to send up arrow to slave: {}", err))?;
-        aoba::ci::sleep_a_while().await;
-        let screen = slave_cap.capture(&mut slave_session, "slave up arrow")?;
-        if Regex::new(&format!(r"> ?{}", regex::escape(&vmatch.port2_name)))
-            .unwrap()
-            .is_match(&screen)
-        {
-            break;
-        }
-    }
+    navigate_to_port(&mut slave_session, &mut slave_cap, &vmatch.port2_name, "slave").await?;
 
     // Press Enter to go to ConfigPanel
-    slave_session
-        .send_enter()
-        .map_err(|err| anyhow!("Failed to send Enter to slave: {}", err))?;
+    slave_session.send_enter()?;
     aoba::ci::sleep_a_while().await;
     let _ = slave_cap.capture(&mut slave_session, "slave after Enter")?;
 
@@ -168,70 +187,48 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Navigating master to Modbus panel");
     // In ConfigPanel, navigate down to Modbus option and press Enter
     for _ in 0..5 {
-        master_session
-            .send_arrow(ArrowKey::Down) // Down arrow
-            .map_err(|err| anyhow!("Failed to send down arrow to master: {}", err))?;
+        master_session.send_arrow(ArrowKey::Down)?;
         aoba::ci::sleep_a_while().await;
     }
-    master_session
-        .send_enter()
-        .map_err(|err| anyhow!("Failed to send Enter to master: {}", err))?;
+    master_session.send_enter()?;
     aoba::ci::sleep_a_while().await;
     let _ = master_cap.capture(&mut master_session, "master in Modbus panel")?;
 
     // ========== Navigate to Modbus panel on slave ==========
     log::info!("🧪 Navigating slave to Modbus panel");
     for _ in 0..5 {
-        slave_session
-            .send_arrow(ArrowKey::Down)
-            .map_err(|err| anyhow!("Failed to send down arrow to slave: {}", err))?;
+        slave_session.send_arrow(ArrowKey::Down)?;
         aoba::ci::sleep_a_while().await;
     }
-    slave_session
-        .send_enter()
-        .map_err(|err| anyhow!("Failed to send Enter to slave: {}", err))?;
+    slave_session.send_enter()?;
     aoba::ci::sleep_a_while().await;
     let _ = slave_cap.capture(&mut slave_session, "slave in Modbus panel")?;
 
     // ========== Set master mode on master ==========
     log::info!("🧪 Configuring master as Modbus Master");
     // Add a new modbus entry
-    master_session
-        .send_enter() // Enter on "Add Master/Slave"
-        .map_err(|err| anyhow!("Failed to add entry on master: {}", err))?;
+    master_session.send_enter()?; // Enter on "Add Master/Slave"
     aoba::ci::sleep_a_while().await;
 
     // Navigate to Mode selection and ensure it's Master (default is Master, so just verify)
-    master_session
-        .send_arrow(ArrowKey::Down) // Down to Mode
-        .map_err(|err| anyhow!("Failed to navigate to mode on master: {}", err))?;
+    master_session.send_arrow(ArrowKey::Down)?; // Down to Mode
     aoba::ci::sleep_a_while().await;
     let _ = master_cap.capture(&mut master_session, "master mode selection")?;
 
     // ========== Set slave mode on slave ==========
     log::info!("🧪 Configuring slave as Modbus Slave");
     // Add a new modbus entry
-    slave_session
-        .send_enter() // Enter on "Add Master/Slave"
-        .map_err(|err| anyhow!("Failed to add entry on slave: {}", err))?;
+    slave_session.send_enter()?; // Enter on "Add Master/Slave"
     aoba::ci::sleep_a_while().await;
 
     // Navigate to Mode selection and toggle to Slave
-    slave_session
-        .send_arrow(ArrowKey::Down) // Down to Mode
-        .map_err(|err| anyhow!("Failed to navigate to mode on slave: {}", err))?;
+    slave_session.send_arrow(ArrowKey::Down)?; // Down to Mode
     aoba::ci::sleep_a_while().await;
-    slave_session
-        .send_enter() // Enter to toggle mode
-        .map_err(|err| anyhow!("Failed to toggle mode on slave: {}", err))?;
+    slave_session.send_enter()?; // Enter to toggle mode
     aoba::ci::sleep_a_while().await;
-    slave_session
-        .send_arrow(ArrowKey::Down) // Down to select Slave
-        .map_err(|err| anyhow!("Failed to select Slave on slave: {}", err))?;
+    slave_session.send_arrow(ArrowKey::Down)?; // Down to select Slave
     aoba::ci::sleep_a_while().await;
-    slave_session
-        .send_enter() // Confirm selection
-        .map_err(|err| anyhow!("Failed to confirm Slave selection: {}", err))?;
+    slave_session.send_enter()?; // Confirm selection
     aoba::ci::sleep_a_while().await;
     let _ = slave_cap.capture(&mut slave_session, "slave mode set to Slave")?;
 
@@ -254,12 +251,8 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     log::info!("🧪 Slave screen:\n{}", slave_screen);
 
     // Quit both processes
-    master_session
-        .send("q")
-        .map_err(|err| anyhow!("Failed to quit master: {}", err))?;
-    slave_session
-        .send("q")
-        .map_err(|err| anyhow!("Failed to quit slave: {}", err))?;
+    master_session.send_char('q')?;
+    slave_session.send_char('q')?;
 
     aoba::ci::sleep_a_while().await;
 

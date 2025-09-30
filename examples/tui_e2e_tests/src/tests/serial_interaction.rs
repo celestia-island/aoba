@@ -11,7 +11,7 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 
-use super::key_input::{ArrowKey, ExpectKeyExt};
+use aoba::ci::{ArrowKey, ExpectKeyExt};
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
 
 pub async fn test_tui_serial_port_interaction() -> Result<()> {

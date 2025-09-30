@@ -1,4 +1,4 @@
-use super::key_input::{ArrowKey, ExpectKeyExt};
+use aoba::ci::{ArrowKey, ExpectKeyExt};
 use anyhow::{anyhow, Result};
 use aoba::ci::{spawn_expect_process, TerminalCapture};
 
