@@ -12,14 +12,22 @@ use expectrl::Expect;
 
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
 
-/// Helper function to find and navigate to a specific port in the TUI
-/// Returns the number of down presses needed to reach the port
-fn find_port_position(screen: &str, port_name: &str) -> Option<usize> {
-    // Split screen into lines and find the line with the port
+/// Helper function to find the line number of a pattern in the screen
+fn find_line_with_pattern(screen: &str, pattern: &str) -> Option<usize> {
     let lines: Vec<&str> = screen.lines().collect();
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains(port_name) {
-            // Return approximate position (line number can be used as guide)
+        if line.contains(pattern) {
+            return Some(idx);
+        }
+    }
+    None
+}
+
+/// Helper function to find the cursor position (line with ">")
+fn find_cursor_line(screen: &str) -> Option<usize> {
+    let lines: Vec<&str> = screen.lines().collect();
+    for (idx, line) in lines.iter().enumerate() {
+        if line.trim_start().starts_with('>') {
             return Some(idx);
         }
     }
@@ -52,9 +60,19 @@ async fn navigate_to_port<T: Expect>(
         return Ok(());
     }
 
-    // Find the port position in the screen
-    let port_line = find_port_position(&initial_screen, port_name);
+    // Find the cursor position (line with ">")
+    let cursor_line = find_cursor_line(&initial_screen);
+    if cursor_line.is_none() {
+        return Err(anyhow!(
+            "Could not find cursor position in {} screen",
+            session_name
+        ));
+    }
+    let cursor_pos = cursor_line.unwrap();
+    log::info!("Cursor at line {} in {}", cursor_pos, session_name);
 
+    // Find the target port position
+    let port_line = find_line_with_pattern(&initial_screen, port_name);
     if port_line.is_none() {
         return Err(anyhow!(
             "Port {} not found in screen output for {}",
@@ -62,62 +80,52 @@ async fn navigate_to_port<T: Expect>(
             session_name
         ));
     }
+    let port_pos = port_line.unwrap();
+    log::info!("Found {} at line {} in {}", port_name, port_pos, session_name);
 
-    let line_number = port_line.unwrap();
-    log::info!(
-        "Found {} at line {} in {}",
-        port_name,
-        line_number,
-        session_name
-    );
-
-    // Strategy: Navigate carefully, checking the cursor position frequently
-    // First, try going up to see if the port is above the current position
-    for attempt in 0..50 {
-        session.send_arrow(ArrowKey::Up)?;
-        if attempt % 3 == 0 {
-            aoba::ci::sleep_a_while().await;
-            let screen = cap.capture(session, &format!("{} - searching up", session_name))?;
-            if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
-                .unwrap()
-                .is_match(&screen)
-            {
-                log::info!("✓ Found {} by navigating up in {}", port_name, session_name);
-                return Ok(());
-            }
+    // Calculate how many times to press up or down
+    if port_pos < cursor_pos {
+        // Target is above cursor - press Up
+        let distance = cursor_pos - port_pos;
+        log::info!(
+            "Target is {} lines above cursor, pressing Up {} times",
+            distance,
+            distance
+        );
+        for _ in 0..distance {
+            session.send_arrow(ArrowKey::Up)?;
+        }
+    } else if port_pos > cursor_pos {
+        // Target is below cursor - press Down
+        let distance = port_pos - cursor_pos;
+        log::info!(
+            "Target is {} lines below cursor, pressing Down {} times",
+            distance,
+            distance
+        );
+        for _ in 0..distance {
+            session.send_arrow(ArrowKey::Down)?;
         }
     }
 
-    // If not found going up, navigate down from the top
-    log::info!(
-        "Searching down from top for {} in {}",
-        port_name,
-        session_name
-    );
-    for attempt in 0..100 {
-        session.send_arrow(ArrowKey::Down)?;
-        if attempt % 3 == 0 {
-            aoba::ci::sleep_a_while().await;
-            let screen = cap.capture(session, &format!("{} - searching down", session_name))?;
-            if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
-                .unwrap()
-                .is_match(&screen)
-            {
-                log::info!(
-                    "✓ Found {} by navigating down in {}",
-                    port_name,
-                    session_name
-                );
-                return Ok(());
-            }
-        }
+    // Wait a moment and verify we're at the right position
+    aoba::ci::sleep_a_while().await;
+    let final_screen = cap.capture(session, &format!("{} - final position", session_name))?;
+    
+    if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
+        .unwrap()
+        .is_match(&final_screen)
+    {
+        log::info!("✓ Successfully navigated to {} in {}", port_name, session_name);
+        Ok(())
+    } else {
+        log::warn!("Final screen:\n{}", final_screen);
+        Err(anyhow!(
+            "Failed to position cursor at {} in {}. Cursor may have moved incorrectly.",
+            port_name,
+            session_name
+        ))
     }
-
-    Err(anyhow!(
-        "Failed to navigate to {} in {}",
-        port_name,
-        session_name
-    ))
 }
 
 /// Smoke test: verify that we can spawn two TUI processes and occupy both vcom ports
