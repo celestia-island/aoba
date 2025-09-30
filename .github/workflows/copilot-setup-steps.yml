@@ -1,4 +1,4 @@
-name: "Copilot Setup Steps"
+name: Copilot Setup Steps
 
 on:
   workflow_dispatch:
@@ -20,17 +20,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      # Use stable Rust for consistent smoke test results
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # Install system dependencies including socat for virtual serial ports
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
-      # Cache Cargo registry for faster builds
       - name: Cache cargo registry
         uses: actions/cache@v4
         with:
@@ -42,8 +39,6 @@ jobs:
           restore-keys: |
             copilot-env-cargo-
 
-      # Test the environment to ensure everything works
-      # Note: Environment uses socat-created virtual serial ports for testing
       - name: Test environment (sanity checks)
         run: |
           rustc --version || true
@@ -73,7 +68,6 @@ jobs:
           echo "Available serial ports for testing:"
           find /dev -name "ttyS*" | head -5
 
-      # Clean up virtual ports/processes (ensure socat is killed if started)
       - name: Cleanup
         if: always()
         run: |
