@@ -1,6 +1,7 @@
 // E2E test modules for modbus master-slave communication
 mod modbus_config;
 mod port_navigation;
+mod register_ops;
 
 use anyhow::{anyhow, Result};
 
@@ -79,8 +80,38 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     modbus_config::configure_master_mode(&mut master_session, &mut master_cap, "master").await?;
     modbus_config::configure_slave_mode(&mut slave_session, &mut slave_cap, "slave").await?;
 
-    // Verify slave registers is equal to master registers
-    todo!();
+    // Wait a bit for initial setup
+    aoba::ci::sleep_a_while().await;
+
+    // Verify master registers are set correctly (sanity check)
+    log::info!("🔍 Step 1: Verify master registers are set");
+    if let Err(e) = register_ops::verify_master_registers(&mut master_session, &mut master_cap, "master").await {
+        log::error!("Master register verification failed: {}", e);
+        return Err(e);
+    }
+
+    // Verify slave registers match master values
+    log::info!("🔍 Step 2: Verify slave registers match master");
+    match register_ops::verify_slave_registers(&mut slave_session, &mut slave_cap, "slave").await {
+        Ok(_) => {
+            log::info!("✅ SUCCESS: Slave registers match master values!");
+            log::info!("🎉 Master-slave communication is working correctly!");
+        }
+        Err(e) => {
+            log::error!("❌ EXPECTED FAILURE: {}", e);
+            log::error!("📝 This is normal on first run - the test framework is working correctly");
+            log::error!("📝 The Modbus master-slave communication needs to be implemented/fixed");
+            log::error!("📝 Use the diagnostic output above to identify the communication issues");
+            return Err(e);
+        }
+    }
+
+    // Cleanup: quit both processes
+    use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
+    let quit_actions = vec![CursorAction::TypeChar('q')];
+    
+    let _ = execute_cursor_actions(&mut master_session, &mut master_cap, &quit_actions, "master").await;
+    let _ = execute_cursor_actions(&mut slave_session, &mut slave_cap, &quit_actions, "slave").await;
 
     aoba::ci::sleep_a_while().await;
 
