@@ -12,7 +12,7 @@ static BINARY_BUILT: AtomicBool = AtomicBool::new(false);
 /// Build the project's debug binary for a specific bin name and return the path to the executable.
 /// This uses `cargo build --bin <bin_name>` to limit work to the requested binary and uses the
 /// debug profile to speed up builds during testing.
-/// 
+///
 /// Note: This function uses a global flag to ensure compilation only happens once per test run.
 pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
     // Try to find the workspace root by looking for Cargo.toml with [workspace]
@@ -41,7 +41,10 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
 
     // Check if we've already built the binary in this test run
     if BINARY_BUILT.load(Ordering::Relaxed) && bin_path.exists() {
-        log::info!("✅ Binary already built, skipping compilation: {}", bin_path.display());
+        log::info!(
+            "✅ Binary already built, skipping compilation: {}",
+            bin_path.display()
+        );
         return Ok(bin_path);
     }
 
