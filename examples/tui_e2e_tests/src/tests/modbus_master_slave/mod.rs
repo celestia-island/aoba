@@ -39,7 +39,7 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
     // Quit both processes using auto_cursor
     use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
     let quit_actions = vec![CursorAction::TypeChar('q')];
-    
+
     execute_cursor_actions(&mut session1, &mut cap1, &quit_actions, "session1").await?;
     execute_cursor_actions(&mut session2, &mut cap2, &quit_actions, "session2").await?;
 
@@ -87,8 +87,14 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     // ========== Cleanup ==========
     use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
     let quit_actions = vec![CursorAction::TypeChar('q')];
-    
-    execute_cursor_actions(&mut master_session, &mut master_cap, &quit_actions, "master").await?;
+
+    execute_cursor_actions(
+        &mut master_session,
+        &mut master_cap,
+        &quit_actions,
+        "master",
+    )
+    .await?;
     execute_cursor_actions(&mut slave_session, &mut slave_cap, &quit_actions, "slave").await?;
 
     aoba::ci::sleep_a_while().await;

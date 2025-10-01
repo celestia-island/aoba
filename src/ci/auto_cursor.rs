@@ -56,17 +56,18 @@ pub async fn execute_cursor_actions<T: Expect>(
                 line_range,
                 col_range,
             } => {
-                log::info!("🔍 Matching pattern '{}'", description);
+                log::info!("🔍 Matching pattern '{description}'");
 
                 // Capture current screen
                 let screen =
-                    cap.capture(session, &format!("{} - match {}", session_name, description))?;
+                    cap.capture(session, &format!("{session_name} - match {description}"))?;
 
                 // Extract region to search based on line and column ranges
                 let lines: Vec<&str> = screen.lines().collect();
                 let total_lines = lines.len();
 
-                let (start_line, end_line) = line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                let (start_line, end_line) =
+                    line_range.unwrap_or((0, total_lines.saturating_sub(1)));
                 let start_line = start_line.min(total_lines.saturating_sub(1));
                 let end_line = end_line.min(total_lines.saturating_sub(1));
 
@@ -95,30 +96,26 @@ pub async fn execute_cursor_actions<T: Expect>(
 
                 // Try to match pattern
                 if pattern.is_match(&search_text) {
-                    log::info!("✓ Pattern '{}' matched successfully", description);
+                    log::info!("✓ Pattern '{description}' matched successfully");
                 } else {
                     // Match failed - dump screen and return error
-                    log::error!("❌ Pattern '{}' NOT FOUND", description);
+                    log::error!("❌ Pattern '{description}' NOT FOUND");
                     log::error!("Expected pattern: {:?}", pattern.as_str());
-                    log::error!("Search range: lines {}..={}, cols {:?}", 
-                        start_line, end_line, col_range);
-                    log::error!("Current screen content for {}:", session_name);
+                    log::error!(
+                        "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
+                    );
+                    log::error!("Current screen content for {session_name}:");
                     log::error!("--- Screen Start ---");
-                    log::error!("{}", screen);
+                    log::error!("{screen}");
                     log::error!("--- Screen End ---");
-                    
+
                     return Err(anyhow!(
-                        "Pattern '{}' not found in {} (lines {}..={}, cols {:?})",
-                        description,
-                        session_name,
-                        start_line,
-                        end_line,
-                        col_range
+                        "Pattern '{description}' not found in {session_name} (lines {start_line}..={end_line}, cols {col_range:?})",
                     ));
                 }
             }
             CursorAction::PressArrow { direction, count } => {
-                log::info!("⬆️⬇️ Pressing {:?} {} times", direction, count);
+                log::info!("⬆️⬇️ Pressing {direction:?} {count} times");
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
@@ -136,22 +133,22 @@ pub async fn execute_cursor_actions<T: Expect>(
                 session.send_tab()?;
             }
             CursorAction::TypeChar(ch) => {
-                log::info!("⌨️ Typing character '{}'", ch);
+                log::info!("⌨️ Typing character '{ch}'");
                 session.send_char(*ch)?;
             }
             CursorAction::TypeString(s) => {
-                log::info!("⌨️ Typing string '{}'", s);
+                log::info!("⌨️ Typing string '{s}'");
                 for ch in s.chars() {
                     session.send_char(ch)?;
                 }
             }
             CursorAction::Sleep { ms } => {
-                log::info!("💤 Sleeping for {} ms", ms);
+                log::info!("💤 Sleeping for {ms} ms");
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
             }
         }
     }
 
-    log::info!("✓ All cursor actions executed successfully for {}", session_name);
+    log::info!("✓ All cursor actions executed successfully for {session_name}");
     Ok(())
 }

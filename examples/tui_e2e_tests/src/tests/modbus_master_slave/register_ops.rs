@@ -14,14 +14,10 @@ pub async fn set_magic_number<T: Expect>(
     session_name: &str,
     magic_number: u16,
 ) -> Result<()> {
-    log::info!(
-        "🧪 Setting magic number 0x{:04X} on {} register",
-        magic_number,
-        session_name
-    );
+    log::info!("🧪 Setting magic number 0x{magic_number:04X} on {session_name} register");
 
     // Convert magic number to hex string
-    let hex_string = format!("{:04X}", magic_number);
+    let hex_string = format!("{magic_number:04X}");
 
     let actions = vec![
         // Navigate to the register value field
@@ -44,7 +40,7 @@ pub async fn set_magic_number<T: Expect>(
         // Verify the value is displayed
         CursorAction::MatchPattern {
             pattern: Regex::new(&hex_string)?,
-            description: format!("Magic number 0x{} displayed", hex_string),
+            description: format!("Magic number 0x{hex_string} displayed"),
             line_range: Some((2, 20)),
             col_range: None,
         },
@@ -52,7 +48,7 @@ pub async fn set_magic_number<T: Expect>(
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
-    log::info!("✓ Set magic number 0x{:04X} on {}", magic_number, session_name);
+    log::info!("✓ Set magic number 0x{magic_number:04X} on {session_name}");
     Ok(())
 }
 
@@ -63,52 +59,38 @@ pub async fn verify_magic_number<T: Expect>(
     session_name: &str,
     magic_number: u16,
 ) -> Result<()> {
-    log::info!(
-        "🧪 Verifying magic number 0x{:04X} on {}",
-        magic_number,
-        session_name
-    );
+    log::info!("🧪 Verifying magic number 0x{magic_number:04X} on {session_name}");
 
     // Convert magic number to hex string (try multiple formats)
-    let hex_upper = format!("{:04X}", magic_number);
-    let hex_lower = format!("{:04x}", magic_number);
-    let hex_with_prefix = format!("0x{:04X}", magic_number);
+    let hex_upper = format!("{magic_number:04X}");
+    let hex_lower = format!("{magic_number:04x}");
+    let hex_with_prefix = format!("0x{magic_number:04X}");
 
     // Wait for communication to occur
     let wait_actions = vec![CursorAction::Sleep { ms: 2000 }];
     execute_cursor_actions(session, cap, &wait_actions, session_name).await?;
 
     // Try to match any format of the magic number
-    let pattern_str = format!("({}|{}|{})", hex_upper, hex_lower, hex_with_prefix);
+    let pattern_str = format!("({hex_upper}|{hex_lower}|{hex_with_prefix})");
     let actions = vec![CursorAction::MatchPattern {
         pattern: Regex::new(&pattern_str)?,
-        description: format!("Magic number 0x{} visible on slave", hex_upper),
+        description: format!("Magic number 0x{hex_upper} visible on slave"),
         line_range: Some((2, 20)),
         col_range: None,
     }];
 
     match execute_cursor_actions(session, cap, &actions, session_name).await {
         Ok(_) => {
-            log::info!(
-                "✅ SUCCESS: {} correctly displays the magic number 0x{:04X}!",
-                session_name,
-                magic_number
-            );
+            log::info!("✅ SUCCESS: {session_name} correctly displays the magic number 0x{magic_number:04X}!");
             Ok(())
         }
         Err(e) => {
-            log::warn!(
-                "⚠️  {} does not show 0x{:04X} yet - communication may need fixing",
-                session_name,
-                magic_number
-            );
+            log::warn!("⚠️  {session_name} does not show 0x{magic_number:04X} yet - communication may need fixing");
             log::warn!("This is expected on first run - the test will help identify what needs to be fixed");
-            log::warn!("Error: {}", e);
+            log::warn!("Error: {e}");
             // Return error to fail the test as expected
             Err(anyhow!(
-                "Magic number 0x{:04X} not found on {} display",
-                magic_number,
-                session_name
+                "Magic number 0x{magic_number:04X} not found on {session_name} display"
             ))
         }
     }

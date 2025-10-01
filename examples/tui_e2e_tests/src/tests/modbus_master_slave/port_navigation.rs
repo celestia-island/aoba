@@ -13,7 +13,7 @@ pub async fn navigate_to_vcom1<T: Expect>(
     cap: &mut TerminalCapture,
     session_name: &str,
 ) -> Result<()> {
-    log::info!("🧪 Navigating to vcom1 (first port) in {}", session_name);
+    log::info!("🧪 Navigating to vcom1 (first port) in {session_name}");
 
     // Give the TUI a moment to fully render before navigating
     let actions = vec![
@@ -32,7 +32,7 @@ pub async fn navigate_to_vcom1<T: Expect>(
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
-    log::info!("✓ Navigated to vcom1 in {}", session_name);
+    log::info!("✓ Navigated to vcom1 in {session_name}");
     Ok(())
 }
 
@@ -42,7 +42,7 @@ pub async fn navigate_to_vcom2<T: Expect>(
     cap: &mut TerminalCapture,
     session_name: &str,
 ) -> Result<()> {
-    log::info!("🧪 Navigating to vcom2 (second port) in {}", session_name);
+    log::info!("🧪 Navigating to vcom2 (second port) in {session_name}");
 
     // Give the TUI a moment to fully render before navigating
     let actions = vec![
@@ -66,6 +66,6 @@ pub async fn navigate_to_vcom2<T: Expect>(
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
-    log::info!("✓ Navigated to vcom2 in {}", session_name);
+    log::info!("✓ Navigated to vcom2 in {session_name}");
     Ok(())
 }

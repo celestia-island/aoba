@@ -13,7 +13,7 @@ pub async fn configure_master_mode<T: Expect>(
     cap: &mut TerminalCapture,
     session_name: &str,
 ) -> Result<()> {
-    log::info!("🧪 Configuring {} as Modbus Master", session_name);
+    log::info!("🧪 Configuring {session_name} as Modbus Master");
 
     let actions = vec![
         // Navigate to Modbus panel from ConfigPanel
@@ -52,7 +52,7 @@ pub async fn configure_master_mode<T: Expect>(
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
-    log::info!("✓ Configured {} as Modbus Master", session_name);
+    log::info!("✓ Configured {session_name} as Modbus Master");
     Ok(())
 }
 
@@ -62,7 +62,7 @@ pub async fn configure_slave_mode<T: Expect>(
     cap: &mut TerminalCapture,
     session_name: &str,
 ) -> Result<()> {
-    log::info!("🧪 Configuring {} as Modbus Slave", session_name);
+    log::info!("🧪 Configuring {session_name} as Modbus Slave");
 
     let actions = vec![
         // Navigate to Modbus panel from ConfigPanel
@@ -110,6 +110,6 @@ pub async fn configure_slave_mode<T: Expect>(
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
-    log::info!("✓ Configured {} as Modbus Slave", session_name);
+    log::info!("✓ Configured {session_name} as Modbus Slave");
     Ok(())
 }
