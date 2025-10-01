@@ -42,16 +42,6 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          # Remove existing /dev/ttyS* ports to avoid confusion in tests
-          # These are typically not useful in CI and can interfere with port detection
-          echo "Removing /dev/ttyS* ports..."
-          for port in /dev/ttyS*; do
-            if [ -e "$port" ]; then
-              sudo rm -f "$port" || true
-              echo "Removed $port"
-            fi
-          done
-
           # Create virtual serial port pair using socat in background with sudo
           sudo bash -c 'socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &'
           sleep 2  # Give socat time to start
@@ -76,6 +66,11 @@ jobs:
             echo "Failed to create virtual serial ports"
             exit 1
           fi
+
+      - name: Enumerate serial ports (diagnostic)
+        run: |
+          echo "=== Running port enumeration diagnostic ==="
+          cargo run --example enumerate_ports
 
       - name: Run TUI E2E tests
         run: |
