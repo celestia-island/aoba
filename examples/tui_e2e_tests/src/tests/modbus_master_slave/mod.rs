@@ -1,7 +1,6 @@
 // E2E test modules for modbus master-slave communication
 mod modbus_config;
 mod port_navigation;
-mod register_ops;
 
 use anyhow::{anyhow, Result};
 
@@ -72,30 +71,16 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     aoba::ci::sleep_a_while().await;
     let mut slave_cap = TerminalCapture::new(24, 80);
 
-    // ========== Navigate to ports ==========
+    // Navigate to ports
     port_navigation::navigate_to_vcom1(&mut master_session, &mut master_cap, "master").await?;
     port_navigation::navigate_to_vcom2(&mut slave_session, &mut slave_cap, "slave").await?;
 
-    // ========== Navigate to Modbus panel and configure modes ==========
+    // Navigate to Modbus panel and configure modes
     modbus_config::configure_master_mode(&mut master_session, &mut master_cap, "master").await?;
     modbus_config::configure_slave_mode(&mut slave_session, &mut slave_cap, "slave").await?;
 
-    // ========== Set and verify register values ==========
-    register_ops::set_magic_number(&mut master_session, &mut master_cap, "master", 0xCAFE).await?;
-    register_ops::verify_magic_number(&mut slave_session, &mut slave_cap, "slave", 0xCAFE).await?;
-
-    // ========== Cleanup ==========
-    use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
-    let quit_actions = vec![CursorAction::TypeChar('q')];
-
-    execute_cursor_actions(
-        &mut master_session,
-        &mut master_cap,
-        &quit_actions,
-        "master",
-    )
-    .await?;
-    execute_cursor_actions(&mut slave_session, &mut slave_cap, &quit_actions, "slave").await?;
+    // Verify slave registers is equal to master registers
+    todo!();
 
     aoba::ci::sleep_a_while().await;
 

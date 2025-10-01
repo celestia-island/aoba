@@ -17,38 +17,49 @@ pub async fn configure_master_mode<T: Expect>(
 
     let actions = vec![
         // Navigate to Modbus panel from ConfigPanel
-        CursorAction::Sleep { ms: 300 },
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 5, // Navigate to Modbus option
+            count: 2, // Navigate to Enter Business Configuration
         },
-        CursorAction::Sleep { ms: 200 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
         // Verify we're in Modbus panel
         CursorAction::MatchPattern {
-            pattern: Regex::new("Modbus|Master|Slave")?,
+            pattern: Regex::new("/dev/vcom1 > ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
-            line_range: Some((2, 20)),
+            line_range: Some((1, 1)),
             col_range: None,
         },
         // Add a new modbus entry
         CursorAction::PressEnter, // Enter on "Add Master/Slave"
-        CursorAction::Sleep { ms: 300 },
-        // Master is default mode, verify it
+        // Navigate to `Register Length` and set it to 12
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 1, // Down to Mode field
+            count: 5,
         },
-        CursorAction::Sleep { ms: 200 },
-        // Verify Master mode is displayed
-        CursorAction::MatchPattern {
-            pattern: Regex::new("Master")?,
-            description: "Master mode selected".to_string(),
-            line_range: Some((2, 20)),
-            col_range: None,
+        CursorAction::PressEnter,
+        CursorAction::TypeString("12".to_string()),
+        CursorAction::PressEnter,
+        // Navigate to registers
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
         },
     ];
+    // Set all 12 registers to 0, 11, 22, ..., 110
+    let actions = actions
+        .into_iter()
+        .chain((0..12).flat_map(|i| {
+            vec![
+                CursorAction::PressEnter,
+                CursorAction::TypeString(format!("{}", i * 11)),
+                CursorAction::PressEnter,
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: 1,
+                },
+            ]
+        }))
+        .collect::<Vec<_>>();
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
@@ -66,46 +77,50 @@ pub async fn configure_slave_mode<T: Expect>(
 
     let actions = vec![
         // Navigate to Modbus panel from ConfigPanel
-        CursorAction::Sleep { ms: 300 },
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 5, // Navigate to Modbus option
+            count: 2, // Navigate Enter Business Configuration
         },
-        CursorAction::Sleep { ms: 200 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
         // Verify we're in Modbus panel
         CursorAction::MatchPattern {
-            pattern: Regex::new("Modbus|Master|Slave")?,
+            pattern: Regex::new("/dev/vcom2 > ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
-            line_range: Some((2, 20)),
+            line_range: Some((1, 1)),
             col_range: None,
         },
         // Add a new modbus entry
         CursorAction::PressEnter, // Enter on "Add Master/Slave"
-        CursorAction::Sleep { ms: 300 },
-        // Navigate to Mode selection and toggle to Slave
+        // Change Mode to Slave
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 1, // Down to Mode field
+            count: 1, // Navigate to Mode
         },
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressEnter, // Enter to toggle mode
-        CursorAction::Sleep { ms: 200 },
+        CursorAction::PressEnter,
+        CursorAction::PressArrow {
+            direction: ArrowKey::Right,
+            count: 1, // Select Slave
+        },
+        CursorAction::PressEnter,
+        // Navigate to `Mode` and set it to Slave
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 1, // Down to select Slave
+            count: 1,
         },
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressEnter, // Confirm selection
-        CursorAction::Sleep { ms: 300 },
-        // Verify Slave mode is now displayed
-        CursorAction::MatchPattern {
-            pattern: Regex::new("Slave")?,
-            description: "Slave mode selected".to_string(),
-            line_range: Some((2, 20)),
-            col_range: None,
+        CursorAction::PressEnter,
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1, // Select Slave
         },
+        CursorAction::PressEnter,
+        // Navigate to `Register Length` and set it to 12
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 4,
+        },
+        CursorAction::PressEnter,
+        CursorAction::TypeString("12".to_string()),
+        CursorAction::PressEnter,
     ];
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
