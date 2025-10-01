@@ -39,41 +39,38 @@ jobs:
           restore-keys: |
             copilot-env-cargo-
 
-      - name: Test environment (sanity checks)
+      - name: Setup virtual serial ports
         run: |
-          rustc --version || true
-          cargo --version || true
+          # Create virtual serial port pair using socat in background with sudo
+          sudo bash -c 'socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &'
+          sleep 2  # Give socat time to start
 
-          # Quick cargo check (non-failing to avoid CI breakage)
-          cargo check --all-targets || true
+          # Wait for the virtual ports to be created
+          timeout=10
+          count=0
+          while [ $count -lt $timeout ] && ([ ! -e /dev/vcom1 ] || [ ! -e /dev/vcom2 ]); do
+            sleep 1
+            count=$((count + 1))
+          done
 
-          # Create test virtual serial ports to verify socat works
-          echo "Testing socat virtual serial port creation:"
-          socat PTY,link=/tmp/test_vcom1,raw,echo=0 PTY,link=/tmp/test_vcom2,raw,echo=0 &
-          SOCAT_TEST_PID=$!
-          sleep 2
-
-          if [ -e /tmp/test_vcom1 ] && [ -e /tmp/test_vcom2 ]; then
-            echo "✓ socat virtual serial ports working"
-            ls -la /tmp/test_vcom1 /tmp/test_vcom2
+          # Verify both ports exist
+          if [ -e /dev/vcom1 ] && [ -e /dev/vcom2 ]; then
+            echo "Virtual serial ports created successfully:"
+            ls -la /dev/vcom1 /dev/vcom2
+            # Make sure the ports are accessible
+            sudo chmod 666 /dev/vcom1 /dev/vcom2
+            echo "Port list after setup:"
+            ls -la /dev/vcom* /dev/tty* 2>/dev/null || true
           else
-            echo "⚠ socat virtual serial ports not created"
+            echo "Failed to create virtual serial ports"
+            exit 1
           fi
 
-          # Clean up test ports
-          kill $SOCAT_TEST_PID || true
-          rm -f /tmp/test_vcom1 /tmp/test_vcom2 || true
-
-          # Verify other serial ports are available for testing
-          echo "Available serial ports for testing:"
-          find /dev -name "ttyS*" | head -5
-
-      - name: Cleanup
+      - name: Cleanup virtual ports
         if: always()
         run: |
-          # Kill any remaining socat processes
-          pkill socat || true
+          # Kill socat processes if they exist
+          sudo pkill socat || true
 
-          # Remove any remaining virtual port links
+          # Remove virtual port links if they exist
           sudo rm -f /dev/vcom1 /dev/vcom2 || true
-          sudo rm -f /tmp/test_vcom1 /tmp/test_vcom2 || true

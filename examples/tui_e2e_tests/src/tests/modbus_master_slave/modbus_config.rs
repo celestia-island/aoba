@@ -16,15 +16,6 @@ pub async fn configure_master_mode<T: Expect>(
     log::info!("🧪 Configuring {session_name} as Modbus Master");
 
     let actions = vec![
-        // Verify we're in Modbus panel
-        CursorAction::MatchPattern {
-            pattern: Regex::new("/dev/vcom1 > ModBus Master/Slave Settings")?,
-            description: "In Modbus panel".to_string(),
-            line_range: Some((0, 0)),
-            col_range: None,
-        },
-        // Add a new modbus entry
-        CursorAction::PressEnter, // Enter on "Add Master/Slave"
         // Ensure the station has created
         CursorAction::MatchPattern {
             pattern: Regex::new("#1")?,
@@ -61,6 +52,17 @@ pub async fn configure_master_mode<T: Expect>(
             ]
         }))
         .collect::<Vec<_>>();
+    // Leave the register editing mode
+    let actions = actions
+        .into_iter()
+        .chain(vec![
+            CursorAction::PressEscape,
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 2,
+            },
+        ])
+        .collect::<Vec<_>>();
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
@@ -77,15 +79,6 @@ pub async fn configure_slave_mode<T: Expect>(
     log::info!("🧪 Configuring {session_name} as Modbus Slave");
 
     let actions = vec![
-        // Verify we're in Modbus panel
-        CursorAction::MatchPattern {
-            pattern: Regex::new("/dev/vcom2 > ModBus Master/Slave Settings")?,
-            description: "In Modbus panel".to_string(),
-            line_range: Some((0, 0)),
-            col_range: None,
-        },
-        // Add a new modbus entry
-        CursorAction::PressEnter, // Enter on "Add Master/Slave"
         // Change Mode to Slave
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
@@ -124,6 +117,17 @@ pub async fn configure_slave_mode<T: Expect>(
         CursorAction::TypeString("12".to_string()),
         CursorAction::PressEnter,
     ];
+    // Leave the register editing mode
+    let actions = actions
+        .into_iter()
+        .chain(vec![
+            CursorAction::PressEscape,
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 2,
+            },
+        ])
+        .collect::<Vec<_>>();
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 

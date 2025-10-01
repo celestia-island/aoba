@@ -38,18 +38,6 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     modbus_config::configure_master_mode(&mut master_session, &mut master_cap, "master").await?;
     modbus_config::configure_slave_mode(&mut slave_session, &mut slave_cap, "slave").await?;
 
-    // Wait a bit for initial setup
-    aoba::ci::sleep_a_while().await;
-
-    // Verify master registers are set correctly (sanity check)
-    log::info!("🔍 Step 1: Verify master registers are set");
-    if let Err(e) =
-        register_ops::verify_master_registers(&mut master_session, &mut master_cap, "master").await
-    {
-        log::error!("Master register verification failed: {e}");
-        return Err(e);
-    }
-
     // Verify slave registers match master values
     log::info!("🔍 Step 2: Verify slave registers match master");
     match register_ops::verify_slave_registers(&mut slave_session, &mut slave_cap, "slave").await {

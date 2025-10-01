@@ -26,14 +26,19 @@ pub async fn navigate_to_vcom1<T: Expect>(
         },
         // vcom1 should be the first item (cursor already there), just press Enter
         CursorAction::PressEnter,
-        // Enable port
-        CursorAction::PressEnter,
         // Navigate into ConfigPanel
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
+        // Verify we're in Modbus panel
+        CursorAction::MatchPattern {
+            pattern: Regex::new("/dev/vcom1 > ModBus Master/Slave Settings")?,
+            description: "In Modbus panel".to_string(),
+            line_range: Some((0, 0)),
+            col_range: None,
+        },
     ];
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
@@ -66,14 +71,19 @@ pub async fn navigate_to_vcom2<T: Expect>(
             count: 1,
         },
         CursorAction::PressEnter,
-        // Enable port
-        CursorAction::PressEnter,
         // Navigate into ConfigPanel
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
+        // Verify we're in Modbus panel
+        CursorAction::MatchPattern {
+            pattern: Regex::new("/dev/vcom2 > ModBus Master/Slave Settings")?,
+            description: "In Modbus panel".to_string(),
+            line_range: Some((0, 0)),
+            col_range: None,
+        },
     ];
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
