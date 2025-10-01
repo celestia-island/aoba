@@ -25,6 +25,13 @@ pub async fn configure_master_mode<T: Expect>(
         },
         // Add a new modbus entry
         CursorAction::PressEnter, // Enter on "Add Master/Slave"
+        // Ensure the station has created
+        CursorAction::MatchPattern {
+            pattern: Regex::new("#1")?,
+            description: "Modbus entry created".to_string(),
+            line_range: Some((6, 6)),
+            col_range: None,
+        },
         // Navigate to `Register Length` and set it to 12
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
@@ -90,6 +97,13 @@ pub async fn configure_slave_mode<T: Expect>(
             count: 1, // Select Slave
         },
         CursorAction::PressEnter,
+        // Ensure the station has created
+        CursorAction::MatchPattern {
+            pattern: Regex::new("#1")?,
+            description: "Modbus entry created".to_string(),
+            line_range: Some((6, 6)),
+            col_range: None,
+        },
         // Navigate to `Mode` and set it to Slave
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
