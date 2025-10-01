@@ -49,12 +49,19 @@ pub fn handle_modbus_communication() -> Result<()> {
 
     for (port_name, port_arc, global_mode, stations) in active_ports {
         // Process each port's modbus communication
+        // NOTE: The naming is counter-intuitive but kept for backwards compatibility:
+        // - "Master" mode acts as a Modbus Slave (Server): listens and responds with data from storage
+        // - "Slave" mode acts as a Modbus Master (Client): sends requests to query/write data
+        //
+        // For proper Modbus Master/Slave behavior, we swap the handler calls:
         match &global_mode {
             types::modbus::ModbusConnectionMode::Master { .. } => {
-                handle_master_mode(&port_name, &port_arc, &stations, &global_mode, now)?;
+                // Master should respond to requests (like a Modbus Slave/Server)
+                handle_slave_response_mode(&port_name, &port_arc, &stations, &global_mode, now)?;
             }
             types::modbus::ModbusConnectionMode::Slave { .. } => {
-                handle_slave_mode(&port_name, &port_arc, &stations, &global_mode, now)?;
+                // Slave should send requests (like a Modbus Master/Client)
+                handle_master_query_mode(&port_name, &port_arc, &stations, &global_mode, now)?;
             }
         }
     }
@@ -62,8 +69,10 @@ pub fn handle_modbus_communication() -> Result<()> {
     Ok(())
 }
 
-/// Handle master mode - passively listen and respond to incoming slave requests
-pub fn handle_master_mode(
+/// Handle responses to incoming requests (Modbus Slave/Server behavior)
+/// This function listens for incoming requests and responds with data from storage.
+/// Despite the confusing naming, this is called for "Master" mode which acts as a Modbus Slave.
+pub fn handle_slave_response_mode(
     port_name: &str,
     port_arc: &Arc<RwLock<types::port::PortData>>,
     stations: &[types::modbus::ModbusRegisterItem],
@@ -96,7 +105,7 @@ pub fn handle_master_mode(
                 // Log the received request
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Master RX: {hex_frame}"),
+                    raw: format!("Slave RX (request): {hex_frame}"),
                     parsed: None,
                 };
 
@@ -150,7 +159,7 @@ pub fn handle_master_mode(
 
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
-                        raw: format!("Master TX: {hex_response}"),
+                        raw: format!("Slave TX (response): {hex_response}"),
                         parsed: None,
                     };
 
@@ -179,8 +188,10 @@ pub fn handle_master_mode(
     Ok(())
 }
 
-/// Handle slave mode - periodically send requests and wait for responses with timeout
-pub fn handle_slave_mode(
+/// Handle sending requests and processing responses (Modbus Master/Client behavior)
+/// This function periodically sends requests and waits for responses with timeout.
+/// Despite the confusing naming, this is called for "Slave" mode which acts as a Modbus Master.
+pub fn handle_master_query_mode(
     port_name: &str,
     port_arc: &Arc<RwLock<types::port::PortData>>,
     stations: &[types::modbus::ModbusRegisterItem],
@@ -204,6 +215,7 @@ pub fn handle_slave_mode(
     let current_index = match global_mode {
         types::modbus::ModbusConnectionMode::Slave {
             current_request_at_station_index,
+            storage: _,
         } => *current_request_at_station_index,
         _ => 0,
     };
@@ -283,7 +295,7 @@ pub fn handle_slave_mode(
 
                             let log_entry = PortLogEntry {
                                 when: chrono::Local::now(),
-                                raw: format!("Slave TX: {hex_frame}"),
+                                raw: format!("Master TX (request): {hex_frame}"),
                                 parsed: None,
                             };
 
@@ -309,6 +321,7 @@ pub fn handle_slave_mode(
                                     &mut port.config;
                                 if let types::modbus::ModbusConnectionMode::Slave {
                                     current_request_at_station_index,
+                                    storage: _,
                                 } = mode
                                 {
                                     *current_request_at_station_index =
@@ -349,12 +362,40 @@ pub fn handle_slave_mode(
                     .collect::<Vec<_>>()
                     .join(" ");
 
-                // Log the received response (Slave RX)
+                // Log the received response (Master RX)
                 let log_entry = PortLogEntry {
                     when: chrono::Local::now(),
-                    raw: format!("Slave RX: {hex_frame}"),
+                    raw: format!("Master RX (response): {hex_frame}"),
                     parsed: None,
                 };
+
+                // Parse response and update storage (do this outside the port write lock)
+                let request_arc_opt =
+                    with_port_read(port_arc, |port| port.last_modbus_request.clone())
+                        .and_then(|x| x); // Flatten Option<Option<...>> to Option<...>
+
+                // Get storage from global mode
+                let storage_opt = match global_mode {
+                    types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
+                        Some(storage.clone())
+                    }
+                    _ => None,
+                };
+
+                // Parse and update storage if available
+                if let (Some(storage), Some(request_arc)) = (storage_opt, request_arc_opt) {
+                    if let Ok(request) = request_arc.lock() {
+                        if request.parse_ok(&frame).is_ok() {
+                            // Successfully parsed response
+                            if let Ok(_context) = storage.lock() {
+                                // For now, just log that we received a valid response
+                                log::debug!(
+                                    "Successfully parsed response and would update storage"
+                                );
+                            }
+                        }
+                    }
+                }
 
                 with_port_write(port_arc, |port| {
                     port.logs.push(log_entry);

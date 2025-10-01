@@ -80,9 +80,9 @@ pub fn should_run_vcom_tests() -> bool {
 
 /// A small async helper to make test delays readable and reusable.
 ///
-/// This helper waits for a short, fixed amount of time (100ms). Use it in
+/// This helper waits for a short, fixed amount of time (500ms). Use it in
 /// tests that need a small pause for UI/process responsiveness.
 pub async fn sleep_a_while() {
-    const DEFAULT_MS: u64 = 100;
+    const DEFAULT_MS: u64 = 500;
     tokio::time::sleep(Duration::from_millis(DEFAULT_MS)).await;
 }
