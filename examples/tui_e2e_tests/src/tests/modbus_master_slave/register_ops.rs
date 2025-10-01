@@ -21,15 +21,15 @@ pub async fn verify_slave_registers<T: Expect>(
     tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     // Capture the screen to check register values
-    let screen = cap.capture(session, &format!("{} - register verification", session_name))?;
-    
+    let screen = cap.capture(session, &format!("{session_name} - register verification"))?;
+
     log::info!("📸 Captured screen for verification:");
-    log::info!("{}", screen);
+    log::info!("{screen}");
 
     // Expected register values: 0, 11, 22, 33, 44, 55, 66, 77, 88, 99, 110
     let expected_values = (0..12).map(|i| i * 11).collect::<Vec<u16>>();
-    
-    log::info!("🔍 Expected register values: {:?}", expected_values);
+
+    log::info!("🔍 Expected register values: {expected_values:?}");
 
     // Check each register value
     // The UI typically displays register values in hexadecimal format
@@ -50,7 +50,7 @@ pub async fn verify_slave_registers<T: Expect>(
         for pattern in &hex_patterns {
             if screen.contains(pattern) {
                 found = true;
-                log::info!("✓ Register {} (expected {}): Found pattern '{}'", index, expected, pattern);
+                log::info!("✓ Register {index} (expected {expected}): Found pattern '{pattern}'");
                 break;
             }
         }
@@ -58,13 +58,13 @@ pub async fn verify_slave_registers<T: Expect>(
         if !found {
             all_matched = false;
             missing_values.push((index, expected));
-            log::warn!("✗ Register {} (expected {}): NOT FOUND in screen output", index, expected);
+            log::warn!("✗ Register {index} (expected {expected}): NOT FOUND in screen output");
         }
     }
 
     if !all_matched {
         log::error!("❌ Verification FAILED: Some register values not found on slave");
-        log::error!("Missing registers: {:?}", missing_values);
+        log::error!("Missing registers: {missing_values:?}");
         log::error!("This is EXPECTED on first run - master-slave communication needs to be fixed");
         return Err(anyhow!(
             "Slave registers do not match master values. Missing {} register(s): {:?}",
@@ -87,15 +87,15 @@ pub async fn verify_master_registers<T: Expect>(
     log::info!("🧪 Verifying {session_name} registers are set correctly");
 
     // Capture the screen to check register values
-    let screen = cap.capture(session, &format!("{} - master register check", session_name))?;
-    
+    let screen = cap.capture(session, &format!("{session_name} - master register check"))?;
+
     log::info!("📸 Master screen captured:");
-    log::info!("{}", screen);
+    log::info!("{screen}");
 
     // Expected register values: 0, 11, 22, 33, 44, 55, 66, 77, 88, 99, 110
     let expected_values = (0..12).map(|i| i * 11).collect::<Vec<u16>>();
-    
-    log::info!("🔍 Expected master register values: {:?}", expected_values);
+
+    log::info!("🔍 Expected master register values: {expected_values:?}");
 
     // Check that we can see at least some of the expected values
     let mut found_count = 0;
@@ -111,7 +111,7 @@ pub async fn verify_master_registers<T: Expect>(
         for pattern in &hex_patterns {
             if screen.contains(pattern) {
                 found_count += 1;
-                log::info!("✓ Master register {} ({}): Found pattern '{}'", index, expected, pattern);
+                log::info!("✓ Master register {index} ({expected}): Found pattern '{pattern}'");
                 break;
             }
         }
@@ -119,10 +119,16 @@ pub async fn verify_master_registers<T: Expect>(
 
     if found_count == 0 {
         log::error!("❌ Master verification FAILED: No register values found");
-        return Err(anyhow!("Master registers not set correctly - no values found on screen"));
+        return Err(anyhow!(
+            "Master registers not set correctly - no values found on screen"
+        ));
     }
 
-    log::info!("✅ Master registers verified: found {}/{} values on screen", found_count, expected_values.len());
+    log::info!(
+        "✅ Master registers verified: found {}/{} values on screen",
+        found_count,
+        expected_values.len()
+    );
     Ok(())
 }
 
@@ -142,15 +148,19 @@ pub async fn verify_registers_with_match_pattern<T: Expect>(
 
     for (index, &value) in register_values.iter().enumerate() {
         // Try to match the value in hex format (most common in Modbus UIs)
-        let hex_upper = format!("0x{:04X}", value);
-        let hex_lower = format!("0x{:04x}", value);
-        
+        let hex_upper = format!("0x{value:04X}");
+        let hex_lower = format!("0x{value:04x}");
+
         // Create a pattern that matches either format
-        let pattern_str = format!("({}|{})", regex::escape(&hex_upper), regex::escape(&hex_lower));
-        
+        let pattern_str = format!(
+            "({}|{})",
+            regex::escape(&hex_upper),
+            regex::escape(&hex_lower)
+        );
+
         actions.push(CursorAction::MatchPattern {
             pattern: Regex::new(&pattern_str)?,
-            description: format!("Register {} should have value {}", index, value),
+            description: format!("Register {index} should have value {value}"),
             line_range: None, // Search entire screen
             col_range: None,
         });

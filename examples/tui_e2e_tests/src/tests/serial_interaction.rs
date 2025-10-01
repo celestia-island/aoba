@@ -9,7 +9,6 @@
 // Note: by default vcom tests are only enabled on Unix. To force them on
 // non-Unix platforms set the environment variable `CI_FORCE_VCOM=1`.
 use anyhow::{anyhow, Result};
-use regex::Regex;
 
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
 use aoba::ci::{ArrowKey, ExpectKeyExt};
