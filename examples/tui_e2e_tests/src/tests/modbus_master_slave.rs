@@ -27,8 +27,22 @@ fn find_line_with_pattern(screen: &str, pattern: &str) -> Option<usize> {
 fn find_cursor_line(screen: &str) -> Option<usize> {
     let lines: Vec<&str> = screen.lines().collect();
     for (idx, line) in lines.iter().enumerate() {
-        if line.trim_start().starts_with('>') {
-            return Some(idx);
+        let trimmed = line.trim_start();
+        // Look for lines that start with ">" followed by optional space
+        // This handles both "> " and ">" formats
+        if trimmed.starts_with('>') {
+            // Verify it's actually a cursor indicator, not just a random '>'
+            // The cursor should be followed by a space or another character that's part of the item
+            if trimmed.len() > 1 {
+                let next_char = trimmed.chars().nth(1);
+                // Common patterns: "> item", ">item", "> "
+                if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false) {
+                    return Some(idx);
+                }
+            } else if trimmed == ">" {
+                // Edge case: standalone ">"
+                return Some(idx);
+            }
         }
     }
     None
@@ -42,6 +56,9 @@ async fn navigate_to_port<T: Expect>(
     session_name: &str,
 ) -> Result<()> {
     log::info!("🧪 Navigating to {} in {}", port_name, session_name);
+
+    // Give the TUI a moment to fully render before capturing
+    aoba::ci::sleep_a_while().await;
 
     // First capture the initial screen to see all ports
     let initial_screen = cap.capture(session, &format!("{} - initial screen", session_name))?;
@@ -63,8 +80,12 @@ async fn navigate_to_port<T: Expect>(
     // Find the cursor position (line with ">")
     let cursor_line = find_cursor_line(&initial_screen);
     if cursor_line.is_none() {
+        log::error!("❌ Could not find cursor in {} screen. Screen lines:", session_name);
+        for (idx, line) in initial_screen.lines().enumerate() {
+            log::error!("  Line {}: '{}'", idx, line);
+        }
         return Err(anyhow!(
-            "Could not find cursor position in {} screen",
+            "Could not find cursor position ('>') in {} screen. The TUI may not be fully initialized.",
             session_name
         ));
     }
