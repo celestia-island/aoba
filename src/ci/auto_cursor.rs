@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use expectrl::Expect;
 use regex::Regex;
 
@@ -7,12 +7,6 @@ use crate::ci::{ArrowKey, ExpectKeyExt, TerminalCapture};
 /// Action instruction for automated cursor navigation
 #[derive(Debug, Clone)]
 pub enum CursorAction {
-    /// Wait for a pattern to appear on screen (with optional timeout)
-    WaitForPattern {
-        pattern: Regex,
-        description: String,
-        timeout_ms: Option<u64>,
-    },
     /// Press an arrow key N times
     PressArrow { direction: ArrowKey, count: usize },
     /// Press Enter key
@@ -27,11 +21,19 @@ pub enum CursorAction {
     TypeString(String),
     /// Wait for a fixed duration
     Sleep { ms: u64 },
-    /// Capture screen for debugging
-    CaptureScreen { description: String },
+    /// Match a pattern within specified line and column range
+    /// If match fails, dumps screen and returns error immediately
+    MatchPattern {
+        pattern: Regex,
+        description: String,
+        line_range: Option<(usize, usize)>, // (start_line, end_line) inclusive, 0-indexed
+        col_range: Option<(usize, usize)>,  // (start_col, end_col) inclusive, 0-indexed
+    },
 }
 
 /// Execute a sequence of cursor actions on an expect session
+/// All actions execute in order. If MatchPattern fails, the function
+/// dumps the current screen and returns an error immediately.
 pub async fn execute_cursor_actions<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -48,37 +50,75 @@ pub async fn execute_cursor_actions<T: Expect>(
         log::debug!("Action {} / {}: {:?}", idx + 1, actions.len(), action);
 
         match action {
-            CursorAction::WaitForPattern {
+            CursorAction::MatchPattern {
                 pattern,
                 description,
-                timeout_ms,
+                line_range,
+                col_range,
             } => {
-                let timeout = timeout_ms.unwrap_or(5000);
-                log::info!("⏳ Waiting for pattern '{description}' ({timeout} ms)");
+                log::info!("🔍 Matching pattern '{}'", description);
 
-                // Try to find the pattern on screen
-                let start = std::time::Instant::now();
-                loop {
-                    let screen =
-                        cap.capture(session, &format!("{session_name} - wait for {description}"))?;
-                    if pattern.is_match(&screen) {
-                        log::info!("✓ Pattern '{description}' found");
+                // Capture current screen
+                let screen =
+                    cap.capture(session, &format!("{} - match {}", session_name, description))?;
+
+                // Extract region to search based on line and column ranges
+                let lines: Vec<&str> = screen.lines().collect();
+                let total_lines = lines.len();
+
+                let (start_line, end_line) = line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                let start_line = start_line.min(total_lines.saturating_sub(1));
+                let end_line = end_line.min(total_lines.saturating_sub(1));
+
+                let mut search_text = String::new();
+                for line_idx in start_line..=end_line {
+                    if line_idx >= lines.len() {
                         break;
                     }
+                    let line = lines[line_idx];
+                    let line_text = if let Some((start_col, end_col)) = col_range {
+                        let chars: Vec<char> = line.chars().collect();
+                        let char_count = chars.len();
+                        if char_count == 0 {
+                            String::new()
+                        } else {
+                            let sc = (*start_col).min(char_count.saturating_sub(1));
+                            let ec = (*end_col).min(char_count.saturating_sub(1));
+                            chars[sc..=ec].iter().collect()
+                        }
+                    } else {
+                        line.to_string()
+                    };
+                    search_text.push_str(&line_text);
+                    search_text.push('\n');
+                }
 
-                    if start.elapsed().as_millis() > timeout as u128 {
-                        return Err(anyhow::anyhow!(
-                            "Timeout waiting for pattern '{}' in {}",
-                            description,
-                            session_name
-                        ));
-                    }
-
-                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                // Try to match pattern
+                if pattern.is_match(&search_text) {
+                    log::info!("✓ Pattern '{}' matched successfully", description);
+                } else {
+                    // Match failed - dump screen and return error
+                    log::error!("❌ Pattern '{}' NOT FOUND", description);
+                    log::error!("Expected pattern: {:?}", pattern.as_str());
+                    log::error!("Search range: lines {}..={}, cols {:?}", 
+                        start_line, end_line, col_range);
+                    log::error!("Current screen content for {}:", session_name);
+                    log::error!("--- Screen Start ---");
+                    log::error!("{}", screen);
+                    log::error!("--- Screen End ---");
+                    
+                    return Err(anyhow!(
+                        "Pattern '{}' not found in {} (lines {}..={}, cols {:?})",
+                        description,
+                        session_name,
+                        start_line,
+                        end_line,
+                        col_range
+                    ));
                 }
             }
             CursorAction::PressArrow { direction, count } => {
-                log::info!("⬆️⬇️ Pressing {direction:?} {count} times");
+                log::info!("⬆️⬇️ Pressing {:?} {} times", direction, count);
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
@@ -96,27 +136,22 @@ pub async fn execute_cursor_actions<T: Expect>(
                 session.send_tab()?;
             }
             CursorAction::TypeChar(ch) => {
-                log::info!("⌨️ Typing character '{ch}'");
+                log::info!("⌨️ Typing character '{}'", ch);
                 session.send_char(*ch)?;
             }
             CursorAction::TypeString(s) => {
-                log::info!("⌨️ Typing string '{s}'");
+                log::info!("⌨️ Typing string '{}'", s);
                 for ch in s.chars() {
                     session.send_char(ch)?;
                 }
             }
             CursorAction::Sleep { ms } => {
-                log::info!("💤 Sleeping for {ms} ms");
+                log::info!("💤 Sleeping for {} ms", ms);
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
-            }
-            CursorAction::CaptureScreen { description } => {
-                log::info!("📸 Capturing screen: {description}");
-                let screen = cap.capture(session, &format!("{session_name} - {description}"))?;
-                log::info!("Screen content:\n{screen}");
             }
         }
     }
 
-    log::info!("✓ All cursor actions executed successfully for {session_name}");
+    log::info!("✓ All cursor actions executed successfully for {}", session_name);
     Ok(())
 }
