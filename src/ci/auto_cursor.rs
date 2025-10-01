@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use expectrl::Expect;
 use regex::Regex;
 
-use crate::ci::{ArrowKey, ExpectKeyExt, TerminalCapture};
+use crate::ci::{sleep_a_while, ArrowKey, ExpectKeyExt, TerminalCapture};
 
 /// Action instruction for automated cursor navigation
 #[derive(Debug, Clone)]
@@ -151,6 +151,8 @@ pub async fn execute_cursor_actions<T: Expect>(
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
             }
         }
+
+        sleep_a_while().await;
     }
 
     log::info!("✓ All cursor actions executed successfully for {session_name}");

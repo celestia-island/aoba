@@ -19,15 +19,11 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     // Spawn first TUI process (will be master on vcom1)
     let mut master_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn master TUI process: {}", err))?;
-
-    aoba::ci::sleep_a_while().await;
     let mut master_cap = TerminalCapture::new(24, 80);
 
     // Spawn second TUI process (will be slave on vcom2)
     let mut slave_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn slave TUI process: {}", err))?;
-
-    aoba::ci::sleep_a_while().await;
     let mut slave_cap = TerminalCapture::new(24, 80);
 
     // Navigate to ports
@@ -39,7 +35,6 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     modbus_config::configure_slave_mode(&mut slave_session, &mut slave_cap, "slave").await?;
 
     // Verify slave registers match master values
-    log::info!("🔍 Step 2: Verify slave registers match master");
     match register_ops::verify_slave_registers(&mut slave_session, &mut slave_cap, "slave").await {
         Ok(_) => {
             log::info!("✅ SUCCESS: Slave registers match master values!");
