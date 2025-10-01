@@ -107,9 +107,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                         "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
                     );
                     log::error!("Current screen content for {session_name}:");
-                    log::error!("--- Screen Start ---");
-                    log::error!("{screen}");
-                    log::error!("--- Screen End ---");
+                    log::error!("\n{screen}\n");
 
                     return Err(anyhow!(
                         "Pattern '{description}' not found in {session_name} (lines {start_line}..={end_line}, cols {col_range:?})",
