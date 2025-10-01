@@ -36,7 +36,8 @@ fn find_cursor_line(screen: &str) -> Option<usize> {
             if trimmed.len() > 1 {
                 let next_char = trimmed.chars().nth(1);
                 // Common patterns: "> item", ">item", "> "
-                if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false) {
+                if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
+                {
                     return Some(idx);
                 }
             } else if trimmed == ">" {
@@ -55,34 +56,30 @@ async fn navigate_to_port<T: Expect>(
     port_name: &str,
     session_name: &str,
 ) -> Result<()> {
-    log::info!("🧪 Navigating to {} in {}", port_name, session_name);
+    log::info!("🧪 Navigating to {port_name} in {session_name}");
 
     // Give the TUI a moment to fully render before capturing
     aoba::ci::sleep_a_while().await;
 
     // First capture the initial screen to see all ports
-    let initial_screen = cap.capture(session, &format!("{} - initial screen", session_name))?;
-    log::info!("{} initial screen:\n{}", session_name, initial_screen);
+    let initial_screen = cap.capture(session, &format!("{session_name} - initial screen",))?;
+    log::info!("{session_name} initial screen:\n{initial_screen}");
 
     // Check if cursor is already on the target port
-    if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
+    if Regex::new(&format!(r"> ?{port}", port = regex::escape(port_name)))
         .unwrap()
         .is_match(&initial_screen)
     {
-        log::info!(
-            "✓ Cursor already positioned at {} in {}",
-            port_name,
-            session_name
-        );
+        log::info!("✓ Cursor already positioned at {port_name} in {session_name}");
         return Ok(());
     }
 
     // Find the cursor position (line with ">")
     let cursor_line = find_cursor_line(&initial_screen);
     if cursor_line.is_none() {
-        log::error!("❌ Could not find cursor in {} screen. Screen lines:", session_name);
+        log::error!("❌ Could not find cursor in {session_name} screen. Screen lines:");
         for (idx, line) in initial_screen.lines().enumerate() {
-            log::error!("  Line {}: '{}'", idx, line);
+            log::error!("  Line {idx}: '{line}'");
         }
         return Err(anyhow!(
             "Could not find cursor position ('>') in {} screen. The TUI may not be fully initialized.",
@@ -90,7 +87,7 @@ async fn navigate_to_port<T: Expect>(
         ));
     }
     let cursor_pos = cursor_line.unwrap();
-    log::info!("Cursor at line {} in {}", cursor_pos, session_name);
+    log::info!("Cursor at line {cursor_pos} in {session_name}");
 
     // Find the target port position
     let port_line = find_line_with_pattern(&initial_screen, port_name);
@@ -102,28 +99,20 @@ async fn navigate_to_port<T: Expect>(
         ));
     }
     let port_pos = port_line.unwrap();
-    log::info!("Found {} at line {} in {}", port_name, port_pos, session_name);
+    log::info!("Found {port_name} at line {port_pos} in {session_name}");
 
     // Calculate how many times to press up or down
     if port_pos < cursor_pos {
         // Target is above cursor - press Up
         let distance = cursor_pos - port_pos;
-        log::info!(
-            "Target is {} lines above cursor, pressing Up {} times",
-            distance,
-            distance
-        );
+        log::info!("Target is {distance} lines above cursor, pressing Up {distance} times");
         for _ in 0..distance {
             session.send_arrow(ArrowKey::Up)?;
         }
     } else if port_pos > cursor_pos {
         // Target is below cursor - press Down
         let distance = port_pos - cursor_pos;
-        log::info!(
-            "Target is {} lines below cursor, pressing Down {} times",
-            distance,
-            distance
-        );
+        log::info!("Target is {distance} lines below cursor, pressing Down {distance} times");
         for _ in 0..distance {
             session.send_arrow(ArrowKey::Down)?;
         }
@@ -131,16 +120,16 @@ async fn navigate_to_port<T: Expect>(
 
     // Wait a moment and verify we're at the right position
     aoba::ci::sleep_a_while().await;
-    let final_screen = cap.capture(session, &format!("{} - final position", session_name))?;
-    
+    let final_screen = cap.capture(session, &format!("{session_name} - final position",))?;
+
     if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
         .unwrap()
         .is_match(&final_screen)
     {
-        log::info!("✓ Successfully navigated to {} in {}", port_name, session_name);
+        log::info!("✓ Successfully navigated to {port_name} in {session_name}");
         Ok(())
     } else {
-        log::warn!("Final screen:\n{}", final_screen);
+        log::warn!("Final screen:\n{final_screen}");
         Err(anyhow!(
             "Failed to position cursor at {} in {}. Cursor may have moved incorrectly.",
             port_name,
@@ -189,8 +178,8 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
 
     let screen1 = cap1.capture(&mut session1, "session1 in ConfigPanel")?;
     let screen2 = cap2.capture(&mut session2, "session2 in ConfigPanel")?;
-    log::info!("Screen1 in ConfigPanel:\n{}", screen1);
-    log::info!("Screen2 in ConfigPanel:\n{}", screen2);
+    log::info!("Screen1 in ConfigPanel:\n{screen1}");
+    log::info!("Screen2 in ConfigPanel:\n{screen2}");
 
     // Quit both processes
     session1.send_char('q')?;
@@ -319,8 +308,8 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     let master_screen = master_cap.capture(&mut master_session, "master final state")?;
     let slave_screen = slave_cap.capture(&mut slave_session, "slave final state")?;
 
-    log::info!("🧪 Master screen:\n{}", master_screen);
-    log::info!("🧪 Slave screen:\n{}", slave_screen);
+    log::info!("🧪 Master screen:\n{master_screen}");
+    log::info!("🧪 Slave screen:\n{slave_screen}");
 
     // Quit both processes
     master_session.send_char('q')?;

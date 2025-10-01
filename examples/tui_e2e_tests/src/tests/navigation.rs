@@ -18,7 +18,7 @@ pub async fn test_tui_navigation() -> Result<()> {
     }
 
     let screen = cap.capture(&mut session, "At bottom of list")?;
-    log::info!("Screen at bottom:\n{}", screen);
+    log::info!("Screen at bottom:\n{screen}");
 
     // Press Enter to go to About page
     log::info!("🧪 Entering About page...");
@@ -26,7 +26,7 @@ pub async fn test_tui_navigation() -> Result<()> {
     aoba::ci::sleep_a_while().await;
 
     let about_screen = cap.capture(&mut session, "In About page")?;
-    log::info!("About page:\n{}", about_screen);
+    log::info!("About page:\n{about_screen}");
 
     // Press Escape to return to main page
     log::info!("🧪 Pressing Escape to return to main page...");
@@ -34,7 +34,7 @@ pub async fn test_tui_navigation() -> Result<()> {
     aoba::ci::sleep_a_while().await;
 
     let main_screen = cap.capture(&mut session, "Back to main page")?;
-    log::info!("Back to main page:\n{}", main_screen);
+    log::info!("Back to main page:\n{main_screen}");
 
     // Quit
     session.send_char('q')?;
