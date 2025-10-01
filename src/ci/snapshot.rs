@@ -40,9 +40,7 @@ impl TerminalCapture {
         let out = self.parser.screen().contents();
 
         // Log as a single multi-line string to preserve CI log formatting
-        log::info!("--- Screen Capture Start ({step_description}) ---");
-        log::info!("{out}");
-        log::info!("--- Screen Capture End ---");
+        log::info!("\n{out}\n");
 
         // Add a small delay after capture to let the terminal stabilize
         std::thread::sleep(std::time::Duration::from_millis(100));
