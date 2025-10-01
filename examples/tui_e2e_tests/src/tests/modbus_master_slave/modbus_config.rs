@@ -20,7 +20,7 @@ pub async fn configure_master_mode<T: Expect>(
         CursorAction::MatchPattern {
             pattern: Regex::new("/dev/vcom1 > ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
-            line_range: Some((1, 1)),
+            line_range: Some((0, 0)),
             col_range: None,
         },
         // Add a new modbus entry
@@ -74,7 +74,7 @@ pub async fn configure_slave_mode<T: Expect>(
         CursorAction::MatchPattern {
             pattern: Regex::new("/dev/vcom2 > ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
-            line_range: Some((1, 1)),
+            line_range: Some((0, 0)),
             col_range: None,
         },
         // Add a new modbus entry
