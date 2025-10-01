@@ -17,7 +17,6 @@ pub async fn navigate_to_vcom1<T: Expect>(
 
     // Give the TUI a moment to fully render before navigating
     let actions = vec![
-        CursorAction::Sleep { ms: 500 },
         // Verify vcom1 appears on screen
         CursorAction::MatchPattern {
             pattern: Regex::new("vcom1")?,
@@ -27,7 +26,14 @@ pub async fn navigate_to_vcom1<T: Expect>(
         },
         // vcom1 should be the first item (cursor already there), just press Enter
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        // Enable port
+        CursorAction::PressEnter,
+        // Navigate into ConfigPanel
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::PressEnter,
     ];
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
@@ -59,9 +65,15 @@ pub async fn navigate_to_vcom2<T: Expect>(
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 200 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        // Enable port
+        CursorAction::PressEnter,
+        // Navigate into ConfigPanel
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::PressEnter,
     ];
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;

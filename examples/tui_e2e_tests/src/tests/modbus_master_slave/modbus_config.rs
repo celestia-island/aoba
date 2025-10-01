@@ -16,12 +16,6 @@ pub async fn configure_master_mode<T: Expect>(
     log::info!("🧪 Configuring {session_name} as Modbus Master");
 
     let actions = vec![
-        // Navigate to Modbus panel from ConfigPanel
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 2, // Navigate to Enter Business Configuration
-        },
-        CursorAction::PressEnter,
         // Verify we're in Modbus panel
         CursorAction::MatchPattern {
             pattern: Regex::new("/dev/vcom1 > ModBus Master/Slave Settings")?,
@@ -76,12 +70,6 @@ pub async fn configure_slave_mode<T: Expect>(
     log::info!("🧪 Configuring {session_name} as Modbus Slave");
 
     let actions = vec![
-        // Navigate to Modbus panel from ConfigPanel
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 2, // Navigate Enter Business Configuration
-        },
-        CursorAction::PressEnter,
         // Verify we're in Modbus panel
         CursorAction::MatchPattern {
             pattern: Regex::new("/dev/vcom2 > ModBus Master/Slave Settings")?,
