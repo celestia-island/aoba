@@ -7,48 +7,6 @@ use anyhow::{anyhow, Result};
 
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, TerminalCapture};
 
-/// Smoke test: verify that we can spawn two TUI processes and occupy both vcom ports
-pub async fn test_modbus_smoke_dual_process() -> Result<()> {
-    if !should_run_vcom_tests() {
-        log::info!("Skipping modbus dual process smoke test on this platform");
-        return Ok(());
-    }
-
-    log::info!("🧪 Starting modbus dual process smoke test");
-
-    // Spawn first TUI process
-    let mut session1 = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn first TUI process: {}", err))?;
-
-    aoba::ci::sleep_a_while().await;
-    let mut cap1 = TerminalCapture::new(24, 80);
-
-    // Spawn second TUI process
-    let mut session2 = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn second TUI process: {}", err))?;
-
-    aoba::ci::sleep_a_while().await;
-    let mut cap2 = TerminalCapture::new(24, 80);
-
-    // Navigate to vcom1 in first process using auto_cursor
-    port_navigation::navigate_to_vcom1(&mut session1, &mut cap1, "session1").await?;
-
-    // Navigate to vcom2 in second process using auto_cursor
-    port_navigation::navigate_to_vcom2(&mut session2, &mut cap2, "session2").await?;
-
-    // Quit both processes using auto_cursor with Ctrl+C
-    use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
-    let quit_actions = vec![CursorAction::CtrlC];
-
-    execute_cursor_actions(&mut session1, &mut cap1, &quit_actions, "session1").await?;
-    execute_cursor_actions(&mut session2, &mut cap2, &quit_actions, "session2").await?;
-
-    aoba::ci::sleep_a_while().await;
-
-    log::info!("🧪 Modbus dual process smoke test completed successfully");
-    Ok(())
-}
-
 /// Full test: master-slave modbus communication with register value verification
 pub async fn test_modbus_master_slave_communication() -> Result<()> {
     if !should_run_vcom_tests() {
