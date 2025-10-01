@@ -38,7 +38,8 @@ fn find_line_with_pattern(screen: &str, pattern: &str) -> Option<usize> {
 }
 
 /// Helper function to find the cursor position (line with ">")
-/// Only searches within the valid content area (rows 3 to -3, excluding header/footer)
+/// First searches within the valid content area (rows 3 to -3, excluding header/footer)
+/// If not found, searches all lines as a fallback
 fn find_cursor_line(screen: &str) -> Option<usize> {
     let lines: Vec<&str> = screen.lines().collect();
     let total_lines = lines.len();
@@ -51,7 +52,8 @@ fn find_cursor_line(screen: &str) -> Option<usize> {
         3..(total_lines - 3)
     };
 
-    for idx in search_range {
+    // First pass: search in the preferred range
+    for idx in search_range.clone() {
         let trimmed = lines[idx].trim_start();
         // Look for lines that start with ">" followed by optional space
         // This handles both "> " and ">" formats
@@ -63,14 +65,41 @@ fn find_cursor_line(screen: &str) -> Option<usize> {
                 // Common patterns: "> item", ">item", "> "
                 if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
                 {
+                    log::debug!("Found cursor at line {} (in preferred range): '{}'", idx, trimmed);
                     return Some(idx);
                 }
             } else if trimmed == ">" {
                 // Edge case: standalone ">"
+                log::debug!("Found cursor at line {} (standalone >): '{}'", idx, trimmed);
                 return Some(idx);
             }
         }
     }
+
+    // Second pass: if not found in preferred range, search all lines
+    if total_lines > 6 {
+        log::warn!("Cursor not found in preferred range, searching all lines as fallback");
+        for idx in 0..total_lines {
+            if search_range.contains(&idx) {
+                continue; // Skip already searched lines
+            }
+            let trimmed = lines[idx].trim_start();
+            if trimmed.starts_with('>') {
+                if trimmed.len() > 1 {
+                    let next_char = trimmed.chars().nth(1);
+                    if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
+                    {
+                        log::warn!("Found cursor at line {} (outside preferred range): '{}'", idx, trimmed);
+                        return Some(idx);
+                    }
+                } else if trimmed == ">" {
+                    log::warn!("Found cursor at line {} (standalone >, outside range): '{}'", idx, trimmed);
+                    return Some(idx);
+                }
+            }
+        }
+    }
+
     None
 }
 
@@ -88,7 +117,7 @@ async fn navigate_to_port<T: Expect>(
 
     // First capture the initial screen to see all ports
     let initial_screen = cap.capture(session, &format!("{session_name} - initial screen",))?;
-    log::info!("{session_name} initial screen:\n{initial_screen}");
+    log::info!("{session_name} initial screen captured");
 
     // Check if cursor is already on the target port
     if Regex::new(&format!(r"> ?{port}", port = regex::escape(port_name)))
@@ -102,10 +131,13 @@ async fn navigate_to_port<T: Expect>(
     // Find the cursor position (line with ">")
     let cursor_line = find_cursor_line(&initial_screen);
     if cursor_line.is_none() {
-        log::error!("❌ Could not find cursor in {session_name} screen. Screen lines:");
+        log::error!("❌ Could not find cursor in {session_name} screen.");
+        log::error!("Screen content with line numbers:");
+        let mut debug_output = String::new();
         for (idx, line) in initial_screen.lines().enumerate() {
-            log::error!("  Line {idx}: '{line}'");
+            debug_output.push_str(&format!("  Line {idx}: '{line}'\n"));
         }
+        log::error!("{debug_output}");
         return Err(anyhow!(
             "Could not find cursor position ('>') in {} screen. The TUI may not be fully initialized.",
             session_name
