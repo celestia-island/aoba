@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use ratatui::{prelude::*, text::Line};
+use rmodbus::server::context::ModbusContext;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -97,14 +98,84 @@ pub fn render_register_row_line(
 
                 let cell_spans = match item.register_mode {
                     RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                        // TODO: Read from global storage when mode is Master
-                        // Use is_multiple_of to satisfy clippy::manual-is-multiple-of
-                        let is_on = reg_index.is_multiple_of(2); // Placeholder logic
+                        // Read from global storage when available (both Master and Slave modes have storage)
+                        let is_on = read_status(|status| {
+                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
+                            {
+                                let port_name = format!("COM{}", selected_port + 1);
+                                if let Some(port_entry) = status.ports.map.get(&port_name) {
+                                    if let Ok(port_guard) = port_entry.read() {
+                                        let types::port::PortConfig::Modbus { mode, .. } =
+                                            &port_guard.config;
+                                        let storage_opt = match mode {
+                                            types::modbus::ModbusConnectionMode::Master {
+                                                storage,
+                                            } => Some(storage.clone()),
+                                            types::modbus::ModbusConnectionMode::Slave {
+                                                storage,
+                                                ..
+                                            } => Some(storage.clone()),
+                                        };
+
+                                        if let Some(storage) = storage_opt {
+                                            if let Ok(context) = storage.lock() {
+                                                // Use the address as the register index
+                                                let value =
+                                                    if item.register_mode == RegisterMode::Coils {
+                                                        context.get_coil(addr).unwrap_or(false)
+                                                    } else {
+                                                        context.get_discrete(addr).unwrap_or(false)
+                                                    };
+                                                return Ok(value);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // Fallback to placeholder logic
+                            Ok(reg_index.is_multiple_of(2))
+                        })?;
                         switch_spans(is_on, "ON", "OFF", state)?
                     }
                     RegisterMode::Holding | RegisterMode::Input => {
-                        // TODO: Read from global storage when mode is Master
-                        let current_value = (reg_index * 10) as u16; // Placeholder logic
+                        // Read from global storage when available (both Master and Slave modes have storage)
+                        let current_value = read_status(|status| {
+                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
+                            {
+                                let port_name = format!("COM{}", selected_port + 1);
+                                if let Some(port_entry) = status.ports.map.get(&port_name) {
+                                    if let Ok(port_guard) = port_entry.read() {
+                                        let types::port::PortConfig::Modbus { mode, .. } =
+                                            &port_guard.config;
+                                        let storage_opt = match mode {
+                                            types::modbus::ModbusConnectionMode::Master {
+                                                storage,
+                                            } => Some(storage.clone()),
+                                            types::modbus::ModbusConnectionMode::Slave {
+                                                storage,
+                                                ..
+                                            } => Some(storage.clone()),
+                                        };
+
+                                        if let Some(storage) = storage_opt {
+                                            if let Ok(context) = storage.lock() {
+                                                // Use the address as the register index
+                                                let value = if item.register_mode
+                                                    == RegisterMode::Holding
+                                                {
+                                                    context.get_holding(addr).unwrap_or(0)
+                                                } else {
+                                                    context.get_input(addr).unwrap_or(0)
+                                                };
+                                                return Ok(value);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // Fallback to placeholder logic
+                            Ok((reg_index * 10) as u16)
+                        })?;
                         let hex_str = format!("0x{current_value:04X}");
                         input_spans(hex_str.clone(), state)?
                     }

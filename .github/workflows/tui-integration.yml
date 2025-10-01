@@ -1,4 +1,4 @@
-name: TUI Integration Tests
+name: TUI E2E Tests
 
 on:
   push:
@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  tui-integration-test:
-    name: TUI Integration Tests
+  tui-e2e-test:
+    name: TUI E2E Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -60,14 +60,21 @@ jobs:
             ls -la /dev/vcom1 /dev/vcom2
             # Make sure the ports are accessible
             sudo chmod 666 /dev/vcom1 /dev/vcom2
+            echo "Port list after setup:"
+            ls -la /dev/vcom* /dev/tty* 2>/dev/null || true
           else
             echo "Failed to create virtual serial ports"
             exit 1
           fi
 
-      - name: Run TUI integration tests
+      - name: Enumerate serial ports (diagnostic)
         run: |
-          cargo run -p aoba_tui_integration_tests --bin tui_integration_tests
+          echo "=== Running port enumeration diagnostic ==="
+          cargo run --example enumerate_ports
+
+      - name: Run TUI E2E tests
+        run: |
+          cargo run -p aoba_tui_e2e_tests --bin tui_e2e_tests
 
       - name: Cleanup virtual ports
         if: always()
