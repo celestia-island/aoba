@@ -28,8 +28,15 @@ fn find_line_with_pattern(screen: &str, pattern: &str) -> Option<usize> {
         }
     } else {
         // Search only between line 3 and line (total-3)
-        for idx in 3..(total_lines - 3) {
-            if lines[idx].contains(pattern) {
+        // Use iterator-based approach to avoid indexing by range (clippy: needless-range-loop)
+        // Skip the first 3 lines, then take only the middle section (total_lines - 6 lines)
+        for (idx, line) in lines
+            .iter()
+            .enumerate()
+            .skip(3)
+            .take(total_lines.saturating_sub(6))
+        {
+            if line.contains(pattern) {
                 return Some(idx);
             }
         }
@@ -65,12 +72,12 @@ fn find_cursor_line(screen: &str) -> Option<usize> {
                 // Common patterns: "> item", ">item", "> "
                 if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
                 {
-                    log::debug!("Found cursor at line {} (in preferred range): '{}'", idx, trimmed);
+                    log::debug!("Found cursor at line {idx} (in preferred range): '{trimmed}'");
                     return Some(idx);
                 }
             } else if trimmed == ">" {
                 // Edge case: standalone ">"
-                log::debug!("Found cursor at line {} (standalone >): '{}'", idx, trimmed);
+                log::debug!("Found cursor at line {idx} (standalone >): '{trimmed}'");
                 return Some(idx);
             }
         }
@@ -79,21 +86,26 @@ fn find_cursor_line(screen: &str) -> Option<usize> {
     // Second pass: if not found in preferred range, search all lines
     if total_lines > 6 {
         log::warn!("Cursor not found in preferred range, searching all lines as fallback");
-        for idx in 0..total_lines {
+        for (idx, line) in lines.iter().enumerate() {
             if search_range.contains(&idx) {
                 continue; // Skip already searched lines
             }
-            let trimmed = lines[idx].trim_start();
+            let trimmed = line.trim_start();
             if trimmed.starts_with('>') {
                 if trimmed.len() > 1 {
                     let next_char = trimmed.chars().nth(1);
-                    if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
+                    if next_char == Some(' ')
+                        || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
                     {
-                        log::warn!("Found cursor at line {} (outside preferred range): '{}'", idx, trimmed);
+                        log::warn!(
+                            "Found cursor at line {idx} (outside preferred range): '{trimmed}'"
+                        );
                         return Some(idx);
                     }
                 } else if trimmed == ">" {
-                    log::warn!("Found cursor at line {} (standalone >, outside range): '{}'", idx, trimmed);
+                    log::warn!(
+                        "Found cursor at line {idx} (standalone >, outside range): '{trimmed}'"
+                    );
                     return Some(idx);
                 }
             }
