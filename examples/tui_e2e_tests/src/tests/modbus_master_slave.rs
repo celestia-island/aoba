@@ -13,21 +13,46 @@ use expectrl::Expect;
 use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
 
 /// Helper function to find the line number of a pattern in the screen
+/// Only searches within the valid content area (rows 3 to -3, excluding header/footer)
 fn find_line_with_pattern(screen: &str, pattern: &str) -> Option<usize> {
     let lines: Vec<&str> = screen.lines().collect();
-    for (idx, line) in lines.iter().enumerate() {
-        if line.contains(pattern) {
-            return Some(idx);
+    let total_lines = lines.len();
+    
+    // Only search in the valid content area (skip first 3 and last 3 lines)
+    if total_lines <= 6 {
+        // Screen too small, search everything
+        for (idx, line) in lines.iter().enumerate() {
+            if line.contains(pattern) {
+                return Some(idx);
+            }
+        }
+    } else {
+        // Search only between line 3 and line (total-3)
+        for idx in 3..(total_lines - 3) {
+            if lines[idx].contains(pattern) {
+                return Some(idx);
+            }
         }
     }
     None
 }
 
 /// Helper function to find the cursor position (line with ">")
+/// Only searches within the valid content area (rows 3 to -3, excluding header/footer)
 fn find_cursor_line(screen: &str) -> Option<usize> {
     let lines: Vec<&str> = screen.lines().collect();
-    for (idx, line) in lines.iter().enumerate() {
-        let trimmed = line.trim_start();
+    let total_lines = lines.len();
+    
+    let search_range = if total_lines <= 6 {
+        // Screen too small, search everything
+        0..total_lines
+    } else {
+        // Search only between line 3 and line (total-3)
+        3..(total_lines - 3)
+    };
+    
+    for idx in search_range {
+        let trimmed = lines[idx].trim_start();
         // Look for lines that start with ">" followed by optional space
         // This handles both "> " and ">" formats
         if trimmed.starts_with('>') {

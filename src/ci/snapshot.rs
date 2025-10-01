@@ -43,6 +43,9 @@ impl TerminalCapture {
             "--- Screen Capture Start ({step_description}) ---\n{out}\n--- Screen Capture End ---"
         );
 
+        // Add a small delay after capture to let the terminal stabilize
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
         Ok(out)
     }
 

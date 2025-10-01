@@ -3,14 +3,18 @@ use anyhow::{anyhow, Result};
 use std::{
     path::PathBuf,
     process::{Command, Output, Stdio},
+    sync::atomic::{AtomicBool, Ordering},
 };
+
+// Global flag to track if we've already built the binary
+static BINARY_BUILT: AtomicBool = AtomicBool::new(false);
 
 /// Build the project's debug binary for a specific bin name and return the path to the executable.
 /// This uses `cargo build --bin <bin_name>` to limit work to the requested binary and uses the
 /// debug profile to speed up builds during testing.
+/// 
+/// Note: This function uses a global flag to ensure compilation only happens once per test run.
 pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
-    log::info!("🔧 Building debug binary for: {bin_name}");
-
     // Try to find the workspace root by looking for Cargo.toml with [workspace]
     let workspace_root = std::env::current_dir()?
         .ancestors()
@@ -27,6 +31,22 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
 
     log::info!("🔍 Workspace root: {}", workspace_root.display());
 
+    let exe_name = if cfg!(windows) {
+        format!("{bin_name}.exe")
+    } else {
+        bin_name.to_string()
+    };
+
+    let bin_path = workspace_root.join("target").join("debug").join(exe_name);
+
+    // Check if we've already built the binary in this test run
+    if BINARY_BUILT.load(Ordering::Relaxed) && bin_path.exists() {
+        log::info!("✅ Binary already built, skipping compilation: {}", bin_path.display());
+        return Ok(bin_path);
+    }
+
+    log::info!("🔧 Building debug binary for: {bin_name}");
+
     let status = Command::new("cargo")
         .args(["build", "--bin", bin_name])
         .current_dir(&workspace_root)
@@ -39,17 +59,13 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
         return Err(anyhow!("cargo build failed with status: {}", status));
     }
 
-    let exe_name = if cfg!(windows) {
-        format!("{bin_name}.exe")
-    } else {
-        bin_name.to_string()
-    };
-
-    let bin_path = workspace_root.join("target").join("debug").join(exe_name);
-
     if !bin_path.exists() {
         return Err(anyhow!("Binary not found at: {}", bin_path.display()));
     }
+
+    // Mark that we've built the binary
+    BINARY_BUILT.store(true, Ordering::Relaxed);
+    log::info!("✅ Binary built successfully: {}", bin_path.display());
 
     Ok(bin_path)
 }
