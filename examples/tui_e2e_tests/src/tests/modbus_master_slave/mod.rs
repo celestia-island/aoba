@@ -5,7 +5,7 @@ mod register_operations;
 
 use anyhow::{anyhow, Result};
 
-use aoba::ci::{should_run_vcom_tests, spawn_expect_process, TerminalCapture};
+use aoba::ci::{should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture};
 
 /// Full test: master-slave modbus communication with register value verification
 pub async fn test_modbus_master_slave_communication() -> Result<()> {
@@ -25,6 +25,8 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     let mut slave_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn slave TUI process: {}", err))?;
     let mut slave_cap = TerminalCapture::new(24, 80);
+
+    sleep_a_while().await;
 
     // Navigate to ports
     port_navigation::navigate_to_vcom1(&mut master_session, &mut master_cap, "master").await?;
