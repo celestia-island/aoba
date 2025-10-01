@@ -1,7 +1,7 @@
 // E2E test modules for modbus master-slave communication
 mod modbus_config;
 mod port_navigation;
-mod register_ops;
+mod register_operations;
 
 use anyhow::{anyhow, Result};
 
@@ -35,7 +35,9 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     modbus_config::configure_slave_mode(&mut slave_session, &mut slave_cap, "slave").await?;
 
     // Verify slave registers match master values
-    match register_ops::verify_slave_registers(&mut slave_session, &mut slave_cap, "slave").await {
+    match register_operations::verify_slave_registers(&mut slave_session, &mut slave_cap, "slave")
+        .await
+    {
         Ok(_) => {
             log::info!("✅ SUCCESS: Slave registers match master values!");
             log::info!("🎉 Master-slave communication is working correctly!");

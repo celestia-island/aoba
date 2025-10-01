@@ -20,7 +20,6 @@ pub async fn verify_slave_registers<T: Expect>(
     let actions = vec![
         // Leave the register editing mode
         CursorAction::PressEnter, // Enter on "Enable Port"
-        CursorAction::Sleep { ms: 500 },
         CursorAction::MatchPattern {
             pattern: Regex::new("Enabled")?,
             description: "Port enabled".to_string(),
