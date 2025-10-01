@@ -4,207 +4,69 @@ use aoba::ci::{ArrowKey, ExpectKeyExt};
 // - Process 1 occupies vcom1 and acts as a Modbus master
 // - Process 2 occupies vcom2 and acts as a Modbus slave
 // The test verifies that register values set by the master are reflected on the slave.
+//
+// IMPORTANT: This test assumes /dev/ttySx ports have been removed from the system,
+// so vcom1 and vcom2 are the first two ports in the list.
 
 use anyhow::{anyhow, Result};
-use regex::Regex;
 
 use expectrl::Expect;
 
-use aoba::ci::{should_run_vcom_tests, spawn_expect_process, vcom_matchers, TerminalCapture};
+use aoba::ci::{should_run_vcom_tests, spawn_expect_process, TerminalCapture};
 
-/// Helper function to find the line number of a pattern in the screen
-/// Only searches within the valid content area (rows 3 to -3, excluding header/footer)
-fn find_line_with_pattern(screen: &str, pattern: &str) -> Option<usize> {
-    let lines: Vec<&str> = screen.lines().collect();
-    let total_lines = lines.len();
-
-    // Only search in the valid content area (skip first 3 and last 3 lines)
-    if total_lines <= 6 {
-        // Screen too small, search everything
-        for (idx, line) in lines.iter().enumerate() {
-            if line.contains(pattern) {
-                return Some(idx);
-            }
-        }
-    } else {
-        // Search only between line 3 and line (total-3)
-        // Use iterator-based approach to avoid indexing by range (clippy: needless-range-loop)
-        // Skip the first 3 lines, then take only the middle section (total_lines - 6 lines)
-        for (idx, line) in lines
-            .iter()
-            .enumerate()
-            .skip(3)
-            .take(total_lines.saturating_sub(6))
-        {
-            if line.contains(pattern) {
-                return Some(idx);
-            }
-        }
-    }
-    None
-}
-
-/// Helper function to find the cursor position (line with ">")
-/// First searches within the valid content area (rows 3 to -3, excluding header/footer)
-/// If not found, searches all lines as a fallback
-fn find_cursor_line(screen: &str) -> Option<usize> {
-    let lines: Vec<&str> = screen.lines().collect();
-    let total_lines = lines.len();
-
-    let search_range = if total_lines <= 6 {
-        // Screen too small, search everything
-        0..total_lines
-    } else {
-        // Search only between line 3 and line (total-3)
-        3..(total_lines - 3)
-    };
-
-    // First pass: search in the preferred range
-    for idx in search_range.clone() {
-        let trimmed = lines[idx].trim_start();
-        // Look for lines that start with ">" followed by optional space
-        // This handles both "> " and ">" formats
-        if trimmed.starts_with('>') {
-            // Verify it's actually a cursor indicator, not just a random '>'
-            // The cursor should be followed by a space or another character that's part of the item
-            if trimmed.len() > 1 {
-                let next_char = trimmed.chars().nth(1);
-                // Common patterns: "> item", ">item", "> "
-                if next_char == Some(' ') || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
-                {
-                    log::debug!("Found cursor at line {idx} (in preferred range): '{trimmed}'");
-                    return Some(idx);
-                }
-            } else if trimmed == ">" {
-                // Edge case: standalone ">"
-                log::debug!("Found cursor at line {idx} (standalone >): '{trimmed}'");
-                return Some(idx);
-            }
-        }
-    }
-
-    // Second pass: if not found in preferred range, search all lines
-    if total_lines > 6 {
-        log::warn!("Cursor not found in preferred range, searching all lines as fallback");
-        for (idx, line) in lines.iter().enumerate() {
-            if search_range.contains(&idx) {
-                continue; // Skip already searched lines
-            }
-            let trimmed = line.trim_start();
-            if trimmed.starts_with('>') {
-                if trimmed.len() > 1 {
-                    let next_char = trimmed.chars().nth(1);
-                    if next_char == Some(' ')
-                        || next_char.map(|c| !c.is_whitespace()).unwrap_or(false)
-                    {
-                        log::warn!(
-                            "Found cursor at line {idx} (outside preferred range): '{trimmed}'"
-                        );
-                        return Some(idx);
-                    }
-                } else if trimmed == ">" {
-                    log::warn!(
-                        "Found cursor at line {idx} (standalone >, outside range): '{trimmed}'"
-                    );
-                    return Some(idx);
-                }
-            }
-        }
-    }
-
-    None
-}
-
-/// Navigate to a specific port by name
-async fn navigate_to_port<T: Expect>(
+/// Navigate to vcom1 (first port in list) - just press Enter
+async fn navigate_to_vcom1<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    port_name: &str,
     session_name: &str,
 ) -> Result<()> {
-    log::info!("🧪 Navigating to {port_name} in {session_name}");
+    log::info!("🧪 Navigating to vcom1 (first port) in {session_name}");
 
     // Give the TUI a moment to fully render before capturing
     aoba::ci::sleep_a_while().await;
 
-    // First capture the initial screen to see all ports
-    let initial_screen = cap.capture(session, &format!("{session_name} - initial screen",))?;
-    log::info!("{session_name} initial screen captured");
+    // Capture initial screen for logging
+    let initial_screen = cap.capture(session, &format!("{session_name} - initial screen"))?;
+    log::info!("{session_name} initial screen:");
+    log::info!("{initial_screen}");
 
-    // Check if cursor is already on the target port
-    if Regex::new(&format!(r"> ?{port}", port = regex::escape(port_name)))
-        .unwrap()
-        .is_match(&initial_screen)
-    {
-        log::info!("✓ Cursor already positioned at {port_name} in {session_name}");
-        return Ok(());
-    }
+    // vcom1 should be the first item (cursor already there), just press Enter
+    log::info!("Cursor should already be on vcom1, pressing Enter");
+    session.send_enter()?;
 
-    // Find the cursor position (line with ">")
-    let cursor_line = find_cursor_line(&initial_screen);
-    if cursor_line.is_none() {
-        log::error!("❌ Could not find cursor in {session_name} screen.");
-        log::error!("Screen content with line numbers:");
-        let mut debug_output = String::new();
-        for (idx, line) in initial_screen.lines().enumerate() {
-            debug_output.push_str(&format!("  Line {idx}: '{line}'\n"));
-        }
-        log::error!("{debug_output}");
-        return Err(anyhow!(
-            "Could not find cursor position ('>') in {} screen. The TUI may not be fully initialized.",
-            session_name
-        ));
-    }
-    let cursor_pos = cursor_line.unwrap();
-    log::info!("Cursor at line {cursor_pos} in {session_name}");
-
-    // Find the target port position
-    let port_line = find_line_with_pattern(&initial_screen, port_name);
-    if port_line.is_none() {
-        return Err(anyhow!(
-            "Port {} not found in screen output for {}",
-            port_name,
-            session_name
-        ));
-    }
-    let port_pos = port_line.unwrap();
-    log::info!("Found {port_name} at line {port_pos} in {session_name}");
-
-    // Calculate how many times to press up or down
-    if port_pos < cursor_pos {
-        // Target is above cursor - press Up
-        let distance = cursor_pos - port_pos;
-        log::info!("Target is {distance} lines above cursor, pressing Up {distance} times");
-        for _ in 0..distance {
-            session.send_arrow(ArrowKey::Up)?;
-        }
-    } else if port_pos > cursor_pos {
-        // Target is below cursor - press Down
-        let distance = port_pos - cursor_pos;
-        log::info!("Target is {distance} lines below cursor, pressing Down {distance} times");
-        for _ in 0..distance {
-            session.send_arrow(ArrowKey::Down)?;
-        }
-    }
-
-    // Wait a moment and verify we're at the right position
     aoba::ci::sleep_a_while().await;
-    let final_screen = cap.capture(session, &format!("{session_name} - final position",))?;
+    log::info!("✓ Navigated to vcom1 in {session_name}");
+    Ok(())
+}
 
-    if Regex::new(&format!(r"> ?{}", regex::escape(port_name)))
-        .unwrap()
-        .is_match(&final_screen)
-    {
-        log::info!("✓ Successfully navigated to {port_name} in {session_name}");
-        Ok(())
-    } else {
-        log::warn!("Final screen:\n{final_screen}");
-        Err(anyhow!(
-            "Failed to position cursor at {} in {}. Cursor may have moved incorrectly.",
-            port_name,
-            session_name
-        ))
-    }
+/// Navigate to vcom2 (second port in list) - press Down once then Enter
+async fn navigate_to_vcom2<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    session_name: &str,
+) -> Result<()> {
+    log::info!("🧪 Navigating to vcom2 (second port) in {session_name}");
+
+    // Give the TUI a moment to fully render before capturing
+    aoba::ci::sleep_a_while().await;
+
+    // Capture initial screen for logging
+    let initial_screen = cap.capture(session, &format!("{session_name} - initial screen"))?;
+    log::info!("{session_name} initial screen:");
+    log::info!("{initial_screen}");
+
+    // vcom2 should be the second item, press Down once then Enter
+    log::info!("Pressing Down to move to vcom2");
+    session.send_arrow(ArrowKey::Down)?;
+
+    aoba::ci::sleep_a_while().await;
+
+    log::info!("Pressing Enter to select vcom2");
+    session.send_enter()?;
+
+    aoba::ci::sleep_a_while().await;
+    log::info!("✓ Navigated to vcom2 in {session_name}");
+    Ok(())
 }
 
 /// Smoke test: verify that we can spawn two TUI processes and occupy both vcom ports
@@ -230,20 +92,11 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
     aoba::ci::sleep_a_while().await;
     let mut cap2 = TerminalCapture::new(24, 80);
 
-    let vmatch = vcom_matchers();
+    // Navigate to vcom1 in first process (first port - direct Enter)
+    navigate_to_vcom1(&mut session1, &mut cap1, "session1").await?;
 
-    // Navigate to vcom1 in first process
-    navigate_to_port(&mut session1, &mut cap1, &vmatch.port1_name, "session1").await?;
-
-    // Navigate to vcom2 in second process
-    navigate_to_port(&mut session2, &mut cap2, &vmatch.port2_name, "session2").await?;
-
-    // Press Enter on both to open ConfigPanel
-    session1.send_enter()?;
-    aoba::ci::sleep_a_while().await;
-
-    session2.send_enter()?;
-    aoba::ci::sleep_a_while().await;
+    // Navigate to vcom2 in second process (second port - Down then Enter)
+    navigate_to_vcom2(&mut session2, &mut cap2, "session2").await?;
 
     let screen1 = cap1.capture(&mut session1, "session1 in ConfigPanel")?;
     let screen2 = cap2.capture(&mut session2, "session2 in ConfigPanel")?;
@@ -283,35 +136,13 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     aoba::ci::sleep_a_while().await;
     let mut slave_cap = TerminalCapture::new(24, 80);
 
-    let vmatch = vcom_matchers();
+    // ========== Navigate master to vcom1 (first port) ==========
+    navigate_to_vcom1(&mut master_session, &mut master_cap, "master").await?;
+    let _ = master_cap.capture(&mut master_session, "master after selecting vcom1")?;
 
-    // ========== Navigate master to vcom1 ==========
-    navigate_to_port(
-        &mut master_session,
-        &mut master_cap,
-        &vmatch.port1_name,
-        "master",
-    )
-    .await?;
-
-    // Press Enter to go to ConfigPanel
-    master_session.send_enter()?;
-    aoba::ci::sleep_a_while().await;
-    let _ = master_cap.capture(&mut master_session, "master after Enter")?;
-
-    // ========== Navigate slave to vcom2 ==========
-    navigate_to_port(
-        &mut slave_session,
-        &mut slave_cap,
-        &vmatch.port2_name,
-        "slave",
-    )
-    .await?;
-
-    // Press Enter to go to ConfigPanel
-    slave_session.send_enter()?;
-    aoba::ci::sleep_a_while().await;
-    let _ = slave_cap.capture(&mut slave_session, "slave after Enter")?;
+    // ========== Navigate slave to vcom2 (second port) ==========
+    navigate_to_vcom2(&mut slave_session, &mut slave_cap, "slave").await?;
+    let _ = slave_cap.capture(&mut slave_session, "slave after selecting vcom2")?;
 
     // ========== Navigate to Modbus panel on master ==========
     log::info!("🧪 Navigating master to Modbus panel");

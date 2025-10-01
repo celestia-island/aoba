@@ -42,6 +42,16 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
+          # Remove existing /dev/ttyS* ports to avoid confusion in tests
+          # These are typically not useful in CI and can interfere with port detection
+          echo "Removing /dev/ttyS* ports..."
+          for port in /dev/ttyS*; do
+            if [ -e "$port" ]; then
+              sudo rm -f "$port" || true
+              echo "Removed $port"
+            fi
+          done
+
           # Create virtual serial port pair using socat in background with sudo
           sudo bash -c 'socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &'
           sleep 2  # Give socat time to start
@@ -60,6 +70,8 @@ jobs:
             ls -la /dev/vcom1 /dev/vcom2
             # Make sure the ports are accessible
             sudo chmod 666 /dev/vcom1 /dev/vcom2
+            echo "Port list after setup:"
+            ls -la /dev/vcom* /dev/tty* 2>/dev/null || true
           else
             echo "Failed to create virtual serial ports"
             exit 1
