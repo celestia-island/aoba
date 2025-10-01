@@ -45,7 +45,7 @@ pub async fn execute_cursor_actions<T: Expect>(
     );
 
     for (idx, action) in actions.iter().enumerate() {
-        log::debug!("Action {}/{}: {:?}", idx + 1, actions.len(), action);
+        log::debug!("Action {} / {}: {:?}", idx + 1, actions.len(), action);
 
         match action {
             CursorAction::WaitForPattern {
@@ -54,14 +54,15 @@ pub async fn execute_cursor_actions<T: Expect>(
                 timeout_ms,
             } => {
                 let timeout = timeout_ms.unwrap_or(5000);
-                log::info!("⏳ Waiting for pattern '{}' ({} ms)", description, timeout);
+                log::info!("⏳ Waiting for pattern '{description}' ({timeout} ms)");
 
                 // Try to find the pattern on screen
                 let start = std::time::Instant::now();
                 loop {
-                    let screen = cap.capture(session, &format!("{} - wait for {}", session_name, description))?;
+                    let screen =
+                        cap.capture(session, &format!("{session_name} - wait for {description}"))?;
                     if pattern.is_match(&screen) {
-                        log::info!("✓ Pattern '{}' found", description);
+                        log::info!("✓ Pattern '{description}' found");
                         break;
                     }
 
@@ -77,7 +78,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                 }
             }
             CursorAction::PressArrow { direction, count } => {
-                log::info!("⬆️⬇️ Pressing {:?} {} times", direction, count);
+                log::info!("⬆️⬇️ Pressing {direction:?} {count} times");
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
@@ -95,27 +96,27 @@ pub async fn execute_cursor_actions<T: Expect>(
                 session.send_tab()?;
             }
             CursorAction::TypeChar(ch) => {
-                log::info!("⌨️ Typing character '{}'", ch);
+                log::info!("⌨️ Typing character '{ch}'");
                 session.send_char(*ch)?;
             }
             CursorAction::TypeString(s) => {
-                log::info!("⌨️ Typing string '{}'", s);
+                log::info!("⌨️ Typing string '{s}'");
                 for ch in s.chars() {
                     session.send_char(ch)?;
                 }
             }
             CursorAction::Sleep { ms } => {
-                log::info!("💤 Sleeping for {} ms", ms);
+                log::info!("💤 Sleeping for {ms} ms");
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
             }
             CursorAction::CaptureScreen { description } => {
-                log::info!("📸 Capturing screen: {}", description);
-                let screen = cap.capture(session, &format!("{} - {}", session_name, description))?;
-                log::info!("Screen content:\n{}", screen);
+                log::info!("📸 Capturing screen: {description}");
+                let screen = cap.capture(session, &format!("{session_name} - {description}"))?;
+                log::info!("Screen content:\n{screen}");
             }
         }
     }
 
-    log::info!("✓ All cursor actions executed successfully for {}", session_name);
+    log::info!("✓ All cursor actions executed successfully for {session_name}");
     Ok(())
 }
