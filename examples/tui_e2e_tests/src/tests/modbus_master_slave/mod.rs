@@ -36,9 +36,9 @@ pub async fn test_modbus_smoke_dual_process() -> Result<()> {
     // Navigate to vcom2 in second process using auto_cursor
     port_navigation::navigate_to_vcom2(&mut session2, &mut cap2, "session2").await?;
 
-    // Quit both processes using auto_cursor
+    // Quit both processes using auto_cursor with Ctrl+C
     use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
-    let quit_actions = vec![CursorAction::TypeChar('q')];
+    let quit_actions = vec![CursorAction::CtrlC];
 
     execute_cursor_actions(&mut session1, &mut cap1, &quit_actions, "session1").await?;
     execute_cursor_actions(&mut session2, &mut cap2, &quit_actions, "session2").await?;
@@ -106,12 +106,12 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
         }
     }
 
-    // Cleanup: quit both processes
+    // Cleanup: quit both processes with Ctrl+C
     use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
-    let quit_actions = vec![CursorAction::TypeChar('q')];
+    let quit_actions = vec![CursorAction::CtrlC];
     
-    let _ = execute_cursor_actions(&mut master_session, &mut master_cap, &quit_actions, "master").await;
-    let _ = execute_cursor_actions(&mut slave_session, &mut slave_cap, &quit_actions, "slave").await;
+    execute_cursor_actions(&mut master_session, &mut master_cap, &quit_actions, "master").await?;
+    execute_cursor_actions(&mut slave_session, &mut slave_cap, &quit_actions, "slave").await?;
 
     aoba::ci::sleep_a_while().await;
 

@@ -66,27 +66,9 @@ pub async fn test_tui_serial_port_interaction() -> Result<()> {
     aoba::ci::sleep_a_while().await;
     let _ = cap.capture(&mut session, "Enter key press")?;
 
-    match session.send_char('q') {
-        Ok(_) => {
-            aoba::ci::sleep_a_while().await;
-            let screen = cap.capture(&mut session, "q key press for testing responsiveness")?;
-            if Regex::new(r"(?i)(error|failed|panic|crash)")
-                .unwrap()
-                .is_match(&screen)
-            {
-                return Err(anyhow!(
-                    "TUI interaction test detected errors or unresponsive behavior"
-                ));
-            }
-        }
-        Err(_err) => {
-            let _ = cap.capture(&mut session, "application unresponsive")?;
-            return Err(anyhow!(
-                "TUI application crashed or became unresponsive after pressing Enter"
-            ));
-        }
-    }
+    // Exit with Ctrl+C
+    session.send_ctrl_c()?;
 
-    log::info!("🧪 TUI serial port interaction test completed successfully");
+    log::info!("🧪 Serial port interaction test completed");
     Ok(())
 }

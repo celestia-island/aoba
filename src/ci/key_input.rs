@@ -19,6 +19,9 @@ pub trait ExpectKeyExt {
     /// Send Escape key
     fn send_escape(&mut self) -> Result<()>;
 
+    /// Send Ctrl+C to exit program quickly
+    fn send_ctrl_c(&mut self) -> Result<()>;
+
     /// Send a character key
     fn send_char(&mut self, ch: char) -> Result<()>;
 }
@@ -56,6 +59,11 @@ impl<T: Expect> ExpectKeyExt for T {
     fn send_escape(&mut self) -> Result<()> {
         self.send("\x1b")
             .map_err(|err| anyhow!("Failed to send Escape: {}", err))
+    }
+
+    fn send_ctrl_c(&mut self) -> Result<()> {
+        self.send("\x03")
+            .map_err(|err| anyhow!("Failed to send Ctrl+C: {}", err))
     }
 
     fn send_char(&mut self, ch: char) -> Result<()> {

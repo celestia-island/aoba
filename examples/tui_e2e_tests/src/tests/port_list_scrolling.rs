@@ -76,8 +76,8 @@ async fn test_navigation_and_scrolling(rows: u16, cols: u16, test_name: &str) ->
         cap.capture(&mut session, &format!("{} - After {} up", test_name, i + 1))?;
     }
 
-    // Exit
-    session.send_char('q')?;
+    // Exit with Ctrl+C
+    session.send_ctrl_c()?;
 
     log::info!("    ✓ Navigation test '{test_name}' passed");
     Ok(())
@@ -135,8 +135,8 @@ async fn test_bottom_navigation(rows: u16, cols: u16) -> Result<()> {
     aoba::ci::sleep_a_while().await;
     cap.capture(&mut session, "Bottom nav - Back to bottom")?;
 
-    // Exit
-    session.send_char('q')?;
+    // Exit with Ctrl+C
+    session.send_ctrl_c()?;
 
     log::info!("    ✓ Bottom navigation test passed");
     Ok(())

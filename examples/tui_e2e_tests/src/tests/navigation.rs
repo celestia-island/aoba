@@ -36,8 +36,8 @@ pub async fn test_tui_navigation() -> Result<()> {
     let main_screen = cap.capture(&mut session, "Back to main page")?;
     log::info!("Back to main page:\n{main_screen}");
 
-    // Quit
-    session.send_char('q')?;
+    // Quit with Ctrl+C
+    session.send_ctrl_c()?;
     log::info!("🧪 TUI navigation test completed");
     Ok(())
 }

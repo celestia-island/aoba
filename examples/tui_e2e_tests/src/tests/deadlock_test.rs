@@ -40,8 +40,8 @@ pub async fn test_navigation_to_refresh_no_deadlock() -> Result<()> {
 
     cap.capture(&mut session, "After up arrow (verify still responsive)")?;
 
-    // Exit
-    session.send_char('q')?;
+    // Exit with Ctrl+C
+    session.send_ctrl_c()?;
 
     log::info!("    ✓ Navigation to Refresh item completed without deadlock");
 
@@ -92,8 +92,8 @@ pub async fn test_navigation_with_no_ports() -> Result<()> {
 
     cap.capture(&mut session, "After up navigation")?;
 
-    // Exit
-    session.send_char('q')?;
+    // Exit with Ctrl+C
+    session.send_ctrl_c()?;
 
     log::info!("    ✓ Navigation with no/few ports works correctly");
 

@@ -15,6 +15,8 @@ pub enum CursorAction {
     PressEscape,
     /// Press Tab key
     PressTab,
+    /// Press Ctrl+C to exit program quickly
+    CtrlC,
     /// Type a character
     TypeChar(char),
     /// Type a string
@@ -131,6 +133,10 @@ pub async fn execute_cursor_actions<T: Expect>(
             CursorAction::PressTab => {
                 log::info!("⇥ Pressing Tab");
                 session.send_tab()?;
+            }
+            CursorAction::CtrlC => {
+                log::info!("🛑 Pressing Ctrl+C to exit");
+                session.send_ctrl_c()?;
             }
             CursorAction::TypeChar(ch) => {
                 log::info!("⌨️ Typing character '{ch}'");
