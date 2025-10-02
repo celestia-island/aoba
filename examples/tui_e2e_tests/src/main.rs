@@ -12,6 +12,9 @@ async fn main() -> Result<()> {
 
     tests::test_navigation_to_refresh_no_deadlock().await?;
     
+    // Give extra time for any lingering port handles to be released
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    
     // Reset virtual ports between tests to ensure clean state
     log::info!("🔄 Resetting virtual ports between tests...");
     reset_vcom_ports()?;

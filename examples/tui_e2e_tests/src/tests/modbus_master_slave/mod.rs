@@ -66,6 +66,8 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
     .await?;
     execute_cursor_actions(&mut slave_session, &mut slave_cap, &quit_actions, "slave").await?;
 
+    // Wait for processes to terminate and release ports
+    aoba::ci::sleep_a_while().await;
     aoba::ci::sleep_a_while().await;
 
     log::info!("🧪 Modbus master-slave communication test completed");
