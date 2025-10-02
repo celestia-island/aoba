@@ -42,6 +42,9 @@ pub async fn test_navigation_to_refresh_no_deadlock() -> Result<()> {
 
     // Exit with Ctrl+C
     session.send_ctrl_c()?;
+    
+    // Wait for process to terminate and release ports
+    aoba::ci::sleep_a_while().await;
 
     log::info!("    ✓ Navigation to Refresh item completed without deadlock");
 

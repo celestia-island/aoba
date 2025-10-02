@@ -86,3 +86,49 @@ pub async fn sleep_a_while() {
     const DEFAULT_MS: u64 = 500;
     tokio::time::sleep(Duration::from_millis(DEFAULT_MS)).await;
 }
+
+/// Reset virtual serial ports by calling the socat_reset.sh script.
+///
+/// This function should be called between tests to ensure clean state.
+/// It kills existing socat processes, removes old symlinks, and creates
+/// fresh virtual serial ports.
+///
+/// Returns Ok(()) if the reset was successful, Err otherwise.
+pub fn reset_vcom_ports() -> anyhow::Result<()> {
+    if !should_run_vcom_tests() {
+        log::debug!("Skipping vcom port reset on this platform");
+        return Ok(());
+    }
+
+    log::info!("🔄 Resetting virtual serial ports...");
+    
+    let script_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("examples/tui_e2e_tests/scripts/socat_reset.sh");
+    
+    if !script_path.exists() {
+        return Err(anyhow::anyhow!(
+            "socat_reset.sh script not found at {:?}",
+            script_path
+        ));
+    }
+
+    let output = std::process::Command::new("sudo")
+        .arg(script_path)
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to execute socat_reset.sh: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        log::error!("socat_reset.sh failed with status: {}", output.status);
+        log::error!("stdout: {}", stdout);
+        log::error!("stderr: {}", stderr);
+        return Err(anyhow::anyhow!(
+            "socat_reset.sh failed with status: {}",
+            output.status
+        ));
+    }
+
+    log::info!("✓ Virtual serial ports reset successfully");
+    Ok(())
+}
