@@ -169,7 +169,7 @@ pub async fn configure_slave_mode<T: Expect>(
         // Navigate to `Register Length` and set it to 12
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 4,
+            count: 5,
         },
         CursorAction::PressEnter,
         CursorAction::TypeString("12".to_string()),
