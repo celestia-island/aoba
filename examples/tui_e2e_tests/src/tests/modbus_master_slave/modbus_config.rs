@@ -34,6 +34,14 @@ pub async fn configure_master_mode<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::TypeString("12".to_string()),
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+        // Verify Register Length was set to 12
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"Register Length\s+0x000C")?,
+            description: "Register Length set to 12 (0x000C)".to_string(),
+            line_range: None,
+            col_range: None,
+        },
         // Navigate to registers
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
@@ -55,6 +63,35 @@ pub async fn configure_master_mode<T: Expect>(
             ]
         }))
         .collect::<Vec<_>>();
+    
+    // Verify register values row by row
+    // Row 1: registers 0-7 (values: 0, 11, 22, 33, 44, 55, 66, 77)
+    let actions = actions
+        .into_iter()
+        .chain(vec![
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::MatchPattern {
+                pattern: Regex::new(r"0x0000.*0x000B.*0x0016.*0x0021.*0x002C.*0x0037.*0x0042.*0x004D")?,
+                description: "Row 1: registers 0-7 values verified".to_string(),
+                line_range: None,
+                col_range: None,
+            },
+        ])
+        .collect::<Vec<_>>();
+    
+    // Row 2: registers 8-11 (values: 88, 99, 110, 121)
+    let actions = actions
+        .into_iter()
+        .chain(vec![
+            CursorAction::MatchPattern {
+                pattern: Regex::new(r"0x0008.*0x0058.*0x0063.*0x006E")?,
+                description: "Row 2: registers 8-11 values verified".to_string(),
+                line_range: None,
+                col_range: None,
+            },
+        ])
+        .collect::<Vec<_>>();
+    
     // Leave the register editing mode
     let actions = actions
         .into_iter()
@@ -82,17 +119,30 @@ pub async fn configure_slave_mode<T: Expect>(
     log::info!("🧪 Configuring {session_name} as Modbus Slave");
 
     let actions = vec![
+        // Wait for screen to render
+        CursorAction::Sleep { ms: 500 },
         // Change Mode to Slave
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1, // Navigate to Mode
         },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressArrow {
             direction: ArrowKey::Right,
             count: 1, // Select Slave
         },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+        // Verify mode changed to Slave
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"Connection Mode\s+Slave")?,
+            description: "Mode changed to Slave".to_string(),
+            line_range: None,
+            col_range: None,
+        },
         // Create the station
         CursorAction::PressArrow {
             direction: ArrowKey::Up,
@@ -115,6 +165,14 @@ pub async fn configure_slave_mode<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::TypeString("12".to_string()),
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+        // Verify Register Length was set to 12
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"Register Length\s+0x000C")?,
+            description: "Register Length set to 12 (0x000C)".to_string(),
+            line_range: None,
+            col_range: None,
+        },
     ];
     // Leave the register editing mode
     let actions = actions
