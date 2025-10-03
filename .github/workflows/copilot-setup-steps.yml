@@ -41,30 +41,8 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          # Create virtual serial port pair using socat in background with sudo
-          sudo bash -c 'socat PTY,link=/dev/vcom1,raw,echo=0 PTY,link=/dev/vcom2,raw,echo=0 &'
-          sleep 2  # Give socat time to start
-
-          # Wait for the virtual ports to be created
-          timeout=10
-          count=0
-          while [ $count -lt $timeout ] && ([ ! -e /dev/vcom1 ] || [ ! -e /dev/vcom2 ]); do
-            sleep 1
-            count=$((count + 1))
-          done
-
-          # Verify both ports exist
-          if [ -e /dev/vcom1 ] && [ -e /dev/vcom2 ]; then
-            echo "Virtual serial ports created successfully:"
-            ls -la /dev/vcom1 /dev/vcom2
-            # Make sure the ports are accessible
-            sudo chmod 666 /dev/vcom1 /dev/vcom2
-            echo "Port list after setup:"
-            ls -la /dev/vcom* /dev/tty* 2>/dev/null || true
-          else
-            echo "Failed to create virtual serial ports"
-            exit 1
-          fi
+          chmod +x examples/tui_e2e_tests/scripts/socat_init.sh
+          sudo examples/tui_e2e_tests/scripts/socat_init.sh
 
       - name: Cleanup virtual ports
         if: always()
