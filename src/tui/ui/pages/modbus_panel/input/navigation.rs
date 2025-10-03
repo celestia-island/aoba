@@ -72,19 +72,21 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 } => {
                     // Get register length to check bounds
                     let max_register = read_status(|status| {
-                        let port_name = match &status.page {
+                        let port_name_opt = match &status.page {
                             types::Page::ModbusDashboard { selected_port, .. } => {
-                                format!("COM{}", selected_port + 1)
+                                status.ports.order.get(*selected_port).cloned()
                             }
-                            _ => String::new(),
+                            _ => None,
                         };
-                        if let Some(port_entry) = status.ports.map.get(&port_name) {
-                            if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
-                                let all_items: Vec<_> = stations.iter().collect();
-                                if let Some(item) = all_items.get(slave_index) {
-                                    return Ok(item.register_length as usize);
+                        if let Some(port_name) = port_name_opt {
+                            if let Some(port_entry) = status.ports.map.get(&port_name) {
+                                if let Ok(port_guard) = port_entry.read() {
+                                    let types::port::PortConfig::Modbus { mode: _, stations } =
+                                        &port_guard.config;
+                                    let all_items: Vec<_> = stations.iter().collect();
+                                    if let Some(item) = all_items.get(slave_index) {
+                                        return Ok(item.register_length as usize);
+                                    }
                                 }
                             }
                         }
@@ -136,22 +138,24 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                     // Get register info
                     let (max_register, register_start) = read_status(|status| {
-                        let port_name = match &status.page {
+                        let port_name_opt = match &status.page {
                             types::Page::ModbusDashboard { selected_port, .. } => {
-                                format!("COM{}", selected_port + 1)
+                                status.ports.order.get(*selected_port).cloned()
                             }
-                            _ => String::new(),
+                            _ => None,
                         };
-                        if let Some(port_entry) = status.ports.map.get(&port_name) {
-                            if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
-                                let all_items: Vec<_> = stations.iter().collect();
-                                if let Some(item) = all_items.get(slave_index) {
-                                    return Ok((
-                                        item.register_length as usize,
-                                        item.register_address,
-                                    ));
+                        if let Some(port_name) = port_name_opt {
+                            if let Some(port_entry) = status.ports.map.get(&port_name) {
+                                if let Ok(port_guard) = port_entry.read() {
+                                    let types::port::PortConfig::Modbus { mode: _, stations } =
+                                        &port_guard.config;
+                                    let all_items: Vec<_> = stations.iter().collect();
+                                    if let Some(item) = all_items.get(slave_index) {
+                                        return Ok((
+                                            item.register_length as usize,
+                                            item.register_address,
+                                        ));
+                                    }
                                 }
                             }
                         }
@@ -230,24 +234,26 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                     // Get register info and next slave info
                     let (max_register, _register_start, has_next_slave) = read_status(|status| {
-                        let port_name = match &status.page {
+                        let port_name_opt = match &status.page {
                             types::Page::ModbusDashboard { selected_port, .. } => {
-                                format!("COM{}", selected_port + 1)
+                                status.ports.order.get(*selected_port).cloned()
                             }
-                            _ => String::new(),
+                            _ => None,
                         };
-                        if let Some(port_entry) = status.ports.map.get(&port_name) {
-                            if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
-                                let all_items: Vec<_> = stations.iter().collect();
-                                if let Some(item) = all_items.get(slave_index) {
-                                    let has_next = slave_index + 1 < all_items.len();
-                                    return Ok((
-                                        item.register_length as usize,
-                                        item.register_address,
-                                        has_next,
-                                    ));
+                        if let Some(port_name) = port_name_opt {
+                            if let Some(port_entry) = status.ports.map.get(&port_name) {
+                                if let Ok(port_guard) = port_entry.read() {
+                                    let types::port::PortConfig::Modbus { mode: _, stations } =
+                                        &port_guard.config;
+                                    let all_items: Vec<_> = stations.iter().collect();
+                                    if let Some(item) = all_items.get(slave_index) {
+                                        let has_next = slave_index + 1 < all_items.len();
+                                        return Ok((
+                                            item.register_length as usize,
+                                            item.register_address,
+                                            has_next,
+                                        ));
+                                    }
                                 }
                             }
                         }

@@ -27,12 +27,13 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             // Toggle global mode for this port between Master and Slave
             let current_mode = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-                    let port_name = format!("COM{}", selected_port + 1);
-                    if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { mode, stations: _ } =
-                                &port_guard.config;
-                            return Ok(if mode.is_master() { 0 } else { 1 });
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            if let Ok(port_guard) = port_entry.read() {
+                                let types::port::PortConfig::Modbus { mode, stations: _ } =
+                                    &port_guard.config;
+                                return Ok(if mode.is_master() { 0 } else { 1 });
+                            }
                         }
                     }
                 }
@@ -50,14 +51,15 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             // Get the current register mode value from port config
             let current_value = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-                    let port_name = format!("COM{}", selected_port + 1);
-                    if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
-                            let all_items: Vec<_> = stations.iter().collect();
-                            if let Some(item) = all_items.get(index) {
-                                return Ok((item.register_mode as u8 - 1) as usize);
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            if let Ok(port_guard) = port_entry.read() {
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &port_guard.config;
+                                let all_items: Vec<_> = stations.iter().collect();
+                                if let Some(item) = all_items.get(index) {
+                                    return Ok((item.register_mode as u8 - 1) as usize);
+                                }
                             }
                         }
                     }

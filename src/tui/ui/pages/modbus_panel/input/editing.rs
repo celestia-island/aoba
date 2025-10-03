@@ -146,11 +146,12 @@ fn commit_selector_edit(
         }
     })?;
 
-    let port_name = format!("COM{}", selected_port + 1);
+    let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
 
-    if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
-        match cursor {
-            types::cursor::ModbusDashboardCursor::ModbusMode => {
+    if let Some(port_name) = port_name_opt {
+        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+            match cursor {
+                types::cursor::ModbusDashboardCursor::ModbusMode => {
                 // Apply global mode changes to all stations in this port
                 let new_mode = if selected_index == 0 {
                     ModbusConnectionMode::default_master()
@@ -184,6 +185,7 @@ fn commit_selector_edit(
             _ => {}
         }
     }
+    }
     Ok(())
 }
 
@@ -196,11 +198,12 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
         }
     })?;
 
-    let port_name = format!("COM{}", selected_port + 1);
+    let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
 
-    if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
-        match cursor {
-            types::cursor::ModbusDashboardCursor::StationId { index } => {
+    if let Some(port_name) = port_name_opt {
+        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+            match cursor {
+                types::cursor::ModbusDashboardCursor::StationId { index } => {
                 if let Ok(station_id) = value.parse::<u8>() {
                     with_port_write(&port, |port| {
                         let types::port::PortConfig::Modbus { mode: _, stations } =
@@ -271,6 +274,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
             }
             _ => {}
         }
+    }
     }
     Ok(())
 }

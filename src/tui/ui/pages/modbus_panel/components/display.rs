@@ -68,9 +68,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(status
                 .ports
-                .map
-                .get(&format!("COM{}", selected_port + 1))
-                .cloned())
+                .order
+                .get(*selected_port)
+                .and_then(|port_name| status.ports.map.get(port_name).cloned()))
         } else {
             Ok(None)
         }
@@ -174,11 +174,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     // reuse sep_len from above and helper for separator
     let has_any = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-            if let Some(port_entry) = status.ports.map.get(&format!("COM{}", selected_port + 1)) {
-                if let Ok(port_guard) = port_entry.read() {
-                    match &port_guard.config {
-                        types::port::PortConfig::Modbus { mode: _, stations } => {
-                            return Ok(!stations.is_empty());
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_entry) = status.ports.map.get(port_name) {
+                    if let Ok(port_guard) = port_entry.read() {
+                        match &port_guard.config {
+                            types::port::PortConfig::Modbus { mode: _, stations } => {
+                                return Ok(!stations.is_empty());
+                            }
                         }
                     }
                 }

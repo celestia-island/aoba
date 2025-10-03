@@ -102,31 +102,32 @@ pub fn render_register_row_line(
                         let is_on = read_status(|status| {
                             if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
                             {
-                                let port_name = format!("COM{}", selected_port + 1);
-                                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                    if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode, .. } =
-                                            &port_guard.config;
-                                        let storage_opt = match mode {
-                                            types::modbus::ModbusConnectionMode::Master {
-                                                storage,
-                                            } => Some(storage.clone()),
-                                            types::modbus::ModbusConnectionMode::Slave {
-                                                storage,
-                                                ..
-                                            } => Some(storage.clone()),
-                                        };
+                                if let Some(port_name) = status.ports.order.get(*selected_port) {
+                                    if let Some(port_entry) = status.ports.map.get(port_name) {
+                                        if let Ok(port_guard) = port_entry.read() {
+                                            let types::port::PortConfig::Modbus { mode, .. } =
+                                                &port_guard.config;
+                                            let storage_opt = match mode {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => Some(storage.clone()),
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => Some(storage.clone()),
+                                            };
 
-                                        if let Some(storage) = storage_opt {
-                                            if let Ok(context) = storage.lock() {
-                                                // Use the address as the register index
-                                                let value =
-                                                    if item.register_mode == RegisterMode::Coils {
-                                                        context.get_coil(addr).unwrap_or(false)
-                                                    } else {
-                                                        context.get_discrete(addr).unwrap_or(false)
-                                                    };
-                                                return Ok(value);
+                                            if let Some(storage) = storage_opt {
+                                                if let Ok(context) = storage.lock() {
+                                                    // Use the address as the register index
+                                                    let value =
+                                                        if item.register_mode == RegisterMode::Coils {
+                                                            context.get_coil(addr).unwrap_or(false)
+                                                        } else {
+                                                            context.get_discrete(addr).unwrap_or(false)
+                                                        };
+                                                    return Ok(value);
+                                                }
                                             }
                                         }
                                     }
@@ -142,32 +143,33 @@ pub fn render_register_row_line(
                         let current_value = read_status(|status| {
                             if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
                             {
-                                let port_name = format!("COM{}", selected_port + 1);
-                                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                    if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode, .. } =
-                                            &port_guard.config;
-                                        let storage_opt = match mode {
-                                            types::modbus::ModbusConnectionMode::Master {
-                                                storage,
-                                            } => Some(storage.clone()),
-                                            types::modbus::ModbusConnectionMode::Slave {
-                                                storage,
-                                                ..
-                                            } => Some(storage.clone()),
-                                        };
+                                if let Some(port_name) = status.ports.order.get(*selected_port) {
+                                    if let Some(port_entry) = status.ports.map.get(port_name) {
+                                        if let Ok(port_guard) = port_entry.read() {
+                                            let types::port::PortConfig::Modbus { mode, .. } =
+                                                &port_guard.config;
+                                            let storage_opt = match mode {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => Some(storage.clone()),
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => Some(storage.clone()),
+                                            };
 
-                                        if let Some(storage) = storage_opt {
-                                            if let Ok(context) = storage.lock() {
-                                                // Use the address as the register index
-                                                let value = if item.register_mode
-                                                    == RegisterMode::Holding
-                                                {
-                                                    context.get_holding(addr).unwrap_or(0)
-                                                } else {
-                                                    context.get_input(addr).unwrap_or(0)
-                                                };
-                                                return Ok(value);
+                                            if let Some(storage) = storage_opt {
+                                                if let Ok(context) = storage.lock() {
+                                                    // Use the address as the register index
+                                                    let value = if item.register_mode
+                                                        == RegisterMode::Holding
+                                                    {
+                                                        context.get_holding(addr).unwrap_or(0)
+                                                    } else {
+                                                        context.get_input(addr).unwrap_or(0)
+                                                    };
+                                                    return Ok(value);
+                                                }
                                             }
                                         }
                                     }
