@@ -215,10 +215,10 @@ fn create_new_modbus_entry() -> Result<()> {
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             with_port_write(&port, |port| {
-                let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
-                // Create a new master entry with default values
+                let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                // Create a new entry with the global mode from the port config
                 let new_entry = types::modbus::ModbusRegisterItem {
-                    connection_mode: types::modbus::ModbusConnectionMode::default_master(),
+                    connection_mode: mode.clone(),
                     station_id: 1,
                     register_mode: types::modbus::RegisterMode::Holding,
                     register_address: 0,
@@ -230,7 +230,7 @@ fn create_new_modbus_entry() -> Result<()> {
                     pending_requests: Vec::new(),
                 };
                 stations.push(new_entry);
-                log::info!("Created new modbus master entry with station_id=1");
+                log::info!("Created new modbus entry with station_id=1 in {:?} mode", if mode.is_master() { "Master" } else { "Slave" });
             });
         }
     }
