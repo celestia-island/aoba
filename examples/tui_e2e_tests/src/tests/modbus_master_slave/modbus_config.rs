@@ -16,11 +16,14 @@ pub async fn configure_master_mode<T: Expect>(
     log::info!("🧪 Configuring {session_name} as Modbus Master");
 
     let actions = vec![
+        // Create the station
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 2000 },
         // Ensure the station has created
         CursorAction::MatchPattern {
             pattern: Regex::new("#1")?,
             description: "Modbus entry created".to_string(),
-            line_range: Some((6, 6)),
+            line_range: None,
             col_range: None,
         },
         // Navigate to `Register Length` and set it to 12
@@ -90,24 +93,20 @@ pub async fn configure_slave_mode<T: Expect>(
             count: 1, // Select Slave
         },
         CursorAction::PressEnter,
+        // Create the station
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 1,
+        },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 2000 },
         // Ensure the station has created
         CursorAction::MatchPattern {
             pattern: Regex::new("#1")?,
             description: "Modbus entry created".to_string(),
-            line_range: Some((6, 6)),
+            line_range: None,
             col_range: None,
         },
-        // Navigate to `Mode` and set it to Slave
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::PressEnter,
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1, // Select Slave
-        },
-        CursorAction::PressEnter,
         // Navigate to `Register Length` and set it to 12
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
