@@ -138,7 +138,6 @@ fn commit_selector_edit(
     cursor: types::cursor::ModbusDashboardCursor,
     selected_index: usize,
 ) -> Result<()> {
-    log::info!("commit_selector_edit: cursor={cursor:?}, selected_index={selected_index}");
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -148,11 +147,9 @@ fn commit_selector_edit(
     })?;
 
     let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
-    log::info!("commit_selector_edit: selected_port={selected_port}, port_name={port_name_opt:?}");
 
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
-            log::info!("commit_selector_edit: Port found in map");
             match cursor {
                 types::cursor::ModbusDashboardCursor::ModbusMode => {
                     // Apply global mode changes to all stations in this port
@@ -161,16 +158,8 @@ fn commit_selector_edit(
                     } else {
                         ModbusConnectionMode::default_slave()
                     };
-                    log::info!(
-                        "commit_selector_edit: Changing to {:?} mode",
-                        if new_mode.is_master() {
-                            "Master"
-                        } else {
-                            "Slave"
-                        }
-                    );
 
-                    let result = with_port_write(&port, |port| {
+                    with_port_write(&port, |port| {
                         let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
                         *mode = new_mode.clone();
                         // Update all existing stations to match the new global mode
@@ -179,9 +168,6 @@ fn commit_selector_edit(
                         }
                         log::info!("Updated global connection mode to {:?}", mode.is_master());
                     });
-                    if result.is_none() {
-                        log::error!("commit_selector_edit: Failed to acquire write lock for port");
-                    }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                     // Apply register mode changes
