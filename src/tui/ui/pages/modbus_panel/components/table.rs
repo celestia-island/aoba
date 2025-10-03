@@ -22,9 +22,9 @@ pub fn get_registers_per_row(terminal_width: u16) -> usize {
     // Plus label space (~10 chars for "0x0000 ")
     const LABEL_WIDTH: u16 = 10;
     const REG_WIDTH: u16 = 7;
-    
+
     let available_width = terminal_width.saturating_sub(LABEL_WIDTH + 4); // 4 for margins
-    
+
     if available_width >= REG_WIDTH * 8 {
         8
     } else if available_width >= REG_WIDTH * 4 {

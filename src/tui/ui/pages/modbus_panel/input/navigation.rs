@@ -34,9 +34,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         }
                     } else {
                         // At the first register, jump to RegisterLength
-                        types::cursor::ModbusDashboardCursor::RegisterLength {
-                            index: slave_index,
-                        }
+                        types::cursor::ModbusDashboardCursor::RegisterLength { index: slave_index }
                     }
                 }
                 _ => current_cursor.prev(),
@@ -247,7 +245,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     })?;
 
                     let target_index = register_index + registers_per_row;
-                    
+
                     if target_index < max_register {
                         // Normal case: move down by registers_per_row
                         types::cursor::ModbusDashboardCursor::Register {

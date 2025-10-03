@@ -304,7 +304,9 @@ impl Cursor for ModbusDashboardCursor {
         // Walk items, accumulate heights until we reach the target
         for (idx, item) in items_vec.iter().enumerate() {
             let config_rows = 4usize; // Reduced by 1 since we removed individual ModbusMode
-            let reg_rows = (item.register_length as usize).div_ceil(registers_per_row).max(0usize);
+            let reg_rows = (item.register_length as usize)
+                .div_ceil(registers_per_row)
+                .max(0usize);
             let rows = 1 + config_rows + reg_rows;
 
             match self {
