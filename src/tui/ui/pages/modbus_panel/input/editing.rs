@@ -159,8 +159,12 @@ fn commit_selector_edit(
                 };
 
                 with_port_write(&port, |port| {
-                    let types::port::PortConfig::Modbus { mode, stations: _ } = &mut port.config;
-                    *mode = new_mode;
+                    let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                    *mode = new_mode.clone();
+                    // Update all existing stations to match the new global mode
+                    for station in stations.iter_mut() {
+                        station.connection_mode = new_mode.clone();
+                    }
                     log::info!("Updated global connection mode to {:?}", mode.is_master());
                 });
             }
