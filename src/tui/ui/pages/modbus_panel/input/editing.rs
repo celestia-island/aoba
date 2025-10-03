@@ -138,9 +138,7 @@ fn commit_selector_edit(
     cursor: types::cursor::ModbusDashboardCursor,
     selected_index: usize,
 ) -> Result<()> {
-    log::info!(
-        "commit_selector_edit: cursor={cursor:?}, selected_index={selected_index}"
-    );
+    log::info!("commit_selector_edit: cursor={cursor:?}, selected_index={selected_index}");
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -150,9 +148,7 @@ fn commit_selector_edit(
     })?;
 
     let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
-    log::info!(
-        "commit_selector_edit: selected_port={selected_port}, port_name={port_name_opt:?}"
-    );
+    log::info!("commit_selector_edit: selected_port={selected_port}, port_name={port_name_opt:?}");
 
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {

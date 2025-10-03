@@ -57,9 +57,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             write_status(|status| {
                 status.temporarily.input_raw_buffer =
                     types::ui::InputRawBuffer::Index(current_mode);
-                log::info!(
-                    "ModbusMode Enter: Set input_raw_buffer to Index({current_mode})"
-                );
+                log::info!("ModbusMode Enter: Set input_raw_buffer to Index({current_mode})");
                 Ok(())
             })?;
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
