@@ -120,12 +120,13 @@ pub fn render_register_row_line(
                                             if let Some(storage) = storage_opt {
                                                 if let Ok(context) = storage.lock() {
                                                     // Use the address as the register index
-                                                    let value =
-                                                        if item.register_mode == RegisterMode::Coils {
-                                                            context.get_coil(addr).unwrap_or(false)
-                                                        } else {
-                                                            context.get_discrete(addr).unwrap_or(false)
-                                                        };
+                                                    let value = if item.register_mode
+                                                        == RegisterMode::Coils
+                                                    {
+                                                        context.get_coil(addr).unwrap_or(false)
+                                                    } else {
+                                                        context.get_discrete(addr).unwrap_or(false)
+                                                    };
                                                     return Ok(value);
                                                 }
                                             }

@@ -17,7 +17,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
         }
     })?;
-    log::info!("handle_enter_action: current_cursor={:?}", current_cursor);
+    log::info!("handle_enter_action: current_cursor={current_cursor:?}");
 
     match current_cursor {
         types::cursor::ModbusDashboardCursor::AddLine => {
@@ -28,15 +28,15 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             // Toggle global mode for this port between Master and Slave
             let current_mode = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-                    log::info!("ModbusMode Enter: selected_port={}", selected_port);
+                    log::info!("ModbusMode Enter: selected_port={selected_port}");
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
-                        log::info!("ModbusMode Enter: port_name={}", port_name);
+                        log::info!("ModbusMode Enter: port_name={port_name}");
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             if let Ok(port_guard) = port_entry.read() {
                                 let types::port::PortConfig::Modbus { mode, stations: _ } =
                                     &port_guard.config;
                                 let mode_index = if mode.is_master() { 0 } else { 1 };
-                                log::info!("ModbusMode Enter: current mode index={}", mode_index);
+                                log::info!("ModbusMode Enter: current mode index={mode_index}");
                                 return Ok(mode_index);
                             } else {
                                 log::warn!("ModbusMode Enter: Failed to acquire read lock");
@@ -45,7 +45,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                             log::warn!("ModbusMode Enter: Port not found in map");
                         }
                     } else {
-                        log::warn!("ModbusMode Enter: Port not found in order at index {}", selected_port);
+                        log::warn!(
+                            "ModbusMode Enter: Port not found in order at index {selected_port}"
+                        );
                     }
                 }
                 log::info!("ModbusMode Enter: Falling back to default Master mode");
@@ -55,7 +57,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             write_status(|status| {
                 status.temporarily.input_raw_buffer =
                     types::ui::InputRawBuffer::Index(current_mode);
-                log::info!("ModbusMode Enter: Set input_raw_buffer to Index({})", current_mode);
+                log::info!(
+                    "ModbusMode Enter: Set input_raw_buffer to Index({current_mode})"
+                );
                 Ok(())
             })?;
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
@@ -245,7 +249,10 @@ fn create_new_modbus_entry() -> Result<()> {
                     pending_requests: Vec::new(),
                 };
                 stations.push(new_entry);
-                log::info!("Created new modbus entry with station_id=1 in {:?} mode", if mode.is_master() { "Master" } else { "Slave" });
+                log::info!(
+                    "Created new modbus entry with station_id=1 in {:?} mode",
+                    if mode.is_master() { "Master" } else { "Slave" }
+                );
             });
         }
     }
