@@ -64,29 +64,38 @@ pub async fn configure_master_mode<T: Expect>(
         }))
         .collect::<Vec<_>>();
 
-    // Verify register values row by row
-    // Row 1: registers 0-7 (values: 0, 11, 22, 33, 44, 55, 66, 77)
+    // Verify register values row by row (4 registers per row for 80-column terminals)
+    // Row 1: registers 0-3 (values: 0, 11, 22, 33)
     let actions = actions
         .into_iter()
         .chain(vec![
             CursorAction::Sleep { ms: 500 },
             CursorAction::MatchPattern {
-                pattern: Regex::new(
-                    r"0x0000.*0x000B.*0x0016.*0x0021.*0x002C.*0x0037.*0x0042.*0x004D",
-                )?,
-                description: "Row 1: registers 0-7 values verified".to_string(),
+                pattern: Regex::new(r"0x0000.*0x000B.*0x0016.*0x0021")?,
+                description: "Row 1: registers 0-3 values verified".to_string(),
                 line_range: None,
                 col_range: None,
             },
         ])
         .collect::<Vec<_>>();
 
-    // Row 2: registers 8-11 (values: 88, 99, 110, 121)
+    // Row 2: registers 4-7 (values: 44, 55, 66, 77)
+    let actions = actions
+        .into_iter()
+        .chain(vec![CursorAction::MatchPattern {
+            pattern: Regex::new(r"0x0004.*0x002C.*0x0037.*0x0042.*0x004D")?,
+            description: "Row 2: registers 4-7 values verified".to_string(),
+            line_range: None,
+            col_range: None,
+        }])
+        .collect::<Vec<_>>();
+
+    // Row 3: registers 8-11 (values: 88, 99, 110, 121)
     let actions = actions
         .into_iter()
         .chain(vec![CursorAction::MatchPattern {
             pattern: Regex::new(r"0x0008.*0x0058.*0x0063.*0x006E")?,
-            description: "Row 2: registers 8-11 values verified".to_string(),
+            description: "Row 3: registers 8-11 values verified".to_string(),
             line_range: None,
             col_range: None,
         }])

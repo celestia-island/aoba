@@ -286,7 +286,8 @@ impl Cursor for ModbusDashboardCursor {
     fn view_offset(&self) -> usize {
         // Compute the visual row offset for the cursor. Visual layout has top three rows
         // reserved (Add line, Global mode, and blank), then each block consumes 1 (title) + N value rows
-        // where N = ceil(length/8).
+        // where N = ceil(length/registers_per_row). Using 4 registers per row for 80-column terminals.
+        let registers_per_row = 4;
         let mut offset = 0usize;
         // Start with top three rows
         offset += 3;
@@ -303,7 +304,7 @@ impl Cursor for ModbusDashboardCursor {
         // Walk items, accumulate heights until we reach the target
         for (idx, item) in items_vec.iter().enumerate() {
             let config_rows = 4usize; // Reduced by 1 since we removed individual ModbusMode
-            let reg_rows = (item.register_length as usize).div_ceil(8).max(0usize);
+            let reg_rows = (item.register_length as usize).div_ceil(registers_per_row).max(0usize);
             let rows = 1 + config_rows + reg_rows;
 
             match self {
@@ -323,7 +324,7 @@ impl Cursor for ModbusDashboardCursor {
                     slave_index,
                     register_index,
                 } if *slave_index == idx => {
-                    let cell_row = register_index / 8;
+                    let cell_row = register_index / registers_per_row;
                     return offset + 1 + config_rows + cell_row;
                 }
                 _ => {

@@ -33,7 +33,10 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             register_index: register_index - 1,
                         }
                     } else {
-                        current_cursor.prev()
+                        // At the first register, jump to RegisterLength
+                        types::cursor::ModbusDashboardCursor::RegisterLength {
+                            index: slave_index,
+                        }
                     }
                 }
                 _ => current_cursor.prev(),
@@ -70,8 +73,8 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     slave_index,
                     register_index,
                 } => {
-                    // Get register length to check bounds
-                    let max_register = read_status(|status| {
+                    // Get register length and check if there's a next station
+                    let (max_register, has_next_station) = read_status(|status| {
                         let port_name_opt = match &status.page {
                             types::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
@@ -85,12 +88,13 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                         &port_guard.config;
                                     let all_items: Vec<_> = stations.iter().collect();
                                     if let Some(item) = all_items.get(slave_index) {
-                                        return Ok(item.register_length as usize);
+                                        let has_next = slave_index + 1 < all_items.len();
+                                        return Ok((item.register_length as usize, has_next));
                                     }
                                 }
                             }
                         }
-                        Ok(0)
+                        Ok((0, false))
                     })?;
 
                     if register_index + 1 < max_register {
@@ -98,8 +102,15 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             slave_index,
                             register_index: register_index + 1,
                         }
+                    } else if has_next_station {
+                        // Jump to next station's first register
+                        types::cursor::ModbusDashboardCursor::Register {
+                            slave_index: slave_index + 1,
+                            register_index: 0,
+                        }
                     } else {
-                        current_cursor.next()
+                        // Stay at current position
+                        current_cursor
                     }
                 }
                 _ => current_cursor.next(),
@@ -127,17 +138,17 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
-            // Handle vertical navigation for register table with 8-register row alignment
+            // Handle vertical navigation for register table with dynamic registers per row
             let new_cursor = match current_cursor {
                 types::cursor::ModbusDashboardCursor::Register {
                     slave_index,
                     register_index,
                 } => {
-                    let col = register_index % 8;
-                    let row = register_index / 8;
+                    // Use 4 registers per row for 80-column terminals
+                    let registers_per_row = 4;
 
-                    // Get register info
-                    let (max_register, register_start) = read_status(|status| {
+                    // Get register length
+                    let _max_register = read_status(|status| {
                         let port_name_opt = match &status.page {
                             types::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
@@ -151,50 +162,29 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                         &port_guard.config;
                                     let all_items: Vec<_> = stations.iter().collect();
                                     if let Some(item) = all_items.get(slave_index) {
-                                        return Ok((
-                                            item.register_length as usize,
-                                            item.register_address,
-                                        ));
+                                        return Ok(item.register_length as usize);
                                     }
                                 }
                             }
                         }
-                        Ok((0, 0))
+                        Ok(0)
                     })?;
 
-                    if row > 0 {
-                        // Try to move up one row, same column
-                        let target_index = (row - 1) * 8 + col;
-
-                        // Check if the target position has a valid register
-                        let target_address = register_start + target_index as u16;
-                        let first_valid_address = register_start;
-                        let last_valid_address = register_start + max_register as u16 - 1;
-
-                        if target_address >= first_valid_address
-                            && target_address <= last_valid_address
-                        {
-                            // Valid register at target position
-                            types::cursor::ModbusDashboardCursor::Register {
-                                slave_index,
-                                register_index: target_index,
-                            }
-                        } else {
-                            // Edge case: target position is invalid (would be underscore)
-                            // Jump to first valid register in that row (leftmost valid position)
-                            let row_start_index = (row - 1) * 8;
-                            let first_valid_in_row = if row_start_index < max_register {
-                                row_start_index
-                            } else {
-                                0 // fallback to first register
-                            };
-                            types::cursor::ModbusDashboardCursor::Register {
-                                slave_index,
-                                register_index: first_valid_in_row,
-                            }
+                    if register_index >= registers_per_row {
+                        // Move up by registers_per_row
+                        let target_index = register_index.saturating_sub(registers_per_row);
+                        types::cursor::ModbusDashboardCursor::Register {
+                            slave_index,
+                            register_index: target_index,
+                        }
+                    } else if register_index > 0 {
+                        // In first row but not at index 0, jump to first register
+                        types::cursor::ModbusDashboardCursor::Register {
+                            slave_index,
+                            register_index: 0,
                         }
                     } else {
-                        // At top row, jump to register length field (previous config item)
+                        // At first register, jump to RegisterLength
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: slave_index }
                     }
                 }
@@ -229,11 +219,11 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     slave_index,
                     register_index,
                 } => {
-                    let col = register_index % 8;
-                    let row = register_index / 8;
+                    // Use 4 registers per row for 80-column terminals
+                    let registers_per_row = 4;
 
-                    // Get register info and next slave info
-                    let (max_register, _register_start, has_next_slave) = read_status(|status| {
+                    // Get register length and check if there's a next station
+                    let (max_register, has_next_slave) = read_status(|status| {
                         let port_name_opt = match &status.page {
                             types::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
@@ -248,53 +238,40 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                     let all_items: Vec<_> = stations.iter().collect();
                                     if let Some(item) = all_items.get(slave_index) {
                                         let has_next = slave_index + 1 < all_items.len();
-                                        return Ok((
-                                            item.register_length as usize,
-                                            item.register_address,
-                                            has_next,
-                                        ));
+                                        return Ok((item.register_length as usize, has_next));
                                     }
                                 }
                             }
                         }
-                        Ok((0, 0, false))
+                        Ok((0, false))
                     })?;
 
-                    let max_row = max_register.div_ceil(8);
-                    let target_index = (row + 1) * 8 + col;
-
+                    let target_index = register_index + registers_per_row;
+                    
                     if target_index < max_register {
-                        // Normal case: move down one row, same column
+                        // Normal case: move down by registers_per_row
                         types::cursor::ModbusDashboardCursor::Register {
                             slave_index,
                             register_index: target_index,
                         }
-                    } else if row + 1 < max_row {
-                        // Edge case: would move to invalid position in next row
-                        // Jump to rightmost valid register (register_length - 1)
-                        let last_valid_index = max_register - 1;
+                    } else if register_index < max_register - 1 {
+                        // Target goes beyond, but not at last register yet
+                        // Jump to last register
                         types::cursor::ModbusDashboardCursor::Register {
                             slave_index,
-                            register_index: last_valid_index,
+                            register_index: max_register - 1,
                         }
                     } else {
-                        // At bottom row of current slave
+                        // At last register
                         if has_next_slave {
-                            // Jump to station ID of next slave
-                            types::cursor::ModbusDashboardCursor::StationId {
-                                index: slave_index + 1,
+                            // Jump to next station's first register
+                            types::cursor::ModbusDashboardCursor::Register {
+                                slave_index: slave_index + 1,
+                                register_index: 0,
                             }
                         } else {
-                            // Jump to last valid register in current slave
-                            let last_valid_index = if max_register > 0 {
-                                max_register - 1
-                            } else {
-                                0
-                            };
-                            types::cursor::ModbusDashboardCursor::Register {
-                                slave_index,
-                                register_index: last_valid_index,
-                            }
+                            // Stay at last register
+                            current_cursor
                         }
                     }
                 }
