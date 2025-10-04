@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rmodbus::{server::ModbusFrame, ModbusProto};
+use rmodbus::{server::{context::ModbusContext, ModbusFrame}, ModbusProto};
 
 use crate::protocol::{
     modbus::*,
@@ -374,24 +374,130 @@ pub fn handle_master_query_mode(
                     with_port_read(port_arc, |port| port.last_modbus_request.clone())
                         .and_then(|x| x); // Flatten Option<Option<...>> to Option<...>
 
-                // Get storage from global mode
-                let storage_opt = match global_mode {
+                // Get storage and current station info from global mode
+                let (storage_opt, station_info_opt) = match global_mode {
                     types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
-                        Some(storage.clone())
+                        // Get the station info for the current request
+                        let station_opt = with_port_read(port_arc, |port| {
+                            let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+                            // Find station that has a pending request (last_request_time is set)
+                            stations
+                                .iter()
+                                .find(|s| s.last_request_time.is_some())
+                                .map(|s| (s.register_mode, s.register_address, s.register_length))
+                        })
+                        .and_then(|x| x);
+                        (Some(storage.clone()), station_opt)
                     }
-                    _ => None,
+                    _ => (None, None),
                 };
 
                 // Parse and update storage if available
-                if let (Some(storage), Some(request_arc)) = (storage_opt, request_arc_opt) {
-                    if let Ok(request) = request_arc.lock() {
+                if let (Some(storage), Some(request_arc), Some((register_mode, start_address, length))) =
+                    (storage_opt, request_arc_opt, station_info_opt)
+                {
+                    if let Ok(mut request) = request_arc.lock() {
                         if request.parse_ok(&frame).is_ok() {
-                            // Successfully parsed response
-                            if let Ok(_context) = storage.lock() {
-                                // For now, just log that we received a valid response
-                                log::debug!(
-                                    "Successfully parsed response and would update storage"
-                                );
+                            // Successfully parsed response - now update storage with the values
+                            if let Ok(mut context) = storage.lock() {
+                                match register_mode {
+                                    types::modbus::RegisterMode::Holding => {
+                                        // Parse holding register values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_holdings(
+                                                &mut request,
+                                                frame.to_vec(),
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr = start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_holding(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set holding register at {addr}: {e}"
+                                                    );
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} holding registers starting at address {start_address}: {:?}",
+                                                values.len(),
+                                                values
+                                            );
+                                        }
+                                    }
+                                    types::modbus::RegisterMode::Input => {
+                                        // Parse input register values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_inputs(
+                                                &mut request,
+                                                frame.to_vec(),
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr = start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_input(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set input register at {addr}: {e}"
+                                                    );
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} input registers starting at address {start_address}: {:?}",
+                                                values.len(),
+                                                values
+                                            );
+                                        }
+                                    }
+                                    types::modbus::RegisterMode::Coils => {
+                                        // Parse coil values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_coils(
+                                                &mut request,
+                                                frame.to_vec(),
+                                                length,
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr = start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_coil(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set coil at {addr}: {e}"
+                                                    );
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} coils starting at address {start_address}",
+                                                values.len()
+                                            );
+                                        }
+                                    }
+                                    types::modbus::RegisterMode::DiscreteInputs => {
+                                        // Parse discrete input values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_discrete_inputs(
+                                                &mut request,
+                                                frame.to_vec(),
+                                                length,
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr = start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_discrete(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set discrete input at {addr}: {e}"
+                                                    );
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} discrete inputs starting at address {start_address}",
+                                                values.len()
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
