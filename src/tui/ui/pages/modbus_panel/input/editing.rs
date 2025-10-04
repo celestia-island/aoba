@@ -315,16 +315,41 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                             ModbusConnectionMode::Slave { storage: _, .. } => {
                                                 // Slave mode: Queue a write request to be sent to the master
                                                 // The pending request will be sent in the next poll cycle
-                                                // For now, just log the intent - actual implementation would
-                                                // queue a write command using set_holding/set_coil requests
-                                                log::info!(
-                                                    "📤 Slave: Queued write request for register 0x{:04X} = 0x{:04X} (will be sent to master)",
-                                                    register_addr,
-                                                    register_value
-                                                );
-                                                // TODO: Implement actual Modbus write request queuing
-                                                // This would use generate_pull_set_holding_request or generate_pull_set_coils_request
-                                                // and add the request to a pending_write_requests queue in the station config
+                                                use crate::protocol::modbus::generate_pull_set_holding_request;
+                                                
+                                                match item.register_mode {
+                                                    RegisterMode::Holding => {
+                                                        // Generate a Modbus write request frame
+                                                        if let Ok((_request, raw_frame)) = generate_pull_set_holding_request(
+                                                            item.station_id,
+                                                            register_addr,
+                                                            register_value,
+                                                        ) {
+                                                            // Add the frame to pending requests
+                                                            item.pending_requests.extend_from_slice(&raw_frame);
+                                                            log::info!(
+                                                                "📤 Slave: Queued write request for holding register 0x{:04X} = 0x{:04X} ({} bytes)",
+                                                                register_addr,
+                                                                register_value,
+                                                                raw_frame.len()
+                                                            );
+                                                        } else {
+                                                            log::warn!("Failed to generate write request for holding register");
+                                                        }
+                                                    }
+                                                    RegisterMode::Coils => {
+                                                        // For coils, we need to use the coil write function
+                                                        // For now, log that this needs implementation
+                                                        log::info!(
+                                                            "📤 Slave: Coil write request for 0x{:04X} = {} (coil writes need set_coils_bulk implementation)",
+                                                            register_addr,
+                                                            register_value != 0
+                                                        );
+                                                    }
+                                                    _ => {
+                                                        log::warn!("Cannot write to read-only register type: {:?}", item.register_mode);
+                                                    }
+                                                }
                                             }
                                         }
                                     }

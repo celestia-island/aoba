@@ -252,16 +252,47 @@ pub fn handle_master_query_mode(
             }
 
             if should_send {
-                match generate_modbus_request_with_cache(station, port_arc) {
-                    Ok(request_bytes) => {
-                        // Try to send the request
-                        if let Err(e) =
-                            runtime
-                                .cmd_tx
-                                .send(crate::protocol::runtime::RuntimeCommand::Write(
-                                    request_bytes.clone(),
-                                ))
-                        {
+                // First, check if there are any pending write requests to process
+                let pending_request: Option<Vec<u8>> = with_port_write(port_arc, |port| {
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
+                    if let Some(station_mut) = stations.get_mut(current_index) {
+                        if !station_mut.pending_requests.is_empty() {
+                            // Extract the pending request bytes and clear the queue
+                            let request_bytes = station_mut.pending_requests.clone();
+                            station_mut.pending_requests.clear();
+                            log::info!(
+                                "📤 Sending pending write request for station {} ({} bytes)",
+                                station_mut.station_id,
+                                request_bytes.len()
+                            );
+                            return request_bytes;
+                        }
+                    }
+                    vec![] // Return empty vec if no pending requests
+                }).and_then(|v| if v.is_empty() { None } else { Some(v) });
+
+                // Determine which request to send: pending write or regular read
+                let request_bytes = if let Some(write_req) = pending_request {
+                    write_req
+                } else {
+                    // No pending write, generate regular read request
+                    match generate_modbus_request_with_cache(station, port_arc) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            log::warn!("Failed to generate modbus request: {e}");
+                            return Ok(());
+                        }
+                    }
+                };
+
+                // Try to send the request (write or read)
+                if let Err(e) =
+                    runtime
+                        .cmd_tx
+                        .send(crate::protocol::runtime::RuntimeCommand::Write(
+                            request_bytes.clone(),
+                        ))
+                {
                             let warn_msg = format!(
                                 "Failed to send modbus slave request for {port_name} station {}: {e}",
                                 station.station_id
@@ -337,14 +368,6 @@ pub fn handle_master_query_mode(
                                 station.station_id
                             );
                         }
-                    }
-                    Err(e) => {
-                        log::warn!(
-                            "Failed to generate modbus slave request for {port_name} station {}: {e}",
-                            station.station_id
-                        );
-                    }
-                }
             }
         }
     } else {

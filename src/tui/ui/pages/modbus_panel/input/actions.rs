@@ -160,17 +160,40 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     }
                                                 }
                                                 types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
-                                                    // Slave mode: Read current value for display, queue write request
+                                                    // Slave mode: Queue a write request for the coil
                                                     if let Ok(context) = storage.lock() {
                                                         let current = context.get_coil(register_addr).unwrap_or(false);
                                                         let new_value = !current;
-                                                        log::info!(
-                                                            "📤 Slave: Queued toggle coil 0x{:04X} from {} to {} (will be sent to master)",
+                                                        
+                                                        // For single coil write, we use function 0x05 (Write Single Coil)
+                                                        // Generate the Modbus frame for single coil write
+                                                        use crate::protocol::modbus::generate_pull_set_holding_request;
+                                                        
+                                                        // Single coil write uses value 0xFF00 for ON, 0x0000 for OFF
+                                                        let coil_value = if new_value { 0xFF00 } else { 0x0000 };
+                                                        
+                                                        if let Ok((_request, raw_frame)) = generate_pull_set_holding_request(
+                                                            item.station_id,
                                                             register_addr,
-                                                            current,
-                                                            new_value
-                                                        );
-                                                        // TODO: Queue actual write request to master
+                                                            coil_value,
+                                                        ) {
+                                                            // Modify the function code to 0x05 (Write Single Coil)
+                                                            let mut frame = raw_frame;
+                                                            if frame.len() > 1 {
+                                                                frame[1] = 0x05; // Change function code from 0x06 to 0x05
+                                                            }
+                                                            
+                                                            item.pending_requests.extend_from_slice(&frame);
+                                                            log::info!(
+                                                                "📤 Slave: Queued toggle coil 0x{:04X} from {} to {} ({} bytes)",
+                                                                register_addr,
+                                                                current,
+                                                                new_value,
+                                                                frame.len()
+                                                            );
+                                                        } else {
+                                                            log::warn!("Failed to generate coil write request");
+                                                        }
                                                     }
                                                 }
                                             }
