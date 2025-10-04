@@ -15,14 +15,34 @@ use crate::{
     },
 };
 
-/// Create a register row line that displays 8 registers per line.
-/// row_base is the absolute address of the first slot in this row (i.e. multiple of 8).
+/// Determine the number of registers to display per row based on terminal width.
+/// Returns 1, 4, or 8 depending on available space.
+pub fn get_registers_per_row(terminal_width: u16) -> usize {
+    // Each register needs approximately 7 characters (6 for "0x0000" + 1 space)
+    // Plus label space (~10 chars for "0x0000 ")
+    const LABEL_WIDTH: u16 = 10;
+    const REG_WIDTH: u16 = 7;
+
+    let available_width = terminal_width.saturating_sub(LABEL_WIDTH + 4); // 4 for margins
+
+    if available_width >= REG_WIDTH * 8 {
+        8
+    } else if available_width >= REG_WIDTH * 4 {
+        4
+    } else {
+        1
+    }
+}
+
+/// Create a register row line that displays registers per line based on terminal width.
+/// row_base is the absolute address of the first slot in this row (aligned to registers_per_row).
 pub fn render_register_row_line(
     label: &str,
     slave_index: usize,
     row_base: u16,
     item: &crate::protocol::status::types::modbus::ModbusRegisterItem,
     current_selection: types::cursor::ModbusDashboardCursor,
+    registers_per_row: usize,
 ) -> Result<Line<'static>> {
     let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
     let row_selected = if let types::cursor::ModbusDashboardCursor::Register {
@@ -32,7 +52,7 @@ pub fn render_register_row_line(
     {
         if si == slave_index {
             let sel_addr = item.register_address + (ri as u16);
-            sel_addr >= row_base && sel_addr < row_base + 8
+            sel_addr >= row_base && sel_addr < row_base + (registers_per_row as u16)
         } else {
             false
         }
@@ -56,15 +76,12 @@ pub fn render_register_row_line(
         const SWITCH_COL_TOTAL_WIDTH: usize = 4;
         const NUMERIC_COL_TOTAL_WIDTH: usize = 6;
 
-        let mut col_widths: [usize; 8] = [0; 8];
-        for col_width in col_widths.iter_mut() {
-            *col_width = match item.register_mode {
-                RegisterMode::Coils | RegisterMode::DiscreteInputs => SWITCH_COL_TOTAL_WIDTH,
-                RegisterMode::Holding | RegisterMode::Input => NUMERIC_COL_TOTAL_WIDTH,
-            };
-        }
+        let col_width_value = match item.register_mode {
+            RegisterMode::Coils | RegisterMode::DiscreteInputs => SWITCH_COL_TOTAL_WIDTH,
+            RegisterMode::Holding | RegisterMode::Input => NUMERIC_COL_TOTAL_WIDTH,
+        };
 
-        for (slot, _) in col_widths.iter().enumerate() {
+        for slot in 0..registers_per_row {
             let addr = row_start + slot as u16;
             let item_start = item.register_address;
             let item_end = item_start + item.register_length;
@@ -74,7 +91,7 @@ pub fn render_register_row_line(
             }
 
             if addr >= item_start && addr < item_end {
-                let reg_index = (addr - item_start) as usize;
+                let _reg_index = (addr - item_start) as usize;
 
                 let slot_selected = if let types::cursor::ModbusDashboardCursor::Register {
                     slave_index: si,
@@ -102,38 +119,40 @@ pub fn render_register_row_line(
                         let is_on = read_status(|status| {
                             if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
                             {
-                                let port_name = format!("COM{}", selected_port + 1);
-                                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                    if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode, .. } =
-                                            &port_guard.config;
-                                        let storage_opt = match mode {
-                                            types::modbus::ModbusConnectionMode::Master {
-                                                storage,
-                                            } => Some(storage.clone()),
-                                            types::modbus::ModbusConnectionMode::Slave {
-                                                storage,
-                                                ..
-                                            } => Some(storage.clone()),
-                                        };
+                                if let Some(port_name) = status.ports.order.get(*selected_port) {
+                                    if let Some(port_entry) = status.ports.map.get(port_name) {
+                                        if let Ok(port_guard) = port_entry.read() {
+                                            let types::port::PortConfig::Modbus { mode, .. } =
+                                                &port_guard.config;
+                                            let storage_opt = match mode {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => Some(storage.clone()),
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => Some(storage.clone()),
+                                            };
 
-                                        if let Some(storage) = storage_opt {
-                                            if let Ok(context) = storage.lock() {
-                                                // Use the address as the register index
-                                                let value =
-                                                    if item.register_mode == RegisterMode::Coils {
+                                            if let Some(storage) = storage_opt {
+                                                if let Ok(context) = storage.lock() {
+                                                    // Use the address as the register index
+                                                    let value = if item.register_mode
+                                                        == RegisterMode::Coils
+                                                    {
                                                         context.get_coil(addr).unwrap_or(false)
                                                     } else {
                                                         context.get_discrete(addr).unwrap_or(false)
                                                     };
-                                                return Ok(value);
+                                                    return Ok(value);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                            // Fallback to placeholder logic
-                            Ok(reg_index.is_multiple_of(2))
+                            // Default to false (OFF) when storage not available
+                            Ok(false)
                         })?;
                         switch_spans(is_on, "ON", "OFF", state)?
                     }
@@ -142,39 +161,40 @@ pub fn render_register_row_line(
                         let current_value = read_status(|status| {
                             if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
                             {
-                                let port_name = format!("COM{}", selected_port + 1);
-                                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                    if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode, .. } =
-                                            &port_guard.config;
-                                        let storage_opt = match mode {
-                                            types::modbus::ModbusConnectionMode::Master {
-                                                storage,
-                                            } => Some(storage.clone()),
-                                            types::modbus::ModbusConnectionMode::Slave {
-                                                storage,
-                                                ..
-                                            } => Some(storage.clone()),
-                                        };
+                                if let Some(port_name) = status.ports.order.get(*selected_port) {
+                                    if let Some(port_entry) = status.ports.map.get(port_name) {
+                                        if let Ok(port_guard) = port_entry.read() {
+                                            let types::port::PortConfig::Modbus { mode, .. } =
+                                                &port_guard.config;
+                                            let storage_opt = match mode {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => Some(storage.clone()),
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => Some(storage.clone()),
+                                            };
 
-                                        if let Some(storage) = storage_opt {
-                                            if let Ok(context) = storage.lock() {
-                                                // Use the address as the register index
-                                                let value = if item.register_mode
-                                                    == RegisterMode::Holding
-                                                {
-                                                    context.get_holding(addr).unwrap_or(0)
-                                                } else {
-                                                    context.get_input(addr).unwrap_or(0)
-                                                };
-                                                return Ok(value);
+                                            if let Some(storage) = storage_opt {
+                                                if let Ok(context) = storage.lock() {
+                                                    // Use the address as the register index
+                                                    let value = if item.register_mode
+                                                        == RegisterMode::Holding
+                                                    {
+                                                        context.get_holding(addr).unwrap_or(0)
+                                                    } else {
+                                                        context.get_input(addr).unwrap_or(0)
+                                                    };
+                                                    return Ok(value);
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                            // Fallback to placeholder logic
-                            Ok((reg_index * 10) as u16)
+                            // Default to 0 when storage not available
+                            Ok(0)
                         })?;
                         let hex_str = format!("0x{current_value:04X}");
                         input_spans(hex_str.clone(), state)?
@@ -185,12 +205,11 @@ pub fn render_register_row_line(
 
                 let cell_text: String = cell_spans.iter().map(|s| s.to_string()).collect();
                 let cell_width = UnicodeWidthStr::width(cell_text.as_str());
-                let target = col_widths[slot];
-                if cell_width < target {
-                    spans.push(Span::raw(" ".repeat(target - cell_width)));
+                if cell_width < col_width_value {
+                    spans.push(Span::raw(" ".repeat(col_width_value - cell_width)));
                 }
             } else {
-                let placeholder = "_".repeat(col_widths[slot]);
+                let placeholder = "_".repeat(col_width_value);
                 spans.push(Span::styled(
                     placeholder,
                     Style::default().fg(Color::DarkGray),

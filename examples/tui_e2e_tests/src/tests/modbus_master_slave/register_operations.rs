@@ -49,8 +49,8 @@ pub async fn verify_slave_registers<T: Expect>(
     log::info!("📸 Captured screen for verification:");
     log::info!("{screen}");
 
-    // Expected register values: 0, 11, 22, 33, 44, 55, 66, 77, 88, 99, 110
-    let expected_values = (0..12).map(|i| i * 11).collect::<Vec<u16>>();
+    // Expected register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
+    let expected_values = (0..12).map(|i| i * 10).collect::<Vec<u16>>();
 
     log::info!("🔍 Expected register values: {expected_values:?}");
 

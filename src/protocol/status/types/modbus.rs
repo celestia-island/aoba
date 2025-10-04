@@ -1,4 +1,3 @@
-use rmodbus::server::context::ModbusContext;
 use std::sync::{Arc, Mutex};
 use strum::{EnumIter, FromRepr};
 
@@ -29,16 +28,6 @@ impl ModbusConnectionMode {
         let storage = Arc::new(Mutex::new(
             rmodbus::server::storage::ModbusStorageSmall::new(),
         ));
-
-        // Initialize with some example values for demonstration
-        if let Ok(mut context) = storage.lock() {
-            for i in 0..100 {
-                let _ = context.set_coil(i, i % 2 == 0);
-                let _ = context.set_discrete(i, i % 3 == 0);
-                let _ = context.set_holding(i, i * 10);
-                let _ = context.set_input(i, i * 20);
-            }
-        }
 
         ModbusConnectionMode::Master { storage }
     }

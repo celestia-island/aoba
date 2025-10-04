@@ -28,12 +28,12 @@ pub async fn test_modbus_master_slave_communication() -> Result<()> {
 
     sleep_a_while().await;
 
-    // Navigate to ports
+    // Navigate vcom1
     port_navigation::navigate_to_vcom1(&mut master_session, &mut master_cap, "master").await?;
-    port_navigation::navigate_to_vcom2(&mut slave_session, &mut slave_cap, "slave").await?;
-
-    // Navigate to Modbus panel and configure modes
     modbus_config::configure_master_mode(&mut master_session, &mut master_cap, "master").await?;
+
+    // Navigate vcom2
+    port_navigation::navigate_to_vcom2(&mut slave_session, &mut slave_cap, "slave").await?;
     modbus_config::configure_slave_mode(&mut slave_session, &mut slave_cap, "slave").await?;
 
     // Verify slave registers match master values
