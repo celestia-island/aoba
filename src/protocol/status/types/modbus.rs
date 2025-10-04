@@ -30,15 +30,8 @@ impl ModbusConnectionMode {
             rmodbus::server::storage::ModbusStorageSmall::new(),
         ));
 
-        // Initialize with some example values for demonstration
-        if let Ok(mut context) = storage.lock() {
-            for i in 0..100 {
-                let _ = context.set_coil(i, i % 2 == 0);
-                let _ = context.set_discrete(i, i % 3 == 0);
-                let _ = context.set_holding(i, i * 10);
-                let _ = context.set_input(i, i * 20);
-            }
-        }
+        // Storage initialized with all zeros by default (no pre-filled values)
+        // Users can set register values as needed after station creation
 
         ModbusConnectionMode::Master { storage }
     }
