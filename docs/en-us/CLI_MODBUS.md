@@ -13,6 +13,7 @@ aoba --list-ports --json
 ```
 
 Output includes:
+
 - `path`: Port path (e.g., COM1, /dev/ttyUSB0)
 - `status`: "Free" or "Occupied"
 - `guid`: Windows device GUID (if available)
@@ -21,6 +22,7 @@ Output includes:
 - `serial`: Serial number (if available)
 
 Example output:
+
 ```json
 [
   {
@@ -36,6 +38,7 @@ Example output:
 ### 2. Slave Listen Modes
 
 #### Temporary Mode
+
 Listen for one Modbus request, respond, and exit:
 
 ```bash
@@ -50,6 +53,7 @@ aoba --slave-listen /dev/ttyUSB0 \
 Outputs a single JSON response and exits.
 
 #### Persistent Mode
+
 Continuously listen for requests and output JSONL:
 
 ```bash
@@ -66,6 +70,7 @@ Outputs one JSON line per request processed.
 ### 3. Master Provide Modes
 
 #### Temporary Mode
+
 Provide data once and exit:
 
 ```bash
@@ -81,6 +86,7 @@ aoba --master-provide /dev/ttyUSB0 \
 Reads one line from the data source, sends it, and exits.
 
 #### Persistent Mode
+
 Continuously provide data:
 
 ```bash
@@ -127,14 +133,15 @@ Each line represents an update to be sent to the slave.
 
 ## Integration Tests
 
-Integration tests are available in `examples/cli_integration_tests/`. Run them with:
+Integration tests are available in `examples/cli_e2e_tests/`. Run them with:
 
 ```bash
-cd examples/cli_integration_tests
+cd examples/cli_e2e_tests
 cargo run
 ```
 
 Tests verify:
+
 - Enhanced port listing with status
 - Slave listen temporary mode
 - Slave listen persistent mode

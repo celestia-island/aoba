@@ -13,6 +13,7 @@ aoba --list-ports --json
 ```
 
 输出包括：
+
 - `path`: 端口路径（例如 COM1, /dev/ttyUSB0）
 - `status`: "Free"（空闲）或 "Occupied"（占用）
 - `guid`: Windows 设备 GUID（如果可用）
@@ -21,6 +22,7 @@ aoba --list-ports --json
 - `serial`: 序列号（如果可用）
 
 示例输出：
+
 ```json
 [
   {
@@ -36,6 +38,7 @@ aoba --list-ports --json
 ### 2. 从站监听模式
 
 #### 临时模式
+
 监听一个 Modbus 请求，响应后退出：
 
 ```bash
@@ -50,6 +53,7 @@ aoba --slave-listen /dev/ttyUSB0 \
 输出单个 JSON 响应后退出。
 
 #### 常驻模式
+
 持续监听请求并输出 JSONL：
 
 ```bash
@@ -66,6 +70,7 @@ aoba --slave-listen-persist /dev/ttyUSB0 \
 ### 3. 主站提供模式
 
 #### 临时模式
+
 提供一次数据后退出：
 
 ```bash
@@ -81,6 +86,7 @@ aoba --master-provide /dev/ttyUSB0 \
 从数据源读取一行，发送数据后退出。
 
 #### 常驻模式
+
 持续提供数据：
 
 ```bash
@@ -127,14 +133,15 @@ aoba --master-provide-persist /dev/ttyUSB0 \
 
 ## 集成测试
 
-集成测试位于 `examples/cli_integration_tests/`。运行测试：
+集成测试位于 `examples/cli_e2e_tests/`。运行测试：
 
 ```bash
-cd examples/cli_integration_tests
+cd examples/cli_e2e_tests
 cargo run
 ```
 
 测试验证：
+
 - 带状态的增强端口列表
 - 从站临时监听模式
 - 从站常驻监听模式

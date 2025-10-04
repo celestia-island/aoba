@@ -8,7 +8,7 @@ use std::time::Duration;
 /// Test master-slave communication with virtual serial ports
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
-    
+
     // Wait longer to ensure previous tests have fully released ports
     thread::sleep(Duration::from_secs(2));
 
@@ -106,7 +106,7 @@ pub fn test_master_slave_communication() -> Result<()> {
     // Kill master process and wait for it to fully exit
     let _ = master.kill();
     let _ = master.wait();
-    
+
     // Give extra time for ports to be fully released
     thread::sleep(Duration::from_secs(1));
 
@@ -175,10 +175,10 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
             let _ = child.wait();
 
             log::info!("✅ Slave listen command accepted with virtual ports");
-            
+
             // Give extra time for port to be fully released
             thread::sleep(Duration::from_secs(1));
-            
+
             Ok(())
         }
         Err(e) => {
@@ -233,10 +233,10 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
 
             // Clean up
             let _ = std::fs::remove_file(&data_file);
-            
+
             // Give extra time for port to be fully released
             thread::sleep(Duration::from_secs(1));
-            
+
             Ok(())
         }
         Err(e) => {
