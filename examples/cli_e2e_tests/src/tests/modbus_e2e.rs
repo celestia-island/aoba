@@ -9,8 +9,8 @@ use std::time::Duration;
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
     
-    // Wait a bit to ensure previous tests have fully released ports
-    thread::sleep(Duration::from_secs(1));
+    // Wait longer to ensure previous tests have fully released ports
+    thread::sleep(Duration::from_secs(2));
 
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
@@ -50,8 +50,8 @@ pub fn test_master_slave_communication() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Give master time to start
-    thread::sleep(Duration::from_secs(2));
+    // Give master time to start and fully acquire the port
+    thread::sleep(Duration::from_secs(3));
 
     // Check if master is still running
     match master.try_wait()? {
@@ -103,12 +103,12 @@ pub fn test_master_slave_communication() -> Result<()> {
     // Wait for slave to complete (temporary mode exits after one response)
     let slave_result = slave_output.wait_with_output()?;
 
-    // Kill master process
+    // Kill master process and wait for it to fully exit
     let _ = master.kill();
     let _ = master.wait();
     
-    // Give time for ports to be fully released
-    thread::sleep(Duration::from_millis(500));
+    // Give extra time for ports to be fully released
+    thread::sleep(Duration::from_secs(1));
 
     log::info!("🧪 Slave exit status: {}", slave_result.status);
     log::info!(
@@ -177,7 +177,7 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
             log::info!("✅ Slave listen command accepted with virtual ports");
             
             // Give extra time for port to be fully released
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_secs(1));
             
             Ok(())
         }
@@ -235,7 +235,7 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
             let _ = std::fs::remove_file(&data_file);
             
             // Give extra time for port to be fully released
-            thread::sleep(Duration::from_millis(500));
+            thread::sleep(Duration::from_secs(1));
             
             Ok(())
         }
