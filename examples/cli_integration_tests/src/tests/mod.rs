@@ -14,5 +14,5 @@ pub use modbus_cli::{
     test_slave_listen_temp,
 };
 pub use modbus_e2e::{
-    test_master_slave_communication, test_master_provide_with_vcom, test_slave_listen_with_vcom,
+    test_master_provide_with_vcom, test_master_slave_communication, test_slave_listen_with_vcom,
 };

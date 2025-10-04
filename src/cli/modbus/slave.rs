@@ -45,10 +45,10 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
 
         // Explicitly drop port_arc to close the port
         drop(port_arc);
-        
+
         // Give the OS time to fully release the port
         std::thread::sleep(Duration::from_millis(100));
-        
+
         response
     };
 
