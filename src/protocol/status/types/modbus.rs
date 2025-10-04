@@ -1,4 +1,3 @@
-use rmodbus::server::context::ModbusContext;
 use std::sync::{Arc, Mutex};
 use strum::{EnumIter, FromRepr};
 
@@ -29,9 +28,6 @@ impl ModbusConnectionMode {
         let storage = Arc::new(Mutex::new(
             rmodbus::server::storage::ModbusStorageSmall::new(),
         ));
-
-        // Storage initialized with all zeros by default (no pre-filled values)
-        // Users can set register values as needed after station creation
 
         ModbusConnectionMode::Master { storage }
     }
