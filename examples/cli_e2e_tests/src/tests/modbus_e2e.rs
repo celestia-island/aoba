@@ -8,6 +8,9 @@ use std::time::Duration;
 /// Test master-slave communication with virtual serial ports
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
+    
+    // Wait a bit to ensure previous tests have fully released ports
+    thread::sleep(Duration::from_secs(1));
 
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
@@ -103,6 +106,9 @@ pub fn test_master_slave_communication() -> Result<()> {
     // Kill master process
     let _ = master.kill();
     let _ = master.wait();
+    
+    // Give time for ports to be fully released
+    thread::sleep(Duration::from_millis(500));
 
     log::info!("🧪 Slave exit status: {}", slave_result.status);
     log::info!(
@@ -166,8 +172,13 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
             // Wait for a short time
             thread::sleep(Duration::from_millis(1000));
             let _ = child.kill();
+            let _ = child.wait();
 
             log::info!("✅ Slave listen command accepted with virtual ports");
+            
+            // Give extra time for port to be fully released
+            thread::sleep(Duration::from_millis(500));
+            
             Ok(())
         }
         Err(e) => {
@@ -216,11 +227,16 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
             // Let it run for a bit
             thread::sleep(Duration::from_secs(1));
             let _ = child.kill();
+            let _ = child.wait();
 
             log::info!("✅ Master provide persist command accepted with virtual ports");
 
             // Clean up
             let _ = std::fs::remove_file(&data_file);
+            
+            // Give extra time for port to be fully released
+            thread::sleep(Duration::from_millis(500));
+            
             Ok(())
         }
         Err(e) => {

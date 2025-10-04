@@ -110,7 +110,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        package: [aoba_cli_integration_tests, aoba_tui_e2e_tests]
+        package: [aoba_cli_e2e_tests, aoba_tui_e2e_tests]
 
     steps:
       - uses: actions/checkout@v5

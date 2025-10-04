@@ -42,8 +42,8 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          chmod +x examples/cli_integration_tests/scripts/socat_init.sh
-          sudo examples/cli_integration_tests/scripts/socat_init.sh
+          chmod +x examples/cli_e2e_tests/scripts/socat_init.sh
+          sudo examples/cli_e2e_tests/scripts/socat_init.sh
 
       - name: Enumerate serial ports (diagnostic)
         run: |
@@ -52,7 +52,7 @@ jobs:
 
       - name: Run CLI E2E tests
         run: |
-          cargo run -p aoba_cli_integration_tests --bin cli_integration_tests
+          cargo run -p aoba_cli_e2e_tests --bin cli_e2e_tests
 
       - name: Cleanup virtual ports
         if: always()

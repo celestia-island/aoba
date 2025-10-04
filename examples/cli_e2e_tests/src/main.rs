@@ -6,7 +6,7 @@ fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    log::info!("🧪 Starting CLI Integration Tests...");
+    log::info!("🧪 Starting CLI E2E Tests...");
 
     tests::test_cli_help()?;
     tests::test_cli_list_ports()?;
@@ -29,6 +29,6 @@ fn main() -> Result<()> {
         log::warn!("⚠️ Virtual serial ports not found, skipping E2E tests");
     }
 
-    log::info!("🧪 All CLI integration tests passed!");
+    log::info!("🧪 All CLI E2E tests passed!");
     Ok(())
 }
