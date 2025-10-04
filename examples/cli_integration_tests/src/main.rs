@@ -13,11 +13,21 @@ fn main() -> Result<()> {
     tests::test_cli_list_ports_json()?;
     tests::test_cli_list_ports_json_with_status()?;
 
-    log::info!("🧪 Testing Modbus CLI features...");
+    log::info!("🧪 Testing Modbus CLI features (basic)...");
     tests::test_slave_listen_temp()?;
     tests::test_slave_listen_persist()?;
     tests::test_master_provide_temp()?;
     tests::test_master_provide_persist()?;
+
+    // Check if virtual serial ports are available for E2E tests
+    if std::path::Path::new("/dev/vcom1").exists() && std::path::Path::new("/dev/vcom2").exists() {
+        log::info!("🧪 Virtual serial ports detected, running E2E tests...");
+        tests::test_slave_listen_with_vcom()?;
+        tests::test_master_provide_with_vcom()?;
+        tests::test_master_slave_communication()?;
+    } else {
+        log::warn!("⚠️ Virtual serial ports not found, skipping E2E tests");
+    }
 
     log::info!("🧪 All CLI integration tests passed!");
     Ok(())
