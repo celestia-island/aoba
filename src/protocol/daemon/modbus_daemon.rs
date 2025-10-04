@@ -4,7 +4,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rmodbus::{server::ModbusFrame, ModbusProto};
+use rmodbus::{
+    server::{context::ModbusContext, ModbusFrame},
+    ModbusProto,
+};
 
 use crate::protocol::{
     modbus::*,
@@ -249,98 +252,121 @@ pub fn handle_master_query_mode(
             }
 
             if should_send {
-                match generate_modbus_request_with_cache(station, port_arc) {
-                    Ok(request_bytes) => {
-                        // Try to send the request
-                        if let Err(e) =
-                            runtime
-                                .cmd_tx
-                                .send(crate::protocol::runtime::RuntimeCommand::Write(
-                                    request_bytes.clone(),
-                                ))
-                        {
-                            let warn_msg = format!(
-                                "Failed to send modbus slave request for {port_name} station {}: {e}",
-                                station.station_id
-                            );
-                            log::warn!("{warn_msg}");
-
-                            // Also write this warning into the port logs so the UI can show it
-                            let log_entry = PortLogEntry {
-                                when: chrono::Local::now(),
-                                raw: warn_msg.clone(),
-                                parsed: None,
-                            };
-                            with_port_write(port_arc, |port| {
-                                port.logs.push(log_entry);
-                                if port.logs.len() > 1000 {
-                                    let excess = port.logs.len() - 1000;
-                                    port.logs.drain(0..excess);
-                                }
-
-                                // Ensure we clear station.last_request_time if we had set it earlier
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &mut port.config;
-                                if let Some(station_mut) = stations.get_mut(current_index) {
-                                    station_mut.last_request_time = None;
-                                }
-                            });
-                        } else {
-                            // Log the sent frame
-                            let hex_frame = request_bytes
-                                .iter()
-                                .map(|b| format!("{b:02x}"))
-                                .collect::<Vec<_>>()
-                                .join(" ");
-
-                            let log_entry = PortLogEntry {
-                                when: chrono::Local::now(),
-                                raw: format!("Master TX (request): {hex_frame}"),
-                                parsed: None,
-                            };
-
-                            with_port_write(port_arc, |port| {
-                                port.logs.push(log_entry);
-                                if port.logs.len() > 1000 {
-                                    let excess = port.logs.len() - 1000;
-                                    port.logs.drain(0..excess);
-                                }
-
-                                // Update the station's next poll time (1 second interval)
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &mut port.config;
-                                if let Some(station_mut) = stations.get_mut(current_index) {
-                                    station_mut.next_poll_at = now + Duration::from_secs(1);
-                                    station_mut.last_request_time = Some(now);
-                                }
-                            });
-
-                            // Move to next station for the next poll cycle in a separate write
-                            with_port_write(port_arc, |port| {
-                                let types::port::PortConfig::Modbus { mode, stations } =
-                                    &mut port.config;
-                                if let types::modbus::ModbusConnectionMode::Slave {
-                                    current_request_at_station_index,
-                                    storage: _,
-                                } = mode
-                                {
-                                    *current_request_at_station_index =
-                                        (current_index + 1) % stations.len();
-                                }
-                            });
-
+                // First, check if there are any pending write requests to process
+                let pending_request: Option<Vec<u8>> = with_port_write(port_arc, |port| {
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
+                    if let Some(station_mut) = stations.get_mut(current_index) {
+                        if !station_mut.pending_requests.is_empty() {
+                            // Extract the pending request bytes and clear the queue
+                            let request_bytes = station_mut.pending_requests.clone();
+                            station_mut.pending_requests.clear();
                             log::info!(
-                                "Sent modbus slave request for {port_name} station {}: {hex_frame}",
-                                station.station_id
+                                "📤 Sending pending write request for station {} ({} bytes)",
+                                station_mut.station_id,
+                                request_bytes.len()
                             );
+                            return request_bytes;
                         }
                     }
-                    Err(e) => {
-                        log::warn!(
-                            "Failed to generate modbus slave request for {port_name} station {}: {e}",
-                            station.station_id
-                        );
+                    vec![] // Return empty vec if no pending requests
+                })
+                .and_then(|v| if v.is_empty() { None } else { Some(v) });
+
+                // Determine which request to send: pending write or regular read
+                let request_bytes = if let Some(write_req) = pending_request {
+                    write_req
+                } else {
+                    // No pending write, generate regular read request
+                    match generate_modbus_request_with_cache(station, port_arc) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            log::warn!("Failed to generate modbus request: {e}");
+                            return Ok(());
+                        }
                     }
+                };
+
+                // Try to send the request (write or read)
+                if let Err(e) =
+                    runtime
+                        .cmd_tx
+                        .send(crate::protocol::runtime::RuntimeCommand::Write(
+                            request_bytes.clone(),
+                        ))
+                {
+                    let warn_msg = format!(
+                        "Failed to send modbus slave request for {port_name} station {}: {e}",
+                        station.station_id
+                    );
+                    log::warn!("{warn_msg}");
+
+                    // Also write this warning into the port logs so the UI can show it
+                    let log_entry = PortLogEntry {
+                        when: chrono::Local::now(),
+                        raw: warn_msg.clone(),
+                        parsed: None,
+                    };
+                    with_port_write(port_arc, |port| {
+                        port.logs.push(log_entry);
+                        if port.logs.len() > 1000 {
+                            let excess = port.logs.len() - 1000;
+                            port.logs.drain(0..excess);
+                        }
+
+                        // Ensure we clear station.last_request_time if we had set it earlier
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &mut port.config;
+                        if let Some(station_mut) = stations.get_mut(current_index) {
+                            station_mut.last_request_time = None;
+                        }
+                    });
+                } else {
+                    // Log the sent frame
+                    let hex_frame = request_bytes
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    let log_entry = PortLogEntry {
+                        when: chrono::Local::now(),
+                        raw: format!("Master TX (request): {hex_frame}"),
+                        parsed: None,
+                    };
+
+                    with_port_write(port_arc, |port| {
+                        port.logs.push(log_entry);
+                        if port.logs.len() > 1000 {
+                            let excess = port.logs.len() - 1000;
+                            port.logs.drain(0..excess);
+                        }
+
+                        // Update the station's next poll time (1 second interval)
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &mut port.config;
+                        if let Some(station_mut) = stations.get_mut(current_index) {
+                            station_mut.next_poll_at = now + Duration::from_secs(1);
+                            station_mut.last_request_time = Some(now);
+                        }
+                    });
+
+                    // Move to next station for the next poll cycle in a separate write
+                    with_port_write(port_arc, |port| {
+                        let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                        if let types::modbus::ModbusConnectionMode::Slave {
+                            current_request_at_station_index,
+                            storage: _,
+                        } = mode
+                        {
+                            *current_request_at_station_index =
+                                (current_index + 1) % stations.len();
+                        }
+                    });
+
+                    log::info!(
+                        "Sent modbus slave request for {port_name} station {}: {hex_frame}",
+                        station.station_id
+                    );
                 }
             }
         }
@@ -374,24 +400,165 @@ pub fn handle_master_query_mode(
                     with_port_read(port_arc, |port| port.last_modbus_request.clone())
                         .and_then(|x| x); // Flatten Option<Option<...>> to Option<...>
 
-                // Get storage from global mode
-                let storage_opt = match global_mode {
+                // Get storage and current station info from global mode
+                let (storage_opt, station_info_opt) = match global_mode {
                     types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
-                        Some(storage.clone())
+                        // Get the station info for the current request
+                        let station_opt = with_port_read(port_arc, |port| {
+                            let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+                            // Find station that has a pending request (last_request_time is set)
+                            stations
+                                .iter()
+                                .find(|s| s.last_request_time.is_some())
+                                .map(|s| (s.register_mode, s.register_address, s.register_length))
+                        })
+                        .and_then(|x| x);
+                        (Some(storage.clone()), station_opt)
                     }
-                    _ => None,
+                    _ => (None, None),
                 };
 
                 // Parse and update storage if available
-                if let (Some(storage), Some(request_arc)) = (storage_opt, request_arc_opt) {
-                    if let Ok(request) = request_arc.lock() {
+                if let (
+                    Some(storage),
+                    Some(request_arc),
+                    Some((register_mode, start_address, length)),
+                ) = (storage_opt, request_arc_opt, station_info_opt)
+                {
+                    if let Ok(mut request) = request_arc.lock() {
                         if request.parse_ok(&frame).is_ok() {
-                            // Successfully parsed response
-                            if let Ok(_context) = storage.lock() {
-                                // For now, just log that we received a valid response
-                                log::debug!(
-                                    "Successfully parsed response and would update storage"
-                                );
+                            // Successfully parsed response - now update storage with the values
+                            if let Ok(mut context) = storage.lock() {
+                                match register_mode {
+                                    types::modbus::RegisterMode::Holding => {
+                                        // Parse holding register values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_holdings(
+                                                &mut request,
+                                                frame.to_vec(),
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
+                                                match context.set_holding(addr, value) {
+                                                    Ok(_) => {
+                                                        log::debug!(
+                                                            "✓ Set holding register at addr {addr} (0x{addr:04X}) = {value} (0x{value:04X})"
+                                                        );
+                                                    }
+                                                    Err(e) => {
+                                                        log::warn!(
+                                                            "Failed to set holding register at {addr}: {e}"
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            log::info!(
+                                                "📥 Slave updated {} holding registers starting at address {start_address} (0x{start_address:04X}): {:?}",
+                                                values.len(),
+                                                values
+                                            );
+
+                                            // Verify the values were written correctly by reading them back
+                                            log::debug!("🔍 Verifying written values:");
+                                            for (offset, &expected_value) in
+                                                values.iter().enumerate()
+                                            {
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
+                                                if let Ok(actual_value) = context.get_holding(addr)
+                                                {
+                                                    if actual_value == expected_value {
+                                                        log::debug!("  ✓ Addr {addr}: {actual_value} (correct)");
+                                                    } else {
+                                                        log::warn!("  ✗ Addr {addr}: {actual_value} (expected {expected_value})");
+                                                    }
+                                                } else {
+                                                    log::warn!(
+                                                        "  ✗ Addr {addr}: Failed to read back"
+                                                    );
+                                                }
+                                            }
+                                        } else {
+                                            log::warn!("Failed to parse holding register response");
+                                        }
+                                    }
+                                    types::modbus::RegisterMode::Input => {
+                                        // Parse input register values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_inputs(
+                                                &mut request,
+                                                frame.to_vec(),
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_input(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set input register at {addr}: {e}"
+                                                    );
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} input registers starting at address {start_address}: {:?}",
+                                                values.len(),
+                                                values
+                                            );
+                                        }
+                                    }
+                                    types::modbus::RegisterMode::Coils => {
+                                        // Parse coil values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_coils(
+                                                &mut request,
+                                                frame.to_vec(),
+                                                length,
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_coil(addr, value) {
+                                                    log::warn!("Failed to set coil at {addr}: {e}");
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} coils starting at address {start_address}",
+                                                values.len()
+                                            );
+                                        }
+                                    }
+                                    types::modbus::RegisterMode::DiscreteInputs => {
+                                        // Parse discrete input values from response
+                                        if let Ok(values) =
+                                            crate::protocol::modbus::parse_pull_get_discrete_inputs(
+                                                &mut request,
+                                                frame.to_vec(),
+                                                length,
+                                            )
+                                        {
+                                            // Write values to storage
+                                            for (offset, &value) in values.iter().enumerate() {
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
+                                                if let Err(e) = context.set_discrete(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set discrete input at {addr}: {e}"
+                                                    );
+                                                }
+                                            }
+                                            log::info!(
+                                                "Updated {} discrete inputs starting at address {start_address}",
+                                                values.len()
+                                            );
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
