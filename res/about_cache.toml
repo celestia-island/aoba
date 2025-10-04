@@ -63,6 +63,10 @@ name = "image"
 version = "^0.25"
 
 [[dependencies]]
+name = "interprocess"
+version = "^2"
+
+[[dependencies]]
 name = "libc"
 version = "^0.2"
 
@@ -175,6 +179,7 @@ expectrl = "MIT"
 flume = "Apache-2.0/MIT"
 futures = "MIT OR Apache-2.0"
 image = "MIT OR Apache-2.0"
+interprocess = "MIT OR Apache-2.0"
 libc = "MIT OR Apache-2.0"
 log = "MIT OR Apache-2.0"
 num_enum = "BSD-3-Clause OR MIT OR Apache-2.0"
