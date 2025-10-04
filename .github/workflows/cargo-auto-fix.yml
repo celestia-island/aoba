@@ -1,24 +1,22 @@
-name: Basic Checks
+name: Cargo Auto Fix
 
 on:
   push:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Check
+  auto-fix:
+    name: Auto Fix Cargo Issues
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    strategy:
-      matrix:
-        rust: [stable, nightly]
-
+    
     steps:
       - uses: actions/checkout@v5
         with:
@@ -28,7 +26,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Install system dependencies
@@ -47,58 +45,65 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Check formatting
-        id: fmt_check
-        run: cargo fmt --all -- --check
-        continue-on-error: true
-
-      - name: Check compilation
+      - name: Run cargo check
         id: check
-        run: cargo check --all-targets --all-features
-        continue-on-error: true
-
-      - name: Clippy lints
-        id: clippy_check
-        run: cargo clippy --all-targets --all-features -- -D warnings
-        continue-on-error: true
-
-      - name: Run unit tests
-        run: cargo test --lib
-        continue-on-error: true
-
-      # Auto-fix steps (only run on stable Rust and on push to master/main)
-      - name: Attempt auto-fix with cargo fix
-        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.check.outcome == 'failure'
         run: |
-          echo "Attempting to fix compilation errors..."
+          echo "Running cargo check..."
+          cargo check --all-targets --all-features 2>&1 | tee check.log || echo "check_failed=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Run cargo clippy (check)
+        id: clippy_check
+        run: |
+          echo "Running cargo clippy check..."
+          cargo clippy --all-targets --all-features -- -D warnings 2>&1 | tee clippy.log || echo "clippy_failed=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Run cargo fmt (check)
+        id: fmt_check
+        run: |
+          echo "Running cargo fmt check..."
+          cargo fmt --all -- --check 2>&1 | tee fmt.log || echo "fmt_failed=true" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Attempt auto-fix with cargo fix
+        if: steps.check.outputs.check_failed == 'true'
+        run: |
+          echo "Attempting to fix compilation errors with cargo fix..."
           cargo fix --all-targets --allow-dirty --allow-staged || true
         continue-on-error: true
 
       - name: Attempt auto-fix with cargo clippy --fix
-        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.clippy_check.outcome == 'failure'
+        if: steps.clippy_check.outputs.clippy_failed == 'true'
         run: |
           echo "Attempting to fix clippy warnings..."
           cargo clippy --fix --all-targets --all-features --allow-dirty --allow-staged || true
         continue-on-error: true
 
       - name: Run cargo fmt (auto-fix)
-        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.fmt_check.outcome == 'failure'
+        if: steps.fmt_check.outputs.fmt_failed == 'true'
         run: |
           echo "Running cargo fmt to fix formatting..."
           cargo fmt --all
         continue-on-error: true
 
-      - name: Check for changes and commit
-        if: matrix.rust == 'stable' && github.event_name == 'push'
+      - name: Check for changes
+        id: git_status
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "No changes to commit"
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "Changes detected:"
+            git diff --cached --stat
+          fi
+
+      - name: Commit and push changes
+        if: steps.git_status.outputs.has_changes == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add -A
-          if ! git diff --cached --quiet; then
-            echo "Changes detected, committing..."
-            git commit -m "🎨 Clippy."
-            git push
-          else
-            echo "No changes to commit"
-          fi
-        continue-on-error: true
+          git commit -m "🎨 Clippy."
+          git push
