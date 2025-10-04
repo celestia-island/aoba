@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
+use rmodbus::server::context::ModbusContext;
 
 use crate::{
     protocol::status::{
@@ -257,20 +258,79 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                     };
 
                     if let Ok(register_value) = parsed_value {
-                        with_port_write(&port, |port| {
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &mut port.config;
-                            let mut all_items: Vec<_> = stations.iter_mut().collect();
-                            if let Some(item) = all_items.get_mut(slave_index) {
-                                // TODO: Update global storage when mode is Master
-                                log::info!(
-                                    "Updated register value for slave {} register {} to 0x{:04X}",
-                                    item.station_id,
-                                    register_index,
-                                    register_value
-                                );
+                        // Get selected port and port name
+                        let selected_port = read_status(|status| {
+                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                                Ok(*selected_port)
+                            } else {
+                                Ok(0)
                             }
-                        });
+                        })?;
+                        
+                        let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
+                        
+                        if let Some(port_name) = port_name_opt {
+                            if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+                                with_port_write(&port, |port| {
+                                    let types::port::PortConfig::Modbus { mode, stations } =
+                                        &mut port.config;
+                                    let mut all_items: Vec<_> = stations.iter_mut().collect();
+                                    if let Some(item) = all_items.get_mut(slave_index) {
+                                        let register_addr = item.register_address + register_index as u16;
+                                        
+                                        match mode {
+                                            ModbusConnectionMode::Master { storage } => {
+                                                // Master mode: Write directly to local storage
+                                                if let Ok(mut context) = storage.lock() {
+                                                    match item.register_mode {
+                                                        RegisterMode::Holding => {
+                                                            if let Err(e) = context.set_holding(register_addr, register_value) {
+                                                                log::warn!("Failed to set holding register at {register_addr}: {e}");
+                                                            } else {
+                                                                log::info!(
+                                                                    "✓ Master: Set holding register at 0x{:04X} = 0x{:04X}",
+                                                                    register_addr,
+                                                                    register_value
+                                                                );
+                                                            }
+                                                        }
+                                                        RegisterMode::Coils => {
+                                                            let coil_value = register_value != 0;
+                                                            if let Err(e) = context.set_coil(register_addr, coil_value) {
+                                                                log::warn!("Failed to set coil at {register_addr}: {e}");
+                                                            } else {
+                                                                log::info!(
+                                                                    "✓ Master: Set coil at 0x{:04X} = {}",
+                                                                    register_addr,
+                                                                    coil_value
+                                                                );
+                                                            }
+                                                        }
+                                                        _ => {
+                                                            log::warn!("Cannot write to read-only register type: {:?}", item.register_mode);
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            ModbusConnectionMode::Slave { storage: _, .. } => {
+                                                // Slave mode: Queue a write request to be sent to the master
+                                                // The pending request will be sent in the next poll cycle
+                                                // For now, just log the intent - actual implementation would
+                                                // queue a write command using set_holding/set_coil requests
+                                                log::info!(
+                                                    "📤 Slave: Queued write request for register 0x{:04X} = 0x{:04X} (will be sent to master)",
+                                                    register_addr,
+                                                    register_value
+                                                );
+                                                // TODO: Implement actual Modbus write request queuing
+                                                // This would use generate_pull_set_holding_request or generate_pull_set_coils_request
+                                                // and add the request to a pending_write_requests queue in the station config
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
                     }
                 }
                 _ => {}

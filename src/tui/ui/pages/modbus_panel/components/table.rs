@@ -91,7 +91,7 @@ pub fn render_register_row_line(
             }
 
             if addr >= item_start && addr < item_end {
-                let reg_index = (addr - item_start) as usize;
+                let _reg_index = (addr - item_start) as usize;
 
                 let slot_selected = if let types::cursor::ModbusDashboardCursor::Register {
                     slave_index: si,
@@ -151,8 +151,8 @@ pub fn render_register_row_line(
                                     }
                                 }
                             }
-                            // Fallback to placeholder logic
-                            Ok(reg_index.is_multiple_of(2))
+                            // Default to false (OFF) when storage not available
+                            Ok(false)
                         })?;
                         switch_spans(is_on, "ON", "OFF", state)?
                     }
@@ -193,8 +193,8 @@ pub fn render_register_row_line(
                                     }
                                 }
                             }
-                            // Fallback to placeholder logic
-                            Ok((reg_index * 10) as u16)
+                            // Default to 0 when storage not available
+                            Ok(0)
                         })?;
                         let hex_str = format!("0x{current_value:04X}");
                         input_spans(hex_str.clone(), state)?
