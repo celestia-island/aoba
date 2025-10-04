@@ -26,7 +26,7 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check that output contains JSON array
     if !stdout.starts_with('[') && !stdout.contains(']') {
         return Err(anyhow!("Expected JSON array output, got: {}", stdout));
@@ -34,7 +34,7 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
 
     // Parse JSON to verify structure
     let json: serde_json::Value = serde_json::from_str(&stdout)?;
-    
+
     if let Some(arr) = json.as_array() {
         if arr.is_empty() {
             log::warn!("No serial ports found");
@@ -47,12 +47,12 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
                 if !port.get("status").is_some() {
                     return Err(anyhow!("Port missing 'status' field"));
                 }
-                
+
                 let status = port.get("status").and_then(|v| v.as_str()).unwrap_or("");
                 if status != "Free" && status != "Occupied" {
                     return Err(anyhow!("Invalid status value: {}", status));
                 }
-                
+
                 log::info!("🧪 Port status field verified: {}", status);
             }
         }

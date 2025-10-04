@@ -39,28 +39,28 @@ pub fn parse_args() -> ArgMatches {
                 .long("slave-listen")
                 .help("Modbus slave: listen for requests and respond once, then exit")
                 .value_name("PORT")
-                .conflicts_with_all(&["slave-listen-persist", "master-provide", "master-provide-persist"]),
+                .conflicts_with_all(["slave-listen-persist", "master-provide", "master-provide-persist"]),
         )
         .arg(
             Arg::new("slave-listen-persist")
                 .long("slave-listen-persist")
                 .help("Modbus slave: continuously listen for requests and respond (JSONL output)")
                 .value_name("PORT")
-                .conflicts_with_all(&["slave-listen", "master-provide", "master-provide-persist"]),
+                .conflicts_with_all(["slave-listen", "master-provide", "master-provide-persist"]),
         )
         .arg(
             Arg::new("master-provide")
                 .long("master-provide")
                 .help("Modbus master: provide data once and respond to requests, then exit")
                 .value_name("PORT")
-                .conflicts_with_all(&["master-provide-persist", "slave-listen", "slave-listen-persist"]),
+                .conflicts_with_all(["master-provide-persist", "slave-listen", "slave-listen-persist"]),
         )
         .arg(
             Arg::new("master-provide-persist")
                 .long("master-provide-persist")
                 .help("Modbus master: continuously provide data and respond to requests (JSONL output)")
                 .value_name("PORT")
-                .conflicts_with_all(&["master-provide", "slave-listen", "slave-listen-persist"]),
+                .conflicts_with_all(["master-provide", "slave-listen", "slave-listen-persist"]),
         )
         .arg(
             Arg::new("station-id")

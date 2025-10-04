@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
 use clap::ArgMatches;
+use rmodbus::server::context::ModbusContext;
 use serde::Serialize;
 use std::io::{BufRead, BufReader};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use rmodbus::server::context::ModbusContext;
 
 /// Response structure for modbus operations
 #[derive(Serialize, Clone)]
@@ -22,14 +23,18 @@ pub enum DataSource {
     Pipe(String),
 }
 
-impl DataSource {
-    pub fn from_str(s: &str) -> Result<Self> {
+impl std::str::FromStr for DataSource {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(path) = s.strip_prefix("file:") {
             Ok(DataSource::File(path.to_string()))
         } else if let Some(name) = s.strip_prefix("pipe:") {
             Ok(DataSource::Pipe(name.to_string()))
         } else {
-            Err(anyhow!("Invalid data source format. Use file:<path> or pipe:<name>"))
+            Err(anyhow!(
+                "Invalid data source format. Use file:<path> or pipe:<name>"
+            ))
         }
     }
 }
@@ -57,13 +62,7 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     let reg_mode = parse_register_mode(register_mode)?;
 
     log::info!(
-        "Starting slave listen on {} (station_id={}, addr={}, len={}, mode={:?}, baud={})",
-        port,
-        station_id,
-        register_address,
-        register_length,
-        reg_mode,
-        baud_rate
+        "Starting slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
     // Open serial port
@@ -80,11 +79,18 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     ));
 
     // Wait for one request and respond
-    let response = listen_for_one_request(port_arc, station_id, register_address, register_length, reg_mode, storage)?;
+    let response = listen_for_one_request(
+        port_arc,
+        station_id,
+        register_address,
+        register_length,
+        reg_mode,
+        storage,
+    )?;
 
     // Output JSON
     let json = serde_json::to_string(&response)?;
-    println!("{}", json);
+    println!("{json}");
 
     Ok(())
 }
@@ -100,13 +106,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let reg_mode = parse_register_mode(register_mode)?;
 
     log::info!(
-        "Starting persistent slave listen on {} (station_id={}, addr={}, len={}, mode={:?}, baud={})",
-        port,
-        station_id,
-        register_address,
-        register_length,
-        reg_mode,
-        baud_rate
+        "Starting persistent slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
     // Open serial port
@@ -134,10 +134,10 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         ) {
             Ok(response) => {
                 let json = serde_json::to_string(&response)?;
-                println!("{}", json);
+                println!("{json}");
             }
             Err(e) => {
-                log::warn!("Error processing request: {}", e);
+                log::warn!("Error processing request: {e}");
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
@@ -151,20 +151,15 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let data_source_str = matches.get_one::<String>("data-source")
+    let data_source_str = matches
+        .get_one::<String>("data-source")
         .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
 
     let reg_mode = parse_register_mode(register_mode)?;
     let data_source = DataSource::from_str(data_source_str)?;
 
     log::info!(
-        "Starting master provide on {} (station_id={}, addr={}, len={}, mode={:?}, baud={})",
-        port,
-        station_id,
-        register_address,
-        register_length,
-        reg_mode,
-        baud_rate
+        "Starting master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
     // Open serial port
@@ -177,7 +172,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
 
     // Read one line of data and provide it
     let values = read_one_data_update(&data_source)?;
-    
+
     let response = provide_data_once(
         port_arc,
         station_id,
@@ -189,7 +184,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
 
     // Output JSON
     let json = serde_json::to_string(&response)?;
-    println!("{}", json);
+    println!("{json}");
 
     Ok(())
 }
@@ -201,20 +196,15 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let data_source_str = matches.get_one::<String>("data-source")
+    let data_source_str = matches
+        .get_one::<String>("data-source")
         .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
 
     let reg_mode = parse_register_mode(register_mode)?;
     let data_source = DataSource::from_str(data_source_str)?;
 
     log::info!(
-        "Starting persistent master provide on {} (station_id={}, addr={}, len={}, mode={:?}, baud={})",
-        port,
-        station_id,
-        register_address,
-        register_length,
-        reg_mode,
-        baud_rate
+        "Starting persistent master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
     // Open serial port
@@ -230,13 +220,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         DataSource::File(path) => {
             let file = std::fs::File::open(path)?;
             let reader = BufReader::new(file);
-            
+
             for line in reader.lines() {
                 let line = line?;
                 if line.trim().is_empty() {
                     continue;
                 }
-                
+
                 match parse_data_line(&line) {
                     Ok(values) => {
                         match provide_data_once(
@@ -249,15 +239,15 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         ) {
                             Ok(response) => {
                                 let json = serde_json::to_string(&response)?;
-                                println!("{}", json);
+                                println!("{json}");
                             }
                             Err(e) => {
-                                log::warn!("Error providing data: {}", e);
+                                log::warn!("Error providing data: {e}");
                             }
                         }
                     }
                     Err(e) => {
-                        log::warn!("Error parsing data line: {}", e);
+                        log::warn!("Error parsing data line: {e}");
                     }
                 }
             }
@@ -281,7 +271,7 @@ fn listen_for_one_request(
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
-    
+
     // Read request from port
     let mut buffer = vec![0u8; 256];
     let mut port = port_arc.lock().unwrap();
@@ -293,7 +283,7 @@ fn listen_for_one_request(
     }
 
     let request = &buffer[..bytes_read];
-    log::info!("Received request: {:02X?}", request);
+    log::info!("Received request: {request:02X?}");
 
     // Parse and respond to request
     let mut response = Vec::new();
@@ -333,16 +323,17 @@ fn listen_for_one_request(
         let mut port = port_arc.lock().unwrap();
         port.write_all(&resp)?;
         port.flush()?;
-        log::info!("Sent response: {:02X?}", resp);
+        log::info!("Sent response: {resp:02X?}");
     }
 
     // Extract values from storage for response
-    let values = extract_values_from_storage(&storage, register_address, register_length, reg_mode)?;
+    let values =
+        extract_values_from_storage(&storage, register_address, register_length, reg_mode)?;
 
     Ok(ModbusResponse {
         station_id,
         register_address,
-        register_mode: format!("{:?}", reg_mode),
+        register_mode: format!("{reg_mode:?}"),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -375,7 +366,9 @@ fn provide_data_once(
             request.generate_set_coils_bulk(register_address, &coils, &mut raw)?;
         }
         _ => {
-            return Err(anyhow!("Master can only write to holding registers or coils"));
+            return Err(anyhow!(
+                "Master can only write to holding registers or coils"
+            ));
         }
     }
 
@@ -383,7 +376,7 @@ fn provide_data_once(
     let mut port = port_arc.lock().unwrap();
     port.write_all(&raw)?;
     port.flush()?;
-    log::info!("Sent write request: {:02X?}", raw);
+    log::info!("Sent write request: {raw:02X?}");
 
     // Read response
     let mut buffer = vec![0u8; 256];
@@ -391,13 +384,16 @@ fn provide_data_once(
     drop(port);
 
     if bytes_read > 0 {
-        log::info!("Received response: {:02X?}", &buffer[..bytes_read]);
+        log::info!(
+            "Received response: {resp_bytes:02X?}",
+            resp_bytes = &buffer[..bytes_read]
+        );
     }
 
     Ok(ModbusResponse {
         station_id,
         register_address,
-        register_mode: format!("{:?}", reg_mode),
+        register_mode: format!("{reg_mode:?}"),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -466,10 +462,18 @@ fn extract_values_from_storage(
                 storage.get_input(addr)?
             }
             crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                if storage.get_coil(addr)? { 1 } else { 0 }
+                if storage.get_coil(addr)? {
+                    1
+                } else {
+                    0
+                }
             }
             crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                if storage.get_discrete(addr)? { 1 } else { 0 }
+                if storage.get_discrete(addr)? {
+                    1
+                } else {
+                    0
+                }
             }
         };
         values.push(value);

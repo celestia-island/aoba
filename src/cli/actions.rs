@@ -33,7 +33,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
         let want_json = matches.get_flag("json");
         if want_json {
             let mut out: Vec<PortInfo> = Vec::new();
-            
+
             // Get occupied ports from status if available
             let occupied_ports = crate::protocol::status::read_status(|status| {
                 let mut ports = std::collections::HashSet::new();
@@ -67,7 +67,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
                 // Canonical: COMn if present, else basename for unix-like
                 let canonical = compute_canonical(&p.port_name);
                 let raw_type = Some(format!("{:?}", p.port_type));
-                
+
                 out.push(PortInfo {
                     port_name: &p.port_name,
                     status,
@@ -87,12 +87,12 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
             } else {
                 // Fallback to plain listing
                 for (p, _) in ports_enriched.iter() {
-                    println!("{}", p.port_name);
+                    println!("{p_port}", p_port = p.port_name);
                 }
             }
         } else {
             for (p, _) in ports_enriched.iter() {
-                println!("{}", p.port_name);
+                println!("{p_port}", p_port = p.port_name);
             }
         }
         return true;
@@ -101,7 +101,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle modbus slave listen
     if let Some(port) = matches.get_one::<String>("slave-listen") {
         if let Err(e) = super::modbus::handle_slave_listen(matches, port) {
-            eprintln!("Error in slave-listen: {}", e);
+            eprintln!("Error in slave-listen: {e}");
             std::process::exit(1);
         }
         return true;
@@ -110,7 +110,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle modbus slave listen persist
     if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
         if let Err(e) = super::modbus::handle_slave_listen_persist(matches, port) {
-            eprintln!("Error in slave-listen-persist: {}", e);
+            eprintln!("Error in slave-listen-persist: {e}");
             std::process::exit(1);
         }
         return true;
@@ -119,7 +119,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle modbus master provide
     if let Some(port) = matches.get_one::<String>("master-provide") {
         if let Err(e) = super::modbus::handle_master_provide(matches, port) {
-            eprintln!("Error in master-provide: {}", e);
+            eprintln!("Error in master-provide: {e}");
             std::process::exit(1);
         }
         return true;
@@ -128,7 +128,7 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     // Handle modbus master provide persist
     if let Some(port) = matches.get_one::<String>("master-provide-persist") {
         if let Err(e) = super::modbus::handle_master_provide_persist(matches, port) {
-            eprintln!("Error in master-provide-persist: {}", e);
+            eprintln!("Error in master-provide-persist: {e}");
             std::process::exit(1);
         }
         return true;
