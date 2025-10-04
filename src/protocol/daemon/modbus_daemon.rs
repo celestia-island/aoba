@@ -437,19 +437,25 @@ pub fn handle_master_query_mode(
                                                 values.len(),
                                                 values
                                             );
-                                            
+
                                             // Verify the values were written correctly by reading them back
                                             log::debug!("🔍 Verifying written values:");
-                                            for (offset, &expected_value) in values.iter().enumerate() {
-                                                let addr = start_address.wrapping_add(offset as u16);
-                                                if let Ok(actual_value) = context.get_holding(addr) {
+                                            for (offset, &expected_value) in
+                                                values.iter().enumerate()
+                                            {
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
+                                                if let Ok(actual_value) = context.get_holding(addr)
+                                                {
                                                     if actual_value == expected_value {
                                                         log::debug!("  ✓ Addr {addr}: {actual_value} (correct)");
                                                     } else {
                                                         log::warn!("  ✗ Addr {addr}: {actual_value} (expected {expected_value})");
                                                     }
                                                 } else {
-                                                    log::warn!("  ✗ Addr {addr}: Failed to read back");
+                                                    log::warn!(
+                                                        "  ✗ Addr {addr}: Failed to read back"
+                                                    );
                                                 }
                                             }
                                         } else {
