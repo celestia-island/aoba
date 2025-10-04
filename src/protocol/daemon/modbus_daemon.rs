@@ -4,7 +4,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use rmodbus::{server::{context::ModbusContext, ModbusFrame}, ModbusProto};
+use rmodbus::{
+    server::{context::ModbusContext, ModbusFrame},
+    ModbusProto,
+};
 
 use crate::protocol::{
     modbus::*,
@@ -393,8 +396,11 @@ pub fn handle_master_query_mode(
                 };
 
                 // Parse and update storage if available
-                if let (Some(storage), Some(request_arc), Some((register_mode, start_address, length))) =
-                    (storage_opt, request_arc_opt, station_info_opt)
+                if let (
+                    Some(storage),
+                    Some(request_arc),
+                    Some((register_mode, start_address, length)),
+                ) = (storage_opt, request_arc_opt, station_info_opt)
                 {
                     if let Ok(mut request) = request_arc.lock() {
                         if request.parse_ok(&frame).is_ok() {
@@ -411,7 +417,8 @@ pub fn handle_master_query_mode(
                                         {
                                             // Write values to storage
                                             for (offset, &value) in values.iter().enumerate() {
-                                                let addr = start_address.wrapping_add(offset as u16);
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
                                                 if let Err(e) = context.set_holding(addr, value) {
                                                     log::warn!(
                                                         "Failed to set holding register at {addr}: {e}"
@@ -435,7 +442,8 @@ pub fn handle_master_query_mode(
                                         {
                                             // Write values to storage
                                             for (offset, &value) in values.iter().enumerate() {
-                                                let addr = start_address.wrapping_add(offset as u16);
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
                                                 if let Err(e) = context.set_input(addr, value) {
                                                     log::warn!(
                                                         "Failed to set input register at {addr}: {e}"
@@ -460,11 +468,10 @@ pub fn handle_master_query_mode(
                                         {
                                             // Write values to storage
                                             for (offset, &value) in values.iter().enumerate() {
-                                                let addr = start_address.wrapping_add(offset as u16);
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
                                                 if let Err(e) = context.set_coil(addr, value) {
-                                                    log::warn!(
-                                                        "Failed to set coil at {addr}: {e}"
-                                                    );
+                                                    log::warn!("Failed to set coil at {addr}: {e}");
                                                 }
                                             }
                                             log::info!(
@@ -484,7 +491,8 @@ pub fn handle_master_query_mode(
                                         {
                                             // Write values to storage
                                             for (offset, &value) in values.iter().enumerate() {
-                                                let addr = start_address.wrapping_add(offset as u16);
+                                                let addr =
+                                                    start_address.wrapping_add(offset as u16);
                                                 if let Err(e) = context.set_discrete(addr, value) {
                                                     log::warn!(
                                                         "Failed to set discrete input at {addr}: {e}"
