@@ -68,9 +68,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(status
                 .ports
-                .map
-                .get(&format!("COM{}", selected_port + 1))
-                .cloned())
+                .order
+                .get(*selected_port)
+                .and_then(|port_name| status.ports.map.get(port_name).cloned()))
         } else {
             Ok(None)
         }
@@ -174,11 +174,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     // reuse sep_len from above and helper for separator
     let has_any = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-            if let Some(port_entry) = status.ports.map.get(&format!("COM{}", selected_port + 1)) {
-                if let Ok(port_guard) = port_entry.read() {
-                    match &port_guard.config {
-                        types::port::PortConfig::Modbus { mode: _, stations } => {
-                            return Ok(!stations.is_empty());
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_entry) = status.ports.map.get(port_name) {
+                    if let Ok(port_guard) = port_entry.read() {
+                        match &port_guard.config {
+                            types::port::PortConfig::Modbus { mode: _, stations } => {
+                                return Ok(!stations.is_empty());
+                            }
                         }
                     }
                 }
@@ -407,18 +409,29 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     let item_start = item.register_address;
                     let item_end = item_start + item.register_length;
 
-                    let first_row = (item_start / 8) * 8;
-                    let last_row = item_end.div_ceil(8) * 8;
+                    // Use 4 registers per row for 80-column terminals
+                    // TODO: Make this dynamic based on actual terminal width
+                    let registers_per_row = 4;
+
+                    let first_row =
+                        (item_start / registers_per_row as u16) * registers_per_row as u16;
+                    let last_row =
+                        item_end.div_ceil(registers_per_row as u16) * registers_per_row as u16;
 
                     let mut row = first_row;
                     while row < last_row {
                         let label = format!("  0x{row:04X}");
-                        if let Ok(line) =
-                            render_register_row_line(&label, index, row, item, current_selection)
-                        {
+                        if let Ok(line) = render_register_row_line(
+                            &label,
+                            index,
+                            row,
+                            item,
+                            current_selection,
+                            registers_per_row,
+                        ) {
                             lines.push(line);
                         }
-                        row += 8;
+                        row += registers_per_row as u16;
                     }
                 }
 

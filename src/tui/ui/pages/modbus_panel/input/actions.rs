@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use rmodbus::server::context::ModbusContext;
 
 use crate::{
     protocol::status::{
@@ -27,12 +28,13 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             // Toggle global mode for this port between Master and Slave
             let current_mode = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-                    let port_name = format!("COM{}", selected_port + 1);
-                    if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { mode, stations: _ } =
-                                &port_guard.config;
-                            return Ok(if mode.is_master() { 0 } else { 1 });
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            if let Ok(port_guard) = port_entry.read() {
+                                let types::port::PortConfig::Modbus { mode, stations: _ } =
+                                    &port_guard.config;
+                                return Ok(if mode.is_master() { 0 } else { 1 });
+                            }
                         }
                     }
                 }
@@ -50,14 +52,15 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             // Get the current register mode value from port config
             let current_value = read_status(|status| {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
-                    let port_name = format!("COM{}", selected_port + 1);
-                    if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
-                            let all_items: Vec<_> = stations.iter().collect();
-                            if let Some(item) = all_items.get(index) {
-                                return Ok((item.register_mode as u8 - 1) as usize);
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            if let Ok(port_guard) = port_entry.read() {
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &port_guard.config;
+                                let all_items: Vec<_> = stations.iter().collect();
+                                if let Some(item) = all_items.get(index) {
+                                    return Ok((item.register_mode as u8 - 1) as usize);
+                                }
                             }
                         }
                     }
@@ -115,27 +118,111 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     match mode {
                         types::modbus::RegisterMode::Coils
                         | types::modbus::RegisterMode::DiscreteInputs => {
-                            // Toggle the coil value directly without entering edit mode
-                            with_port_write(
-                                &read_status(|status| {
+                            // Toggle coil value
+                            let selected_port = read_status(|status| {
+                                if let types::Page::ModbusDashboard { selected_port, .. } =
+                                    &status.page
+                                {
+                                    Ok(*selected_port)
+                                } else {
+                                    Ok(0)
+                                }
+                            })?;
+
+                            let port_name_opt = read_status(|status| {
+                                Ok(status.ports.order.get(selected_port).cloned())
+                            })?;
+
+                            if let Some(port_name) = port_name_opt {
+                                if let Some(port) = read_status(|status| {
                                     Ok(status.ports.map.get(&port_name).cloned())
-                                })?
-                                .ok_or(anyhow!("Port not found"))?,
-                                |port| {
-                                    let types::port::PortConfig::Modbus { mode: _, stations } =
-                                        &mut port.config;
-                                    let mut all_items: Vec<_> = stations.iter_mut().collect();
-                                    if let Some(item) = all_items.get_mut(slave_index) {
-                                        // TODO: Update global storage when mode is Master
-                                        // For now, just log the action
-                                        log::info!(
-                                            "Toggle register {} for station {}",
-                                            register_index,
-                                            item.station_id
-                                        );
-                                    }
-                                },
-                            );
+                                })? {
+                                    with_port_write(&port, |port| {
+                                        let types::port::PortConfig::Modbus { mode, stations } =
+                                            &mut port.config;
+                                        let mut all_items: Vec<_> = stations.iter_mut().collect();
+                                        if let Some(item) = all_items.get_mut(slave_index) {
+                                            let register_addr =
+                                                item.register_address + register_index as u16;
+
+                                            // Read current value, toggle it, and write back
+                                            match mode {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => {
+                                                    // Master mode: Toggle coil directly in storage
+                                                    if let Ok(mut context) = storage.lock() {
+                                                        if item.register_mode
+                                                            == types::modbus::RegisterMode::Coils
+                                                        {
+                                                            let current = context
+                                                                .get_coil(register_addr)
+                                                                .unwrap_or(false);
+                                                            let new_value = !current;
+                                                            if let Err(e) = context
+                                                                .set_coil(register_addr, new_value)
+                                                            {
+                                                                log::warn!("Failed to toggle coil at {register_addr}: {e}");
+                                                            } else {
+                                                                log::info!(
+                                                                    "✓ Master: Toggled coil at 0x{register_addr:04X} from {current} to {new_value}"
+                                                                );
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => {
+                                                    // Slave mode: Queue a write request for the coil
+                                                    if let Ok(context) = storage.lock() {
+                                                        let current = context
+                                                            .get_coil(register_addr)
+                                                            .unwrap_or(false);
+                                                        let new_value = !current;
+
+                                                        // For single coil write, we use function 0x05 (Write Single Coil)
+                                                        // Generate the Modbus frame for single coil write
+                                                        use crate::protocol::modbus::generate_pull_set_holding_request;
+
+                                                        // Single coil write uses value 0xFF00 for ON, 0x0000 for OFF
+                                                        let coil_value =
+                                                            if new_value { 0xFF00 } else { 0x0000 };
+
+                                                        if let Ok((_request, raw_frame)) =
+                                                            generate_pull_set_holding_request(
+                                                                item.station_id,
+                                                                register_addr,
+                                                                coil_value,
+                                                            )
+                                                        {
+                                                            // Modify the function code to 0x05 (Write Single Coil)
+                                                            let mut frame = raw_frame;
+                                                            if frame.len() > 1 {
+                                                                frame[1] = 0x05;
+                                                                // Change function code from 0x06 to 0x05
+                                                            }
+
+                                                            item.pending_requests
+                                                                .extend_from_slice(&frame);
+                                                            log::info!(
+                                                                "📤 Slave: Queued toggle coil 0x{:04X} from {} to {} ({} bytes)",
+                                                                register_addr,
+                                                                current,
+                                                                new_value,
+                                                                frame.len()
+                                                            );
+                                                        } else {
+                                                            log::warn!("Failed to generate coil write request");
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            }
                             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
                         }
                         types::modbus::RegisterMode::Holding
@@ -144,12 +231,42 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                             let current_value = read_status(|status| {
                                 if let Some(port_entry) = status.ports.map.get(&port_name) {
                                     if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                                        let types::port::PortConfig::Modbus { mode, stations } =
                                             &port_guard.config;
                                         let all_items: Vec<_> = stations.iter().collect();
-                                        if let Some(_item) = all_items.get(slave_index) {
-                                            // TODO: Read from global storage when mode is Master
-                                            return Ok(0); // Placeholder value
+                                        if let Some(item) = all_items.get(slave_index) {
+                                            let register_addr =
+                                                item.register_address + register_index as u16;
+
+                                            // Read current value from storage
+                                            let storage_opt = match mode {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => Some(storage.clone()),
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => Some(storage.clone()),
+                                            };
+
+                                            if let Some(storage) = storage_opt {
+                                                if let Ok(context) = storage.lock() {
+                                                    let value = match item.register_mode {
+                                                        types::modbus::RegisterMode::Holding => {
+                                                            context
+                                                                .get_holding(register_addr)
+                                                                .unwrap_or(0)
+                                                        }
+                                                        types::modbus::RegisterMode::Input => {
+                                                            context
+                                                                .get_input(register_addr)
+                                                                .unwrap_or(0)
+                                                        }
+                                                        _ => 0,
+                                                    };
+                                                    return Ok(value);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -215,10 +332,10 @@ fn create_new_modbus_entry() -> Result<()> {
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             with_port_write(&port, |port| {
-                let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
-                // Create a new master entry with default values
+                let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                // Create a new entry with the global mode from the port config
                 let new_entry = types::modbus::ModbusRegisterItem {
-                    connection_mode: types::modbus::ModbusConnectionMode::default_master(),
+                    connection_mode: mode.clone(),
                     station_id: 1,
                     register_mode: types::modbus::RegisterMode::Holding,
                     register_address: 0,
@@ -230,7 +347,10 @@ fn create_new_modbus_entry() -> Result<()> {
                     pending_requests: Vec::new(),
                 };
                 stations.push(new_entry);
-                log::info!("Created new modbus master entry with station_id=1");
+                log::info!(
+                    "Created new modbus entry with station_id=1 in {:?} mode",
+                    if mode.is_master() { "Master" } else { "Slave" }
+                );
             });
         }
     }
