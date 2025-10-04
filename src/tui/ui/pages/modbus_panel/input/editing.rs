@@ -260,49 +260,56 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                     if let Ok(register_value) = parsed_value {
                         // Get selected port and port name
                         let selected_port = read_status(|status| {
-                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
+                            {
                                 Ok(*selected_port)
                             } else {
                                 Ok(0)
                             }
                         })?;
-                        
-                        let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
-                        
+
+                        let port_name_opt = read_status(|status| {
+                            Ok(status.ports.order.get(selected_port).cloned())
+                        })?;
+
                         if let Some(port_name) = port_name_opt {
-                            if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+                            if let Some(port) =
+                                read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
+                            {
                                 with_port_write(&port, |port| {
                                     let types::port::PortConfig::Modbus { mode, stations } =
                                         &mut port.config;
                                     let mut all_items: Vec<_> = stations.iter_mut().collect();
                                     if let Some(item) = all_items.get_mut(slave_index) {
-                                        let register_addr = item.register_address + register_index as u16;
-                                        
+                                        let register_addr =
+                                            item.register_address + register_index as u16;
+
                                         match mode {
                                             ModbusConnectionMode::Master { storage } => {
                                                 // Master mode: Write directly to local storage
                                                 if let Ok(mut context) = storage.lock() {
                                                     match item.register_mode {
                                                         RegisterMode::Holding => {
-                                                            if let Err(e) = context.set_holding(register_addr, register_value) {
+                                                            if let Err(e) = context.set_holding(
+                                                                register_addr,
+                                                                register_value,
+                                                            ) {
                                                                 log::warn!("Failed to set holding register at {register_addr}: {e}");
                                                             } else {
                                                                 log::info!(
-                                                                    "✓ Master: Set holding register at 0x{:04X} = 0x{:04X}",
-                                                                    register_addr,
-                                                                    register_value
+                                                                    "✓ Master: Set holding register at 0x{register_addr:04X} = 0x{register_value:04X}"
                                                                 );
                                                             }
                                                         }
                                                         RegisterMode::Coils => {
                                                             let coil_value = register_value != 0;
-                                                            if let Err(e) = context.set_coil(register_addr, coil_value) {
+                                                            if let Err(e) = context
+                                                                .set_coil(register_addr, coil_value)
+                                                            {
                                                                 log::warn!("Failed to set coil at {register_addr}: {e}");
                                                             } else {
                                                                 log::info!(
-                                                                    "✓ Master: Set coil at 0x{:04X} = {}",
-                                                                    register_addr,
-                                                                    coil_value
+                                                                    "✓ Master: Set coil at 0x{register_addr:04X} = {coil_value}"
                                                                 );
                                                             }
                                                         }
@@ -316,17 +323,20 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                 // Slave mode: Queue a write request to be sent to the master
                                                 // The pending request will be sent in the next poll cycle
                                                 use crate::protocol::modbus::generate_pull_set_holding_request;
-                                                
+
                                                 match item.register_mode {
                                                     RegisterMode::Holding => {
                                                         // Generate a Modbus write request frame
-                                                        if let Ok((_request, raw_frame)) = generate_pull_set_holding_request(
-                                                            item.station_id,
-                                                            register_addr,
-                                                            register_value,
-                                                        ) {
+                                                        if let Ok((_request, raw_frame)) =
+                                                            generate_pull_set_holding_request(
+                                                                item.station_id,
+                                                                register_addr,
+                                                                register_value,
+                                                            )
+                                                        {
                                                             // Add the frame to pending requests
-                                                            item.pending_requests.extend_from_slice(&raw_frame);
+                                                            item.pending_requests
+                                                                .extend_from_slice(&raw_frame);
                                                             log::info!(
                                                                 "📤 Slave: Queued write request for holding register 0x{:04X} = 0x{:04X} ({} bytes)",
                                                                 register_addr,

@@ -269,7 +269,8 @@ pub fn handle_master_query_mode(
                         }
                     }
                     vec![] // Return empty vec if no pending requests
-                }).and_then(|v| if v.is_empty() { None } else { Some(v) });
+                })
+                .and_then(|v| if v.is_empty() { None } else { Some(v) });
 
                 // Determine which request to send: pending write or regular read
                 let request_bytes = if let Some(write_req) = pending_request {
@@ -293,81 +294,80 @@ pub fn handle_master_query_mode(
                             request_bytes.clone(),
                         ))
                 {
-                            let warn_msg = format!(
-                                "Failed to send modbus slave request for {port_name} station {}: {e}",
-                                station.station_id
-                            );
-                            log::warn!("{warn_msg}");
+                    let warn_msg = format!(
+                        "Failed to send modbus slave request for {port_name} station {}: {e}",
+                        station.station_id
+                    );
+                    log::warn!("{warn_msg}");
 
-                            // Also write this warning into the port logs so the UI can show it
-                            let log_entry = PortLogEntry {
-                                when: chrono::Local::now(),
-                                raw: warn_msg.clone(),
-                                parsed: None,
-                            };
-                            with_port_write(port_arc, |port| {
-                                port.logs.push(log_entry);
-                                if port.logs.len() > 1000 {
-                                    let excess = port.logs.len() - 1000;
-                                    port.logs.drain(0..excess);
-                                }
-
-                                // Ensure we clear station.last_request_time if we had set it earlier
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &mut port.config;
-                                if let Some(station_mut) = stations.get_mut(current_index) {
-                                    station_mut.last_request_time = None;
-                                }
-                            });
-                        } else {
-                            // Log the sent frame
-                            let hex_frame = request_bytes
-                                .iter()
-                                .map(|b| format!("{b:02x}"))
-                                .collect::<Vec<_>>()
-                                .join(" ");
-
-                            let log_entry = PortLogEntry {
-                                when: chrono::Local::now(),
-                                raw: format!("Master TX (request): {hex_frame}"),
-                                parsed: None,
-                            };
-
-                            with_port_write(port_arc, |port| {
-                                port.logs.push(log_entry);
-                                if port.logs.len() > 1000 {
-                                    let excess = port.logs.len() - 1000;
-                                    port.logs.drain(0..excess);
-                                }
-
-                                // Update the station's next poll time (1 second interval)
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &mut port.config;
-                                if let Some(station_mut) = stations.get_mut(current_index) {
-                                    station_mut.next_poll_at = now + Duration::from_secs(1);
-                                    station_mut.last_request_time = Some(now);
-                                }
-                            });
-
-                            // Move to next station for the next poll cycle in a separate write
-                            with_port_write(port_arc, |port| {
-                                let types::port::PortConfig::Modbus { mode, stations } =
-                                    &mut port.config;
-                                if let types::modbus::ModbusConnectionMode::Slave {
-                                    current_request_at_station_index,
-                                    storage: _,
-                                } = mode
-                                {
-                                    *current_request_at_station_index =
-                                        (current_index + 1) % stations.len();
-                                }
-                            });
-
-                            log::info!(
-                                "Sent modbus slave request for {port_name} station {}: {hex_frame}",
-                                station.station_id
-                            );
+                    // Also write this warning into the port logs so the UI can show it
+                    let log_entry = PortLogEntry {
+                        when: chrono::Local::now(),
+                        raw: warn_msg.clone(),
+                        parsed: None,
+                    };
+                    with_port_write(port_arc, |port| {
+                        port.logs.push(log_entry);
+                        if port.logs.len() > 1000 {
+                            let excess = port.logs.len() - 1000;
+                            port.logs.drain(0..excess);
                         }
+
+                        // Ensure we clear station.last_request_time if we had set it earlier
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &mut port.config;
+                        if let Some(station_mut) = stations.get_mut(current_index) {
+                            station_mut.last_request_time = None;
+                        }
+                    });
+                } else {
+                    // Log the sent frame
+                    let hex_frame = request_bytes
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    let log_entry = PortLogEntry {
+                        when: chrono::Local::now(),
+                        raw: format!("Master TX (request): {hex_frame}"),
+                        parsed: None,
+                    };
+
+                    with_port_write(port_arc, |port| {
+                        port.logs.push(log_entry);
+                        if port.logs.len() > 1000 {
+                            let excess = port.logs.len() - 1000;
+                            port.logs.drain(0..excess);
+                        }
+
+                        // Update the station's next poll time (1 second interval)
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &mut port.config;
+                        if let Some(station_mut) = stations.get_mut(current_index) {
+                            station_mut.next_poll_at = now + Duration::from_secs(1);
+                            station_mut.last_request_time = Some(now);
+                        }
+                    });
+
+                    // Move to next station for the next poll cycle in a separate write
+                    with_port_write(port_arc, |port| {
+                        let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                        if let types::modbus::ModbusConnectionMode::Slave {
+                            current_request_at_station_index,
+                            storage: _,
+                        } = mode
+                        {
+                            *current_request_at_station_index =
+                                (current_index + 1) % stations.len();
+                        }
+                    });
+
+                    log::info!(
+                        "Sent modbus slave request for {port_name} station {}: {hex_frame}",
+                        station.station_id
+                    );
+                }
             }
         }
     } else {

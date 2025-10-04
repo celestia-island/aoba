@@ -120,70 +120,92 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         | types::modbus::RegisterMode::DiscreteInputs => {
                             // Toggle coil value
                             let selected_port = read_status(|status| {
-                                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                                if let types::Page::ModbusDashboard { selected_port, .. } =
+                                    &status.page
+                                {
                                     Ok(*selected_port)
                                 } else {
                                     Ok(0)
                                 }
                             })?;
-                            
-                            let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
-                            
+
+                            let port_name_opt = read_status(|status| {
+                                Ok(status.ports.order.get(selected_port).cloned())
+                            })?;
+
                             if let Some(port_name) = port_name_opt {
-                                if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+                                if let Some(port) = read_status(|status| {
+                                    Ok(status.ports.map.get(&port_name).cloned())
+                                })? {
                                     with_port_write(&port, |port| {
                                         let types::port::PortConfig::Modbus { mode, stations } =
                                             &mut port.config;
                                         let mut all_items: Vec<_> = stations.iter_mut().collect();
                                         if let Some(item) = all_items.get_mut(slave_index) {
-                                            let register_addr = item.register_address + register_index as u16;
-                                            
+                                            let register_addr =
+                                                item.register_address + register_index as u16;
+
                                             // Read current value, toggle it, and write back
                                             match mode {
-                                                types::modbus::ModbusConnectionMode::Master { storage } => {
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => {
                                                     // Master mode: Toggle coil directly in storage
                                                     if let Ok(mut context) = storage.lock() {
-                                                        if item.register_mode == types::modbus::RegisterMode::Coils {
-                                                            let current = context.get_coil(register_addr).unwrap_or(false);
+                                                        if item.register_mode
+                                                            == types::modbus::RegisterMode::Coils
+                                                        {
+                                                            let current = context
+                                                                .get_coil(register_addr)
+                                                                .unwrap_or(false);
                                                             let new_value = !current;
-                                                            if let Err(e) = context.set_coil(register_addr, new_value) {
+                                                            if let Err(e) = context
+                                                                .set_coil(register_addr, new_value)
+                                                            {
                                                                 log::warn!("Failed to toggle coil at {register_addr}: {e}");
                                                             } else {
                                                                 log::info!(
-                                                                    "✓ Master: Toggled coil at 0x{:04X} from {} to {}",
-                                                                    register_addr,
-                                                                    current,
-                                                                    new_value
+                                                                    "✓ Master: Toggled coil at 0x{register_addr:04X} from {current} to {new_value}"
                                                                 );
                                                             }
                                                         }
                                                     }
                                                 }
-                                                types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => {
                                                     // Slave mode: Queue a write request for the coil
                                                     if let Ok(context) = storage.lock() {
-                                                        let current = context.get_coil(register_addr).unwrap_or(false);
+                                                        let current = context
+                                                            .get_coil(register_addr)
+                                                            .unwrap_or(false);
                                                         let new_value = !current;
-                                                        
+
                                                         // For single coil write, we use function 0x05 (Write Single Coil)
                                                         // Generate the Modbus frame for single coil write
                                                         use crate::protocol::modbus::generate_pull_set_holding_request;
-                                                        
+
                                                         // Single coil write uses value 0xFF00 for ON, 0x0000 for OFF
-                                                        let coil_value = if new_value { 0xFF00 } else { 0x0000 };
-                                                        
-                                                        if let Ok((_request, raw_frame)) = generate_pull_set_holding_request(
-                                                            item.station_id,
-                                                            register_addr,
-                                                            coil_value,
-                                                        ) {
+                                                        let coil_value =
+                                                            if new_value { 0xFF00 } else { 0x0000 };
+
+                                                        if let Ok((_request, raw_frame)) =
+                                                            generate_pull_set_holding_request(
+                                                                item.station_id,
+                                                                register_addr,
+                                                                coil_value,
+                                                            )
+                                                        {
                                                             // Modify the function code to 0x05 (Write Single Coil)
                                                             let mut frame = raw_frame;
                                                             if frame.len() > 1 {
-                                                                frame[1] = 0x05; // Change function code from 0x06 to 0x05
+                                                                frame[1] = 0x05;
+                                                                // Change function code from 0x06 to 0x05
                                                             }
-                                                            
-                                                            item.pending_requests.extend_from_slice(&frame);
+
+                                                            item.pending_requests
+                                                                .extend_from_slice(&frame);
                                                             log::info!(
                                                                 "📤 Slave: Queued toggle coil 0x{:04X} from {} to {} ({} bytes)",
                                                                 register_addr,
@@ -213,26 +235,32 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                             &port_guard.config;
                                         let all_items: Vec<_> = stations.iter().collect();
                                         if let Some(item) = all_items.get(slave_index) {
-                                            let register_addr = item.register_address + register_index as u16;
-                                            
+                                            let register_addr =
+                                                item.register_address + register_index as u16;
+
                                             // Read current value from storage
                                             let storage_opt = match mode {
-                                                types::modbus::ModbusConnectionMode::Master { storage } => {
-                                                    Some(storage.clone())
-                                                }
-                                                types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
-                                                    Some(storage.clone())
-                                                }
+                                                types::modbus::ModbusConnectionMode::Master {
+                                                    storage,
+                                                } => Some(storage.clone()),
+                                                types::modbus::ModbusConnectionMode::Slave {
+                                                    storage,
+                                                    ..
+                                                } => Some(storage.clone()),
                                             };
-                                            
+
                                             if let Some(storage) = storage_opt {
                                                 if let Ok(context) = storage.lock() {
                                                     let value = match item.register_mode {
                                                         types::modbus::RegisterMode::Holding => {
-                                                            context.get_holding(register_addr).unwrap_or(0)
+                                                            context
+                                                                .get_holding(register_addr)
+                                                                .unwrap_or(0)
                                                         }
                                                         types::modbus::RegisterMode::Input => {
-                                                            context.get_input(register_addr).unwrap_or(0)
+                                                            context
+                                                                .get_input(register_addr)
+                                                                .unwrap_or(0)
                                                         }
                                                         _ => 0,
                                                     };
