@@ -419,17 +419,41 @@ pub fn handle_master_query_mode(
                                             for (offset, &value) in values.iter().enumerate() {
                                                 let addr =
                                                     start_address.wrapping_add(offset as u16);
-                                                if let Err(e) = context.set_holding(addr, value) {
-                                                    log::warn!(
-                                                        "Failed to set holding register at {addr}: {e}"
-                                                    );
+                                                match context.set_holding(addr, value) {
+                                                    Ok(_) => {
+                                                        log::debug!(
+                                                            "✓ Set holding register at addr {addr} (0x{addr:04X}) = {value} (0x{value:04X})"
+                                                        );
+                                                    }
+                                                    Err(e) => {
+                                                        log::warn!(
+                                                            "Failed to set holding register at {addr}: {e}"
+                                                        );
+                                                    }
                                                 }
                                             }
                                             log::info!(
-                                                "Updated {} holding registers starting at address {start_address}: {:?}",
+                                                "📥 Slave updated {} holding registers starting at address {start_address} (0x{start_address:04X}): {:?}",
                                                 values.len(),
                                                 values
                                             );
+                                            
+                                            // Verify the values were written correctly by reading them back
+                                            log::debug!("🔍 Verifying written values:");
+                                            for (offset, &expected_value) in values.iter().enumerate() {
+                                                let addr = start_address.wrapping_add(offset as u16);
+                                                if let Ok(actual_value) = context.get_holding(addr) {
+                                                    if actual_value == expected_value {
+                                                        log::debug!("  ✓ Addr {addr}: {actual_value} (correct)");
+                                                    } else {
+                                                        log::warn!("  ✗ Addr {addr}: {actual_value} (expected {expected_value})");
+                                                    }
+                                                } else {
+                                                    log::warn!("  ✗ Addr {addr}: Failed to read back");
+                                                }
+                                            }
+                                        } else {
+                                            log::warn!("Failed to parse holding register response");
                                         }
                                     }
                                     types::modbus::RegisterMode::Input => {
