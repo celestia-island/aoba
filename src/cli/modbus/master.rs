@@ -24,25 +24,35 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         "Starting master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
-    // Open serial port
-    let port_handle = serialport::new(port, baud_rate)
-        .timeout(Duration::from_secs(5))
-        .open()
-        .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
-
-    let port_arc = Arc::new(Mutex::new(port_handle));
-
     // Read one line of data and provide it
     let values = read_one_data_update(&data_source)?;
 
-    let response = provide_data_once(
-        port_arc,
-        station_id,
-        register_address,
-        register_length,
-        reg_mode,
-        values,
-    )?;
+    let response = {
+        // Open serial port in a scope to ensure it's closed before returning
+        let port_handle = serialport::new(port, baud_rate)
+            .timeout(Duration::from_secs(5))
+            .open()
+            .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+
+        let port_arc = Arc::new(Mutex::new(port_handle));
+
+        let response = provide_data_once(
+            port_arc.clone(),
+            station_id,
+            register_address,
+            register_length,
+            reg_mode,
+            values,
+        )?;
+
+        // Explicitly drop port_arc to close the port
+        drop(port_arc);
+        
+        // Give the OS time to fully release the port
+        std::thread::sleep(Duration::from_millis(100));
+        
+        response
+    };
 
     // Output JSON
     let json = serde_json::to_string(&response)?;

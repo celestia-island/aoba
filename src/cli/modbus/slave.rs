@@ -19,28 +19,38 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
         "Starting slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
-    // Open serial port
-    let port_handle = serialport::new(port, baud_rate)
-        .timeout(Duration::from_secs(5))
-        .open()
-        .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+    let response = {
+        // Open serial port in a scope to ensure it's closed before returning
+        let port_handle = serialport::new(port, baud_rate)
+            .timeout(Duration::from_secs(5))
+            .open()
+            .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
 
-    let port_arc = Arc::new(Mutex::new(port_handle));
+        let port_arc = Arc::new(Mutex::new(port_handle));
 
-    // Initialize modbus storage
-    let storage = Arc::new(Mutex::new(
-        rmodbus::server::storage::ModbusStorageSmall::new(),
-    ));
+        // Initialize modbus storage
+        let storage = Arc::new(Mutex::new(
+            rmodbus::server::storage::ModbusStorageSmall::new(),
+        ));
 
-    // Wait for one request and respond
-    let response = listen_for_one_request(
-        port_arc,
-        station_id,
-        register_address,
-        register_length,
-        reg_mode,
-        storage,
-    )?;
+        // Wait for one request and respond
+        let response = listen_for_one_request(
+            port_arc.clone(),
+            station_id,
+            register_address,
+            register_length,
+            reg_mode,
+            storage,
+        )?;
+
+        // Explicitly drop port_arc to close the port
+        drop(port_arc);
+        
+        // Give the OS time to fully release the port
+        std::thread::sleep(Duration::from_millis(100));
+        
+        response
+    };
 
     // Output JSON
     let json = serde_json::to_string(&response)?;
