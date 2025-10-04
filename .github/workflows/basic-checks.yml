@@ -102,3 +102,92 @@ jobs:
             echo "No changes to commit"
           fi
         continue-on-error: true
+
+  examples-check:
+    name: Check examples/**
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        package: [aoba_cli_integration_tests, aoba_tui_e2e_tests]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run fmt check for package
+        id: fmt_check
+        run: cargo fmt -p ${{ matrix.package }} -- --check
+        continue-on-error: true
+
+      - name: Run cargo check for package
+        id: check
+        run: cargo check -p ${{ matrix.package }} --all-targets --all-features
+        continue-on-error: true
+
+      - name: Run clippy for package
+        id: clippy_check
+        run: cargo clippy -p ${{ matrix.package }} --all-targets --all-features -- -D warnings
+        continue-on-error: true
+
+      # Auto-fix steps (only run on push to master/main)
+      - name: Attempt auto-fix with cargo fix
+        if: github.event_name == 'push' && steps.check.outcome == 'failure'
+        run: |
+          echo "Attempting to fix compilation errors for ${{ matrix.package }}..."
+          cargo fix -p ${{ matrix.package }} --all-targets --allow-dirty --allow-staged || true
+        continue-on-error: true
+
+      - name: Attempt auto-fix with cargo clippy --fix
+        if: github.event_name == 'push' && steps.clippy_check.outcome == 'failure'
+        run: |
+          echo "Attempting to fix clippy warnings for ${{ matrix.package }}..."
+          cargo clippy --fix -p ${{ matrix.package }} --all-targets --all-features --allow-dirty --allow-staged || true
+        continue-on-error: true
+
+      - name: Run cargo fmt (auto-fix)
+        if: github.event_name == 'push' && steps.fmt_check.outcome == 'failure'
+        run: |
+          echo "Running cargo fmt to fix formatting for ${{ matrix.package }}..."
+          cargo fmt -p ${{ matrix.package }}
+        continue-on-error: true
+
+      - name: Check for changes and commit
+        if: github.event_name == 'push'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          if ! git diff --cached --quiet; then
+            echo "Changes detected, committing..."
+            git commit -m "🎨 Clippy."
+            git push
+          else
+            echo "No changes to commit"
+          fi
+        continue-on-error: true
