@@ -59,14 +59,14 @@ pub fn test_master_slave_communication() -> Result<()> {
             let stderr = if let Some(stderr) = master.stderr.take() {
                 let mut buf = String::new();
                 let mut reader = BufReader::new(stderr);
-                let _ = reader.read_line(&mut buf);
+                reader.read_line(&mut buf)?;
                 buf
             } else {
                 String::new()
             };
 
-            let _ = std::fs::remove_file(&data_file);
-            let _ = std::fs::remove_file(&master_output);
+            std::fs::remove_file(&data_file)?;
+            std::fs::remove_file(&master_output)?;
 
             return Err(anyhow!(
                 "Master exited prematurely with status {}: {}",
@@ -104,8 +104,8 @@ pub fn test_master_slave_communication() -> Result<()> {
     let slave_result = slave_output.wait_with_output()?;
 
     // Kill master process and wait for it to fully exit
-    let _ = master.kill();
-    let _ = master.wait();
+    master.kill()?;
+    master.wait()?;
 
     // Give extra time for ports to be fully released
     thread::sleep(Duration::from_secs(1));
@@ -125,8 +125,8 @@ pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Master output: {}", master_output_content);
 
     // Clean up
-    let _ = std::fs::remove_file(&data_file);
-    let _ = std::fs::remove_file(&master_output);
+    std::fs::remove_file(&data_file)?;
+    std::fs::remove_file(&master_output)?;
 
     // Verify communication happened
     if !slave_result.status.success() {
@@ -171,8 +171,8 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
         Ok(mut child) => {
             // Wait for a short time
             thread::sleep(Duration::from_millis(1000));
-            let _ = child.kill();
-            let _ = child.wait();
+            child.kill()?;
+            child.wait()?;
 
             log::info!("✅ Slave listen command accepted with virtual ports");
 
@@ -226,13 +226,13 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
         Ok(mut child) => {
             // Let it run for a bit
             thread::sleep(Duration::from_secs(1));
-            let _ = child.kill();
-            let _ = child.wait();
+            child.kill()?;
+            child.wait()?;
 
             log::info!("✅ Master provide persist command accepted with virtual ports");
 
             // Clean up
-            let _ = std::fs::remove_file(&data_file);
+            std::fs::remove_file(&data_file)?;
 
             // Give extra time for port to be fully released
             thread::sleep(Duration::from_secs(1));
@@ -240,7 +240,7 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            let _ = std::fs::remove_file(&data_file);
+            std::fs::remove_file(&data_file)?;
             log::error!("Failed to spawn master provide persist: {}", e);
             Err(anyhow!("Failed to spawn: {}", e))
         }

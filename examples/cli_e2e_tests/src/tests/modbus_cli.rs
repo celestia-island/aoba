@@ -35,7 +35,7 @@ pub fn test_slave_listen_temp() -> Result<()> {
         Ok(mut child) => {
             // Wait for a short time, then kill it (it will timeout anyway)
             std::thread::sleep(Duration::from_millis(500));
-            let _ = child.kill();
+            child.kill()?;
 
             log::info!("🧪 Slave listen command accepted (port error expected)");
             Ok(())
@@ -76,7 +76,7 @@ pub fn test_slave_listen_persist() -> Result<()> {
             std::thread::sleep(Duration::from_millis(500));
 
             // Kill the process after timeout
-            let _ = child.kill();
+            child.kill()?;
 
             log::info!("🧪 Slave listen persist command accepted (port error expected)");
             Ok(())
@@ -125,16 +125,16 @@ pub fn test_master_provide_temp() -> Result<()> {
     match output {
         Ok(mut child) => {
             std::thread::sleep(Duration::from_millis(500));
-            let _ = child.kill();
+            child.kill()?;
 
             log::info!("🧪 Master provide command accepted (port error expected)");
 
             // Clean up
-            let _ = std::fs::remove_file(&data_file);
+            std::fs::remove_file(&data_file)?;
             Ok(())
         }
         Err(e) => {
-            let _ = std::fs::remove_file(&data_file);
+            std::fs::remove_file(&data_file)?;
             log::error!("Failed to spawn master provide: {}", e);
             Err(anyhow!("Failed to spawn: {}", e))
         }
@@ -183,16 +183,16 @@ pub fn test_master_provide_persist() -> Result<()> {
             std::thread::sleep(Duration::from_secs(1));
 
             // Kill the process
-            let _ = child.kill();
+            child.kill()?;
 
             log::info!("🧪 Master provide persist command accepted (port error expected)");
 
             // Clean up
-            let _ = std::fs::remove_file(&data_file);
+            std::fs::remove_file(&data_file)?;
             Ok(())
         }
         Err(e) => {
-            let _ = std::fs::remove_file(&data_file);
+            std::fs::remove_file(&data_file)?;
             log::error!("Failed to spawn master provide persist: {}", e);
             Err(anyhow!("Failed to spawn: {}", e))
         }
