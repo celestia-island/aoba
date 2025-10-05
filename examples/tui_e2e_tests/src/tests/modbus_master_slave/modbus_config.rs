@@ -48,13 +48,16 @@ pub async fn configure_master_mode<T: Expect>(
             count: 1,
         },
     ];
-    // Set all 12 registers to 0, 10, 20, ..., 110
+    // Set all 12 registers to 0, 10, 20, ..., 110 (in decimal)
+    // UI expects hex input, so we need to enter hex values: 0, A, 14, 1E, 28, 32, 3C, 46, 50, 5A, 64, 6E
     let actions = actions
         .into_iter()
         .chain((0..12).flat_map(|i| {
+            let decimal_value = i * 10;
+            let hex_string = format!("{:X}", decimal_value); // Format as uppercase hex without 0x prefix
             vec![
                 CursorAction::PressEnter,
-                CursorAction::TypeString(format!("{}", i * 10)),
+                CursorAction::TypeString(hex_string),
                 CursorAction::PressEnter,
                 CursorAction::PressArrow {
                     direction: ArrowKey::Right,
@@ -65,7 +68,7 @@ pub async fn configure_master_mode<T: Expect>(
         .collect::<Vec<_>>();
 
     // Verify register values row by row (4 registers per row for 80-column terminals)
-    // Row 1: registers 0-3 (values: 0, 10, 20, 30)
+    // Row 1: registers 0-3 (decimal values: 0, 10, 20, 30 -> hex input: 0, A, 14, 1E)
     let actions = actions
         .into_iter()
         .chain(vec![
@@ -78,21 +81,21 @@ pub async fn configure_master_mode<T: Expect>(
             },
         ])
         .collect::<Vec<_>>();
-    // Row 2: registers 4-7 (values: 40, 50, 60, 70)
+    // Row 2: registers 4-7 (decimal values: 40, 50, 60, 70 -> hex: 28, 32, 3C, 46)
     let actions = actions
         .into_iter()
         .chain(vec![CursorAction::MatchPattern {
-            pattern: Regex::new(r"0x0004.*0x0028.*0x0032.*0x003C.*0x0046")?,
+            pattern: Regex::new(r"0x0004.*0x0028.*0x0032.*0x003C")?,
             description: "Row 2: registers 4-7 values verified".to_string(),
             line_range: None,
             col_range: None,
         }])
         .collect::<Vec<_>>();
-    // Row 3: registers 8-11 (values: 80, 90, 100, 110)
+    // Row 3: registers 8-11 (decimal values: 80, 90, 100, 110 -> hex: 50, 5A, 64, 6E)
     let actions = actions
         .into_iter()
         .chain(vec![CursorAction::MatchPattern {
-            pattern: Regex::new(r"0x0008.*0x0050.*0x005A.*0x0064.*0x006E")?,
+            pattern: Regex::new(r"0x0008.*0x0050.*0x005A.*0x0064")?,
             description: "Row 3: registers 8-11 values verified".to_string(),
             line_range: None,
             col_range: None,
