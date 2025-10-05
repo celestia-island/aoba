@@ -3,7 +3,11 @@ use serde::Serialize;
 
 #[derive(Serialize)]
 struct PortInfo<'a> {
+    #[serde(rename = "path")]
     port_name: &'a str,
+    status: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     vid: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -24,18 +28,36 @@ struct PortInfo<'a> {
 
 pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     if matches.get_flag("list-ports") {
-        let ports = crate::protocol::tty::available_ports_sorted();
+        let ports_enriched = crate::protocol::tty::available_ports_enriched();
 
         let want_json = matches.get_flag("json");
         if want_json {
             let mut out: Vec<PortInfo> = Vec::new();
-            for p in ports.iter() {
-                // Try to extract vid / pid / serial using the existing helper if available
-                let (vid, pid, serial, manufacturer, product) =
-                    match crate::protocol::tty::try_extract_vid_pid_serial(&p.port_type) {
-                        Some((v, pa, s, m, pr)) => (Some(v), Some(pa), s, m, pr),
-                        None => (None, None, None, None, None),
-                    };
+
+            // Get occupied ports from status if available
+            let occupied_ports = crate::protocol::status::read_status(|status| {
+                let mut ports = std::collections::HashSet::new();
+                for (port_name, port_arc) in &status.ports.map {
+                    if let Ok(port_data) = port_arc.read() {
+                        if matches!(
+                            &port_data.state,
+                            crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                        ) {
+                            ports.insert(port_name.clone());
+                        }
+                    }
+                }
+                Ok(ports)
+            })
+            .unwrap_or_default();
+
+            for (p, extra) in ports_enriched.iter() {
+                let status = if occupied_ports.contains(&p.port_name) {
+                    "Occupied"
+                } else {
+                    "Free"
+                };
+
                 // Attempt to capture annotation if present in port_name (parenthetical)
                 let ann = if p.port_name.contains('(') && p.port_name.contains(')') {
                     Some(p.port_name.clone())
@@ -45,30 +67,69 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
                 // Canonical: COMn if present, else basename for unix-like
                 let canonical = compute_canonical(&p.port_name);
                 let raw_type = Some(format!("{:?}", p.port_type));
+
                 out.push(PortInfo {
                     port_name: &p.port_name,
-                    vid,
-                    pid,
-                    serial,
+                    status,
+                    guid: extra.guid.clone(),
+                    vid: extra.vid,
+                    pid: extra.pid,
+                    serial: extra.serial.clone(),
                     annotation: ann,
                     canonical,
                     raw_port_type: raw_type,
-                    manufacturer,
-                    product,
+                    manufacturer: extra.manufacturer.clone(),
+                    product: extra.product.clone(),
                 });
             }
             if let Ok(s) = serde_json::to_string_pretty(&out) {
                 println!("{s}");
             } else {
                 // Fallback to plain listing
-                for p in ports.iter() {
-                    println!("{}", p.port_name);
+                for (p, _) in ports_enriched.iter() {
+                    println!("{p_port}", p_port = p.port_name);
                 }
             }
         } else {
-            for p in ports.iter() {
-                println!("{}", p.port_name);
+            for (p, _) in ports_enriched.iter() {
+                println!("{p_port}", p_port = p.port_name);
             }
+        }
+        return true;
+    }
+
+    // Handle modbus slave listen
+    if let Some(port) = matches.get_one::<String>("slave-listen") {
+        if let Err(e) = super::modbus::slave::handle_slave_listen(matches, port) {
+            eprintln!("Error in slave-listen: {e}");
+            std::process::exit(1);
+        }
+        return true;
+    }
+
+    // Handle modbus slave listen persist
+    if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
+        if let Err(e) = super::modbus::slave::handle_slave_listen_persist(matches, port) {
+            eprintln!("Error in slave-listen-persist: {e}");
+            std::process::exit(1);
+        }
+        return true;
+    }
+
+    // Handle modbus master provide
+    if let Some(port) = matches.get_one::<String>("master-provide") {
+        if let Err(e) = super::modbus::master::handle_master_provide(matches, port) {
+            eprintln!("Error in master-provide: {e}");
+            std::process::exit(1);
+        }
+        return true;
+    }
+
+    // Handle modbus master provide persist
+    if let Some(port) = matches.get_one::<String>("master-provide-persist") {
+        if let Err(e) = super::modbus::master::handle_master_provide_persist(matches, port) {
+            eprintln!("Error in master-provide-persist: {e}");
+            std::process::exit(1);
         }
         return true;
     }

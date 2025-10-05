@@ -110,7 +110,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        package: [aoba_cli_integration_tests, aoba_tui_e2e_tests]
+        package: [aoba_cli_e2e_tests, aoba_tui_e2e_tests]
 
     steps:
       - uses: actions/checkout@v5
@@ -179,6 +179,43 @@ jobs:
 
       - name: Check for changes and commit
         if: github.event_name == 'push'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          if ! git diff --cached --quiet; then
+            echo "Changes detected, committing..."
+            git commit -m "🎨 Clippy."
+            git push
+          else
+            echo "No changes to commit"
+          fi
+        continue-on-error: true
+
+      # Auto-fix steps
+      - name: Attempt auto-fix with cargo fix
+        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.check.outcome == 'failure'
+        run: |
+          echo "Attempting to fix compilation errors..."
+          cargo fix --all-targets --allow-dirty --allow-staged || true
+        continue-on-error: true
+
+      - name: Attempt auto-fix with cargo clippy --fix
+        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.clippy_check.outcome == 'failure'
+        run: |
+          echo "Attempting to fix clippy warnings..."
+          cargo clippy --fix --all-targets --all-features --allow-dirty --allow-staged || true
+        continue-on-error: true
+
+      - name: Run cargo fmt (auto-fix)
+        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.fmt_check.outcome == 'failure'
+        run: |
+          echo "Running cargo fmt to fix formatting..."
+          cargo fmt --all
+        continue-on-error: true
+
+      - name: Check for changes and commit
+        if: matrix.rust == 'stable' && github.event_name == 'push'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
