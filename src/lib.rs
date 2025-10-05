@@ -27,7 +27,9 @@ pub fn init_common() {
 
     #[cfg(debug_assertions)]
     {
-        let target = Box::new(File::create("./log.log").expect("Can't create file"));
+        // Check for AOBA_LOG_FILE environment variable
+        let log_path = std::env::var("AOBA_LOG_FILE").unwrap_or_else(|_| "./log.log".to_string());
+        let target = Box::new(File::create(&log_path).expect("Can't create log file"));
         Builder::new()
             .format(|buf, record| {
                 writeln!(

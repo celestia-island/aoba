@@ -344,6 +344,7 @@ fn create_new_modbus_entry() -> Result<()> {
                     req_total: 0,
                     next_poll_at: std::time::Instant::now() - std::time::Duration::from_secs(1), // Start immediately
                     last_request_time: None,
+                    last_response_time: None,
                     pending_requests: Vec::new(),
                 };
                 stations.push(new_entry);

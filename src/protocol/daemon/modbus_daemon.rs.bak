@@ -127,7 +127,7 @@ pub fn handle_slave_response_mode(
                 }
                 
                 let station_id = frame[0];
-                let _function_code = frame[1];
+                let function_code = frame[1];
                 
                 // Extract register address from frame (bytes 2-3 for most function codes)
                 let register_address = if frame.len() >= 4 {
@@ -255,13 +255,6 @@ pub fn handle_slave_response_mode(
 /// Handle sending requests and processing responses (Modbus Master/Client behavior)
 /// This function periodically sends requests and waits for responses with timeout.
 /// Despite the confusing naming, this is called for "Slave" mode which acts as a Modbus Master.
-///
-/// Key behaviors:
-/// - Process ONE station at a time (sequential, not parallel)
-/// - Send request and wait for response or 3-second timeout
-/// - On success: move to next station immediately (respecting 1-second minimum interval)
-/// - On timeout: stay on current station and retry on next poll
-/// - Only move to next station after successful response (not after sending request)
 pub fn handle_master_query_mode(
     port_name: &str,
     port_arc: &Arc<RwLock<types::port::PortData>>,
@@ -291,7 +284,162 @@ pub fn handle_master_query_mode(
         _ => 0,
     };
 
-    // Process incoming responses FIRST (before sending new requests)
+    // Only process the current station
+    if let Some(station) = stations.get(current_index) {
+        log::debug!(
+            "Slave mode: checking station {} (index {}), next_poll_at: {:?}, now: {:?}",
+            station.station_id,
+            current_index,
+            station.next_poll_at,
+            now
+        );
+
+        if now >= station.next_poll_at {
+            log::debug!(
+                "Slave mode: time to send request for station {}",
+                station.station_id
+            );
+
+            // Decide whether to send: skip if a previous request is still pending
+            let mut should_send = true;
+            if let Some(last_rt) = station.last_request_time {
+                if now.duration_since(last_rt) <= Duration::from_secs(3) {
+                    log::debug!(
+                        "Skipping send for station {} because previous request is still pending",
+                        station.station_id
+                    );
+                    should_send = false;
+                }
+            }
+
+            if should_send {
+                // First, check if there are any pending write requests to process
+                let pending_request: Option<Vec<u8>> = with_port_write(port_arc, |port| {
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
+                    if let Some(station_mut) = stations.get_mut(current_index) {
+                        if !station_mut.pending_requests.is_empty() {
+                            // Extract the pending request bytes and clear the queue
+                            let request_bytes = station_mut.pending_requests.clone();
+                            station_mut.pending_requests.clear();
+                            log::info!(
+                                "📤 Sending pending write request for station {} ({} bytes)",
+                                station_mut.station_id,
+                                request_bytes.len()
+                            );
+                            return request_bytes;
+                        }
+                    }
+                    vec![] // Return empty vec if no pending requests
+                })
+                .and_then(|v| if v.is_empty() { None } else { Some(v) });
+
+                // Determine which request to send: pending write or regular read
+                let request_bytes = if let Some(write_req) = pending_request {
+                    write_req
+                } else {
+                    // No pending write, generate regular read request
+                    match generate_modbus_request_with_cache(station, port_arc) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            log::warn!("Failed to generate modbus request: {e}");
+                            return Ok(());
+                        }
+                    }
+                };
+
+                // Try to send the request (write or read)
+                if let Err(e) =
+                    runtime
+                        .cmd_tx
+                        .send(crate::protocol::runtime::RuntimeCommand::Write(
+                            request_bytes.clone(),
+                        ))
+                {
+                    let warn_msg = format!(
+                        "Failed to send modbus slave request for {port_name} station {}: {e}",
+                        station.station_id
+                    );
+                    log::warn!("{warn_msg}");
+
+                    // Also write this warning into the port logs so the UI can show it
+                    let log_entry = PortLogEntry {
+                        when: chrono::Local::now(),
+                        raw: warn_msg.clone(),
+                        parsed: None,
+                    };
+                    with_port_write(port_arc, |port| {
+                        port.logs.push(log_entry);
+                        if port.logs.len() > 1000 {
+                            let excess = port.logs.len() - 1000;
+                            port.logs.drain(0..excess);
+                        }
+
+                        // Ensure we clear station.last_request_time if we had set it earlier
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &mut port.config;
+                        if let Some(station_mut) = stations.get_mut(current_index) {
+                            station_mut.last_request_time = None;
+                        }
+                    });
+                } else {
+                    // Log the sent frame
+                    let hex_frame = request_bytes
+                        .iter()
+                        .map(|b| format!("{b:02x}"))
+                        .collect::<Vec<_>>()
+                        .join(" ");
+
+                    let log_entry = PortLogEntry {
+                        when: chrono::Local::now(),
+                        raw: format!("Master TX (request): {hex_frame}"),
+                        parsed: None,
+                    };
+
+                    with_port_write(port_arc, |port| {
+                        port.logs.push(log_entry);
+                        if port.logs.len() > 1000 {
+                            let excess = port.logs.len() - 1000;
+                            port.logs.drain(0..excess);
+                        }
+
+                        // Update the station's next poll time (1 second interval)
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &mut port.config;
+                        if let Some(station_mut) = stations.get_mut(current_index) {
+                            station_mut.next_poll_at = now + Duration::from_secs(1);
+                            station_mut.last_request_time = Some(now);
+                        }
+                    });
+
+                    // Move to next station for the next poll cycle in a separate write
+                    with_port_write(port_arc, |port| {
+                        let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                        if let types::modbus::ModbusConnectionMode::Slave {
+                            current_request_at_station_index,
+                            storage: _,
+                        } = mode
+                        {
+                            *current_request_at_station_index =
+                                (current_index + 1) % stations.len();
+                        }
+                    });
+
+                    log::info!(
+                        "Sent modbus slave request for {port_name} station {}: {hex_frame}",
+                        station.station_id
+                    );
+                }
+            }
+        }
+    } else {
+        log::debug!(
+            "Slave mode: no station found at index {} (total stations: {})",
+            current_index,
+            stations.len()
+        );
+    }
+
+    // Process incoming responses with 3-second timeout logic
     while let Ok(event) = runtime.evt_rx.try_recv() {
         match event {
             crate::protocol::runtime::RuntimeEvent::FrameReceived(frame) => {
@@ -417,8 +565,9 @@ pub fn handle_master_query_mode(
                                                 }
                                             }
                                             log::info!(
-                                                "Updated {} input registers starting at address {start_address}",
-                                                values.len()
+                                                "Updated {} input registers starting at address {start_address}: {:?}",
+                                                values.len(),
+                                                values
                                             );
                                         }
                                     }
@@ -436,9 +585,7 @@ pub fn handle_master_query_mode(
                                                 let addr =
                                                     start_address.wrapping_add(offset as u16);
                                                 if let Err(e) = context.set_coil(addr, value) {
-                                                    log::warn!(
-                                                        "Failed to set coil at {addr}: {e}"
-                                                    );
+                                                    log::warn!("Failed to set coil at {addr}: {e}");
                                                 }
                                             }
                                             log::info!(
@@ -478,7 +625,6 @@ pub fn handle_master_query_mode(
                     }
                 }
 
-                // Update station state: clear timeout, increment success, and MOVE TO NEXT STATION
                 with_port_write(port_arc, |port| {
                     port.logs.push(log_entry);
                     if port.logs.len() > 1000 {
@@ -487,39 +633,16 @@ pub fn handle_master_query_mode(
                     }
 
                     // Find matching station and update success counter for valid responses within timeout
-                    let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
-                    let mut station_found = false;
-                    let stations_len = stations.len();
-                    for (idx, station) in stations.iter_mut().enumerate() {
+                    let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
+                    for station in stations.iter_mut() {
                         if let Some(last_request_time) = station.last_request_time {
                             // Check if response is within 3-second timeout
                             if now.duration_since(last_request_time) <= Duration::from_secs(3) {
                                 station.req_success = station.req_success.saturating_add(1);
                                 station.last_request_time = None; // Clear timeout tracking
-                                station_found = true;
-                                
-                                // SUCCESS: Move to next station
-                                if let types::modbus::ModbusConnectionMode::Slave {
-                                    current_request_at_station_index,
-                                    storage: _,
-                                } = mode
-                                {
-                                    let next_index = (idx + 1) % stations_len;
-                                    *current_request_at_station_index = next_index;
-                                    log::info!(
-                                        "✅ Success response for station {} (idx {}), moving to next station idx {}",
-                                        station.station_id,
-                                        idx,
-                                        next_index
-                                    );
-                                }
                                 break;
                             }
                         }
-                    }
-                    
-                    if !station_found {
-                        log::debug!("Received response but no matching pending request found");
                     }
                 });
                 log::info!("Received modbus slave response for {port_name}: {hex_frame}");
@@ -531,12 +654,11 @@ pub fn handle_master_query_mode(
         }
     }
 
-    // Check for timeouts - on timeout, clear the request so it can be retried
-    // but DON'T move to next station (stay on current station and retry)
+    // Check for timeouts and log failed requests
     let mut logs_to_add: Vec<PortLogEntry> = Vec::new();
     with_port_write(port_arc, |port| {
         let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
-        for (idx, station) in stations.iter_mut().enumerate() {
+        for station in stations.iter_mut() {
             if let Some(last_request_time) = station.last_request_time {
                 // Check if request has timed out (3 seconds)
                 if now.duration_since(last_request_time) > Duration::from_secs(3) {
@@ -544,20 +666,18 @@ pub fn handle_master_query_mode(
                     let log_entry = PortLogEntry {
                         when: chrono::Local::now(),
                         raw: format!(
-                            "Slave Request Timeout: Station {} (idx {}) - will retry (3s timeout exceeded)",
-                            station.station_id,
-                            idx
+                            "Slave Request Timeout: Station {} (3s timeout exceeded)",
+                            station.station_id
                         ),
                         parsed: None,
                     };
 
                     logs_to_add.push(log_entry);
 
-                    station.last_request_time = None; // Clear timeout tracking so we can retry
+                    station.last_request_time = None; // Clear timeout tracking
                     log::warn!(
-                        "⏱️  Request timeout for {port_name} station {} (idx {}), staying on same station to retry",
-                        station.station_id,
-                        idx
+                        "Request timeout for {port_name} station {}",
+                        station.station_id
                     );
                 }
             }
@@ -574,138 +694,6 @@ pub fn handle_master_query_mode(
                 port.logs.drain(0..excess);
             }
         });
-    }
-
-    // Now check if we should send a request for the current station
-    if let Some(station) = stations.get(current_index) {
-        log::debug!(
-            "Slave mode: checking station {} (index {}), next_poll_at: {:?}, now: {:?}",
-            station.station_id,
-            current_index,
-            station.next_poll_at,
-            now
-        );
-
-        // Check if it's time to poll AND there's no pending request
-        if now >= station.next_poll_at && station.last_request_time.is_none() {
-            log::debug!(
-                "Slave mode: time to send request for station {} (index {})",
-                station.station_id,
-                current_index
-            );
-
-            // First, check if there are any pending write requests to process
-            let pending_request: Option<Vec<u8>> = with_port_write(port_arc, |port| {
-                let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
-                if let Some(station_mut) = stations.get_mut(current_index) {
-                    if !station_mut.pending_requests.is_empty() {
-                        // Extract the pending request bytes and clear the queue
-                        let request_bytes = station_mut.pending_requests.clone();
-                        station_mut.pending_requests.clear();
-                        log::info!(
-                            "📤 Sending pending write request for station {} ({} bytes)",
-                            station_mut.station_id,
-                            request_bytes.len()
-                        );
-                        return request_bytes;
-                    }
-                }
-                vec![] // Return empty vec if no pending requests
-            })
-            .and_then(|v| if v.is_empty() { None } else { Some(v) });
-
-            // Determine which request to send: pending write or regular read
-            let request_bytes = if let Some(write_req) = pending_request {
-                write_req
-            } else {
-                // No pending write, generate regular read request
-                match generate_modbus_request_with_cache(station, port_arc) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        log::warn!("Failed to generate modbus request: {e}");
-                        return Ok(());
-                    }
-                }
-            };
-
-            // Try to send the request (write or read)
-            if let Err(e) =
-                runtime
-                    .cmd_tx
-                    .send(crate::protocol::runtime::RuntimeCommand::Write(
-                        request_bytes.clone(),
-                    ))
-            {
-                let warn_msg = format!(
-                    "Failed to send modbus slave request for {port_name} station {}: {e}",
-                    station.station_id
-                );
-                log::warn!("{warn_msg}");
-
-                // Also write this warning into the port logs so the UI can show it
-                let log_entry = PortLogEntry {
-                    when: chrono::Local::now(),
-                    raw: warn_msg.clone(),
-                    parsed: None,
-                };
-                with_port_write(port_arc, |port| {
-                    port.logs.push(log_entry);
-                    if port.logs.len() > 1000 {
-                        let excess = port.logs.len() - 1000;
-                        port.logs.drain(0..excess);
-                    }
-                });
-            } else {
-                // Log the sent frame
-                let hex_frame = request_bytes
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-
-                let log_entry = PortLogEntry {
-                    when: chrono::Local::now(),
-                    raw: format!("Master TX (request): {hex_frame}"),
-                    parsed: None,
-                };
-
-                with_port_write(port_arc, |port| {
-                    port.logs.push(log_entry);
-                    if port.logs.len() > 1000 {
-                        let excess = port.logs.len() - 1000;
-                        port.logs.drain(0..excess);
-                    }
-
-                    // Update the station's next poll time (1 second interval) and mark as pending
-                    let types::port::PortConfig::Modbus { mode: _, stations } =
-                        &mut port.config;
-                    if let Some(station_mut) = stations.get_mut(current_index) {
-                        station_mut.next_poll_at = now + Duration::from_secs(1);
-                        station_mut.last_request_time = Some(now);
-                    }
-                });
-
-                // NOTE: Do NOT move to next station here! Only move after successful response.
-
-                log::info!(
-                    "📤 Sent modbus slave request for {port_name} station {} (idx {}): {hex_frame}",
-                    station.station_id,
-                    current_index
-                );
-            }
-        } else if station.last_request_time.is_some() {
-            log::debug!(
-                "Slave mode: waiting for response from station {} (index {})",
-                station.station_id,
-                current_index
-            );
-        }
-    } else {
-        log::debug!(
-            "Slave mode: no station found at index {} (total stations: {})",
-            current_index,
-            stations.len()
-        );
     }
 
     Ok(())
