@@ -42,8 +42,8 @@ jobs:
 
       - name: Setup virtual serial ports
         run: |
-          chmod +x examples/tui_e2e_tests/scripts/socat_init.sh
-          sudo examples/tui_e2e_tests/scripts/socat_init.sh
+          chmod +x scripts/socat_init.sh
+          sudo scripts/socat_init.sh
 
       - name: Enumerate serial ports (diagnostic)
         run: |
