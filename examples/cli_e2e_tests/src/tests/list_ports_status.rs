@@ -41,10 +41,10 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
         } else {
             // Check first port has required fields
             if let Some(port) = arr.first() {
-                if !port.get("path").is_some() {
+                if port.get("path").is_none() {
                     return Err(anyhow!("Port missing 'path' field"));
                 }
-                if !port.get("status").is_some() {
+                if port.get("status").is_none() {
                     return Err(anyhow!("Port missing 'status' field"));
                 }
 

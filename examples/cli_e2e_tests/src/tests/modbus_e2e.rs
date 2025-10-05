@@ -21,7 +21,7 @@ pub fn test_master_slave_communication() -> Result<()> {
     let server_output_file = File::create(&server_output)?;
 
     let mut server = Command::new(&binary)
-        .args(&[
+        .args([
             "--slave-listen-persist",
             "/dev/vcom1",
             "--station-id",
@@ -77,7 +77,7 @@ pub fn test_master_slave_communication() -> Result<()> {
     // Now start client (Modbus master) on /dev/vcom2 in temporary mode
     log::info!("🧪 Starting Modbus client (master) on /dev/vcom2...");
     let client_output = Command::new(&binary)
-        .args(&[
+        .args([
             "--master-provide",
             "/dev/vcom2",
             "--station-id",
@@ -148,7 +148,7 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
 
     // Just verify the command works with virtual ports
     let output = Command::new(&binary)
-        .args(&[
+        .args([
             "--slave-listen",
             "/dev/vcom1",
             "--station-id",
@@ -201,7 +201,7 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
     }
 
     let output = Command::new(&binary)
-        .args(&[
+        .args([
             "--master-provide-persist",
             "/dev/vcom2",
             "--station-id",
