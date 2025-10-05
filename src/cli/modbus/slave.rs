@@ -1,9 +1,13 @@
 use anyhow::{anyhow, Result};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
 use clap::ArgMatches;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use super::{extract_values_from_storage, parse_register_mode, ModbusResponse};
+use crate::cli::cleanup;
 
 /// Handle slave listen (temporary: output once and exit)
 pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
@@ -80,6 +84,15 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Register cleanup to ensure port is released on program exit
+    {
+        let pa = port_arc.clone();
+        cleanup::register_cleanup(move || {
+            drop(pa);
+            std::thread::sleep(Duration::from_millis(100));
+        });
+    }
 
     // Initialize modbus storage
     let storage = Arc::new(Mutex::new(

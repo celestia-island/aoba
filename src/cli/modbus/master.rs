@@ -1,10 +1,14 @@
 use anyhow::{anyhow, Result};
+use std::{
+    io::{BufRead, BufReader},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+
 use clap::ArgMatches;
-use std::io::{BufRead, BufReader};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
 
 use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
+use crate::cli::cleanup;
 
 /// Handle master provide (temporary: output once and exit)
 pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
@@ -86,6 +90,16 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Register cleanup to ensure port is released on program exit
+    {
+        let pa = port_arc.clone();
+        cleanup::register_cleanup(move || {
+            // Drop the Arc to release the port and give OS time
+            drop(pa);
+            std::thread::sleep(Duration::from_millis(100));
+        });
+    }
 
     // Continuously read data updates and provide them
     match &data_source {
