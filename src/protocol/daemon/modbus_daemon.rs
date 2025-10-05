@@ -125,10 +125,10 @@ pub fn handle_slave_response_mode(
                     log::debug!("Frame too short to parse for throttling check");
                     continue;
                 }
-                
+
                 let station_id = frame[0];
                 let _function_code = frame[1];
-                
+
                 // Extract register address from frame (bytes 2-3 for most function codes)
                 let register_address = if frame.len() >= 4 {
                     u16::from_be_bytes([frame[2], frame[3]])
@@ -139,11 +139,12 @@ pub fn handle_slave_response_mode(
                 // Check throttling: has enough time passed since last response to this station/register?
                 let should_throttle = with_port_read(port_arc, |port| {
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
-                    
+
                     // Find matching station by station_id and register_address
                     for station in stations {
-                        if station.station_id == station_id 
-                            && station.register_address == register_address {
+                        if station.station_id == station_id
+                            && station.register_address == register_address
+                        {
                             if let Some(last_response_time) = station.last_response_time {
                                 let elapsed = now.duration_since(last_response_time);
                                 if elapsed < Duration::from_secs(1) {
@@ -204,10 +205,11 @@ pub fn handle_slave_response_mode(
                     // Update last_response_time for this station/register combination
                     with_port_write(port_arc, |port| {
                         let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
-                        
+
                         for station in stations.iter_mut() {
-                            if station.station_id == station_id 
-                                && station.register_address == register_address {
+                            if station.station_id == station_id
+                                && station.register_address == register_address
+                            {
                                 station.last_response_time = Some(now);
                                 break;
                             }
@@ -436,9 +438,7 @@ pub fn handle_master_query_mode(
                                                 let addr =
                                                     start_address.wrapping_add(offset as u16);
                                                 if let Err(e) = context.set_coil(addr, value) {
-                                                    log::warn!(
-                                                        "Failed to set coil at {addr}: {e}"
-                                                    );
+                                                    log::warn!("Failed to set coil at {addr}: {e}");
                                                 }
                                             }
                                             log::info!(
@@ -497,7 +497,7 @@ pub fn handle_master_query_mode(
                                 station.req_success = station.req_success.saturating_add(1);
                                 station.last_request_time = None; // Clear timeout tracking
                                 station_found = true;
-                                
+
                                 // SUCCESS: Move to next station
                                 if let types::modbus::ModbusConnectionMode::Slave {
                                     current_request_at_station_index,
@@ -517,7 +517,7 @@ pub fn handle_master_query_mode(
                             }
                         }
                     }
-                    
+
                     if !station_found {
                         log::debug!("Received response but no matching pending request found");
                     }
@@ -629,12 +629,11 @@ pub fn handle_master_query_mode(
             };
 
             // Try to send the request (write or read)
-            if let Err(e) =
-                runtime
-                    .cmd_tx
-                    .send(crate::protocol::runtime::RuntimeCommand::Write(
-                        request_bytes.clone(),
-                    ))
+            if let Err(e) = runtime
+                .cmd_tx
+                .send(crate::protocol::runtime::RuntimeCommand::Write(
+                    request_bytes.clone(),
+                ))
             {
                 let warn_msg = format!(
                     "Failed to send modbus slave request for {port_name} station {}: {e}",
@@ -677,8 +676,7 @@ pub fn handle_master_query_mode(
                     }
 
                     // Update the station's next poll time (1 second interval) and mark as pending
-                    let types::port::PortConfig::Modbus { mode: _, stations } =
-                        &mut port.config;
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &mut port.config;
                     if let Some(station_mut) = stations.get_mut(current_index) {
                         station_mut.next_poll_at = now + Duration::from_secs(1);
                         station_mut.last_request_time = Some(now);
