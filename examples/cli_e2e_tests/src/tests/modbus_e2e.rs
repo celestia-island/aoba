@@ -9,9 +9,6 @@ use std::time::Duration;
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
 
-    // Wait longer to ensure previous tests have fully released ports
-    thread::sleep(Duration::from_secs(2));
-
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
     // Create a temporary file with test data
