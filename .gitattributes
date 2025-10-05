@@ -1,0 +1,24 @@
+# Ensure all text files use LF line endings for Linux compatibility
+* text=auto eol=lf
+
+# Explicitly set shell scripts to LF
+*.sh text eol=lf
+
+# Source code files
+*.rs text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+
+# Ensure binary files are not modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
