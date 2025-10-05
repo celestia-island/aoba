@@ -68,10 +68,12 @@ unicode-width = "^0.2"
 rmodbus = { version = "^0.11", features = ["with_serde"] }
 libc = "^0.2"
 serialport = "^4"
+interprocess = "^2"
 
 expectrl = "^0.8"
 regex = "^1"
 vt100 = "^0.15"
+ctrlc = "^3"
 
 [dev-dependencies]
 # TUI testing dependencies

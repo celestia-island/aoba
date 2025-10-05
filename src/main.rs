@@ -66,6 +66,24 @@ async fn main() -> Result<()> {
     // Console launcher: keep it simple and let the OS / terminal manage stdio.
     aoba::init_common();
 
+    // Ensure registered cleanup handlers are run on Ctrl-C and on panic
+    // Note: using ctrlc crate to register handler cross-platform
+    {
+        let _ = ctrlc::set_handler(|| {
+            // Best-effort cleanup
+            aoba::cli::cleanup::run_cleanups();
+            // After cleanup, exit
+            std::process::exit(130);
+        });
+    }
+
+    // Panic hook: run cleanups before unwinding/abort
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        aoba::cli::cleanup::run_cleanups();
+        default_panic(info);
+    }));
+
     let matches = aoba::cli::parse_args();
 
     // One-shot actions (e.g., --list-ports). If handled, exit.
