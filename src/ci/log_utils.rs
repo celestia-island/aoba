@@ -67,3 +67,57 @@ pub fn analyze_log_tail(path: &str, num_lines: usize) -> Result<String> {
     
     Ok(analysis)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn test_tail_log_file() {
+        // Create a temporary log file
+        let temp_path = "/tmp/test_log.txt";
+        let mut file = File::create(temp_path).unwrap();
+        
+        // Write 100 lines
+        for i in 1..=100 {
+            writeln!(file, "Line {}", i).unwrap();
+        }
+        drop(file);
+
+        // Read last 10 lines
+        let lines = tail_log_file(temp_path, 10).unwrap();
+        assert_eq!(lines.len(), 10);
+        assert_eq!(lines[0], "Line 91");
+        assert_eq!(lines[9], "Line 100");
+
+        // Clean up
+        std::fs::remove_file(temp_path).ok();
+    }
+
+    #[test]
+    fn test_analyze_log_tail() {
+        // Create a temporary log file with various log levels
+        let temp_path = "/tmp/test_log_analysis.txt";
+        let mut file = File::create(temp_path).unwrap();
+        
+        writeln!(file, "2025-01-01 [INFO] - Starting application").unwrap();
+        writeln!(file, "2025-01-01 [DEBUG] - Master TX (request): 01 03 00 00").unwrap();
+        writeln!(file, "2025-01-01 [DEBUG] - Master RX (response): 01 03 02 12 34").unwrap();
+        writeln!(file, "2025-01-01 [WARN] - Timeout detected").unwrap();
+        writeln!(file, "2025-01-01 [ERROR] - Connection failed").unwrap();
+        drop(file);
+
+        // Analyze the log
+        let analysis = analyze_log_tail(temp_path, 100).unwrap();
+        
+        assert!(analysis.contains("Errors: 1"));
+        assert!(analysis.contains("Warnings: 1"));
+        assert!(analysis.contains("Timeouts: 1"));
+        assert!(analysis.contains("TX (transmitted): 1"));
+        assert!(analysis.contains("RX (received): 1"));
+
+        // Clean up
+        std::fs::remove_file(temp_path).ok();
+    }
+}
