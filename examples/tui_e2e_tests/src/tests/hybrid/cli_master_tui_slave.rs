@@ -137,15 +137,126 @@ async fn navigate_to_vcom1<T: Expect>(
             line_range: Some((2, 20)),
             col_range: None,
         },
-        // Navigate down to find vcom1
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 1,
-        },
-        // Enter the port details
+    ];
+
+    execute_cursor_actions(session, cap, &actions, "verify_vcom1_visible").await?;
+
+    // Capture current screen to determine which port we're on
+    let screen = cap.capture(session, "check_current_port")?;
+    log::info!("📸 Current screen:\n{}", screen);
+
+    // Find which line vcom1 is on and which line has the cursor
+    let lines: Vec<&str> = screen.lines().collect();
+    let mut vcom1_line_index = None;
+    let mut current_selection_line = None;
+
+    for (idx, line) in lines.iter().enumerate() {
+        if line.contains("/dev/vcom1") {
+            vcom1_line_index = Some(idx);
+            log::info!("Found vcom1 at line {}: {}", idx, line);
+        }
+        // Look for the selection indicator (> at start or highlighted)
+        if line.trim_start().starts_with('>') || line.contains("│ > ") {
+            current_selection_line = Some(idx);
+            log::info!("Current selection at line {}: {}", idx, line);
+        }
+    }
+
+    // Navigate to vcom1 based on relative position
+    let nav_actions = if let (Some(vcom1_idx), Some(curr_idx)) = (vcom1_line_index, current_selection_line) {
+        let delta = (vcom1_idx as i32) - (curr_idx as i32);
+        log::info!("Need to move {} lines (vcom1 at {}, cursor at {})", delta, vcom1_idx, curr_idx);
+        
+        if delta > 0 {
+            // Need to move down
+            vec![
+                CursorAction::PressArrow {
+                    direction: aoba::ci::ArrowKey::Down,
+                    count: delta.abs() as usize,
+                },
+            ]
+        } else if delta < 0 {
+            // Need to move up
+            vec![
+                CursorAction::PressArrow {
+                    direction: aoba::ci::ArrowKey::Up,
+                    count: delta.abs() as usize,
+                },
+            ]
+        } else {
+            // Already on vcom1, no movement needed
+            log::info!("Already on vcom1");
+            vec![]
+        }
+    } else {
+        // Fallback: if we can't determine positions precisely, use a heuristic
+        // Try moving up to potentially get to the first item, then search
+        log::warn!("Could not determine exact positions, using fallback navigation");
+        vec![
+            // Move up several times to try to get to the top
+            CursorAction::PressArrow {
+                direction: aoba::ci::ArrowKey::Up,
+                count: 5,
+            },
+            CursorAction::Sleep { ms: 500 },
+        ]
+    };
+
+    if !nav_actions.is_empty() {
+        execute_cursor_actions(session, cap, &nav_actions, "navigate_to_vcom1").await?;
+        
+        // After navigation, verify we can still see vcom1 and adjust if needed
+        let screen_after = cap.capture(session, "check_after_nav")?;
+        log::info!("📸 Screen after navigation:\n{}", screen_after);
+        
+        // Check if vcom1 is on the current line
+        let lines_after: Vec<&str> = screen_after.lines().collect();
+        let mut on_vcom1 = false;
+        
+        for line in &lines_after {
+            if (line.trim_start().starts_with('>') || line.contains("│ > ")) && line.contains("/dev/vcom1") {
+                on_vcom1 = true;
+                log::info!("✓ Successfully navigated to vcom1");
+                break;
+            }
+        }
+        
+        // If not on vcom1 yet, try moving down to find it
+        if !on_vcom1 {
+            log::info!("Not on vcom1 yet, searching...");
+            for _ in 0..5 {
+                let screen_search = cap.capture(session, "search_vcom1")?;
+                let search_lines: Vec<&str> = screen_search.lines().collect();
+                
+                let mut found = false;
+                for line in &search_lines {
+                    if (line.trim_start().starts_with('>') || line.contains("│ > ")) && line.contains("/dev/vcom1") {
+                        found = true;
+                        log::info!("✓ Found vcom1 on current line");
+                        break;
+                    }
+                }
+                
+                if found {
+                    break;
+                }
+                
+                // Move down one and try again
+                execute_cursor_actions(session, cap, &vec![
+                    CursorAction::PressArrow {
+                        direction: aoba::ci::ArrowKey::Down,
+                        count: 1,
+                    },
+                ], "search_down").await?;
+            }
+        }
+    }
+
+    // Enter the port details
+    let enter_actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-        // Verify we're in the port details view
+        // Verify we're in the port details view for vcom1
         CursorAction::MatchPattern {
             pattern: Regex::new(r"/dev/vcom1")?,
             description: "In vcom1 port details".to_string(),
@@ -154,7 +265,7 @@ async fn navigate_to_vcom1<T: Expect>(
         },
     ];
 
-    execute_cursor_actions(session, cap, &actions, "navigate_vcom1").await?;
+    execute_cursor_actions(session, cap, &enter_actions, "enter_vcom1").await?;
     Ok(())
 }
 
