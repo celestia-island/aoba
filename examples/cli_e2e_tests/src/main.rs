@@ -8,8 +8,8 @@ use std::process::Command;
 pub fn setup_virtual_serial_ports() -> Result<bool> {
     log::info!("🧪 Setting up virtual serial ports...");
 
-    // Find the socat_init.sh script
-    let script_path = std::path::Path::new("examples/cli_e2e_tests/scripts/socat_init.sh");
+    // Find the socat_init.sh script (centralized at repo root)
+    let script_path = std::path::Path::new("scripts/socat_init.sh");
 
     if !script_path.exists() {
         log::warn!(

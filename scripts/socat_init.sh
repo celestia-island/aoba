@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
-# If the script is launched with /bin/sh (dash) it will not support
-# 'set -o pipefail'. Re-exec using bash to ensure bash-specific features work.
+# Unified socat init script for both tui and cli E2E tests
+# Usage: socat_init.sh [--mode cli|tui]
+
 if [ -z "${BASH_VERSION:-}" ]; then
   if command -v bash >/dev/null 2>&1; then
     exec bash "$0" "$@"
@@ -13,12 +14,38 @@ fi
 
 set -euo pipefail
 
+# defaults
+MODE="tui"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --mode)
+      shift
+      if [ $# -eq 0 ]; then
+        echo "--mode requires an argument: cli or tui" >&2
+        exit 2
+      fi
+      MODE="$1"
+      ;;
+    --mode=*)
+      MODE="${1#*=}"
+      ;;
+    -h|--help)
+      echo "Usage: $0 [--mode cli|tui]";
+      exit 0
+      ;;
+    *)
+      echo "Unknown arg: $1" >&2; exit 2
+      ;;
+  esac
+  shift
+done
+
 V1=/dev/vcom1
 V2=/dev/vcom2
-PIDFILE=/var/run/socat_vcom.pid
-LOG=/tmp/socat_vcom.log
+PIDFILE=/var/run/socat_vcom${MODE:+_${MODE}}.pid
+LOG=/tmp/socat_vcom${MODE:+_${MODE}}.log
 
-echo "[socat_init] stopping existing socat (pidfile if present)"
+echo "[socat_init] mode=$MODE stopping existing socat (pidfile if present)"
 if [ -f "$PIDFILE" ]; then
   sudo bash -lc "kill \$(cat $PIDFILE) 2>/dev/null || true; rm -f $PIDFILE || true"
 fi
