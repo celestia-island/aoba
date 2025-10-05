@@ -6,21 +6,21 @@ use std::process::Command;
 /// Setup virtual serial ports by running socat_init script with sudo
 fn setup_virtual_serial_ports() -> Result<bool> {
     log::info!("🧪 Setting up virtual serial ports...");
-    
+
     // Find the socat_init.sh script
     let script_path = std::path::Path::new("examples/cli_e2e_tests/scripts/socat_init.sh");
-    
+
     if !script_path.exists() {
-        log::warn!("⚠️ socat_init.sh script not found at {}", script_path.display());
+        log::warn!(
+            "⚠️ socat_init.sh script not found at {}",
+            script_path.display()
+        );
         return Ok(false);
     }
-    
+
     // Run the script with sudo
-    let output = Command::new("sudo")
-        .arg("bash")
-        .arg(script_path)
-        .output()?;
-    
+    let output = Command::new("sudo").arg("bash").arg(script_path).output()?;
+
     if output.status.success() {
         log::info!("✅ Virtual serial ports setup successfully");
         Ok(true)
