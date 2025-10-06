@@ -3,6 +3,7 @@
 use anyhow::Result;
 use expectrl::{spawn, Expect};
 use std::time::Duration;
+use aoba::ci::TerminalCapture;
 
 fn main() -> Result<()> {
     println!("🔍 TUI Smoke Test - Understanding Interface Structure");
@@ -16,14 +17,17 @@ fn main() -> Result<()> {
 
     // Launch TUI
     println!("🚀 Launching TUI application...");
-    let mut tui_session = spawn("cargo run --release -- --tui")?;
+    // Use the already-built binary with absolute path
+    let aoba_bin = std::env::current_dir()?.join("target/release/aoba");
+    let mut tui_session = spawn(&format!("{} --tui", aoba_bin.display()))?;
+    let mut cap = TerminalCapture::new(30, 80);
     std::thread::sleep(Duration::from_secs(3));
     println!("✓ TUI launched\n");
 
     // Capture initial screen
     println!("📸 SCREEN CAPTURE 1: Initial TUI Screen");
     println!("========================================");
-    let screen1 = capture_screen(&mut tui_session)?;
+    let screen1 = capture_screen(&mut cap, &mut tui_session, "initial")?;
     println!("{}", screen1);
     println!("\n");
 
@@ -34,7 +38,7 @@ fn main() -> Result<()> {
     
     println!("📸 SCREEN CAPTURE 2: After Down arrow");
     println!("========================================");
-    let screen2 = capture_screen(&mut tui_session)?;
+    let screen2 = capture_screen(&mut cap, &mut tui_session, "after_down_1")?;
     println!("{}", screen2);
     println!("\n");
 
@@ -45,7 +49,7 @@ fn main() -> Result<()> {
     
     println!("📸 SCREEN CAPTURE 3: After second Down arrow");
     println!("========================================");
-    let screen3 = capture_screen(&mut tui_session)?;
+    let screen3 = capture_screen(&mut cap, &mut tui_session, "after_down_2")?;
     println!("{}", screen3);
     println!("\n");
 
@@ -56,7 +60,7 @@ fn main() -> Result<()> {
     
     println!("📸 SCREEN CAPTURE 4: After Enter (port details)");
     println!("========================================");
-    let screen4 = capture_screen(&mut tui_session)?;
+    let screen4 = capture_screen(&mut cap, &mut tui_session, "port_details")?;
     println!("{}", screen4);
     println!("\n");
 
@@ -67,7 +71,7 @@ fn main() -> Result<()> {
     
     println!("📸 SCREEN CAPTURE 5: After Down in port details");
     println!("========================================");
-    let screen5 = capture_screen(&mut tui_session)?;
+    let screen5 = capture_screen(&mut cap, &mut tui_session, "port_details_down")?;
     println!("{}", screen5);
     println!("\n");
 
@@ -78,7 +82,7 @@ fn main() -> Result<()> {
     
     println!("📸 SCREEN CAPTURE 6: Inside Modbus Settings");
     println!("========================================");
-    let screen6 = capture_screen(&mut tui_session)?;
+    let screen6 = capture_screen(&mut cap, &mut tui_session, "modbus_settings")?;
     println!("{}", screen6);
     println!("\n");
 
@@ -96,25 +100,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn capture_screen(session: &mut impl Expect) -> Result<String> {
-    // Read available output
-    let mut buffer = Vec::new();
-    loop {
-        match session.try_read(Duration::from_millis(100)) {
-            Ok(chunk) => buffer.extend_from_slice(&chunk),
-            Err(_) => break,
-        }
-    }
-    
-    let output = String::from_utf8_lossy(&buffer).to_string();
-    
-    // Extract just the visible screen content (last part after clear screens)
-    let lines: Vec<&str> = output.lines().collect();
-    let visible_lines = if lines.len() > 30 {
-        &lines[lines.len() - 30..]
-    } else {
-        &lines[..]
-    };
-    
-    Ok(visible_lines.join("\n"))
+fn capture_screen(cap: &mut TerminalCapture, session: &mut impl Expect, label: &str) -> Result<String> {
+    cap.capture(session, label)
 }
