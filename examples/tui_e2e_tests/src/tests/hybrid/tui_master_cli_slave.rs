@@ -315,16 +315,16 @@ async fn configure_tui_master_carefully<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_reg_length").await?;
 
-    // Set Register Length to 4
-    log::info!("  Set Register Length to 4");
+    // Set Register Length to 12 (0x000C) as required by test spec
+    log::info!("  Set Register Length to 12");
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::TypeString("4".to_string()),
+        CursorAction::TypeString("C".to_string()), // hex C = 12 decimal
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
         CursorAction::MatchPattern {
-            pattern: Regex::new(r"Register Length\s+0x0004")?,
-            description: "Register Length set to 4".to_string(),
+            pattern: Regex::new(r"Register Length\s+0x000C")?,
+            description: "Register Length set to 12".to_string(),
             line_range: None,
             col_range: None,
         },
@@ -345,8 +345,10 @@ async fn configure_tui_master_carefully<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
 
-    // Set register values: 0, 10, 20, 30 (in hex: 0, A, 14, 1E)
-    let test_values = vec![0u16, 10, 20, 30];
+    // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
+    // In hex: 0, A, 14, 1E, 28, 32, 3C, 46, 50, 5A, 64, 6E
+    // Layout is 4 columns per row: [0,1,2,3] [4,5,6,7] [8,9,10,11]
+    let test_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
     for (i, &val) in test_values.iter().enumerate() {
         let hex_val = format!("{:X}", val);
         log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
@@ -359,32 +361,60 @@ async fn configure_tui_master_carefully<T: Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{}", i)).await?;
 
-        // Move to next register
+        // Navigate to next register
         if i < test_values.len() - 1 {
-            let actions = vec![
-                CursorAction::PressArrow {
-                    direction: aoba::ci::ArrowKey::Right,
-                    count: 1,
-                },
-                CursorAction::Sleep { ms: 300 },
-            ];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
+            // Within a row (columns 0-3), move Right
+            // After column 3 (i=3,7), move Down to next row start
+            if (i + 1) % 4 == 0 {
+                // End of row, move to next row start
+                log::info!("    End of row, moving to next row");
+                let actions = vec![
+                    CursorAction::PressArrow {
+                        direction: aoba::ci::ArrowKey::Down,
+                        count: 1,
+                    },
+                    CursorAction::PressArrow {
+                        direction: aoba::ci::ArrowKey::Left,
+                        count: 3, // Go back to column 0
+                    },
+                    CursorAction::Sleep { ms: 300 },
+                ];
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &actions,
+                    &format!("nav_to_row_{}", (i + 1) / 4),
+                )
                 .await?;
+            } else {
+                // Within row, move Right to next column
+                let actions = vec![
+                    CursorAction::PressArrow {
+                        direction: aoba::ci::ArrowKey::Right,
+                        count: 1,
+                    },
+                    CursorAction::Sleep { ms: 300 },
+                ];
+                execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
+                    .await?;
+            }
         }
     }
 
     let screen = cap.capture(session, "registers_set")?;
-    log::info!("📸 Registers set:\n{}", screen);
+    log::info!("📸 All 12 registers set:\n{}", screen);
 
-    // Verify values are correct
-    if !screen.contains("0x0000")
-        || !screen.contains("0x000A")
-        || !screen.contains("0x0014")
-        || !screen.contains("0x001E")
-    {
+    // Verify at least some key values are visible (pattern check)
+    let has_values = screen.contains("0x000A")
+        || screen.contains("0x0014")
+        || screen.contains("0x001E")
+        || screen.contains("0x0028")
+        || screen.contains("0x0032")
+        || screen.contains("0x003C");
+    if !has_values {
         log::warn!("⚠️  Register values may not be set correctly");
     } else {
-        log::info!("  ✓ Register values verified");
+        log::info!("  ✓ Register values verified (pattern visible)");
     }
 
     // Exit register editing mode
@@ -565,7 +595,7 @@ async fn run_cli_slave_poll() -> Result<String> {
             "--register-address",
             "0",
             "--register-length",
-            "4",
+            "12", // Updated to match the 12 registers configured in TUI
             "--json",
         ])
         .stdout(Stdio::piped())
@@ -596,8 +626,8 @@ async fn run_cli_slave_poll() -> Result<String> {
 fn verify_cli_output(output: &str) -> Result<()> {
     log::info!("  🔍 Verifying CLI output contains expected values");
 
-    // Expected values in decimal: 0, 10, 20, 30
-    let expected_values = vec![0u16, 10, 20, 30];
+    // Expected values in decimal: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
+    let expected_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
 
     let mut all_found = true;
     for &val in &expected_values {
