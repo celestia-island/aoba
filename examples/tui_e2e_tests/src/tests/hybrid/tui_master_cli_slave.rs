@@ -222,11 +222,12 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
 
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
+    let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1500 },
         CursorAction::MatchPattern {
-            pattern: Regex::new(r"/dev/vcom1")?,
+            pattern: vcom_pattern_regex,
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
             col_range: None,
