@@ -320,6 +320,11 @@ pub fn handle_master_query_mode(
     global_mode: &types::modbus::ModbusConnectionMode,
     now: Instant,
 ) -> Result<()> {
+    log::info!(
+        "🔄 handle_master_query_mode called for {port_name} with {} stations",
+        stations.len()
+    );
+
     // Get runtime handle for sending requests
     let runtime_handle = with_port_read(port_arc, |port| {
         if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
@@ -330,8 +335,11 @@ pub fn handle_master_query_mode(
     });
 
     let Some(Some(runtime)) = runtime_handle else {
+        log::warn!("⚠️  handle_master_query_mode: No runtime handle for {port_name}");
         return Ok(());
     };
+
+    log::info!("✅ handle_master_query_mode: Runtime handle obtained for {port_name}");
 
     // Get the current station index from the global mode
     let current_index = match global_mode {
@@ -341,6 +349,11 @@ pub fn handle_master_query_mode(
         } => *current_request_at_station_index,
         _ => 0,
     };
+
+    log::info!(
+        "📍 Current station index: {current_index} (total stations: {})",
+        stations.len()
+    );
 
     // Process incoming responses FIRST (before sending new requests)
     while let Ok(event) = runtime.evt_rx.try_recv() {
@@ -627,18 +640,19 @@ pub fn handle_master_query_mode(
 
     // Now check if we should send a request for the current station
     if let Some(station) = stations.get(current_index) {
-        log::debug!(
-            "Slave mode: checking station {} (index {}), next_poll_at: {:?}, now: {:?}",
+        log::info!(
+            "🔍 Slave mode: checking station {} (index {}), next_poll_at: {:?}, last_request_time: {:?}, now: {:?}",
             station.station_id,
             current_index,
             station.next_poll_at,
+            station.last_request_time,
             now
         );
 
         // Check if it's time to poll AND there's no pending request
         if now >= station.next_poll_at && station.last_request_time.is_none() {
-            log::debug!(
-                "Slave mode: time to send request for station {} (index {})",
+            log::info!(
+                "✅ Slave mode: IT'S TIME to send request for station {} (index {})",
                 station.station_id,
                 current_index
             );
@@ -740,12 +754,23 @@ pub fn handle_master_query_mode(
                     current_index
                 );
             }
-        } else if station.last_request_time.is_some() {
-            log::debug!(
-                "Slave mode: waiting for response from station {} (index {})",
-                station.station_id,
-                current_index
-            );
+        } else {
+            // Condition not met - log why
+            if now < station.next_poll_at {
+                log::info!(
+                    "⏳ Slave mode: NOT YET time for station {} - waiting {:?} more",
+                    station.station_id,
+                    station.next_poll_at.duration_since(now)
+                );
+            }
+            if station.last_request_time.is_some() {
+                log::info!(
+                    "⏳ Slave mode: waiting for response from station {} (index {}) - request sent at {:?}",
+                    station.station_id,
+                    current_index,
+                    station.last_request_time
+                );
+            }
         }
     } else {
         log::debug!(
