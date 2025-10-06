@@ -405,15 +405,16 @@ async fn configure_tui_master_carefully<T: Expect>(
         log::info!("  ✓ Already back on port details page");
     } else if screen.contains("COM Ports") {
         log::info!("  We went back to main port list, need to enter vcom1 again");
-        
+
         // Navigate back to vcom1 and enter it
-        let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/dev/vcom1".to_string());
-        
+        let vcom_pattern =
+            std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/dev/vcom1".to_string());
+
         // Find vcom1 and navigate to it
         let lines: Vec<&str> = screen.lines().collect();
         let mut vcom1_line = None;
         let mut cursor_line = None;
-        
+
         for (idx, line) in lines.iter().enumerate() {
             if line.contains(&vcom_pattern) {
                 vcom1_line = Some(idx);
@@ -425,7 +426,7 @@ async fn configure_tui_master_carefully<T: Expect>(
                 }
             }
         }
-        
+
         if let (Some(vcom1_idx), Some(curr_idx)) = (vcom1_line, cursor_line) {
             if vcom1_idx != curr_idx {
                 let delta = if vcom1_idx > curr_idx {
@@ -433,13 +434,13 @@ async fn configure_tui_master_carefully<T: Expect>(
                 } else {
                     curr_idx - vcom1_idx
                 };
-                
+
                 let direction = if vcom1_idx > curr_idx {
                     aoba::ci::ArrowKey::Down
                 } else {
                     aoba::ci::ArrowKey::Up
                 };
-                
+
                 log::info!("  Navigating to vcom1 ({} steps)", delta);
                 let actions = vec![
                     CursorAction::PressArrow {
@@ -451,18 +452,15 @@ async fn configure_tui_master_carefully<T: Expect>(
                 execute_cursor_actions(session, cap, &actions, "nav_back_to_vcom1").await?;
             }
         }
-        
+
         // Press Enter to enter vcom1 details
         log::info!("  Press Enter to enter vcom1 details");
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 },
-        ];
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
         execute_cursor_actions(session, cap, &actions, "reenter_vcom1").await?;
-        
+
         let screen = cap.capture(session, "back_in_vcom1_details")?;
         log::info!("📸 Back in vcom1 details:\n{}", screen);
-        
+
         if !screen.contains("Enable Port") {
             return Err(anyhow!("Failed to re-enter vcom1 details page"));
         }
@@ -488,7 +486,9 @@ async fn enable_port_carefully<T: Expect>(
     // We should be back in vcom1 details page after exiting Modbus settings
     // Verify we see "Enable Port" option
     if !screen.contains("Enable Port") {
-        return Err(anyhow!("Not in port details page - 'Enable Port' not found"));
+        return Err(anyhow!(
+            "Not in port details page - 'Enable Port' not found"
+        ));
     }
 
     // Check if cursor is on "Enable Port" line
@@ -496,8 +496,9 @@ async fn enable_port_carefully<T: Expect>(
     let mut on_enable_port = false;
     for line in lines {
         let trimmed = line.trim();
-        if (trimmed.starts_with("│ > ") || trimmed.starts_with("> ")) 
-            && line.contains("Enable Port") {
+        if (trimmed.starts_with("│ > ") || trimmed.starts_with("> "))
+            && line.contains("Enable Port")
+        {
             on_enable_port = true;
             log::info!("  ✓ Cursor already on 'Enable Port' line");
             break;
@@ -522,10 +523,7 @@ async fn enable_port_carefully<T: Expect>(
 
     // Press Enter to toggle Enable Port to Enabled
     log::info!("  Press Enter to toggle Enable Port to Enabled");
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-    ];
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
     execute_cursor_actions(session, cap, &actions, "toggle_enable_port").await?;
 
     let screen = cap.capture(session, "after_toggle")?;
@@ -533,7 +531,9 @@ async fn enable_port_carefully<T: Expect>(
 
     // Check that we're still on port details page
     if !screen.contains("Protocol Mode") {
-        return Err(anyhow!("Unexpected screen after toggling - not on port details"));
+        return Err(anyhow!(
+            "Unexpected screen after toggling - not on port details"
+        ));
     }
 
     // Check if it shows "Enabled"
