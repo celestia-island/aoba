@@ -116,6 +116,20 @@ pub async fn configure_master_mode<T: Expect>(
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
 
+    // Now enable the port so the master can start responding to requests
+    log::info!("🔌 Enabling {session_name} port");
+    let enable_actions = vec![
+        CursorAction::PressEnter, // Press Enter on "Enable Port"
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::MatchPattern {
+            pattern: Regex::new("Enabled")?,
+            description: "Port shows as 'Enabled'".to_string(),
+            line_range: Some((2, 2)),
+            col_range: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &enable_actions, session_name).await?;
+
     log::info!("✓ Configured {session_name} as Modbus Master");
     Ok(())
 }

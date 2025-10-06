@@ -8,7 +8,7 @@ use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
 use aoba::ci::TerminalCapture;
 
 /// Verify that slave registers match the expected values from master
-/// This checks that all 12 registers on the slave side show values: 0, 11, 22, 33, ..., 110
+/// This checks that all 12 registers on the slave side show values: 0, 10, 20, 30, ..., 110
 pub async fn verify_slave_registers<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -26,6 +26,8 @@ pub async fn verify_slave_registers<T: Expect>(
             line_range: Some((2, 2)),
             col_range: None,
         },
+        // Wait for modbus daemon to start and establish communication
+        CursorAction::Sleep { ms: 3000 },
         // Navigate to Modbus Panel
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -39,6 +41,8 @@ pub async fn verify_slave_registers<T: Expect>(
             line_range: Some((0, 0)),
             col_range: None,
         },
+        // Allow time for registers to populate from master
+        CursorAction::Sleep { ms: 2000 },
     ];
 
     execute_cursor_actions(session, cap, &actions, session_name).await?;
