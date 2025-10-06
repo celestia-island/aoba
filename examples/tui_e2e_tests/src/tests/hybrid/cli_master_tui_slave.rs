@@ -26,6 +26,33 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     log::info!("🧪 Starting CLI Master + TUI Slave hybrid test");
 
+    // Step 0: Start socat to create virtual COM ports
+    log::info!("🧪 Step 0: Setting up virtual COM ports with socat");
+    let socat_process = Command::new("socat")
+        .args([
+            "-d",
+            "-d",
+            "pty,raw,echo=0,link=/tmp/vcom1",
+            "pty,raw,echo=0,link=/tmp/vcom2",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| anyhow!("Failed to spawn socat: {}", e))?;
+
+    log::info!("  ✓ socat started with PID {}", socat_process.id());
+
+    // Wait for socat to create the symlinks
+    thread::sleep(Duration::from_secs(2));
+
+    if !std::path::Path::new("/tmp/vcom1").exists() {
+        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    }
+    if !std::path::Path::new("/tmp/vcom2").exists() {
+        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    }
+    log::info!("  ✓ Virtual COM ports created: /tmp/vcom1 and /tmp/vcom2");
+
     // Step 1: Prepare test data file for CLI
     log::info!("🧪 Step 1: Prepare test data file");
     let temp_dir = std::env::temp_dir();
@@ -43,10 +70,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     let mut cli_master = Command::new(&binary)
         .args([
-            "modbus",
-            "master",
-            "provide-persist",
-            "--port",
+            "--master-provide-persist",
             "/tmp/vcom2",
             "--baud-rate",
             "9600",
@@ -137,6 +161,9 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     let quit_actions = vec![CursorAction::CtrlC];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await?;
+
+    // Kill socat
+    drop(socat_process);
 
     std::fs::remove_file(&data_file)?;
 
