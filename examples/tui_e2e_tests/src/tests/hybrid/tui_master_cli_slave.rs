@@ -347,17 +347,17 @@ async fn configure_tui_master_carefully<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
 
-    // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
-    // UI accepts DECIMAL input and displays as hex
+    // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110 (in decimal)
+    // UI accepts HEX input and displays as hex, so we need to convert decimal to hex strings
     // Layout is 4 columns per row: [0,1,2,3] [4,5,6,7] [8,9,10,11]
     let test_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
     for (i, &val) in test_values.iter().enumerate() {
-        let decimal_val = format!("{}", val); // Enter in DECIMAL
+        let hex_val = format!("{:X}", val); // Convert to HEX string
         log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
 
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::TypeString(decimal_val.clone()), // Type decimal value
+            CursorAction::TypeString(hex_val.clone()), // Type hex value
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
         ];
@@ -394,13 +394,9 @@ async fn configure_tui_master_carefully<T: Expect>(
         log::info!("  ✓ Register values verified (pattern visible)");
     }
 
-    // Exit register editing mode
-    log::info!("  Exit register editing (first Escape)");
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
-    execute_cursor_actions(session, cap, &actions, "exit_register_edit").await?;
-
-    // Exit Modbus settings back to port details (second Escape)
-    log::info!("  Exit Modbus settings back to port details (second Escape)");
+    // Exit Modbus settings back to port details
+    // We're in navigation mode (not editing), so one Escape goes back to port details
+    log::info!("  Exit Modbus settings back to port details (press Escape)");
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
