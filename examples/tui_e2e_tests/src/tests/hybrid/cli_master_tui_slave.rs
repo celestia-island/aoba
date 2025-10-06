@@ -92,9 +92,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     // Step 4: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 4: Verify TUI loaded with port list");
-    let actions = vec![
-        CursorAction::Sleep { ms: 2000 },
-        CursorAction::MatchPattern {
+    let actions = vec![        CursorAction::MatchPattern {
             pattern: Regex::new(r"AOBA")?,
             description: "TUI application title visible".to_string(),
             line_range: Some((0, 3)),
@@ -232,9 +230,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"/tmp/vcom1")?,
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
@@ -274,9 +270,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     // Enter Modbus settings
     log::info!("  Enter Modbus Settings");
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 3)),
@@ -302,9 +296,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     // Create station first
     log::info!("  Create new station");
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"#1")?,
             description: "Station #1 created".to_string(),
             line_range: None,
@@ -335,9 +327,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
             direction: aoba::ci::ArrowKey::Right,
             count: 1,
         },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"Connection Mode\s+Slave")?,
             description: "Mode changed to Slave".to_string(),
             line_range: None,
@@ -365,9 +355,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::TypeString("4".to_string()),
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"Register Length\s+0x0004")?,
             description: "Register Length set to 4".to_string(),
             line_range: None,
@@ -406,9 +394,7 @@ async fn enable_port_carefully<T: Expect>(
 
     // Should be on "Enable Port" option
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"Enabled")?,
             description: "Port enabled".to_string(),
             line_range: Some((2, 5)),
@@ -438,9 +424,7 @@ async fn check_received_values_carefully<T: Expect>(
             direction: aoba::ci::ArrowKey::Down,
             count: 2,
         },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
             line_range: Some((0, 3)),

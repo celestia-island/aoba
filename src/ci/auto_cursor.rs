@@ -58,59 +58,83 @@ pub async fn execute_cursor_actions<T: Expect>(
                 line_range,
                 col_range,
             } => {
-                log::info!("🔍 Matching pattern '{description}'");
+                log::info!("🔍 Matching pattern '{description}' with retry logic");
 
-                // Capture current screen
-                let screen =
-                    cap.capture(session, &format!("{session_name} - match {description}"))?;
+                const MAX_RETRIES: usize = 10;
+                const RETRY_INTERVAL_MS: u64 = 1000;
+                
+                let mut matched = false;
+                let mut last_screen = String::new();
+                
+                for attempt in 1..=MAX_RETRIES {
+                    // Capture current screen
+                    let screen =
+                        cap.capture(session, &format!("{session_name} - match {description} (attempt {attempt})"))?;
+                    last_screen = screen.clone();
 
-                // Extract region to search based on line and column ranges
-                let lines: Vec<&str> = screen.lines().collect();
-                let total_lines = lines.len();
+                    // Extract region to search based on line and column ranges
+                    let lines: Vec<&str> = screen.lines().collect();
+                    let total_lines = lines.len();
 
-                let (start_line, end_line) =
-                    line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-                let start_line = start_line.min(total_lines.saturating_sub(1));
-                let end_line = end_line.min(total_lines.saturating_sub(1));
+                    let (start_line, end_line) =
+                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                    let start_line = start_line.min(total_lines.saturating_sub(1));
+                    let end_line = end_line.min(total_lines.saturating_sub(1));
 
-                let mut search_text = String::new();
-                for line_idx in start_line..=end_line {
-                    if line_idx >= lines.len() {
-                        break;
-                    }
-                    let line = lines[line_idx];
-                    let line_text = if let Some((start_col, end_col)) = col_range {
-                        let chars: Vec<char> = line.chars().collect();
-                        let char_count = chars.len();
-                        if char_count == 0 {
-                            String::new()
-                        } else {
-                            let sc = (*start_col).min(char_count.saturating_sub(1));
-                            let ec = (*end_col).min(char_count.saturating_sub(1));
-                            chars[sc..=ec].iter().collect()
+                    let mut search_text = String::new();
+                    for line_idx in start_line..=end_line {
+                        if line_idx >= lines.len() {
+                            break;
                         }
-                    } else {
-                        line.to_string()
-                    };
-                    search_text.push_str(&line_text);
-                    search_text.push('\n');
-                }
+                        let line = lines[line_idx];
+                        let line_text = if let Some((start_col, end_col)) = col_range {
+                            let chars: Vec<char> = line.chars().collect();
+                            let char_count = chars.len();
+                            if char_count == 0 {
+                                String::new()
+                            } else {
+                                let sc = (*start_col).min(char_count.saturating_sub(1));
+                                let ec = (*end_col).min(char_count.saturating_sub(1));
+                                chars[sc..=ec].iter().collect()
+                            }
+                        } else {
+                            line.to_string()
+                        };
+                        search_text.push_str(&line_text);
+                        search_text.push('\n');
+                    }
 
-                // Try to match pattern
-                if pattern.is_match(&search_text) {
-                    log::info!("✓ Pattern '{description}' matched successfully");
-                } else {
-                    // Match failed - dump screen and return error
-                    log::error!("❌ Pattern '{description}' NOT FOUND");
+                    // Try to match pattern
+                    if pattern.is_match(&search_text) {
+                        log::info!("✓ Pattern '{description}' matched successfully on attempt {attempt}");
+                        matched = true;
+                        break;
+                    } else {
+                        if attempt < MAX_RETRIES {
+                            log::debug!("Pattern '{description}' not matched on attempt {attempt}, retrying in {RETRY_INTERVAL_MS}ms...");
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS)).await;
+                        }
+                    }
+                }
+                
+                if !matched {
+                    // All retries failed - dump screen and return error
+                    log::error!("❌ Pattern '{description}' NOT FOUND after {MAX_RETRIES} attempts");
                     log::error!("Expected pattern: {:?}", pattern.as_str());
+                    
+                    let lines: Vec<&str> = last_screen.lines().collect();
+                    let total_lines = lines.len();
+                    let (start_line, end_line) =
+                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                    
                     log::error!(
                         "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
                     );
-                    log::error!("Current screen content for {session_name}:");
-                    log::error!("\n{screen}\n");
+                    log::error!("Last screen content for {session_name}:");
+                    log::error!("\n{last_screen}\n");
 
                     return Err(anyhow!(
-                        "Pattern '{description}' not found in {session_name} (lines {start_line}..={end_line}, cols {col_range:?})",
+                        "Pattern '{description}' not found in {session_name} after {MAX_RETRIES} attempts (lines {start_line}..={end_line}, cols {col_range:?})",
                     ));
                 }
             }

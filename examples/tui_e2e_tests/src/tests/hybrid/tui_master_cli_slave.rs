@@ -67,7 +67,6 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     // Step 2: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 2: Verify TUI loaded with port list");
     let actions = vec![
-        CursorAction::Sleep { ms: 2000 },
         CursorAction::MatchPattern {
             pattern: Regex::new(r"AOBA")?,
             description: "TUI application title visible".to_string(),
@@ -233,7 +232,6 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
         CursorAction::MatchPattern {
             pattern: vcom_pattern_regex,
             description: "In vcom1 port details".to_string(),
@@ -276,7 +274,6 @@ async fn configure_tui_master_carefully<T: Expect>(
     log::info!("  Enter Business Configuration (Modbus settings)");
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
         CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus settings".to_string(),
@@ -293,7 +290,6 @@ async fn configure_tui_master_carefully<T: Expect>(
     log::info!("  Create new station");
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
         CursorAction::MatchPattern {
             pattern: Regex::new(r"#1")?,
             description: "Station #1 created".to_string(),
@@ -323,7 +319,6 @@ async fn configure_tui_master_carefully<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::TypeString("12".to_string()), // Enter 12 in decimal
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
         CursorAction::MatchPattern {
             pattern: Regex::new(r"Register Length\s+0x000C")?,
             description: "Register Length set to 12".to_string(),
