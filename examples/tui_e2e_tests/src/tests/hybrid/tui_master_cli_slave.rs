@@ -142,8 +142,8 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let screen = cap.capture(session, "before_navigation")?;
     log::info!("📸 Screen before navigation:\n{}", screen);
 
-    // Verify vcom1 is visible (check for /tmp/vcom1 or /dev/vcom1)
-    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/dev/vcom1".to_string());
+    // Verify vcom1 is visible (check for /tmp/vcom1)
+    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
     if !screen.contains(&vcom_pattern) {
         return Err(anyhow!("vcom1 ({}) not found in port list", vcom_pattern));
     }
@@ -408,7 +408,7 @@ async fn configure_tui_master_carefully<T: Expect>(
 
         // Navigate back to vcom1 and enter it
         let vcom_pattern =
-            std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/dev/vcom1".to_string());
+            std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
 
         // Find vcom1 and navigate to it
         let lines: Vec<&str> = screen.lines().collect();
