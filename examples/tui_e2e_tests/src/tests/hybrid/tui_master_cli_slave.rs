@@ -102,8 +102,8 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     log::info!("🧪 Step 6: Wait for port and Modbus daemon to initialize");
     log::info!("  Waiting for Modbus daemon to start listening...");
     sleep_a_while().await;
-    // Increase wait time to ensure daemon is fully started and listening
-    thread::sleep(Duration::from_secs(5));
+    // Increase wait time significantly to ensure daemon is fully started and listening
+    thread::sleep(Duration::from_secs(10));
 
     // Step 7: Use CLI to poll the TUI master
     log::info!("🧪 Step 7: Run CLI slave poll command");
@@ -347,59 +347,34 @@ async fn configure_tui_master_carefully<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
 
-    // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
-    // UI accepts DECIMAL input and displays as hex
+    // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110 (in decimal)
+    // UI accepts HEX input and displays as hex, so we need to convert decimal to hex strings
     // Layout is 4 columns per row: [0,1,2,3] [4,5,6,7] [8,9,10,11]
     let test_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
     for (i, &val) in test_values.iter().enumerate() {
-        let decimal_val = format!("{}", val); // Enter in DECIMAL
+        let hex_val = format!("{:X}", val); // Convert to HEX string
         log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
 
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::TypeString(decimal_val.clone()), // Type decimal value
+            CursorAction::TypeString(hex_val.clone()), // Type hex value
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{}", i)).await?;
 
-        // Navigate to next register
+        // Navigate to next register - just use RIGHT arrow for all registers
         if i < test_values.len() - 1 {
-            // Within a row (columns 0-3), move Right
-            // After column 3 (i=3,7), move Down to next row start
-            if (i + 1) % 4 == 0 {
-                // End of row, move to next row start
-                log::info!("    End of row, moving to next row");
-                let actions = vec![
-                    CursorAction::PressArrow {
-                        direction: aoba::ci::ArrowKey::Down,
-                        count: 1,
-                    },
-                    CursorAction::PressArrow {
-                        direction: aoba::ci::ArrowKey::Left,
-                        count: 3, // Go back to column 0
-                    },
-                    CursorAction::Sleep { ms: 300 },
-                ];
-                execute_cursor_actions(
-                    session,
-                    cap,
-                    &actions,
-                    &format!("nav_to_row_{}", (i + 1) / 4),
-                )
+            log::info!("    Moving Right to next register");
+            let actions = vec![
+                CursorAction::PressArrow {
+                    direction: aoba::ci::ArrowKey::Right,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 250 },
+            ];
+            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
                 .await?;
-            } else {
-                // Within row, move Right to next column
-                let actions = vec![
-                    CursorAction::PressArrow {
-                        direction: aoba::ci::ArrowKey::Right,
-                        count: 1,
-                    },
-                    CursorAction::Sleep { ms: 300 },
-                ];
-                execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
-                    .await?;
-            }
         }
     }
 
@@ -419,13 +394,9 @@ async fn configure_tui_master_carefully<T: Expect>(
         log::info!("  ✓ Register values verified (pattern visible)");
     }
 
-    // Exit register editing mode
-    log::info!("  Exit register editing (first Escape)");
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
-    execute_cursor_actions(session, cap, &actions, "exit_register_edit").await?;
-
-    // Exit Modbus settings back to port details (second Escape)
-    log::info!("  Exit Modbus settings back to port details (second Escape)");
+    // Exit Modbus settings back to port details
+    // We're in navigation mode (not editing), so one Escape goes back to port details
+    log::info!("  Exit Modbus settings back to port details (press Escape)");
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
