@@ -15,15 +15,15 @@ pub fn test_master_slave_communication() -> Result<()> {
 
     let temp_dir = std::env::temp_dir();
 
-    // Start server (Modbus slave) on /dev/vcom1 in persistent mode
-    log::info!("🧪 Starting Modbus server (slave) on /dev/vcom1...");
+    // Start server (Modbus slave) on /tmp/vcom1 in persistent mode
+    log::info!("🧪 Starting Modbus server (slave) on /tmp/vcom1...");
     let server_output = temp_dir.join("server_output.log");
     let server_output_file = File::create(&server_output)?;
 
     let mut server = Command::new(&binary)
         .args([
             "--slave-listen-persist",
-            "/dev/vcom1",
+            "/tmp/vcom1",
             "--station-id",
             "1",
             "--register-address",
@@ -74,12 +74,12 @@ pub fn test_master_slave_communication() -> Result<()> {
         writeln!(file, r#"{{"values": [10, 20, 30, 40, 50]}}"#)?;
     }
 
-    // Now start client (Modbus master) on /dev/vcom2 in temporary mode
-    log::info!("🧪 Starting Modbus client (master) on /dev/vcom2...");
+    // Now start client (Modbus master) on /tmp/vcom2 in temporary mode
+    log::info!("🧪 Starting Modbus client (master) on /tmp/vcom2...");
     let client_output = Command::new(&binary)
         .args([
             "--master-provide",
-            "/dev/vcom2",
+            "/tmp/vcom2",
             "--station-id",
             "1",
             "--register-address",
@@ -150,7 +150,7 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
     let output = Command::new(&binary)
         .args([
             "--slave-listen",
-            "/dev/vcom1",
+            "/tmp/vcom1",
             "--station-id",
             "1",
             "--register-address",
@@ -203,7 +203,7 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
     let output = Command::new(&binary)
         .args([
             "--master-provide-persist",
-            "/dev/vcom2",
+            "/tmp/vcom2",
             "--station-id",
             "1",
             "--register-address",

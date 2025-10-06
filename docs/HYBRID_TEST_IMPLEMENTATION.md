@@ -36,7 +36,7 @@ examples/tui_e2e_tests/src/tests/
 2. Navigate to port and Modbus settings
 3. Configure as Master with values: 0, 10, 20, 30
 4. Enable port
-5. Run CLI command: aoba modbus slave poll --port /dev/vcom2 ...
+5. Run CLI command: aoba modbus slave poll --port /tmp/vcom2 ...
 6. Verify CLI output contains expected values
 7. Cleanup
 ```
@@ -101,7 +101,7 @@ Created comprehensive README at `examples/tui_e2e_tests/src/tests/hybrid/README.
 ### Virtual COM Port Setup
 
 Tests require virtual COM port pairs:
-- `/dev/vcom1` ↔ `/dev/vcom2` (Linux/macOS)
+- `/tmp/vcom1` ↔ `/tmp/vcom2` (Linux/macOS)
 - Created using `socat` or platform-specific tools
 
 ### Communication Protocol
@@ -153,7 +153,7 @@ Tests require virtual COM port pairs:
 
 ```bash
 # Create virtual ports (terminal 1)
-socat -d -d pty,raw,echo=0,link=/dev/vcom1 pty,raw,echo=0,link=/dev/vcom2
+socat -d -d pty,raw,echo=0,link=/tmp/vcom1 pty,raw,echo=0,link=/tmp/vcom2
 
 # Run tests (terminal 2)
 cd examples/tui_e2e_tests

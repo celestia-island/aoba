@@ -12,8 +12,8 @@ Based on source code analysis (`src/tui/ui/pages/entry/`):
 ```
 AOBA > Port List
 ┌─────────────────────────────────────────────────────────┐
-│ > /dev/vcom1        [Status]                            │
-│   /dev/vcom2        [Status]                            │
+│ > /tmp/vcom1        [Status]                            │
+│   /tmp/vcom2        [Status]                            │
 │   [Other ports...]                                      │
 │                                                          │
 │   Refresh                                                │
@@ -31,7 +31,7 @@ Press ↑/k or ↓/j to move    Press Enter to select
 
 **Navigation Strategy:**
 1. Capture full screen
-2. Parse lines to find line containing "/dev/vcom1"
+2. Parse lines to find line containing "/tmp/vcom1"
 3. Parse lines to find line with `>` (current cursor position)
 4. Calculate delta: `vcom1_line - cursor_line`
 5. Send Up/Down arrows for exact delta
@@ -43,9 +43,9 @@ After pressing Enter on a port:
 
 **Layout:**
 ```
-AOBA > /dev/vcom1
+AOBA > /tmp/vcom1
 ┌─────────────────────────────────────────────────────────┐
-│ > Port Name         /dev/vcom1                          │
+│ > Port Name         /tmp/vcom1                          │
 │   Baud Rate         9600                                │
 │   Data Bits         8                                   │
 │   Stop Bits         1                                   │
@@ -59,14 +59,14 @@ Press Esc to go back
 ```
 
 **Key Points:**
-- Title shows "AOBA > /dev/vcom1"
+- Title shows "AOBA > /tmp/vcom1"
 - Fields listed vertically
 - "ModBus Settings" is typically around line 6-7
 - "Enable" is at the bottom
 
 **Navigation to Modbus Settings:**
 1. After entering port, capture screen
-2. Verify title contains "/dev/vcom1"
+2. Verify title contains "/tmp/vcom1"
 3. Find line containing "ModBus Settings"
 4. Find current cursor line (`>`)
 5. Calculate delta
@@ -78,7 +78,7 @@ Press Esc to go back
 
 **Layout (Master mode):**
 ```
-AOBA > /dev/vcom1 > ModBus Master/Slave Settings
+AOBA > /tmp/vcom1 > ModBus Master/Slave Settings
 ┌─────────────────────────────────────────────────────────┐
 │ > Create Station                                        │
 │   Connection Mode       Master                          │
@@ -155,30 +155,30 @@ CLI (vcom2) = Slave (polls data)
 ### Detailed Steps
 
 **Step 1: Setup Virtual COM Ports**
-- Action: `socat -d -d pty,raw,echo=0,link=/dev/vcom1 pty,raw,echo=0,link=/dev/vcom2`
+- Action: `socat -d -d pty,raw,echo=0,link=/tmp/vcom1 pty,raw,echo=0,link=/tmp/vcom2`
 - Wait: 2 seconds
-- Verification: Check `/dev/vcom1` and `/dev/vcom2` exist
+- Verification: Check `/tmp/vcom1` and `/tmp/vcom2` exist
 
 **Step 2: Launch TUI**
 - Action: `cargo run --release -- --tui`
 - Wait: 3 seconds
 - Capture: Screen
-- Regex: `AOBA.*Port List` or `/dev/vcom` present
+- Regex: `AOBA.*Port List` or `/tmp/vcom` present
 
 **Step 3: Navigate to vcom1**
 - Capture: Screen before navigation
-- Parse: Find "/dev/vcom1" line number
+- Parse: Find "/tmp/vcom1" line number
 - Parse: Find line with `>` (cursor)
 - Calculate: delta = vcom1_line - cursor_line
 - Navigate: Send delta Down/Up arrows
 - Capture: Screen after navigation
-- Regex: `>\s*/dev/vcom1` (cursor on vcom1)
+- Regex: `>\s*/tmp/vcom1` (cursor on vcom1)
 
 **Step 4: Enter vcom1 Details**
 - Action: Press Enter
 - Wait: 500ms
 - Capture: Screen
-- Regex: `AOBA\s*>\s*/dev/vcom1` (title changed)
+- Regex: `AOBA\s*>\s*/tmp/vcom1` (title changed)
 
 **Step 5: Navigate to Modbus Settings**
 - Parse: Find "ModBus Settings" line
@@ -229,7 +229,7 @@ CLI (vcom2) = Slave (polls data)
 - Action: Press Esc to go back to port details
 - Wait: 300ms
 - Capture: Screen
-- Regex: `AOBA\s*>\s*/dev/vcom1` (back at port details)
+- Regex: `AOBA\s*>\s*/tmp/vcom1` (back at port details)
 - Parse: Find "Enable" line
 - Navigate: To that line
 - Action: Press Enter
@@ -239,7 +239,7 @@ CLI (vcom2) = Slave (polls data)
 
 **Step 11: Run CLI Slave Poll**
 - Action: Spawn CLI process
-- Command: `cargo run --release -- modbus slave poll --port /dev/vcom2 --station-id 1 --register-address 0 --register-length 4 --register-mode holding --baud-rate 9600`
+- Command: `cargo run --release -- modbus slave poll --port /tmp/vcom2 --station-id 1 --register-address 0 --register-length 4 --register-mode holding --baud-rate 9600`
 - Wait: 3 seconds for communication
 - Capture: CLI stdout
 - Regex: Parse JSON output for values
@@ -266,7 +266,7 @@ TUI (vcom1) = Slave (polls data)
 
 **Step 3: Start CLI Master Provide-Persist**
 - Action: Spawn CLI process in background
-- Command: `cargo run --release -- modbus master provide-persist --port /dev/vcom2 --station-id 1 --register-address 0 --register-length 4 --register-mode holding --baud-rate 9600 --data-source file:/tmp/test_data.jsonl`
+- Command: `cargo run --release -- modbus master provide-persist --port /tmp/vcom2 --station-id 1 --register-address 0 --register-length 4 --register-mode holding --baud-rate 9600 --data-source file:/tmp/test_data.jsonl`
 - Wait: 2 seconds for startup
 - Verification: Process running (no immediate error)
 

@@ -47,7 +47,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
             "master",
             "provide-persist",
             "--port",
-            "/dev/vcom2",
+            "/tmp/vcom2",
             "--baud-rate",
             "9600",
             "--station-id",
@@ -160,7 +160,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("📸 Screen before navigation:\n{}", screen);
 
     // Verify vcom1 is visible
-    if !screen.contains("/dev/vcom1") {
+    if !screen.contains("/tmp/vcom1") {
         return Err(anyhow!("vcom1 not found in port list"));
     }
 
@@ -170,7 +170,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains("/dev/vcom1") {
+        if line.contains("/tmp/vcom1") {
             vcom1_line = Some(idx);
             log::info!("  Found vcom1 at line {}", idx);
         }
@@ -218,7 +218,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
 
     let on_vcom1 = screen_after.lines().any(|line| {
         let trimmed = line.trim_start();
-        (trimmed.starts_with("> ") || trimmed.starts_with(">")) && line.contains("/dev/vcom1")
+        (trimmed.starts_with("> ") || trimmed.starts_with(">")) && line.contains("/tmp/vcom1")
     });
 
     if !on_vcom1 {
@@ -235,7 +235,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1500 },
         CursorAction::MatchPattern {
-            pattern: Regex::new(r"/dev/vcom1")?,
+            pattern: Regex::new(r"/tmp/vcom1")?,
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
             col_range: None,

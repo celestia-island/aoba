@@ -22,7 +22,7 @@ These tests follow a methodical approach requested by @langyo:
 **Step-by-step flow:**
 1. ✓ Spawn TUI, verify "AOBA" title appears
 2. ✓ Navigate to vcom1 (with screen capture and cursor detection)
-3. ✓ Enter vcom1 details, verify header shows "/dev/vcom1"
+3. ✓ Enter vcom1 details, verify header shows "/tmp/vcom1"
 4. ✓ Navigate to Modbus Settings
 5. ✓ Create station, verify "#1" appears
 6. ✓ Set Register Length to 4, verify "0x0004"
@@ -71,7 +71,7 @@ These tests follow a methodical approach requested by @langyo:
 Create virtual COM port pair:
 ```bash
 # Linux/macOS
-socat -d -d pty,raw,echo=0,link=/dev/vcom1 pty,raw,echo=0,link=/dev/vcom2
+socat -d -d pty,raw,echo=0,link=/tmp/vcom1 pty,raw,echo=0,link=/tmp/vcom2
 ```
 
 ### Run Tests
@@ -114,10 +114,10 @@ Navigation is carefully logged:
 **"vcom1 not found in port list"**
 ```bash
 # Check if ports exist
-ls -l /dev/vcom*
+ls -l /tmp/vcom*
 
 # Fix permissions
-sudo chmod 666 /dev/vcom*
+sudo chmod 666 /tmp/vcom*
 ```
 
 **"Failed to navigate to vcom1"**
@@ -132,7 +132,7 @@ sudo chmod 666 /dev/vcom*
 
 **"CLI command failed"**
 - Run CLI command manually to test
-- Check if port is already in use: `lsof /dev/vcom2`
+- Check if port is already in use: `lsof /tmp/vcom2`
 - Verify baud rate matches
 
 ## Code Structure
