@@ -319,7 +319,7 @@ async fn configure_tui_master_carefully<T: Expect>(
     log::info!("  Set Register Length to 12");
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::TypeString("C".to_string()), // hex C = 12 decimal
+        CursorAction::TypeString("12".to_string()), // Enter 12 in decimal
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
         CursorAction::MatchPattern {
@@ -346,16 +346,16 @@ async fn configure_tui_master_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
 
     // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
-    // In hex: 0, A, 14, 1E, 28, 32, 3C, 46, 50, 5A, 64, 6E
+    // UI accepts DECIMAL input and displays as hex
     // Layout is 4 columns per row: [0,1,2,3] [4,5,6,7] [8,9,10,11]
     let test_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
     for (i, &val) in test_values.iter().enumerate() {
-        let hex_val = format!("{:X}", val);
+        let decimal_val = format!("{}", val);  // Enter in DECIMAL
         log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
 
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::TypeString(hex_val.clone()),
+            CursorAction::TypeString(decimal_val.clone()),  // Type decimal value
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
         ];
