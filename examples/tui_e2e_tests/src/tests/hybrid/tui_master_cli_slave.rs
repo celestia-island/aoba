@@ -24,6 +24,38 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 
     log::info!("🧪 Starting TUI Master + CLI Slave hybrid test");
 
+    // Step 0: Setup virtual COM ports
+    log::info!("🧪 Step 0: Setting up virtual COM ports with socat");
+    let socat_process = Command::new("socat")
+        .args(&[
+            "-d",
+            "-d",
+            "pty,raw,echo=0,link=/tmp/vcom1",
+            "pty,raw,echo=0,link=/tmp/vcom2",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow!("Failed to spawn socat: {}", e))?;
+    
+    log::info!("  ✓ socat started with PID {}", socat_process.id());
+    
+    // Wait for socat to create the symlinks
+    thread::sleep(Duration::from_secs(2));
+    
+    // Verify vcom ports exist
+    if !std::path::Path::new("/tmp/vcom1").exists() {
+        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    }
+    if !std::path::Path::new("/tmp/vcom2").exists() {
+        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    }
+    log::info!("  ✓ /tmp/vcom1 and /tmp/vcom2 created successfully");
+    
+    // Set environment variables so the test uses these ports
+    std::env::set_var("AOBATEST_PORT1", "/tmp/vcom1");
+    std::env::set_var("AOBATEST_PORT2", "/tmp/vcom2");
+
     // Spawn TUI process (will be master on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui"])
@@ -86,6 +118,15 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 
     sleep_a_while().await;
 
+    // Cleanup: kill socat
+    log::info!("🧪 Step 10: Cleanup - kill socat");
+    drop(socat_process); // This will kill the process when it goes out of scope
+    // But let's be explicit and try to kill it
+    Command::new("pkill")
+        .args(&["-f", "socat.*vcom"])
+        .output()
+        .ok(); // Ignore errors, socat might already be dead
+
     log::info!("✅ TUI Master + CLI Slave test completed successfully");
     Ok(())
 }
@@ -101,9 +142,10 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let screen = cap.capture(session, "before_navigation")?;
     log::info!("📸 Screen before navigation:\n{}", screen);
 
-    // Verify vcom1 is visible
-    if !screen.contains("/dev/vcom1") {
-        return Err(anyhow!("vcom1 not found in port list"));
+    // Verify vcom1 is visible (check for /tmp/vcom1 or /dev/vcom1)
+    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/dev/vcom1".to_string());
+    if !screen.contains(&vcom_pattern) {
+        return Err(anyhow!("vcom1 ({}) not found in port list", vcom_pattern));
     }
 
     // Find vcom1 line and current cursor position
@@ -112,20 +154,27 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains("/dev/vcom1") {
+        if line.contains(&vcom_pattern) {
             vcom1_line = Some(idx);
-            log::info!("  Found vcom1 at line {}", idx);
+            log::info!("  Found vcom1 ({}) at line {}: {}", vcom_pattern, idx, line.trim());
         }
-        // Look for cursor indicator - could be ">" at start or in the line
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("> ") || trimmed.starts_with(">") {
-            cursor_line = Some(idx);
-            log::info!("  Current cursor at line {}", idx);
+        // Look for cursor indicator - look for "> " or "│ > " pattern
+        if line.contains("> ") {
+            // Make sure it's a cursor marker, not just any > character
+            // The cursor is typically "│ > portname" or "> portname"
+            let trimmed = line.trim();
+            if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
+                cursor_line = Some(idx);
+                log::info!("  Current cursor at line {}: {}", idx, line.trim());
+            }
         }
     }
 
     let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
     let curr_idx = cursor_line.unwrap_or(3); // Default to line 3 if not found
+
+    log::info!("  vcom1 is at line index: {}", vcom1_idx);
+    log::info!("  cursor is at line index: {}", curr_idx);
 
     // Navigate to vcom1
     if vcom1_idx > curr_idx {
@@ -151,7 +200,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, "nav_up_to_vcom1").await?;
     } else {
-        log::info!("  Already on vcom1 line");
+        log::info!("  Already on vcom1 line, no navigation needed");
     }
 
     // Verify cursor is now on vcom1
@@ -159,17 +208,17 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("📸 Screen after navigation:\n{}", screen_after);
 
     let on_vcom1 = screen_after.lines().any(|line| {
-        let trimmed = line.trim_start();
-        (trimmed.starts_with("> ") || trimmed.starts_with(">")) && line.contains("/dev/vcom1")
+        let trimmed = line.trim();
+        (trimmed.starts_with("│ > ") || trimmed.starts_with("> ")) && line.contains(&vcom_pattern)
     });
 
     if !on_vcom1 {
         return Err(anyhow!(
-            "Failed to navigate to vcom1 - cursor not on vcom1 line"
+            "Failed to navigate to vcom1 - cursor not on vcom1 line ({})", vcom_pattern
         ));
     }
 
-    log::info!("  ✓ Cursor is now on vcom1");
+    log::info!("  ✓ Cursor is now on vcom1 ({})", vcom_pattern);
 
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
