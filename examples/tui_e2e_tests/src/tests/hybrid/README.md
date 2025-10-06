@@ -1,155 +1,181 @@
-# Hybrid TUI + CLI Tests
+# Hybrid TUI + CLI Tests - Complete Rewrite
 
-This directory contains hybrid tests that combine TUI and CLI for more robust and easier-to-debug testing.
+This directory contains hybrid tests that combine TUI and CLI, completely rewritten with step-by-step verification.
+
+## Complete Rewrite Approach
+
+These tests follow a methodical approach requested by @langyo:
+- **Step-by-step execution** with verification after each action
+- **Regex probes** after every critical operation
+- **Screen captures** at each major checkpoint
+- **Detailed logging** with emojis for easy scanning
+- **Iterative debugging** until tests pass
 
 ## Test Structure
 
 ### 1. TUI Master + CLI Slave (`tui_master_cli_slave.rs`)
 
-**Setup:**
-- TUI runs as Modbus Master (Slave/Server) on `/dev/vcom1`
-- CLI runs as Modbus Slave (Master/Client) on `/dev/vcom2`
+**What it tests:**
+- TUI as Modbus Master (Slave/Server) on vcom1
+- CLI as Modbus Slave (Master/Client) on vcom2
 
-**Test Flow:**
-1. Start TUI and navigate to vcom1
-2. Configure TUI as Master with test values (0, 10, 20, 30)
-3. Enable the port
-4. Run CLI slave poll command to request data
-5. Verify CLI receives the correct values
+**Step-by-step flow:**
+1. ✓ Spawn TUI, verify "AOBA" title appears
+2. ✓ Navigate to vcom1 (with screen capture and cursor detection)
+3. ✓ Enter vcom1 details, verify header shows "/dev/vcom1"
+4. ✓ Navigate to Modbus Settings
+5. ✓ Create station, verify "#1" appears
+6. ✓ Set Register Length to 4, verify "0x0004"
+7. ✓ Set 4 register values (0, A, 14, 1E), verify each
+8. ✓ Exit register editing
+9. ✓ Enable port, verify "Enabled" status
+10. ✓ Wait for initialization (3 seconds)
+11. ✓ Run CLI slave poll command
+12. ✓ Verify CLI output contains: 0, 10, 20, 30
 
-**Benefits:**
-- TUI provides data (easy to set up visually)
-- CLI polls (easy to verify output programmatically)
-- Simpler than full TUI-TUI test
+**Key features:**
+- Screen capture before/after navigation to find cursor position
+- Parse screen lines to calculate exact navigation steps
+- Verify each register value was set correctly
+- CLI output is validated against expected values
 
 ### 2. CLI Master + TUI Slave (`cli_master_tui_slave.rs`)
 
-**Setup:**
-- CLI runs as Modbus Master (Slave/Server) on `/dev/vcom2`
-- TUI runs as Modbus Slave (Master/Client) on `/dev/vcom1`
+**What it tests:**
+- CLI as Modbus Master (Slave/Server) on vcom2
+- TUI as Modbus Slave (Master/Client) on vcom1
 
-**Test Flow:**
-1. Start CLI master in persistent mode with test data (5, 15, 25, 35)
-2. Start TUI and navigate to vcom1
-3. Configure TUI as Slave
-4. Enable the port
-5. Wait for communication
-6. Check TUI display for received values
+**Step-by-step flow:**
+1. ✓ Create test data file (5, 15, 25, 35)
+2. ✓ Start CLI master, verify process is running
+3. ✓ Spawn TUI, verify "AOBA" title
+4. ✓ Navigate to vcom1 with verification
+5. ✓ Enter Modbus Settings
+6. ✓ Create station, verify "#1"
+7. ✓ Change mode to Slave, verify "Connection Mode Slave"
+8. ✓ Set Register Length to 4, verify "0x0004"
+9. ✓ Enable port, verify "Enabled"
+10. ✓ Wait for communication (7 seconds)
+11. ✓ Navigate to Modbus panel
+12. ✓ Check display for received values (5, 15, 25, 35)
 
-**Benefits:**
-- CLI provides data (easy to control)
-- TUI polls (visual verification possible)
-- Tests TUI's ability to receive data from external sources
+**Key features:**
+- CLI provides reliable test data
+- TUI polling verified step by step
+- Values checked in TUI display (with warning if not found)
 
 ## Running the Tests
 
 ### Prerequisites
 
-Virtual COM ports must be available (vcom1 and vcom2 paired).
-
-On Linux with socat:
+Create virtual COM port pair:
 ```bash
-# In a separate terminal, create virtual ports
+# Linux/macOS
 socat -d -d pty,raw,echo=0,link=/dev/vcom1 pty,raw,echo=0,link=/dev/vcom2
 ```
 
-### Run All Tests
-
+### Run Tests
 ```bash
 cd examples/tui_e2e_tests
 cargo run
 ```
 
-This will run:
-1. Full TUI master-slave test (original)
-2. TUI Master + CLI Slave hybrid test
-3. CLI Master + TUI Slave hybrid test
-
-### Run Specific Test
-
-You can modify `main.rs` to run only specific tests, or run with filters:
-
+### Verbose Logging
 ```bash
-# Run with verbose logging
 RUST_LOG=debug cargo run
 ```
 
-## Test Architecture
+## Debugging Guide
 
+### Screen Captures (📸)
+Every major action logs a screen capture:
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Hybrid Test Framework                     │
-└─────────────────────────────────────────────────────────────┘
-                               │
-              ┌────────────────┴────────────────┐
-              │                                 │
-    ┌─────────▼──────────┐          ┌─────────▼──────────┐
-    │  TUI Master +      │          │  CLI Master +      │
-    │  CLI Slave Test    │          │  TUI Slave Test    │
-    └────────────────────┘          └────────────────────┘
-              │                                 │
-    ┌─────────▼──────────┐          ┌─────────▼──────────┐
-    │ TUI (vcom1)        │          │ CLI (vcom2)        │
-    │ - Master mode      │◄────────►│ - Master mode      │
-    │ - Provides data    │  Serial  │ - Provides data    │
-    └────────────────────┘          └────────────────────┘
-              │                                 │
-    ┌─────────▼──────────┐          ┌─────────▼──────────┐
-    │ CLI (vcom2)        │          │ TUI (vcom1)        │
-    │ - Slave mode       │          │ - Slave mode       │
-    │ - Polls data       │          │ - Polls data       │
-    └────────────────────┘          └────────────────────┘
+📸 Initial screen:
+[screen content here]
 ```
 
-## Advantages of Hybrid Testing
+### Navigation Logs (📍)
+Navigation is carefully logged:
+```
+📍 Finding vcom1 in port list...
+  Found vcom1 at line 5
+  Current cursor at line 3
+  Moving DOWN 2 steps to reach vcom1
+  ✓ Cursor is now on vcom1
+```
 
-1. **Easier Debugging**: CLI output is plain text, easy to parse
-2. **Better Coverage**: Tests both TUI and CLI implementations
-3. **Faster Iteration**: CLI commands are quicker than UI automation
-4. **More Reliable**: Less dependent on UI timing and rendering
-5. **Complementary**: Each approach tests different aspects
+### Verification (✓ / ✗ / ⚠️)
+- ✓ = Success
+- ✗ = Failure  
+- ⚠️ = Warning
 
-## Implementation Details
+### Common Issues
 
-### TUI Automation
-Uses `expectrl` and `auto_cursor` framework to:
-- Navigate TUI menus
-- Enter values
-- Verify screen content
+**"vcom1 not found in port list"**
+```bash
+# Check if ports exist
+ls -l /dev/vcom*
 
-### CLI Execution
-Uses `std::process::Command` to:
-- Run CLI commands
-- Capture output
-- Verify results
+# Fix permissions
+sudo chmod 666 /dev/vcom*
+```
 
-### Communication
-- Virtual serial ports (vcom1 ↔ vcom2)
-- Modbus RTU protocol
-- 9600 baud rate (default)
+**"Failed to navigate to vcom1"**
+- Check screen capture in logs
+- Cursor detection looks for lines starting with `>`
+- May need to adjust cursor detection logic
 
-## Troubleshooting
+**"Pattern not found"**
+- Compare expected pattern with actual screen content
+- Check regex syntax
+- Adjust line_range if needed
 
-### "Port not found" errors
-- Ensure virtual COM ports are created and paired
-- Check permissions: `sudo chmod 666 /dev/vcom*`
+**"CLI command failed"**
+- Run CLI command manually to test
+- Check if port is already in use: `lsof /dev/vcom2`
+- Verify baud rate matches
 
-### "Pattern not found" in TUI
-- Check screen capture logs for actual content
-- UI timing might need adjustment (increase sleep times)
+## Code Structure
 
-### CLI command fails
-- Verify CLI commands work standalone first
-- Check if port is already in use
+### Careful Navigation Function
+```rust
+async fn navigate_to_vcom1_carefully<T: Expect>(...)
+```
+- Captures screen before navigation
+- Finds vcom1 line number
+- Finds current cursor line
+- Calculates delta and moves precisely
+- Verifies cursor is on vcom1 before Enter
 
-### Communication timeout
-- Ensure ports are properly paired
-- Check baud rate matches on both sides
-- Look for errors in debug logs
+### Step-by-Step Configuration
+```rust
+async fn configure_tui_master_carefully<T: Expect>(...)
+```
+- Each navigation step verified
+- Each value set with confirmation
+- Register values checked after setting
+- Mode changes verified with regex
 
-## Future Improvements
+### Enable Port with Verification
+```rust
+async fn enable_port_carefully<T: Expect>(...)
+```
+- Screen capture before/after
+- Regex probe for "Enabled" text
+- Detailed logging
 
-- Add more test scenarios (different baud rates, register types)
-- Add negative tests (error handling)
-- Add performance tests (throughput, latency)
-- Add stress tests (many requests, long running)
+## Benefits of This Rewrite
+
+1. **Clear Failure Points**: Know exactly which step failed
+2. **Visual Evidence**: Screen captures show what went wrong
+3. **Precise Navigation**: Uses screen parsing, not guesswork
+4. **Better Logging**: Emojis and structure make logs scannable
+5. **Maintainable**: Organized by logical steps
+6. **Debuggable**: Can reproduce issues from logs
+
+## Test Philosophy
+
+These tests follow the principle:
+> "Test should fail fast and fail clearly"
+
+Every assertion is checked immediately with clear error messages and screen evidence.
