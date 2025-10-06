@@ -83,8 +83,9 @@ impl std::fmt::Debug for PortRuntimeHandle {
 impl PortRuntimeHandle {
     pub fn spawn(port_name: String, initial: SerialConfig) -> Result<Self> {
         log::info!("PortRuntimeHandle::spawn called for {}", port_name);
+        // Use 100ms timeout to be more responsive while still allowing blocking reads
         let builder =
-            serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(200));
+            serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(100));
         let builder = initial.apply_builder(builder);
         let handle = builder.open()?;
         log::info!("Serial port {} opened successfully", port_name);
@@ -166,13 +167,16 @@ fn boot_serial_loop(
     let mut assembling: Vec<u8> = Vec::with_capacity(READ_BUF_SIZE);
     let mut last_byte: Option<Instant> = None;
     let mut loop_count = 0u64;
+    let mut read_attempts = 0u64;
+    let mut successful_reads = 0u64;
     
-    log::info!("Runtime serial loop started for port {}", port_name);
+    log::info!("🔵 Runtime serial loop STARTED for port {} (thread ID: {:?})", port_name, std::thread::current().id());
 
     loop {
         loop_count += 1;
         if loop_count % 1000 == 0 {
-            log::info!("Runtime loop for {} executed {} times", port_name, loop_count);
+            log::info!("🔄 Runtime loop for {} executed {} times (reads: {}, successful: {})", 
+                      port_name, loop_count, read_attempts, successful_reads);
         }
         
         while let Ok(cmd) = cmd_rx.try_recv() {
@@ -209,27 +213,44 @@ fn boot_serial_loop(
                 last_byte = None;
             }
         }
+        // Try to read from serial port
+        let mut data_received = false;
+        read_attempts += 1;
         if let Ok(mut g) = serial.lock() {
             let mut buf = [0u8; READ_BUF_SIZE];
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {
-                    log::info!("Runtime: Read {} bytes from serial port", n);
+                    successful_reads += 1;
+                    log::info!("✅ Runtime: Read {} bytes from serial port {}: {:02X?}", n, port_name, &buf[..n]);
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
+                    data_received = true;
                     if assembling.len() > MAX_ASSEMBLING_LEN {
                         finalize_buffer(&mut assembling, &evt_tx)?;
                         assembling.clear();
                         last_byte = None;
                     }
                 }
-                Ok(_) => {}
-                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => {}
+                Ok(_) => {
+                    // Read returned 0 bytes, continue
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::TimedOut => {
+                    // Timeout is expected, continue
+                }
                 Err(err) => {
+                    log::warn!("⚠️  Runtime {}: Serial read error: {}", port_name, err);
                     evt_tx.send(RuntimeEvent::Error(format!("read error: {err}")))?;
                 }
             }
+        } else {
+            log::warn!("⚠️  Runtime {}: Failed to lock serial port", port_name);
         }
-        std::thread::sleep(Duration::from_millis(2));
+        
+        // Only sleep if no data was received to avoid excessive CPU usage
+        // When data is flowing, continue immediately to read more
+        if !data_received {
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 }
 
