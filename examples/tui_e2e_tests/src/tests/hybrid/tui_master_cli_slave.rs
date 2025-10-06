@@ -350,12 +350,12 @@ async fn configure_tui_master_carefully<T: Expect>(
     // Layout is 4 columns per row: [0,1,2,3] [4,5,6,7] [8,9,10,11]
     let test_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
     for (i, &val) in test_values.iter().enumerate() {
-        let decimal_val = format!("{}", val);  // Enter in DECIMAL
+        let decimal_val = format!("{}", val); // Enter in DECIMAL
         log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
 
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::TypeString(decimal_val.clone()),  // Type decimal value
+            CursorAction::TypeString(decimal_val.clone()), // Type decimal value
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
         ];
