@@ -21,6 +21,8 @@ use crate::protocol::{
 /// Handle modbus communication for all active ports
 pub fn handle_modbus_communication() -> Result<()> {
     let now = std::time::Instant::now();
+    
+    log::trace!("handle_modbus_communication called");
 
     // Get all ports that are currently active
     let active_ports = read_status(|status| {
@@ -49,6 +51,8 @@ pub fn handle_modbus_communication() -> Result<()> {
         }
         Ok(ports)
     })?;
+    
+    log::trace!("handle_modbus_communication found {} active ports", active_ports.len());
 
     for (port_name, port_arc, global_mode, stations) in active_ports {
         log::trace!(

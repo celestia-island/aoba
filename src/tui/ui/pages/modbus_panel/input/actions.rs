@@ -349,8 +349,9 @@ fn create_new_modbus_entry() -> Result<()> {
                 };
                 stations.push(new_entry);
                 log::info!(
-                    "Created new modbus entry with station_id=1 in {:?} mode",
-                    if mode.is_master() { "Master" } else { "Slave" }
+                    "✅ Created new modbus entry with station_id=1 in {:?} mode (total stations now: {})",
+                    if mode.is_master() { "Master" } else { "Slave" },
+                    stations.len()
                 );
             });
         }
