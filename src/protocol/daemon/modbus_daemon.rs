@@ -82,6 +82,12 @@ pub fn handle_slave_response_mode(
     global_mode: &types::modbus::ModbusConnectionMode,
     now: Instant,
 ) -> Result<()> {
+    log::trace!(
+        "handle_slave_response_mode called for {} with {} stations",
+        port_name,
+        stations.len()
+    );
+
     // Get runtime handle for receiving requests and sending responses
     let runtime_handle = with_port_read(port_arc, |port| {
         if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
@@ -96,7 +102,9 @@ pub fn handle_slave_response_mode(
     };
 
     // Process incoming requests from external slaves and generate responses
+    let mut event_count = 0;
     while let Ok(event) = runtime.evt_rx.try_recv() {
+        event_count += 1;
         match event {
             crate::protocol::runtime::RuntimeEvent::FrameReceived(frame) => {
                 let hex_frame = frame
@@ -249,6 +257,14 @@ pub fn handle_slave_response_mode(
             }
             _ => {}
         }
+    }
+
+    if event_count > 0 {
+        log::debug!(
+            "Master mode: processed {} events for port {}",
+            event_count,
+            port_name
+        );
     }
 
     Ok(())

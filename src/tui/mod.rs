@@ -384,8 +384,9 @@ fn run_core_thread(
             Ok(())
         })?;
 
-        // Handle modbus communication at most once per second to avoid tight loops
-        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_secs(1) {
+        // Handle modbus communication at most once per 100ms to ensure timely responses
+        // This frequency is critical for TUI Master mode to respond quickly to CLI slave requests
+        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_millis(100) {
             // Update the timestamp first to ensure we don't re-enter while still running
             last_modbus_run = std::time::Instant::now();
             crate::protocol::daemon::handle_modbus_communication()?;
