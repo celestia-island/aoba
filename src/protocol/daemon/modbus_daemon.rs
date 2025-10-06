@@ -27,11 +27,23 @@ pub fn handle_modbus_communication() -> Result<()> {
     // Get all ports that are currently active
     let active_ports = read_status(|status| {
         let mut ports = Vec::new();
+        log::info!("Checking {} total ports for modbus activity", status.ports.map.len());
         for (port_name, port_arc) in &status.ports.map {
             if let Ok(port_data) = port_arc.read() {
+                log::info!("  Port {}: state={:?}", port_name, 
+                    match &port_data.state {
+                        types::port::PortState::Free => "Free",
+                        types::port::PortState::OccupiedByThis { .. } => "OccupiedByThis",
+                        types::port::PortState::OccupiedByOther { .. } => "OccupiedByOther",
+                    });
+                    
                 if let types::port::PortState::OccupiedByThis { runtime: _, .. } = &port_data.state
                 {
                     let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
+                    log::info!("    Config: Modbus with {} stations in {:?} mode", 
+                        stations.len(),
+                        if mode.is_master() { "Master" } else { "Slave" });
+                        
                     if !stations.is_empty() {
                         ports.push((
                             port_name.clone(),
@@ -45,6 +57,8 @@ pub fn handle_modbus_communication() -> Result<()> {
                             stations.len(),
                             if mode.is_master() { "Master" } else { "Slave" }
                         );
+                    } else {
+                        log::info!("    ⚠️ Port has no stations configured");
                     }
                 }
             }
