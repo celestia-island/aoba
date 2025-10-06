@@ -90,13 +90,13 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     log::info!("🧪 Step 3: Navigate to vcom1 in port list");
     navigate_to_vcom1_carefully(&mut tui_session, &mut tui_cap).await?;
 
-    // Step 4: Enable the port FIRST (before entering Modbus settings)
-    log::info!("🧪 Step 4: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Step 5: Configure as Master mode with test data
-    log::info!("🧪 Step 5: Configure TUI as Master with test values");
+    // Step 4: Configure Modbus settings FIRST (before enabling)
+    log::info!("🧪 Step 4: Configure TUI as Master with test values");
     configure_tui_master_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Step 5: Enable the port (after configuration)
+    log::info!("🧪 Step 5: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Give TUI time to fully initialize the port
     log::info!("🧪 Step 6: Wait for port to initialize");
@@ -387,19 +387,95 @@ async fn configure_tui_master_carefully<T: Expect>(
         log::info!("  ✓ Register values verified");
     }
 
-    // Exit register editing mode (we're done with configuration)
-    log::info!("  Exit register editing");
+    // Exit register editing mode
+    log::info!("  Exit register editing (first Escape)");
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
     execute_cursor_actions(session, cap, &actions, "exit_register_edit").await?;
 
-    let screen = cap.capture(session, "config_complete")?;
-    log::info!("📸 Configuration complete:\n{}", screen);
+    // Exit Modbus settings back to port details (second Escape)
+    log::info!("  Exit Modbus settings back to port details (second Escape)");
+    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
+    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
-    log::info!("  ✓ Master configuration complete");
+    let screen = cap.capture(session, "after_exit")?;
+    log::info!("📸 After exiting Modbus settings:\n{}", screen);
+
+    // Check if we're back on port details or main port list
+    if screen.contains("Enable Port") {
+        log::info!("  ✓ Already back on port details page");
+    } else if screen.contains("COM Ports") {
+        log::info!("  We went back to main port list, need to enter vcom1 again");
+        
+        // Navigate back to vcom1 and enter it
+        let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/dev/vcom1".to_string());
+        
+        // Find vcom1 and navigate to it
+        let lines: Vec<&str> = screen.lines().collect();
+        let mut vcom1_line = None;
+        let mut cursor_line = None;
+        
+        for (idx, line) in lines.iter().enumerate() {
+            if line.contains(&vcom_pattern) {
+                vcom1_line = Some(idx);
+            }
+            if line.contains("> ") {
+                let trimmed = line.trim();
+                if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
+                    cursor_line = Some(idx);
+                }
+            }
+        }
+        
+        if let (Some(vcom1_idx), Some(curr_idx)) = (vcom1_line, cursor_line) {
+            if vcom1_idx != curr_idx {
+                let delta = if vcom1_idx > curr_idx {
+                    vcom1_idx - curr_idx
+                } else {
+                    curr_idx - vcom1_idx
+                };
+                
+                let direction = if vcom1_idx > curr_idx {
+                    aoba::ci::ArrowKey::Down
+                } else {
+                    aoba::ci::ArrowKey::Up
+                };
+                
+                log::info!("  Navigating to vcom1 ({} steps)", delta);
+                let actions = vec![
+                    CursorAction::PressArrow {
+                        direction,
+                        count: delta,
+                    },
+                    CursorAction::Sleep { ms: 500 },
+                ];
+                execute_cursor_actions(session, cap, &actions, "nav_back_to_vcom1").await?;
+            }
+        }
+        
+        // Press Enter to enter vcom1 details
+        log::info!("  Press Enter to enter vcom1 details");
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 1000 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reenter_vcom1").await?;
+        
+        let screen = cap.capture(session, "back_in_vcom1_details")?;
+        log::info!("📸 Back in vcom1 details:\n{}", screen);
+        
+        if !screen.contains("Enable Port") {
+            return Err(anyhow!("Failed to re-enter vcom1 details page"));
+        }
+    } else {
+        return Err(anyhow!("Unexpected screen after exiting Modbus settings"));
+    }
+
+    log::info!("  ✓ Master configuration complete, ready to enable port");
     Ok(())
 }
 
 /// Enable the serial port in TUI - carefully
+/// This should be called AFTER configuring Modbus settings
 async fn enable_port_carefully<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -409,13 +485,13 @@ async fn enable_port_carefully<T: Expect>(
     let screen = cap.capture(session, "before_enable")?;
     log::info!("📸 Before enabling:\n{}", screen);
 
-    // We should be in vcom1 details page
+    // We should be back in vcom1 details page after exiting Modbus settings
     // Verify we see "Enable Port" option
     if !screen.contains("Enable Port") {
         return Err(anyhow!("Not in port details page - 'Enable Port' not found"));
     }
 
-    // Check if cursor is already on "Enable Port"
+    // Check if cursor is on "Enable Port" line
     let lines: Vec<&str> = screen.lines().collect();
     let mut on_enable_port = false;
     for line in lines {
@@ -428,13 +504,13 @@ async fn enable_port_carefully<T: Expect>(
         }
     }
 
-    // If not on Enable Port, try to navigate to it (should be first option)
+    // If not on Enable Port, navigate to it
     if !on_enable_port {
-        log::info!("  Navigate to 'Enable Port' option");
+        log::info!("  Navigate UP to 'Enable Port' option");
         let actions = vec![
             CursorAction::PressArrow {
                 direction: aoba::ci::ArrowKey::Up,
-                count: 3, // Go all the way to top
+                count: 3, // Go all the way up
             },
             CursorAction::Sleep { ms: 500 },
         ];
@@ -444,8 +520,7 @@ async fn enable_port_carefully<T: Expect>(
         log::info!("📸 On Enable Port option:\n{}", screen);
     }
 
-    // Press Enter to toggle Enable Port
-    // Note: Pressing Enter here should toggle between Disabled and Enabled
+    // Press Enter to toggle Enable Port to Enabled
     log::info!("  Press Enter to toggle Enable Port to Enabled");
     let actions = vec![
         CursorAction::PressEnter,
@@ -456,13 +531,18 @@ async fn enable_port_carefully<T: Expect>(
     let screen = cap.capture(session, "after_toggle")?;
     log::info!("📸 After toggling:\n{}", screen);
 
-    // The UI might show "Enabled" on the same line or might not show it immediately
-    // Let's just check that we're still on the port details page
+    // Check that we're still on port details page
     if !screen.contains("Protocol Mode") {
         return Err(anyhow!("Unexpected screen after toggling - not on port details"));
     }
 
-    log::info!("  ✓ Port toggle completed");
+    // Check if it shows "Enabled"
+    if screen.contains("Enabled") {
+        log::info!("  ✓ Port shows as 'Enabled'");
+    } else {
+        log::warn!("⚠️  'Enabled' text not found - port may not be enabled");
+    }
+
     Ok(())
 }
 
