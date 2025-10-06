@@ -363,43 +363,18 @@ async fn configure_tui_master_carefully<T: Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{}", i)).await?;
 
-        // Navigate to next register
+        // Navigate to next register - just use RIGHT arrow for all registers
         if i < test_values.len() - 1 {
-            // Within a row (columns 0-3), move Right
-            // After column 3 (i=3,7), move Down to next row start
-            if (i + 1) % 4 == 0 {
-                // End of row, move to next row start
-                log::info!("    End of row, moving to next row");
-                let actions = vec![
-                    CursorAction::PressArrow {
-                        direction: aoba::ci::ArrowKey::Down,
-                        count: 1,
-                    },
-                    CursorAction::PressArrow {
-                        direction: aoba::ci::ArrowKey::Left,
-                        count: 3, // Go back to column 0
-                    },
-                    CursorAction::Sleep { ms: 300 },
-                ];
-                execute_cursor_actions(
-                    session,
-                    cap,
-                    &actions,
-                    &format!("nav_to_row_{}", (i + 1) / 4),
-                )
+            log::info!("    Moving Right to next register");
+            let actions = vec![
+                CursorAction::PressArrow {
+                    direction: aoba::ci::ArrowKey::Right,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 250 },
+            ];
+            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
                 .await?;
-            } else {
-                // Within row, move Right to next column
-                let actions = vec![
-                    CursorAction::PressArrow {
-                        direction: aoba::ci::ArrowKey::Right,
-                        count: 1,
-                    },
-                    CursorAction::Sleep { ms: 300 },
-                ];
-                execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
-                    .await?;
-            }
         }
     }
 
