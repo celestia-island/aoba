@@ -37,7 +37,7 @@ pub fn handle_modbus_communication() -> Result<()> {
                             mode.clone(),
                             stations.clone(),
                         ));
-                        log::debug!(
+                        log::trace!(
                             "Found active port {} with {} stations in {:?} mode",
                             port_name,
                             stations.len(),
@@ -51,6 +51,17 @@ pub fn handle_modbus_communication() -> Result<()> {
     })?;
 
     for (port_name, port_arc, global_mode, stations) in active_ports {
+        log::trace!(
+            "Processing modbus communication for {} ({} mode, {} stations)",
+            port_name,
+            if global_mode.is_master() {
+                "Master"
+            } else {
+                "Slave"
+            },
+            stations.len()
+        );
+
         // Process each port's modbus communication
         // NOTE: The naming is counter-intuitive but kept for backwards compatibility:
         // - "Master" mode acts as a Modbus Slave (Server): listens and responds with data from storage
@@ -247,8 +258,10 @@ pub fn handle_slave_response_mode(
 
                     log::info!("Sent modbus master response for {port_name}: {hex_response}");
                 } else {
-                    log::debug!(
-                        "Could not generate a response for the Modbus request: {hex_frame}"
+                    log::warn!(
+                        "Failed to generate modbus response for port {port_name} (station_id={}, stations configured: {})",
+                        station_id,
+                        stations.len()
                     );
                 }
             }
@@ -260,11 +273,13 @@ pub fn handle_slave_response_mode(
     }
 
     if event_count > 0 {
-        log::debug!(
-            "Master mode: processed {} events for port {}",
-            event_count,
-            port_name
+        log::info!(
+            "Master mode {}: processed {} events",
+            port_name,
+            event_count
         );
+    } else {
+        log::trace!("Master mode {}: no events to process", port_name);
     }
 
     Ok(())
@@ -773,7 +788,15 @@ pub fn generate_modbus_master_response(
     let _station = stations
         .iter()
         .find(|s| s.station_id == slave_id)
-        .ok_or_else(|| anyhow!("No station configured for slave ID {}", slave_id))?;
+        .ok_or_else(|| {
+            let available_ids: Vec<u8> = stations.iter().map(|s| s.station_id).collect();
+            log::warn!(
+                "No station configured for slave ID {}. Available station IDs: {:?}",
+                slave_id,
+                available_ids
+            );
+            anyhow!("No station configured for slave ID {}", slave_id)
+        })?;
 
     // Use the storage from the global mode instead of creating a new one
     let storage = match global_mode {
