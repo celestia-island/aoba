@@ -13,7 +13,7 @@ use anyhow::Result;
 #[cfg(debug_assertions)]
 use chrono::Local;
 #[cfg(debug_assertions)]
-use std::{fs::File, io::Write};
+use std::io::Write;
 
 #[cfg(debug_assertions)]
 use env_logger::Builder;

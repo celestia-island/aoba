@@ -553,11 +553,11 @@ async fn enable_port_carefully<T: Expect>(
 async fn run_cli_slave_poll() -> Result<String> {
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
-    log::info!("  🖥️  Executing CLI command: slave listen (poll master)");
+    log::info!("  🖥️  Executing CLI command: slave poll (request data from master)");
 
     let output = Command::new(&binary)
         .args([
-            "--slave-listen",
+            "--slave-poll",
             "/tmp/vcom2",
             "--baud-rate",
             "9600",
