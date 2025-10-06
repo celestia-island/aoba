@@ -16,7 +16,7 @@ use aoba::ci::{should_run_vcom_tests, sleep_a_while, spawn_expect_process, Termi
 /// Test CLI Master with TUI Slave
 /// CLI acts as Modbus Master (Slave/Server) responding to requests with test data
 /// TUI acts as Modbus Slave (Master/Client) polling for data
-/// 
+///
 /// This test is rewritten with careful step-by-step verification
 pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     if !should_run_vcom_tests() {
@@ -89,7 +89,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     let mut tui_cap = TerminalCapture::new(24, 80);
 
     sleep_a_while().await;
-    
+
     // Step 4: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 4: Verify TUI loaded with port list");
     let actions = vec![
@@ -101,8 +101,14 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
             col_range: None,
         },
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_tui_loaded").await?;
-    
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "verify_tui_loaded",
+    )
+    .await?;
+
     let screen = tui_cap.capture(&mut tui_session, "initial_screen")?;
     log::info!("📸 Initial screen:\n{}", screen);
 
@@ -148,21 +154,21 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  📍 Finding vcom1 in port list...");
-    
+
     // Capture screen to see current state
     let screen = cap.capture(session, "before_navigation")?;
     log::info!("📸 Screen before navigation:\n{}", screen);
-    
+
     // Verify vcom1 is visible
     if !screen.contains("/dev/vcom1") {
         return Err(anyhow!("vcom1 not found in port list"));
     }
-    
+
     // Find vcom1 line and current cursor position
     let lines: Vec<&str> = screen.lines().collect();
     let mut vcom1_line = None;
     let mut cursor_line = None;
-    
+
     for (idx, line) in lines.iter().enumerate() {
         if line.contains("/dev/vcom1") {
             vcom1_line = Some(idx);
@@ -175,10 +181,10 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
             log::info!("  Current cursor at line {}", idx);
         }
     }
-    
+
     let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
     let curr_idx = cursor_line.unwrap_or(3); // Default to line 3 if not found
-    
+
     // Navigate to vcom1
     if vcom1_idx > curr_idx {
         let steps = vcom1_idx - curr_idx;
@@ -205,22 +211,24 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     } else {
         log::info!("  Already on vcom1 line");
     }
-    
+
     // Verify cursor is now on vcom1
     let screen_after = cap.capture(session, "after_navigation")?;
     log::info!("📸 Screen after navigation:\n{}", screen_after);
-    
+
     let on_vcom1 = screen_after.lines().any(|line| {
         let trimmed = line.trim_start();
         (trimmed.starts_with("> ") || trimmed.starts_with(">")) && line.contains("/dev/vcom1")
     });
-    
+
     if !on_vcom1 {
-        return Err(anyhow!("Failed to navigate to vcom1 - cursor not on vcom1 line"));
+        return Err(anyhow!(
+            "Failed to navigate to vcom1 - cursor not on vcom1 line"
+        ));
     }
-    
+
     log::info!("  ✓ Cursor is now on vcom1");
-    
+
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
     let actions = vec![
@@ -234,10 +242,10 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
-    
+
     let screen_details = cap.capture(session, "vcom1_details")?;
     log::info!("📸 Inside vcom1 details:\n{}", screen_details);
-    
+
     log::info!("  ✓ Successfully entered vcom1 details");
     Ok(())
 }
@@ -248,7 +256,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  📝 Configuring as Slave...");
-    
+
     // Navigate to Modbus settings (should be 2 down from current position)
     log::info!("  Navigate to Modbus Settings");
     let actions = vec![
@@ -259,10 +267,10 @@ async fn configure_tui_slave_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_modbus").await?;
-    
+
     let screen = cap.capture(session, "on_modbus_option")?;
     log::info!("📸 On Modbus option:\n{}", screen);
-    
+
     // Enter Modbus settings
     log::info!("  Enter Modbus Settings");
     let actions = vec![
@@ -276,10 +284,10 @@ async fn configure_tui_slave_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
-    
+
     let screen = cap.capture(session, "in_modbus_settings")?;
     log::info!("📸 In Modbus settings:\n{}", screen);
-    
+
     // Navigate up to mode selector (Create Station is default, we need to go up to Connection Mode)
     log::info!("  Navigate up to Connection Mode");
     let actions = vec![
@@ -290,7 +298,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_mode").await?;
-    
+
     // Create station first
     log::info!("  Create new station");
     let actions = vec![
@@ -304,10 +312,10 @@ async fn configure_tui_slave_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
-    
+
     let screen = cap.capture(session, "station_created")?;
     log::info!("📸 Station created:\n{}", screen);
-    
+
     // Navigate to Connection Mode field (1 down from current)
     log::info!("  Navigate to Connection Mode");
     let actions = vec![
@@ -318,7 +326,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_connection_mode").await?;
-    
+
     // Change mode to Slave
     log::info!("  Change mode to Slave");
     let actions = vec![
@@ -337,10 +345,10 @@ async fn configure_tui_slave_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "set_slave_mode").await?;
-    
+
     let screen = cap.capture(session, "mode_set_to_slave")?;
     log::info!("📸 Mode set to Slave:\n{}", screen);
-    
+
     // Navigate to Register Length field (4 down from current)
     log::info!("  Navigate to Register Length");
     let actions = vec![
@@ -351,7 +359,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_reg_length").await?;
-    
+
     // Set Register Length to 4
     log::info!("  Set Register Length to 4");
     let actions = vec![
@@ -367,10 +375,10 @@ async fn configure_tui_slave_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "set_reg_length").await?;
-    
+
     let screen = cap.capture(session, "reg_length_set")?;
     log::info!("📸 Register Length set:\n{}", screen);
-    
+
     // Navigate back up to "Enable Port" (should be about 2 up)
     log::info!("  Navigate back to Enable Port");
     let actions = vec![
@@ -381,7 +389,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_enable").await?;
-    
+
     log::info!("  ✓ Slave configuration complete");
     Ok(())
 }
@@ -392,10 +400,10 @@ async fn enable_port_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  🔌 Enabling port...");
-    
+
     let screen = cap.capture(session, "before_enable")?;
     log::info!("📸 Before enabling:\n{}", screen);
-    
+
     // Should be on "Enable Port" option
     let actions = vec![
         CursorAction::PressEnter,
@@ -408,10 +416,10 @@ async fn enable_port_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "enable_port").await?;
-    
+
     let screen = cap.capture(session, "after_enable")?;
     log::info!("📸 After enabling:\n{}", screen);
-    
+
     log::info!("  ✓ Port enabled successfully");
     Ok(())
 }
@@ -422,7 +430,7 @@ async fn check_received_values_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  🔍 Checking received values...");
-    
+
     // Navigate to Modbus panel (2 down)
     log::info!("  Navigate to Modbus panel");
     let actions = vec![

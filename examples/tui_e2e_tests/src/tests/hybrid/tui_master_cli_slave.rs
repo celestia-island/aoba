@@ -14,7 +14,7 @@ use aoba::ci::{should_run_vcom_tests, sleep_a_while, spawn_expect_process, Termi
 /// Test TUI Master with CLI Slave
 /// TUI acts as Modbus Master (Slave/Server) responding to requests
 /// CLI acts as Modbus Slave (Master/Client) polling for data
-/// 
+///
 /// This test is rewritten with careful step-by-step verification
 pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     if !should_run_vcom_tests() {
@@ -31,7 +31,7 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     let mut tui_cap = TerminalCapture::new(24, 80);
 
     sleep_a_while().await;
-    
+
     // Step 2: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 2: Verify TUI loaded with port list");
     let actions = vec![
@@ -43,8 +43,14 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
             col_range: None,
         },
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_tui_loaded").await?;
-    
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "verify_tui_loaded",
+    )
+    .await?;
+
     let screen = tui_cap.capture(&mut tui_session, "initial_screen")?;
     log::info!("📸 Initial screen:\n{}", screen);
 
@@ -90,21 +96,21 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  📍 Finding vcom1 in port list...");
-    
+
     // Capture screen to see current state
     let screen = cap.capture(session, "before_navigation")?;
     log::info!("📸 Screen before navigation:\n{}", screen);
-    
+
     // Verify vcom1 is visible
     if !screen.contains("/dev/vcom1") {
         return Err(anyhow!("vcom1 not found in port list"));
     }
-    
+
     // Find vcom1 line and current cursor position
     let lines: Vec<&str> = screen.lines().collect();
     let mut vcom1_line = None;
     let mut cursor_line = None;
-    
+
     for (idx, line) in lines.iter().enumerate() {
         if line.contains("/dev/vcom1") {
             vcom1_line = Some(idx);
@@ -117,10 +123,10 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
             log::info!("  Current cursor at line {}", idx);
         }
     }
-    
+
     let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
     let curr_idx = cursor_line.unwrap_or(3); // Default to line 3 if not found
-    
+
     // Navigate to vcom1
     if vcom1_idx > curr_idx {
         let steps = vcom1_idx - curr_idx;
@@ -147,22 +153,24 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     } else {
         log::info!("  Already on vcom1 line");
     }
-    
+
     // Verify cursor is now on vcom1
     let screen_after = cap.capture(session, "after_navigation")?;
     log::info!("📸 Screen after navigation:\n{}", screen_after);
-    
+
     let on_vcom1 = screen_after.lines().any(|line| {
         let trimmed = line.trim_start();
         (trimmed.starts_with("> ") || trimmed.starts_with(">")) && line.contains("/dev/vcom1")
     });
-    
+
     if !on_vcom1 {
-        return Err(anyhow!("Failed to navigate to vcom1 - cursor not on vcom1 line"));
+        return Err(anyhow!(
+            "Failed to navigate to vcom1 - cursor not on vcom1 line"
+        ));
     }
-    
+
     log::info!("  ✓ Cursor is now on vcom1");
-    
+
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
     let actions = vec![
@@ -176,10 +184,10 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
-    
+
     let screen_details = cap.capture(session, "vcom1_details")?;
     log::info!("📸 Inside vcom1 details:\n{}", screen_details);
-    
+
     log::info!("  ✓ Successfully entered vcom1 details");
     Ok(())
 }
@@ -190,7 +198,7 @@ async fn configure_tui_master_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  📝 Configuring as Master...");
-    
+
     // Navigate to Modbus settings (should be 2 down from current position)
     log::info!("  Navigate to Modbus Settings");
     let actions = vec![
@@ -201,10 +209,10 @@ async fn configure_tui_master_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_modbus").await?;
-    
+
     let screen = cap.capture(session, "on_modbus_option")?;
     log::info!("📸 On Modbus option:\n{}", screen);
-    
+
     // Enter Modbus settings
     log::info!("  Enter Modbus Settings");
     let actions = vec![
@@ -218,10 +226,10 @@ async fn configure_tui_master_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
-    
+
     let screen = cap.capture(session, "in_modbus_settings")?;
     log::info!("📸 In Modbus settings:\n{}", screen);
-    
+
     // Create station (should be on "Create Station" by default)
     log::info!("  Create new station");
     let actions = vec![
@@ -235,10 +243,10 @@ async fn configure_tui_master_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
-    
+
     let screen = cap.capture(session, "station_created")?;
     log::info!("📸 Station created:\n{}", screen);
-    
+
     // Navigate to Register Length field (5 down from current)
     log::info!("  Navigate to Register Length");
     let actions = vec![
@@ -249,7 +257,7 @@ async fn configure_tui_master_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_reg_length").await?;
-    
+
     // Set Register Length to 4
     log::info!("  Set Register Length to 4");
     let actions = vec![
@@ -265,10 +273,10 @@ async fn configure_tui_master_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "set_reg_length").await?;
-    
+
     let screen = cap.capture(session, "reg_length_set")?;
     log::info!("📸 Register Length set:\n{}", screen);
-    
+
     // Navigate to register values (1 down)
     log::info!("  Navigate to register values");
     let actions = vec![
@@ -279,13 +287,13 @@ async fn configure_tui_master_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
-    
+
     // Set register values: 0, 10, 20, 30 (in hex: 0, A, 14, 1E)
     let test_values = vec![0u16, 10, 20, 30];
     for (i, &val) in test_values.iter().enumerate() {
         let hex_val = format!("{:X}", val);
         log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
-        
+
         let actions = vec![
             CursorAction::PressEnter,
             CursorAction::TypeString(hex_val.clone()),
@@ -293,7 +301,7 @@ async fn configure_tui_master_carefully<T: Expect>(
             CursorAction::Sleep { ms: 500 },
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{}", i)).await?;
-        
+
         // Move to next register
         if i < test_values.len() - 1 {
             let actions = vec![
@@ -303,29 +311,30 @@ async fn configure_tui_master_carefully<T: Expect>(
                 },
                 CursorAction::Sleep { ms: 300 },
             ];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1)).await?;
+            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
+                .await?;
         }
     }
-    
+
     let screen = cap.capture(session, "registers_set")?;
     log::info!("📸 Registers set:\n{}", screen);
-    
+
     // Verify values are correct
-    if !screen.contains("0x0000") || !screen.contains("0x000A") 
-        || !screen.contains("0x0014") || !screen.contains("0x001E") {
+    if !screen.contains("0x0000")
+        || !screen.contains("0x000A")
+        || !screen.contains("0x0014")
+        || !screen.contains("0x001E")
+    {
         log::warn!("⚠️  Register values may not be set correctly");
     } else {
         log::info!("  ✓ Register values verified");
     }
-    
+
     // Exit register editing mode
     log::info!("  Exit register editing");
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-    ];
+    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
     execute_cursor_actions(session, cap, &actions, "exit_register_edit").await?;
-    
+
     // Navigate back up to "Enable Port" (should be about 2 up)
     log::info!("  Navigate back to Enable Port");
     let actions = vec![
@@ -336,7 +345,7 @@ async fn configure_tui_master_carefully<T: Expect>(
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_enable").await?;
-    
+
     log::info!("  ✓ Master configuration complete");
     Ok(())
 }
@@ -347,10 +356,10 @@ async fn enable_port_carefully<T: Expect>(
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     log::info!("  🔌 Enabling port...");
-    
+
     let screen = cap.capture(session, "before_enable")?;
     log::info!("📸 Before enabling:\n{}", screen);
-    
+
     // Should be on "Enable Port" option
     let actions = vec![
         CursorAction::PressEnter,
@@ -363,10 +372,10 @@ async fn enable_port_carefully<T: Expect>(
         },
     ];
     execute_cursor_actions(session, cap, &actions, "enable_port").await?;
-    
+
     let screen = cap.capture(session, "after_enable")?;
     log::info!("📸 After enabling:\n{}", screen);
-    
+
     log::info!("  ✓ Port enabled successfully");
     Ok(())
 }
@@ -430,9 +439,9 @@ fn verify_cli_output(output: &str) -> Result<()> {
     for &val in &expected_values {
         // Check for various formats
         let patterns = vec![
-            format!("0x{:04X}", val),  // 0x000A
-            format!("0x{:04x}", val),  // 0x000a
-            format!("{}", val),        // 10
+            format!("0x{:04X}", val), // 0x000A
+            format!("0x{:04x}", val), // 0x000a
+            format!("{}", val),       // 10
         ];
 
         let mut found = false;
