@@ -82,10 +82,12 @@ impl std::fmt::Debug for PortRuntimeHandle {
 
 impl PortRuntimeHandle {
     pub fn spawn(port_name: String, initial: SerialConfig) -> Result<Self> {
+        log::info!("PortRuntimeHandle::spawn called for {}", port_name);
         let builder =
             serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(200));
         let builder = initial.apply_builder(builder);
         let handle = builder.open()?;
+        log::info!("Serial port {} opened successfully", port_name);
         let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> = Arc::new(Mutex::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx) = flume::unbounded();
@@ -163,8 +165,16 @@ fn boot_serial_loop(
     let mut gap = compute_gap(&initial);
     let mut assembling: Vec<u8> = Vec::with_capacity(READ_BUF_SIZE);
     let mut last_byte: Option<Instant> = None;
+    let mut loop_count = 0u64;
+    
+    log::info!("Runtime serial loop started for port {}", port_name);
 
     loop {
+        loop_count += 1;
+        if loop_count % 1000 == 0 {
+            log::info!("Runtime loop for {} executed {} times", port_name, loop_count);
+        }
+        
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 RuntimeCommand::Reconfigure(new_cfg) => {
@@ -203,6 +213,7 @@ fn boot_serial_loop(
             let mut buf = [0u8; READ_BUF_SIZE];
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {
+                    log::info!("Runtime: Read {} bytes from serial port", n);
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
                     if assembling.len() > MAX_ASSEMBLING_LEN {
