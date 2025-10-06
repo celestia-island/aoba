@@ -37,12 +37,12 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| anyhow!("Failed to spawn socat: {}", e))?;
-    
+
     log::info!("  ✓ socat started with PID {}", socat_process.id());
-    
+
     // Wait for socat to create the symlinks
     thread::sleep(Duration::from_secs(2));
-    
+
     // Verify vcom ports exist
     if !std::path::Path::new("/tmp/vcom1").exists() {
         return Err(anyhow!("/tmp/vcom1 was not created by socat"));
@@ -51,7 +51,7 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
         return Err(anyhow!("/tmp/vcom2 was not created by socat"));
     }
     log::info!("  ✓ /tmp/vcom1 and /tmp/vcom2 created successfully");
-    
+
     // Set environment variables so the test uses these ports
     std::env::set_var("AOBATEST_PORT1", "/tmp/vcom1");
     std::env::set_var("AOBATEST_PORT2", "/tmp/vcom2");
@@ -121,7 +121,7 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     // Cleanup: kill socat
     log::info!("🧪 Step 10: Cleanup - kill socat");
     drop(socat_process); // This will kill the process when it goes out of scope
-    // But let's be explicit and try to kill it
+                         // But let's be explicit and try to kill it
     Command::new("pkill")
         .args(&["-f", "socat.*vcom"])
         .output()
@@ -156,7 +156,12 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     for (idx, line) in lines.iter().enumerate() {
         if line.contains(&vcom_pattern) {
             vcom1_line = Some(idx);
-            log::info!("  Found vcom1 ({}) at line {}: {}", vcom_pattern, idx, line.trim());
+            log::info!(
+                "  Found vcom1 ({}) at line {}: {}",
+                vcom_pattern,
+                idx,
+                line.trim()
+            );
         }
         // Look for cursor indicator - look for "> " or "│ > " pattern
         if line.contains("> ") {
@@ -214,7 +219,8 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
 
     if !on_vcom1 {
         return Err(anyhow!(
-            "Failed to navigate to vcom1 - cursor not on vcom1 line ({})", vcom_pattern
+            "Failed to navigate to vcom1 - cursor not on vcom1 line ({})",
+            vcom_pattern
         ));
     }
 
