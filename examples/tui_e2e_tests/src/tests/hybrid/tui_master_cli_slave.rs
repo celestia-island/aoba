@@ -98,10 +98,12 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     log::info!("🧪 Step 5: Enable the port");
     enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
-    // Give TUI time to fully initialize the port
-    log::info!("🧪 Step 6: Wait for port to initialize");
+    // Give TUI time to fully initialize the port and start Modbus daemon
+    log::info!("🧪 Step 6: Wait for port and Modbus daemon to initialize");
+    log::info!("  Waiting for Modbus daemon to start listening...");
     sleep_a_while().await;
-    thread::sleep(Duration::from_secs(3));
+    // Increase wait time to ensure daemon is fully started and listening
+    thread::sleep(Duration::from_secs(5));
 
     // Step 7: Use CLI to poll the TUI master
     log::info!("🧪 Step 7: Run CLI slave poll command");
