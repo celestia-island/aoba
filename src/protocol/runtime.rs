@@ -70,6 +70,35 @@ pub struct PortRuntimeHandle {
     pub current_cfg: SerialConfig,
     pub shared_serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     pub thread_handle: Arc<Mutex<Option<std::thread::JoinHandle<Result<()>>>>>,
+    // Track if this is the "owning" handle that should cleanup on drop
+    // Using Arc to share ownership - only cleanup when Arc count reaches 0
+    _cleanup: Arc<CleanupMarker>,
+}
+
+// Marker struct to trigger cleanup only when all handles are dropped
+struct CleanupMarker {
+    cmd_tx: Sender<RuntimeCommand>,
+    thread_handle: Arc<Mutex<Option<std::thread::JoinHandle<Result<()>>>>>,
+}
+
+impl Drop for CleanupMarker {
+    fn drop(&mut self) {
+        // Only send stop and join when the LAST handle is dropped
+        log::info!("🔴 CleanupMarker dropping - sending Stop command");
+        if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
+            log::warn!("CleanupMarker stop command send error: {err:?}");
+        }
+
+        if let Ok(mut thread) = self.thread_handle.lock() {
+            if let Some(thread) = thread.take() {
+                if let Err(err) = thread.join() {
+                    log::warn!("CleanupMarker thread join error: {err:?}");
+                }
+            }
+        } else {
+            log::warn!("CleanupMarker failed to lock thread_handle for join");
+        }
+    }
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -94,16 +123,30 @@ impl PortRuntimeHandle {
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
+        
+        let thread_handle_arc = Arc::new(Mutex::new(None));
+        let thread_handle_clone = Arc::clone(&thread_handle_arc);
 
         let handle = std::thread::spawn(move || {
             boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
         });
+        
+        // Store the thread handle
+        *thread_handle_arc.lock().unwrap() = Some(handle);
+        
+        // Create cleanup marker that will be shared via Arc
+        let cleanup = Arc::new(CleanupMarker {
+            cmd_tx: cmd_tx.clone(),
+            thread_handle: thread_handle_clone,
+        });
+        
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
             shared_serial: serial,
-            thread_handle: Arc::new(Mutex::new(Some(handle))),
+            thread_handle: thread_handle_arc,
+            _cleanup: cleanup,
         })
     }
 
@@ -116,6 +159,9 @@ impl PortRuntimeHandle {
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
+        
+        let thread_handle_arc = Arc::new(Mutex::new(None));
+        let thread_handle_clone = Arc::clone(&thread_handle_arc);
 
         let handle = std::thread::spawn(move || {
             crate::protocol::daemon::boot_serial_loop(
@@ -126,31 +172,24 @@ impl PortRuntimeHandle {
                 evt_tx,
             )
         });
+        
+        // Store the thread handle
+        *thread_handle_arc.lock().unwrap() = Some(handle);
+        
+        // Create cleanup marker that will be shared via Arc
+        let cleanup = Arc::new(CleanupMarker {
+            cmd_tx: cmd_tx.clone(),
+            thread_handle: thread_handle_clone,
+        });
+        
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
             shared_serial: serial,
-            thread_handle: Arc::new(Mutex::new(Some(handle))),
+            thread_handle: thread_handle_arc,
+            _cleanup: cleanup,
         })
-    }
-}
-
-impl Drop for PortRuntimeHandle {
-    fn drop(&mut self) {
-        if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
-            log::warn!("PortRuntimeHandle stop command send error: {err:?}");
-        }
-
-        if let Ok(mut thread) = self.thread_handle.lock() {
-            if let Some(thread) = thread.take() {
-                if let Err(err) = thread.join() {
-                    log::warn!("PortRuntimeHandle thread join error: {err:?}");
-                }
-            }
-        } else {
-            log::warn!("PortRuntimeHandle failed to lock thread_handle for join");
-        }
     }
 }
 
