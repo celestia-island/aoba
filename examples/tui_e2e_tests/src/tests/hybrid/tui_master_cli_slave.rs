@@ -415,23 +415,38 @@ async fn enable_port_carefully<T: Expect>(
         return Err(anyhow!("Not in port details page - 'Enable Port' not found"));
     }
 
-    // Navigate UP to "Enable Port" (we're probably on "Protocol Mode" or lower)
-    // Just press Up once to be safe
-    log::info!("  Navigate to 'Enable Port' option");
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "nav_to_enable_port").await?;
+    // Check if cursor is already on "Enable Port"
+    let lines: Vec<&str> = screen.lines().collect();
+    let mut on_enable_port = false;
+    for line in lines {
+        let trimmed = line.trim();
+        if (trimmed.starts_with("│ > ") || trimmed.starts_with("> ")) 
+            && line.contains("Enable Port") {
+            on_enable_port = true;
+            log::info!("  ✓ Cursor already on 'Enable Port' line");
+            break;
+        }
+    }
 
-    let screen = cap.capture(session, "on_enable_port")?;
-    log::info!("📸 On Enable Port option:\n{}", screen);
+    // If not on Enable Port, try to navigate to it (should be first option)
+    if !on_enable_port {
+        log::info!("  Navigate to 'Enable Port' option");
+        let actions = vec![
+            CursorAction::PressArrow {
+                direction: aoba::ci::ArrowKey::Up,
+                count: 3, // Go all the way to top
+            },
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "nav_to_enable_port").await?;
 
-    // Press Enter to toggle it
-    log::info!("  Press Enter to toggle Enable Port");
+        let screen = cap.capture(session, "on_enable_port")?;
+        log::info!("📸 On Enable Port option:\n{}", screen);
+    }
+
+    // Press Enter to toggle Enable Port
+    // Note: Pressing Enter here should toggle between Disabled and Enabled
+    log::info!("  Press Enter to toggle Enable Port to Enabled");
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1500 },
@@ -441,14 +456,13 @@ async fn enable_port_carefully<T: Expect>(
     let screen = cap.capture(session, "after_toggle")?;
     log::info!("📸 After toggling:\n{}", screen);
 
-    // Check if it says "Enabled" now
-    if !screen.contains("Enabled") {
-        log::warn!("⚠️  Port may not be enabled - 'Enabled' text not found");
-        log::warn!("   This might be OK if the UI shows it differently");
-    } else {
-        log::info!("  ✓ Port shows as 'Enabled'");
+    // The UI might show "Enabled" on the same line or might not show it immediately
+    // Let's just check that we're still on the port details page
+    if !screen.contains("Protocol Mode") {
+        return Err(anyhow!("Unexpected screen after toggling - not on port details"));
     }
 
+    log::info!("  ✓ Port toggle completed");
     Ok(())
 }
 
@@ -456,15 +470,12 @@ async fn enable_port_carefully<T: Expect>(
 async fn run_cli_slave_poll() -> Result<String> {
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
-    log::info!("  🖥️  Executing CLI command: modbus slave poll");
+    log::info!("  🖥️  Executing CLI command: slave listen (poll master)");
 
     let output = Command::new(&binary)
         .args([
-            "modbus",
-            "slave",
-            "poll",
-            "--port",
-            "/dev/vcom2",
+            "--slave-listen",
+            "/tmp/vcom2",
             "--baud-rate",
             "9600",
             "--station-id",
@@ -475,6 +486,7 @@ async fn run_cli_slave_poll() -> Result<String> {
             "0",
             "--register-length",
             "4",
+            "--json",
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
