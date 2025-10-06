@@ -49,12 +49,15 @@ pub async fn configure_master_mode<T: Expect>(
         },
     ];
     // Set all 12 registers to 0, 10, 20, ..., 110
+    // Note: Input is parsed as hexadecimal, so we need to type hex representations
     let actions = actions
         .into_iter()
         .chain((0..12).flat_map(|i| {
+            let decimal_value = i * 10;
+            let hex_string = format!("{:X}", decimal_value); // Convert decimal to hex string
             vec![
                 CursorAction::PressEnter,
-                CursorAction::TypeString(format!("{}", i * 10)),
+                CursorAction::TypeString(hex_string),
                 CursorAction::PressEnter,
                 CursorAction::PressArrow {
                     direction: ArrowKey::Right,
@@ -69,7 +72,7 @@ pub async fn configure_master_mode<T: Expect>(
     let actions = actions
         .into_iter()
         .chain(vec![
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep { ms: 1000 }, // Allow time for all registers to be set
             CursorAction::MatchPattern {
                 pattern: Regex::new(r"0x0000.*0x000A.*0x0014.*0x001E")?,
                 description: "Row 1: registers 0-3 values verified".to_string(),
