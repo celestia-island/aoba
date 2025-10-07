@@ -111,11 +111,41 @@ jobs:
           $availablePorts = [System.IO.Ports.SerialPort]::GetPortNames()
           Write-Host "Available ports after setup: $($availablePorts -join ', ')"
           
-          # Try to find COM1 and COM2, or use first two COM ports available
-          $port1 = if ($availablePorts -contains "COM1") { "COM1" } elseif ($availablePorts -match "CNCA") { $availablePorts -match "CNCA" | Select-Object -First 1 } else { $availablePorts | Where-Object { $_ -match "^COM\d+$" } | Select-Object -First 1 }
-          $port2 = if ($availablePorts -contains "COM2") { "COM2" } elseif ($availablePorts -match "CNCB") { $availablePorts -match "CNCB" | Select-Object -First 1 } else { $availablePorts | Where-Object { $_ -match "^COM\d+$" -and $_ -ne $port1 } | Select-Object -First 1 }
+          # Try to find COM1 and COM2, or use CNCA/CNCB, or first two COM ports available
+          $port1 = $null
+          $port2 = $null
+          
+          # First try exact matches
+          if ($availablePorts -contains "COM1") {
+            $port1 = "COM1"
+          }
+          if ($availablePorts -contains "COM2") {
+            $port2 = "COM2"
+          }
+          
+          # If we don't have both, try CNCA/CNCB
+          if (-not $port1) {
+            $port1 = $availablePorts | Where-Object { $_ -like "CNCA*" } | Select-Object -First 1
+          }
+          if (-not $port2) {
+            $port2 = $availablePorts | Where-Object { $_ -like "CNCB*" } | Select-Object -First 1
+          }
+          
+          # If still don't have both, use first two different COM ports
+          if (-not $port1) {
+            $port1 = $availablePorts | Where-Object { $_ -match "^COM\d+$" } | Select-Object -First 1
+          }
+          if (-not $port2) {
+            $port2 = $availablePorts | Where-Object { $_ -match "^COM\d+$" -and $_ -ne $port1 } | Select-Object -First 1
+          }
           
           Write-Host "Will use ports: $port1 and $port2"
+          
+          # Verify they are different
+          if ($port1 -eq $port2) {
+            Write-Host "ERROR: Both ports are the same ($port1)! Available ports: $($availablePorts -join ', ')" -ForegroundColor Red
+            exit 1
+          }
           
           # Export to environment for next steps
           echo "PORT1=$port1" >> $env:GITHUB_ENV

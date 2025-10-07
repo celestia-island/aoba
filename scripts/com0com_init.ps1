@@ -115,6 +115,12 @@ try {
         exit 1
     }
     
+    if ($Port1 -eq $Port2) {
+        Write-Host "[com0com_init] ERROR: Both ports are the same: $Port1" -ForegroundColor Red
+        Write-Host "[com0com_init] Available ports were: $($availablePorts -join ', ')"
+        exit 1
+    }
+    
     Write-Host "[com0com_init] Using ports: $Port1 and $Port2" -ForegroundColor Green
     
     # Set environment variables for the tests to use
