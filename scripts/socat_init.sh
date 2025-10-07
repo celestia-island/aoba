@@ -40,9 +40,9 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-V1=/dev/vcom1
-V2=/dev/vcom2
-PIDFILE=/var/run/socat_vcom${MODE:+_${MODE}}.pid
+V1=/tmp/vcom1
+V2=/tmp/vcom2
+PIDFILE=/tmp/socat_vcom${MODE:+_${MODE}}.pid
 LOG=/tmp/socat_vcom${MODE:+_${MODE}}.log
 
 echo "[socat_init] mode=$MODE stopping existing socat (pidfile if present)"
@@ -51,7 +51,7 @@ if [ -f "$PIDFILE" ]; then
 fi
 
 echo "[socat_init] killing lingering socat processes that reference vcom links (if any)"
-sudo pkill -f "/dev/vcom" || true
+sudo pkill -f "/tmp/vcom" || true
 sleep 0.5
 
 echo "[socat_init] removing existing links: $V1 $V2"
@@ -84,7 +84,7 @@ if [ -e "$V1" ] && [ -e "$V2" ]; then
   if [ -n "$P2" ]; then sudo chmod 666 "$P2" || true; fi
   echo "[socat_init] underlying pts:"; ls -la "$P1" "$P2" || true
 else
-  echo "[socat_init] Failed to create /dev/vcom1 and /dev/vcom2 within ${timeout}s"
+  echo "[socat_init] Failed to create /tmp/vcom1 and /tmp/vcom2 within ${timeout}s"
   echo "[socat_init] socat log ($LOG):"; sudo tail -n 200 "$LOG" || true
   echo "[socat_init] socat processes:"; ps aux | grep socat | grep -v grep || true
   exit 1

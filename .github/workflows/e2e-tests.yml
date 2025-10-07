@@ -1,4 +1,4 @@
-name: TUI E2E Tests
+name: E2E Tests
 
 on:
   push:
@@ -10,9 +10,12 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  tui-e2e-test:
-    name: TUI E2E Tests
+  e2e-test:
+    name: E2E Tests
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [cli_e2e, tui_e2e_test_master, tui_e2e_test_slave]
 
     steps:
       - uses: actions/checkout@v5
@@ -45,14 +48,9 @@ jobs:
           chmod +x scripts/socat_init.sh
           sudo scripts/socat_init.sh
 
-      - name: Enumerate serial ports (diagnostic)
-        run: |
-          echo "=== Running port enumeration diagnostic ==="
-          cargo run --example enumerate_ports
-
       - name: Run TUI E2E tests
         run: |
-          cargo run -p aoba_tui_e2e_tests --bin tui_e2e_tests
+          cargo run --example ${{ matrix.example }}
 
       - name: Cleanup virtual ports
         if: always()
