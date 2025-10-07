@@ -13,6 +13,9 @@ jobs:
   tui-e2e-test:
     name: TUI E2E Tests
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        bin: [tui_e2e_test1, tui_e2e_test2]
 
     steps:
       - uses: actions/checkout@v5
@@ -52,7 +55,7 @@ jobs:
 
       - name: Run TUI E2E tests
         run: |
-          cargo run -p aoba_tui_e2e_tests --bin tui_e2e_tests
+          cargo run -p aoba_tui_e2e_tests --bin ${{ matrix.bin }}
 
       - name: Cleanup virtual ports
         if: always()
