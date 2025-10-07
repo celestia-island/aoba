@@ -101,50 +101,53 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         });
     }
 
-    // Continuously read data updates and provide them
-    match &data_source {
-        DataSource::File(path) => {
-            let file = std::fs::File::open(path)?;
-            let reader = BufReader::new(file);
+    // Continuously read data updates and provide them (loop forever for persistent service)
+    loop {
+        match &data_source {
+            DataSource::File(path) => {
+                let file = std::fs::File::open(path)?;
+                let reader = BufReader::new(file);
 
-            for line in reader.lines() {
-                let line = line?;
-                if line.trim().is_empty() {
-                    continue;
-                }
+                for line in reader.lines() {
+                    let line = line?;
+                    if line.trim().is_empty() {
+                        continue;
+                    }
 
-                match parse_data_line(&line) {
-                    Ok(values) => {
-                        match provide_data_once(
-                            port_arc.clone(),
-                            station_id,
-                            register_address,
-                            register_length,
-                            reg_mode,
-                            values,
-                        ) {
-                            Ok(response) => {
-                                let json = serde_json::to_string(&response)?;
-                                println!("{json}");
-                            }
-                            Err(e) => {
-                                log::warn!("Error providing data: {e}");
+                    match parse_data_line(&line) {
+                        Ok(values) => {
+                            match provide_data_once(
+                                port_arc.clone(),
+                                station_id,
+                                register_address,
+                                register_length,
+                                reg_mode,
+                                values.clone(),
+                            ) {
+                                Ok(response) => {
+                                    let json = serde_json::to_string(&response)?;
+                                    println!("{json}");
+                                }
+                                Err(e) => {
+                                    log::warn!("Error providing data: {e}");
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        log::warn!("Error parsing data line: {e}");
+                        Err(e) => {
+                            log::warn!("Error parsing data line: {e}");
+                        }
                     }
                 }
+
+                // After reading all lines, loop back to start of file
+                log::debug!("Reached end of data file, looping back to start");
+            }
+            DataSource::Pipe(_name) => {
+                // Named pipe support requires platform-specific implementation
+                return Err(anyhow!("Named pipe support is not yet implemented"));
             }
         }
-        DataSource::Pipe(_name) => {
-            // Named pipe support requires platform-specific implementation
-            return Err(anyhow!("Named pipe support is not yet implemented"));
-        }
     }
-
-    Ok(())
 }
 
 /// Provide data once as master

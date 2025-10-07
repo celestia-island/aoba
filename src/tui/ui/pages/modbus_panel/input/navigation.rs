@@ -14,6 +14,7 @@ use crate::{
 use super::actions::{handle_enter_action, handle_leave_page};
 
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    log::info!("🟠 ModbusDashboard navigation input: {:?}", key.code);
     match key.code {
         KeyCode::Left | KeyCode::Char('h') => {
             let current_cursor = read_status(|status| match &status.page {
@@ -293,7 +294,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::Enter => {
+            log::info!("🟠 Enter key pressed in ModbusDashboard");
             handle_enter_action(bus)?;
+            log::info!("🟠 handle_enter_action completed successfully");
             Ok(())
         }
         KeyCode::Delete => {

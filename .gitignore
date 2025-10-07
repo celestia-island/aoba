@@ -11,3 +11,5 @@ Cargo.lock
 .idea
 
 .env
+# TUI E2E debug scripts
+examples/tui_debug*.rs

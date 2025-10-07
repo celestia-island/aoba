@@ -13,7 +13,7 @@ use anyhow::Result;
 #[cfg(debug_assertions)]
 use chrono::Local;
 #[cfg(debug_assertions)]
-use std::{fs::File, io::Write};
+use std::io::Write;
 
 #[cfg(debug_assertions)]
 use env_logger::Builder;
@@ -27,7 +27,15 @@ pub fn init_common() {
 
     #[cfg(debug_assertions)]
     {
-        let target = Box::new(File::create("./log.log").expect("Can't create file"));
+        // Check for AOBA_LOG_FILE environment variable
+        let log_path = std::env::var("AOBA_LOG_FILE").unwrap_or_else(|_| "./log.log".to_string());
+        let target = Box::new(
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .expect("Can't open log file"),
+        );
         Builder::new()
             .format(|buf, record| {
                 writeln!(

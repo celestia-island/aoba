@@ -3,6 +3,7 @@
 
 pub mod auto_cursor;
 pub mod key_input;
+pub mod log_utils;
 pub mod snapshot;
 pub mod terminal;
 pub mod utils;
