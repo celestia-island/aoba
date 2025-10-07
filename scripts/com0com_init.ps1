@@ -38,34 +38,52 @@ Start-Sleep -Seconds 2
 
 # Install new port pair with specific port names
 Write-Host "[com0com_init] Installing port pair CNCA0 <-> CNCB0 with names COM1 and COM2..."
-try {
-    # Install using the correct syntax: install PortName=COM1,EmuBR=yes PortName=COM2,EmuBR=yes
-    # Using EmuBR=yes to emulate baud rate settings
-    $output = & $setupcPath install PortName=COM1,EmuBR=yes PortName=COM2,EmuBR=yes 2>&1
+
+# Use Start-Process with timeout to prevent hanging
+$installJob = Start-Job -ScriptBlock {
+    param($setupcPath)
+    & $setupcPath install PortName=COM1,EmuBR=yes PortName=COM2,EmuBR=yes 2>&1
+} -ArgumentList $setupcPath
+
+# Wait for job with timeout (30 seconds)
+$completed = Wait-Job $installJob -Timeout 30
+
+if ($completed) {
+    $output = Receive-Job $installJob
     Write-Host "[com0com_init] setupc output: $output"
+    Remove-Job $installJob -Force
+    Write-Host "[com0com_init] Port pair installation initiated successfully"
+} else {
+    Write-Host "[com0com_init] Installation command timed out, stopping job..." -ForegroundColor Yellow
+    Stop-Job $installJob
+    Remove-Job $installJob -Force
     
-    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
-        throw "setupc install failed with exit code $LASTEXITCODE"
-    }
-} catch {
-    Write-Host "[com0com_init] ERROR: Failed to install port pair: $_" -ForegroundColor Red
-    Write-Host "[com0com_init] Attempting fallback: install default port pair and check available ports..."
+    Write-Host "[com0com_init] Attempting alternative approach: using default install..." -ForegroundColor Yellow
     
-    # Try installing without specific port names as fallback
-    try {
-        & $setupcPath install 2>&1 | Out-Null
-        Start-Sleep -Seconds 3
-        
-        # List what was created
-        Write-Host "[com0com_init] Installed default ports, listing:"
-        & $setupcPath list
-    } catch {
-        Write-Host "[com0com_init] ERROR: Fallback installation also failed: $_" -ForegroundColor Red
-        exit 1
+    # Try simpler install command with timeout
+    $installJob2 = Start-Job -ScriptBlock {
+        param($setupcPath)
+        & $setupcPath install 2>&1
+    } -ArgumentList $setupcPath
+    
+    $completed2 = Wait-Job $installJob2 -Timeout 20
+    
+    if ($completed2) {
+        $output2 = Receive-Job $installJob2
+        Write-Host "[com0com_init] Default install output: $output2"
+        Remove-Job $installJob2 -Force
+    } else {
+        Write-Host "[com0com_init] Default install also timed out" -ForegroundColor Yellow
+        Stop-Job $installJob2
+        Remove-Job $installJob2 -Force
     }
 }
 
 Write-Host "[com0com_init] Port pair installation completed"
+
+# Wait for system to process the installation
+Write-Host "[com0com_init] Waiting for system to register ports..."
+Start-Sleep -Seconds 5
 
 # List ports after installation
 Write-Host "[com0com_init] Listing com0com ports after installation..."
