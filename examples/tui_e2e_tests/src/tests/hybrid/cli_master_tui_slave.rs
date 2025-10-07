@@ -210,9 +210,9 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
             vcom1_line = Some(idx);
             log::info!("  Found vcom1 at line {}", idx);
         }
-        // Look for cursor indicator - could be ">" at start or in the line
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("> ") || trimmed.starts_with(">") {
+        // Look for cursor indicator - the pattern "> " followed by a port name
+        // The cursor can appear anywhere in the line (e.g., "│ > /tmp/vcom1")
+        if line.contains("> /tmp/") || line.contains("> /dev/") {
             cursor_line = Some(idx);
             log::info!("  Current cursor at line {}", idx);
         }
@@ -253,8 +253,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("📸 Screen after navigation:\n{}", screen_after);
 
     let on_vcom1 = screen_after.lines().any(|line| {
-        let trimmed = line.trim_start();
-        (trimmed.starts_with("> ") || trimmed.starts_with(">")) && line.contains("/tmp/vcom1")
+        line.contains("> /tmp/vcom1")
     });
 
     if !on_vcom1 {
@@ -405,16 +404,16 @@ async fn configure_tui_slave_carefully<T: Expect>(
     let screen = cap.capture(session, "reg_length_set")?;
     log::info!("📸 Register Length set:\n{}", screen);
 
-    // Navigate back up to "Enable Port" (should be about 2 up)
-    log::info!("  Navigate back to Enable Port");
+    // Exit Modbus settings panel to return to port details screen
+    log::info!("  Exit Modbus settings panel (press Escape)");
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 2,
-        },
+        CursorAction::PressEscape,
         CursorAction::Sleep { ms: 500 },
     ];
-    execute_cursor_actions(session, cap, &actions, "nav_to_enable").await?;
+    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
+
+    let screen = cap.capture(session, "back_to_port_details")?;
+    log::info!("📸 Back to port details:\n{}", screen);
 
     log::info!("  ✓ Slave configuration complete");
     Ok(())
