@@ -26,14 +26,18 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     log::info!("🧪 Starting CLI Master + TUI Slave hybrid test");
 
+    // Use different port names for Test 2 to avoid conflicts with Test 1
+    std::env::set_var("AOBATEST_PORT1", "/tmp/vcom3");
+    std::env::set_var("AOBATEST_PORT2", "/tmp/vcom4");
+
     // Step 0: Start socat to create virtual COM ports
     log::info!("🧪 Step 0: Setting up virtual COM ports with socat");
     let socat_process = Command::new("socat")
         .args([
             "-d",
             "-d",
-            "pty,raw,echo=0,link=/tmp/vcom1",
-            "pty,raw,echo=0,link=/tmp/vcom2",
+            "pty,raw,echo=0,link=/tmp/vcom3",
+            "pty,raw,echo=0,link=/tmp/vcom4",
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -45,13 +49,13 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     // Wait for socat to create the symlinks
     thread::sleep(Duration::from_secs(2));
 
-    if !std::path::Path::new("/tmp/vcom1").exists() {
-        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    if !std::path::Path::new("/tmp/vcom3").exists() {
+        return Err(anyhow!("/tmp/vcom3 was not created by socat"));
     }
-    if !std::path::Path::new("/tmp/vcom2").exists() {
-        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    if !std::path::Path::new("/tmp/vcom4").exists() {
+        return Err(anyhow!("/tmp/vcom4 was not created by socat"));
     }
-    log::info!("  ✓ Virtual COM ports created: /tmp/vcom1 and /tmp/vcom2");
+    log::info!("  ✓ Virtual COM ports created: /tmp/vcom3 and /tmp/vcom4");
 
     // Step 1: Prepare test data file for CLI
     log::info!("🧪 Step 1: Prepare test data file");
@@ -65,13 +69,13 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     log::info!("  ✓ Test data file created with values: 5, 15, 25, 35");
 
     // Step 2: Start CLI master in persistent mode
-    log::info!("🧪 Step 2: Start CLI master on vcom2");
+    log::info!("🧪 Step 2: Start CLI master on vcom4");
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
     let mut cli_master = Command::new(&binary)
         .args([
             "--master-provide-persist",
-            "/tmp/vcom2",
+            "/tmp/vcom4",
             "--baud-rate",
             "9600",
             "--station-id",
@@ -148,8 +152,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         let quit_actions = vec![CursorAction::CtrlC];
         let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
         let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
-        let _ = std::fs::remove_file("/tmp/vcom1");
-        let _ = std::fs::remove_file("/tmp/vcom2");
+        let _ = std::fs::remove_file("/tmp/vcom3");
+        let _ = std::fs::remove_file("/tmp/vcom4");
         let _ = std::fs::remove_file(&data_file);
         return Err(e);
     }
@@ -164,8 +168,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         let quit_actions = vec![CursorAction::CtrlC];
         let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
         let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
-        let _ = std::fs::remove_file("/tmp/vcom1");
-        let _ = std::fs::remove_file("/tmp/vcom2");
+        let _ = std::fs::remove_file("/tmp/vcom3");
+        let _ = std::fs::remove_file("/tmp/vcom4");
         let _ = std::fs::remove_file(&data_file);
         return Err(e);
     }
@@ -184,8 +188,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         let quit_actions = vec![CursorAction::CtrlC];
         let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
         let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
-        let _ = std::fs::remove_file("/tmp/vcom1");
-        let _ = std::fs::remove_file("/tmp/vcom2");
+        let _ = std::fs::remove_file("/tmp/vcom3");
+        let _ = std::fs::remove_file("/tmp/vcom4");
         let _ = std::fs::remove_file(&data_file);
         return Err(e);
     }
@@ -207,8 +211,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         .args(&["-f", "socat.*vcom"])
         .output();
     
-    let _ = std::fs::remove_file("/tmp/vcom1");
-    let _ = std::fs::remove_file("/tmp/vcom2");
+    let _ = std::fs::remove_file("/tmp/vcom3");
+    let _ = std::fs::remove_file("/tmp/vcom4");
 
     std::fs::remove_file(&data_file)?;
 
@@ -243,7 +247,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("📸 Screen after going to top:\n{}", screen);
 
     // Verify vcom1 is visible
-    if !screen.contains("/tmp/vcom1") {
+    if !screen.contains("/tmp/vcom3") {
         return Err(anyhow!("vcom1 not found in port list after going to top"));
     }
 
@@ -253,12 +257,12 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains("/tmp/vcom1") {
+        if line.contains("/tmp/vcom3") {
             vcom1_line = Some(idx);
             log::info!("  Found vcom1 at line {}", idx);
         }
         // Look for cursor indicator - the pattern "> " followed by a port name
-        // The cursor can appear anywhere in the line (e.g., "│ > /tmp/vcom1")
+        // The cursor can appear anywhere in the line (e.g., "│ > /tmp/vcom3")
         if line.contains("> /tmp/") || line.contains("> /dev/") {
             cursor_line = Some(idx);
             log::info!("  Current cursor at line {}", idx);
@@ -300,7 +304,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("📸 Screen after navigation:\n{}", screen_after);
 
     let on_vcom1 = screen_after.lines().any(|line| {
-        line.contains("> /tmp/vcom1")
+        line.contains("> /tmp/vcom3")
     });
 
     if !on_vcom1 {
@@ -315,7 +319,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("  Pressing Enter to open vcom1...");
     let actions = vec![
         CursorAction::PressEnter,        CursorAction::MatchPattern {
-            pattern: Regex::new(r"/tmp/vcom1")?,
+            pattern: Regex::new(r"/tmp/vcom3")?,
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
             col_range: None,
