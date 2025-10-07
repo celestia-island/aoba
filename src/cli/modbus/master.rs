@@ -138,7 +138,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         }
                     }
                 }
-                
+
                 // After reading all lines, loop back to start of file
                 log::debug!("Reached end of data file, looping back to start");
             }

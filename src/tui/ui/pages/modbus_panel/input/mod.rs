@@ -24,7 +24,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             status.temporarily.input_raw_buffer,
             types::ui::InputRawBuffer::None
         );
-        log::info!("🟣 ModbusDashboard handle_input: key={:?}, editing={}", key.code, is_editing);
+        log::info!(
+            "🟣 ModbusDashboard handle_input: key={:?}, editing={}",
+            key.code,
+            is_editing
+        );
         Ok(is_editing)
     })?;
 

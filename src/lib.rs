@@ -34,7 +34,7 @@ pub fn init_common() {
                 .create(true)
                 .append(true)
                 .open(&log_path)
-                .expect("Can't open log file")
+                .expect("Can't open log file"),
         );
         Builder::new()
             .format(|buf, record| {

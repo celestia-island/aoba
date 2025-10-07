@@ -29,7 +29,7 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
         .map(|p| p.to_path_buf())
         .ok_or_else(|| anyhow!("Could not find workspace root"))?;
 
-    log::info!("🔍 Workspace root: {}", workspace_root.display());
+    log::info!("🔍 Workspace root: {path}", path = workspace_root.display());
 
     let exe_name = if cfg!(windows) {
         format!("{bin_name}.exe")
@@ -68,7 +68,10 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
 
     // Mark that we've built the binary
     BINARY_BUILT.store(true, Ordering::Relaxed);
-    log::info!("✅ Binary built successfully: {}", bin_path.display());
+    log::info!(
+        "✅ Binary built successfully: {path}",
+        path = bin_path.display()
+    );
 
     Ok(bin_path)
 }
@@ -107,8 +110,8 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
     // If spawning TUI, prepend AOBA_LOG_FILE environment variable to command
     let cmd_with_env = if args.contains(&"--tui") {
         let tui_log = "/tmp/tui_e2e.log";
-        log::info!("   TUI logs will be written to {}", tui_log);
-        format!("env AOBA_LOG_FILE={} {}", tui_log, cmd)
+        log::info!("   TUI logs will be written to {tui_log}");
+        format!("env AOBA_LOG_FILE={tui_log} {cmd}")
     } else {
         cmd
     };

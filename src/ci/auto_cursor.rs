@@ -62,14 +62,16 @@ pub async fn execute_cursor_actions<T: Expect>(
 
                 const MAX_RETRIES: usize = 10;
                 const RETRY_INTERVAL_MS: u64 = 1000;
-                
+
                 let mut matched = false;
                 let mut last_screen = String::new();
-                
+
                 for attempt in 1..=MAX_RETRIES {
                     // Capture current screen
-                    let screen =
-                        cap.capture(session, &format!("{session_name} - match {description} (attempt {attempt})"))?;
+                    let screen = cap.capture(
+                        session,
+                        &format!("{session_name} - match {description} (attempt {attempt})"),
+                    )?;
                     last_screen = screen.clone();
 
                     // Extract region to search based on line and column ranges
@@ -106,27 +108,30 @@ pub async fn execute_cursor_actions<T: Expect>(
 
                     // Try to match pattern
                     if pattern.is_match(&search_text) {
-                        log::info!("✓ Pattern '{description}' matched successfully on attempt {attempt}");
+                        log::info!(
+                            "✓ Pattern '{description}' matched successfully on attempt {attempt}"
+                        );
                         matched = true;
                         break;
-                    } else {
-                        if attempt < MAX_RETRIES {
-                            log::debug!("Pattern '{description}' not matched on attempt {attempt}, retrying in {RETRY_INTERVAL_MS}ms...");
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS)).await;
-                        }
+                    } else if attempt < MAX_RETRIES {
+                        log::debug!("Pattern '{description}' not matched on attempt {attempt}, retrying in {RETRY_INTERVAL_MS}ms...");
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
+                            .await;
                     }
                 }
-                
+
                 if !matched {
                     // All retries failed - dump screen and return error
-                    log::error!("❌ Pattern '{description}' NOT FOUND after {MAX_RETRIES} attempts");
+                    log::error!(
+                        "❌ Pattern '{description}' NOT FOUND after {MAX_RETRIES} attempts"
+                    );
                     log::error!("Expected pattern: {:?}", pattern.as_str());
-                    
+
                     let lines: Vec<&str> = last_screen.lines().collect();
                     let total_lines = lines.len();
                     let (start_line, end_line) =
                         line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-                    
+
                     log::error!(
                         "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
                     );

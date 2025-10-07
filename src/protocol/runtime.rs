@@ -111,35 +111,35 @@ impl std::fmt::Debug for PortRuntimeHandle {
 
 impl PortRuntimeHandle {
     pub fn spawn(port_name: String, initial: SerialConfig) -> Result<Self> {
-        log::info!("PortRuntimeHandle::spawn called for {}", port_name);
+        log::info!("PortRuntimeHandle::spawn called for {port_name}");
         // Use 100ms timeout to be more responsive while still allowing blocking reads
         let builder =
             serialport::new(port_name.clone(), initial.baud).timeout(Duration::from_millis(100));
         let builder = initial.apply_builder(builder);
         let handle = builder.open()?;
-        log::info!("Serial port {} opened successfully", port_name);
+        log::info!("Serial port {port_name} opened successfully");
         let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> = Arc::new(Mutex::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
-        
+
         let thread_handle_arc = Arc::new(Mutex::new(None));
         let thread_handle_clone = Arc::clone(&thread_handle_arc);
 
         let handle = std::thread::spawn(move || {
             boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
         });
-        
+
         // Store the thread handle
         *thread_handle_arc.lock().unwrap() = Some(handle);
-        
+
         // Create cleanup marker that will be shared via Arc
         let cleanup = Arc::new(CleanupMarker {
             cmd_tx: cmd_tx.clone(),
             thread_handle: thread_handle_clone,
         });
-        
+
         Ok(Self {
             cmd_tx,
             evt_rx,
@@ -159,7 +159,7 @@ impl PortRuntimeHandle {
         let (evt_tx, evt_rx) = flume::unbounded();
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
-        
+
         let thread_handle_arc = Arc::new(Mutex::new(None));
         let thread_handle_clone = Arc::clone(&thread_handle_arc);
 
@@ -172,16 +172,16 @@ impl PortRuntimeHandle {
                 evt_tx,
             )
         });
-        
+
         // Store the thread handle
         *thread_handle_arc.lock().unwrap() = Some(handle);
-        
+
         // Create cleanup marker that will be shared via Arc
         let cleanup = Arc::new(CleanupMarker {
             cmd_tx: cmd_tx.clone(),
             thread_handle: thread_handle_clone,
         });
-        
+
         Ok(Self {
             cmd_tx,
             evt_rx,
@@ -208,16 +208,19 @@ fn boot_serial_loop(
     let mut loop_count = 0u64;
     let mut read_attempts = 0u64;
     let mut successful_reads = 0u64;
-    
-    log::info!("🔵 Runtime serial loop STARTED for port {} (thread ID: {:?})", port_name, std::thread::current().id());
+
+    log::info!(
+        "🔵 Runtime serial loop STARTED for port {} (thread ID: {:?})",
+        port_name,
+        std::thread::current().id()
+    );
 
     loop {
         loop_count += 1;
         if loop_count % 1000 == 0 {
-            log::info!("🔄 Runtime loop for {} executed {} times (reads: {}, successful: {})", 
-                      port_name, loop_count, read_attempts, successful_reads);
+            log::info!("🔄 Runtime loop for {port_name} executed {loop_count} times (reads: {read_attempts}, successful: {successful_reads})");
         }
-        
+
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 RuntimeCommand::Reconfigure(new_cfg) => {
@@ -260,7 +263,12 @@ fn boot_serial_loop(
             match g.read(&mut buf) {
                 Ok(n) if n > 0 => {
                     successful_reads += 1;
-                    log::info!("✅ Runtime: Read {} bytes from serial port {}: {:02X?}", n, port_name, &buf[..n]);
+                    log::info!(
+                        "✅ Runtime: Read {} bytes from serial port {}: {:02X?}",
+                        n,
+                        port_name,
+                        &buf[..n]
+                    );
                     assembling.extend_from_slice(&buf[..n]);
                     last_byte = Some(Instant::now());
                     data_received = true;
@@ -277,14 +285,14 @@ fn boot_serial_loop(
                     // Timeout is expected, continue
                 }
                 Err(err) => {
-                    log::warn!("⚠️  Runtime {}: Serial read error: {}", port_name, err);
+                    log::warn!("⚠️  Runtime {port_name}: Serial read error: {err}");
                     evt_tx.send(RuntimeEvent::Error(format!("read error: {err}")))?;
                 }
             }
         } else {
-            log::warn!("⚠️  Runtime {}: Failed to lock serial port", port_name);
+            log::warn!("⚠️  Runtime {port_name}: Failed to lock serial port");
         }
-        
+
         // Only sleep if no data was received to avoid excessive CPU usage
         // When data is flowing, continue immediately to read more
         if !data_received {
@@ -432,7 +440,7 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
                 .map(|b| format!("{b:02x}"))
                 .collect::<Vec<_>>()
                 .join(" ");
-            log::debug!("finalize: no frame len={} hex={}", buf.len(), hex);
+            log::debug!("finalize: no frame len={} hex={hex}", buf.len());
         }
     } else {
         for frame in frames {

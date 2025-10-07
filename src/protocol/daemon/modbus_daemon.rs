@@ -21,29 +21,37 @@ use crate::protocol::{
 /// Handle modbus communication for all active ports
 pub fn handle_modbus_communication() -> Result<()> {
     let now = std::time::Instant::now();
-    
+
     log::trace!("handle_modbus_communication called");
 
     // Get all ports that are currently active
     let active_ports = read_status(|status| {
         let mut ports = Vec::new();
-        log::info!("Checking {} total ports for modbus activity", status.ports.map.len());
+        log::info!(
+            "Checking {} total ports for modbus activity",
+            status.ports.map.len()
+        );
         for (port_name, port_arc) in &status.ports.map {
             if let Ok(port_data) = port_arc.read() {
-                log::info!("  Port {}: state={:?}", port_name, 
+                log::info!(
+                    "  Port {}: state={:?}",
+                    port_name,
                     match &port_data.state {
                         types::port::PortState::Free => "Free",
                         types::port::PortState::OccupiedByThis { .. } => "OccupiedByThis",
-                        types::port::PortState::OccupiedByOther { .. } => "OccupiedByOther",
-                    });
-                    
+                        types::port::PortState::OccupiedByOther => "OccupiedByOther",
+                    }
+                );
+
                 if let types::port::PortState::OccupiedByThis { runtime: _, .. } = &port_data.state
                 {
                     let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
-                    log::info!("    Config: Modbus with {} stations in {:?} mode", 
+                    log::info!(
+                        "    Config: Modbus with {} stations in {:?} mode",
                         stations.len(),
-                        if mode.is_master() { "Master" } else { "Slave" });
-                        
+                        if mode.is_master() { "Master" } else { "Slave" }
+                    );
+
                     if !stations.is_empty() {
                         ports.push((
                             port_name.clone(),
@@ -65,8 +73,11 @@ pub fn handle_modbus_communication() -> Result<()> {
         }
         Ok(ports)
     })?;
-    
-    log::trace!("handle_modbus_communication found {} active ports", active_ports.len());
+
+    log::trace!(
+        "handle_modbus_communication found {} active ports",
+        active_ports.len()
+    );
 
     for (port_name, port_arc, global_mode, stations) in active_ports {
         log::trace!(
@@ -291,13 +302,9 @@ pub fn handle_slave_response_mode(
     }
 
     if event_count > 0 {
-        log::info!(
-            "Master mode {}: processed {} events",
-            port_name,
-            event_count
-        );
+        log::info!("Master mode {port_name}: processed {event_count} events");
     } else {
-        log::trace!("Master mode {}: no events to process", port_name);
+        log::trace!("Master mode {port_name}: no events to process");
     }
 
     Ok(())
@@ -833,11 +840,7 @@ pub fn generate_modbus_master_response(
         .find(|s| s.station_id == slave_id)
         .ok_or_else(|| {
             let available_ids: Vec<u8> = stations.iter().map(|s| s.station_id).collect();
-            log::warn!(
-                "No station configured for slave ID {}. Available station IDs: {:?}",
-                slave_id,
-                available_ids
-            );
+            log::warn!("No station configured for slave ID {slave_id}. Available station IDs: {available_ids:?}");
             anyhow!("No station configured for slave ID {}", slave_id)
         })?;
 

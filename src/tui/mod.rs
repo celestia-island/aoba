@@ -314,12 +314,12 @@ fn run_core_thread(
                         ) {
                             Ok(h) => {
                                 handle_opt = Some(h);
-                                log::info!("ToggleRuntime: Successfully spawned runtime for {} on attempt {}", port_name, attempt + 1);
+                                log::info!("ToggleRuntime: Successfully spawned runtime for {port_name} on attempt {}", attempt + 1);
                                 break;
                             }
                             Err(err) => {
                                 spawn_err = Some(err);
-                                log::warn!("ToggleRuntime: Failed to spawn runtime for {} on attempt {}: {}", port_name, attempt + 1, spawn_err.as_ref().unwrap());
+                                log::warn!("ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {}: {}", attempt + 1, spawn_err.as_ref().unwrap());
                                 // If not last attempt, wait a bit and retry; this allows the OS to release the port
                                 if attempt + 1 < MAX_RETRIES {
                                     // Slightly longer backoff on first attempts
@@ -334,7 +334,9 @@ fn run_core_thread(
                     if let Some(handle) = handle_opt {
                         // Clone handle for insertion under write lock to avoid moving
                         let handle_for_write = handle.clone();
-                        log::info!("ToggleRuntime: Writing runtime handle to port status for {}", port_name);
+                        log::info!(
+                            "ToggleRuntime: Writing runtime handle to port status for {port_name}"
+                        );
                         // Write handle into status under write lock
                         write_status(|status| {
                             if let Some(port) = status.ports.map.get(&port_name) {
@@ -348,7 +350,7 @@ fn run_core_thread(
                                 })
                                 .is_some()
                                 {
-                                    log::info!("ToggleRuntime: Successfully set port {} to OccupiedByThis with runtime", port_name);
+                                    log::info!("ToggleRuntime: Successfully set port {port_name} to OccupiedByThis with runtime");
                                     // updated
                                 } else {
                                     log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (OccupiedByThis)");

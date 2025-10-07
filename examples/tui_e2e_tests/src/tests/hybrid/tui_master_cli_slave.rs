@@ -66,14 +66,12 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 
     // Step 2: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 2: Verify TUI loaded with port list");
-    let actions = vec![
-        CursorAction::MatchPattern {
-            pattern: Regex::new(r"AOBA")?,
-            description: "TUI application title visible".to_string(),
-            line_range: Some((0, 3)),
-            col_range: None,
-        },
-    ];
+    let actions = vec![CursorAction::MatchPattern {
+        pattern: Regex::new(r"AOBA")?,
+        description: "TUI application title visible".to_string(),
+        line_range: Some((0, 3)),
+        col_range: None,
+    }];
     execute_cursor_actions(
         &mut tui_session,
         &mut tui_cap,
@@ -125,7 +123,13 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 2000 }, // Wait longer for port to fully disable
     ];
-    let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &disable_actions, "disable_port").await;
+    let _ = execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &disable_actions,
+        "disable_port",
+    )
+    .await;
 
     // Cleanup: quit TUI
     log::info!("🧪 Step 9: Cleanup - quit TUI");
@@ -142,16 +146,14 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
         .arg(format!("{}", socat_process.id()))
         .output();
     drop(socat_process); // This will kill the process when it goes out of scope
-    
+
     // Then kill any remaining socat processes that might be hanging
-    let _ = Command::new("pkill")
-        .args(&["-f", "socat.*vcom"])
-        .output();
-    
+    let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
+
     // Remove the symlinks to ensure they're cleaned up
     let _ = std::fs::remove_file("/tmp/vcom1");
     let _ = std::fs::remove_file("/tmp/vcom2");
-    
+
     // Wait a bit to ensure resources are fully released
     tokio::time::sleep(Duration::from_secs(3)).await;
 

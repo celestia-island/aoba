@@ -238,7 +238,7 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
     // Output response as JSON
     let json = serde_json::to_string_pretty(&response)?;
-    println!("{}", json);
+    println!("{json}");
 
     Ok(())
 }
@@ -285,7 +285,7 @@ fn send_request_and_wait(
 
     // Send request
     let mut port = port_arc.lock().unwrap();
-    port.write_all(&request_bytes.1)?;  // .1 is the raw frame bytes
+    port.write_all(&request_bytes.1)?; // .1 is the raw frame bytes
     port.flush()?;
     log::info!("Sent request: {:02X?}", request_bytes.1);
     drop(port);
@@ -305,14 +305,14 @@ fn send_request_and_wait(
 
     // Parse response
     let values = match reg_mode {
-        crate::protocol::status::types::modbus::RegisterMode::Holding |
-        crate::protocol::status::types::modbus::RegisterMode::Input => {
+        crate::protocol::status::types::modbus::RegisterMode::Holding
+        | crate::protocol::status::types::modbus::RegisterMode::Input => {
             // Response format for read holdings/inputs:
             // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
             if bytes_read < 5 {
                 return Err(anyhow!("Response too short"));
             }
-            
+
             let byte_count = response[2] as usize;
             if bytes_read < 3 + byte_count + 2 {
                 return Err(anyhow!("Incomplete response"));

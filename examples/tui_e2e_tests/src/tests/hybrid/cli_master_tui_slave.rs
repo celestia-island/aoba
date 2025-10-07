@@ -116,13 +116,12 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     // Step 4: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 4: Verify TUI loaded with port list");
-    let actions = vec![        CursorAction::MatchPattern {
-            pattern: Regex::new(r"AOBA")?,
-            description: "TUI application title visible".to_string(),
-            line_range: Some((0, 3)),
-            col_range: None,
-        },
-    ];
+    let actions = vec![CursorAction::MatchPattern {
+        pattern: Regex::new(r"AOBA")?,
+        description: "TUI application title visible".to_string(),
+        line_range: Some((0, 3)),
+        col_range: None,
+    }];
     execute_cursor_actions(
         &mut tui_session,
         &mut tui_cap,
@@ -146,7 +145,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         let _ = cli_master.kill();
         let _ = cli_master.wait();
         let quit_actions = vec![CursorAction::CtrlC];
-        let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
+        let _ =
+            execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
         let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
         let _ = std::fs::remove_file("/tmp/vcom1");
         let _ = std::fs::remove_file("/tmp/vcom2");
@@ -162,7 +162,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         let _ = cli_master.kill();
         let _ = cli_master.wait();
         let quit_actions = vec![CursorAction::CtrlC];
-        let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
+        let _ =
+            execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
         let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
         let _ = std::fs::remove_file("/tmp/vcom1");
         let _ = std::fs::remove_file("/tmp/vcom2");
@@ -182,7 +183,8 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         let _ = cli_master.kill();
         let _ = cli_master.wait();
         let quit_actions = vec![CursorAction::CtrlC];
-        let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
+        let _ =
+            execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
         let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
         let _ = std::fs::remove_file("/tmp/vcom1");
         let _ = std::fs::remove_file("/tmp/vcom2");
@@ -202,11 +204,9 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
         .arg(format!("{}", socat_process.id()))
         .output();
     drop(socat_process);
-    
-    let _ = Command::new("pkill")
-        .args(&["-f", "socat.*vcom"])
-        .output();
-    
+
+    let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
+
     let _ = std::fs::remove_file("/tmp/vcom1");
     let _ = std::fs::remove_file("/tmp/vcom2");
 
@@ -299,9 +299,9 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let screen_after = cap.capture(session, "after_navigation")?;
     log::info!("📸 Screen after navigation:\n{}", screen_after);
 
-    let on_vcom1 = screen_after.lines().any(|line| {
-        line.contains("> /tmp/vcom1")
-    });
+    let on_vcom1 = screen_after
+        .lines()
+        .any(|line| line.contains("> /tmp/vcom1"));
 
     if !on_vcom1 {
         return Err(anyhow!(
@@ -314,7 +314,8 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
     let actions = vec![
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"/tmp/vcom1")?,
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
@@ -354,7 +355,8 @@ async fn configure_tui_slave_carefully<T: Expect>(
     // Enter Modbus settings
     log::info!("  Enter Modbus Settings");
     let actions = vec![
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 3)),
@@ -380,7 +382,8 @@ async fn configure_tui_slave_carefully<T: Expect>(
     // Create station first
     log::info!("  Create new station");
     let actions = vec![
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"#1")?,
             description: "Station #1 created".to_string(),
             line_range: None,
@@ -411,7 +414,8 @@ async fn configure_tui_slave_carefully<T: Expect>(
             direction: aoba::ci::ArrowKey::Right,
             count: 1,
         },
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"Connection Mode\s+Slave")?,
             description: "Mode changed to Slave".to_string(),
             line_range: None,
@@ -439,7 +443,8 @@ async fn configure_tui_slave_carefully<T: Expect>(
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::TypeString("4".to_string()),
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"Register Length\s+0x0004")?,
             description: "Register Length set to 4".to_string(),
             line_range: None,
@@ -453,10 +458,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
 
     // Exit Modbus settings panel to return to port details screen
     log::info!("  Exit Modbus settings panel (press Escape)");
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-    ];
+    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
     let screen = cap.capture(session, "back_to_port_details")?;
@@ -478,7 +480,8 @@ async fn enable_port_carefully<T: Expect>(
 
     // Should be on "Enable Port" option
     let actions = vec![
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"Enabled")?,
             description: "Port enabled".to_string(),
             line_range: Some((2, 5)),
@@ -508,7 +511,8 @@ async fn check_received_values_carefully<T: Expect>(
             direction: aoba::ci::ArrowKey::Down,
             count: 2,
         },
-        CursorAction::PressEnter,        CursorAction::MatchPattern {
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
             line_range: Some((0, 3)),
