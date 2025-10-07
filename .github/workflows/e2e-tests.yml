@@ -103,15 +103,31 @@ jobs:
           cargo build
 
       - name: Setup virtual serial ports
+        id: setup_ports
         run: |
           powershell -ExecutionPolicy Bypass -File scripts/com0com_init.ps1 -Mode tui
+          
+          # The script will have created the ports, now detect them for use in tests
+          $availablePorts = [System.IO.Ports.SerialPort]::GetPortNames()
+          Write-Host "Available ports after setup: $($availablePorts -join ', ')"
+          
+          # Try to find COM1 and COM2, or use first two COM ports available
+          $port1 = if ($availablePorts -contains "COM1") { "COM1" } elseif ($availablePorts -match "CNCA") { $availablePorts -match "CNCA" | Select-Object -First 1 } else { $availablePorts | Where-Object { $_ -match "^COM\d+$" } | Select-Object -First 1 }
+          $port2 = if ($availablePorts -contains "COM2") { "COM2" } elseif ($availablePorts -match "CNCB") { $availablePorts -match "CNCB" | Select-Object -First 1 } else { $availablePorts | Where-Object { $_ -match "^COM\d+$" -and $_ -ne $port1 } | Select-Object -First 1 }
+          
+          Write-Host "Will use ports: $port1 and $port2"
+          
+          # Export to environment for next steps
+          echo "PORT1=$port1" >> $env:GITHUB_ENV
+          echo "PORT2=$port2" >> $env:GITHUB_ENV
 
       - name: Run TUI E2E tests
         env:
-          AOBATEST_PORT1: COM1
-          AOBATEST_PORT2: COM2
+          AOBATEST_PORT1: ${{ env.PORT1 }}
+          AOBATEST_PORT2: ${{ env.PORT2 }}
           CI_FORCE_VCOM: 1
         run: |
+          Write-Host "Running tests with ports: $env:AOBATEST_PORT1 and $env:AOBATEST_PORT2"
           cargo run --example ${{ matrix.example }}
 
       - name: Cleanup virtual ports
