@@ -217,7 +217,7 @@ fn boot_serial_loop(
 
     loop {
         loop_count += 1;
-        if loop_count % 1000 == 0 {
+        if loop_count.is_multiple_of(1000) {
             log::info!("🔄 Runtime loop for {port_name} executed {loop_count} times (reads: {read_attempts}, successful: {successful_reads})");
         }
 
