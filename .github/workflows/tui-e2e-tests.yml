@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        bin: [tui_e2e_test1, tui_e2e_test2]
+        example: [tui_e2e_test_master, tui_e2e_test_slave]
 
     steps:
       - uses: actions/checkout@v5
@@ -48,14 +48,9 @@ jobs:
           chmod +x scripts/socat_init.sh
           sudo scripts/socat_init.sh
 
-      - name: Enumerate serial ports (diagnostic)
-        run: |
-          echo "=== Running port enumeration diagnostic ==="
-          cargo run --example enumerate_ports
-
       - name: Run TUI E2E tests
         run: |
-          cargo run -p aoba_tui_e2e_tests --bin ${{ matrix.bin }}
+          cargo run --example ${{ matrix.example }}
 
       - name: Cleanup virtual ports
         if: always()
