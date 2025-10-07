@@ -36,46 +36,46 @@ for ($i = 0; $i -le 5; $i++) {
 
 Start-Sleep -Seconds 2
 
-# Install new port pair with specific port names
-Write-Host "[com0com_init] Installing port pair CNCA0 <-> CNCB0 with names COM1 and COM2..."
+# Check if ports already exist after com0com installation
+Write-Host "[com0com_init] Checking if com0com already created ports..."
+$existingPorts = [System.IO.Ports.SerialPort]::GetPortNames()
+Write-Host "[com0com_init] Existing serial ports: $($existingPorts -join ', ')"
 
-# Use Start-Process with timeout to prevent hanging
-$installJob = Start-Job -ScriptBlock {
-    param($setupcPath)
-    & $setupcPath install PortName=COM1,EmuBR=yes PortName=COM2,EmuBR=yes 2>&1
-} -ArgumentList $setupcPath
+# Check if we already have usable virtual ports
+$hasCNCAPorts = ($existingPorts | Where-Object { $_ -like "CNCA*" }).Count -gt 0
+$hasCNCBPorts = ($existingPorts | Where-Object { $_ -like "CNCB*" }) .Count -gt 0
+$hasCOMPorts = ($existingPorts | Where-Object { $_ -match "^COM\d+$" }).Count -ge 2
 
-# Wait for job with timeout (30 seconds)
-$completed = Wait-Job $installJob -Timeout 30
-
-if ($completed) {
-    $output = Receive-Job $installJob
-    Write-Host "[com0com_init] setupc output: $output"
-    Remove-Job $installJob -Force
-    Write-Host "[com0com_init] Port pair installation initiated successfully"
+if ($hasCNCAPorts -and $hasCNCBPorts) {
+    Write-Host "[com0com_init] com0com already has CNCA/CNCB ports configured, skipping install" -ForegroundColor Green
+} elseif ($hasCOMPorts) {
+    Write-Host "[com0com_init] Found existing COM ports, will try to use them" -ForegroundColor Green
 } else {
-    Write-Host "[com0com_init] Installation command timed out, stopping job..." -ForegroundColor Yellow
-    Stop-Job $installJob
-    Remove-Job $installJob -Force
+    Write-Host "[com0com_init] No virtual ports found, attempting to create them..."
+    Write-Host "[com0com_init] NOTE: setupc.exe may hang - using timeout protection"
     
-    Write-Host "[com0com_init] Attempting alternative approach: using default install..." -ForegroundColor Yellow
-    
-    # Try simpler install command with timeout
-    $installJob2 = Start-Job -ScriptBlock {
+    # Use Start-Job with aggressive timeout to prevent hanging
+    $installJob = Start-Job -ScriptBlock {
         param($setupcPath)
-        & $setupcPath install 2>&1
+        try {
+            & $setupcPath install 2>&1
+        } catch {
+            return "Error: $_"
+        }
     } -ArgumentList $setupcPath
     
-    $completed2 = Wait-Job $installJob2 -Timeout 20
+    # Wait for job with timeout (15 seconds only)
+    Write-Host "[com0com_init] Waiting up to 15 seconds for port creation..."
+    $completed = Wait-Job $installJob -Timeout 15
     
-    if ($completed2) {
-        $output2 = Receive-Job $installJob2
-        Write-Host "[com0com_init] Default install output: $output2"
-        Remove-Job $installJob2 -Force
+    if ($completed) {
+        $output = Receive-Job $installJob
+        Write-Host "[com0com_init] setupc output: $output"
+        Remove-Job $installJob -Force
     } else {
-        Write-Host "[com0com_init] Default install also timed out" -ForegroundColor Yellow
-        Stop-Job $installJob2
-        Remove-Job $installJob2 -Force
+        Write-Host "[com0com_init] Install command timed out after 15s - force stopping" -ForegroundColor Yellow
+        Stop-Job $installJob -ErrorAction SilentlyContinue
+        Remove-Job $installJob -Force -ErrorAction SilentlyContinue
     }
 }
 
