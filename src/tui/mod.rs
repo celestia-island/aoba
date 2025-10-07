@@ -314,10 +314,12 @@ fn run_core_thread(
                         ) {
                             Ok(h) => {
                                 handle_opt = Some(h);
+                                log::info!("ToggleRuntime: Successfully spawned runtime for {} on attempt {}", port_name, attempt + 1);
                                 break;
                             }
                             Err(err) => {
                                 spawn_err = Some(err);
+                                log::warn!("ToggleRuntime: Failed to spawn runtime for {} on attempt {}: {}", port_name, attempt + 1, spawn_err.as_ref().unwrap());
                                 // If not last attempt, wait a bit and retry; this allows the OS to release the port
                                 if attempt + 1 < MAX_RETRIES {
                                     // Slightly longer backoff on first attempts
@@ -332,6 +334,7 @@ fn run_core_thread(
                     if let Some(handle) = handle_opt {
                         // Clone handle for insertion under write lock to avoid moving
                         let handle_for_write = handle.clone();
+                        log::info!("ToggleRuntime: Writing runtime handle to port status for {}", port_name);
                         // Write handle into status under write lock
                         write_status(|status| {
                             if let Some(port) = status.ports.map.get(&port_name) {
@@ -345,6 +348,7 @@ fn run_core_thread(
                                 })
                                 .is_some()
                                 {
+                                    log::info!("ToggleRuntime: Successfully set port {} to OccupiedByThis with runtime", port_name);
                                     // updated
                                 } else {
                                     log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (OccupiedByThis)");
@@ -384,8 +388,9 @@ fn run_core_thread(
             Ok(())
         })?;
 
-        // Handle modbus communication at most once per second to avoid tight loops
-        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_secs(1) {
+        // Handle modbus communication at most once per 10ms to ensure very responsive behavior
+        // This high frequency is critical for TUI Master mode to respond quickly to CLI slave requests
+        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_millis(10) {
             // Update the timestamp first to ensure we don't re-enter while still running
             last_modbus_run = std::time::Instant::now();
             crate::protocol::daemon::handle_modbus_communication()?;

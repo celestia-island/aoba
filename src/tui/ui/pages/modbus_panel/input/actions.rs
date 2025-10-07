@@ -11,18 +11,25 @@ use crate::{
 };
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
+    log::info!("🔵 handle_enter_action called");
     let current_cursor = read_status(|status| {
         if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+            log::info!("🔵 Current cursor in ModbusDashboard: {:?}", cursor);
             Ok(*cursor)
         } else {
+            log::warn!("🔵 Not in ModbusDashboard page, using default AddLine cursor");
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
         }
     })?;
 
+    log::info!("🔵 Processing cursor action for: {:?}", current_cursor);
     match current_cursor {
         types::cursor::ModbusDashboardCursor::AddLine => {
+            log::info!("🔵 AddLine action - calling create_new_modbus_entry");
             create_new_modbus_entry()?;
+            log::info!("🔵 Station created successfully, sending refresh");
             bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            log::info!("🔵 Refresh sent");
         }
         types::cursor::ModbusDashboardCursor::ModbusMode => {
             // Toggle global mode for this port between Master and Slave
@@ -319,20 +326,40 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 }
 
 fn create_new_modbus_entry() -> Result<()> {
+    log::info!("🟢 create_new_modbus_entry called");
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            log::info!("🟢 Selected port index: {}", selected_port);
             Ok(*selected_port)
         } else {
+            log::warn!("🟢 Not in ModbusDashboard page, using default port 0");
             Ok(0)
         }
     })?;
 
-    let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
+    let port_name_opt = read_status(|status| {
+        let name = status.ports.order.get(selected_port).cloned();
+        log::info!("🟢 Port name at index {}: {:?}", selected_port, name);
+        Ok(name)
+    })?;
 
     if let Some(port_name) = port_name_opt {
-        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+        log::info!("🟢 Found port name: {}", port_name);
+        if let Some(port) = read_status(|status| {
+            let port = status.ports.map.get(&port_name).cloned();
+            if port.is_some() {
+                log::info!("🟢 Port entry found in map for: {}", port_name);
+            } else {
+                log::warn!("🟢 Port entry NOT found in map for: {}", port_name);
+            }
+            Ok(port)
+        })? {
+            log::info!("🟢 Calling with_port_write for: {}", port_name);
             with_port_write(&port, |port| {
+                log::info!("🟢 Inside with_port_write closure");
                 let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                log::info!("🟢 Current mode: {:?}, current stations count: {}", 
+                    if mode.is_master() { "Master" } else { "Slave" }, stations.len());
                 // Create a new entry with the global mode from the port config
                 let new_entry = types::modbus::ModbusRegisterItem {
                     connection_mode: mode.clone(),
@@ -347,13 +374,21 @@ fn create_new_modbus_entry() -> Result<()> {
                     last_response_time: None,
                     pending_requests: Vec::new(),
                 };
+                log::info!("🟢 Pushing new station entry");
                 stations.push(new_entry);
                 log::info!(
-                    "Created new modbus entry with station_id=1 in {:?} mode",
-                    if mode.is_master() { "Master" } else { "Slave" }
+                    "✅ Created new modbus entry with station_id=1 in {:?} mode (total stations now: {})",
+                    if mode.is_master() { "Master" } else { "Slave" },
+                    stations.len()
                 );
             });
+            log::info!("🟢 with_port_write completed");
+        } else {
+            log::error!("🟢 Port entry is None for: {}", port_name);
         }
+    } else {
+        log::error!("🟢 Port name is None at selected_port index: {}", selected_port);
     }
+    log::info!("🟢 create_new_modbus_entry completed");
     Ok(())
 }

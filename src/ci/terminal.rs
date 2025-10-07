@@ -104,7 +104,16 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
 
     log::info!("🟢 Spawning expectrl process: {cmd}");
 
-    let session = expectrl::spawn(&cmd)
+    // If spawning TUI, prepend AOBA_LOG_FILE environment variable to command
+    let cmd_with_env = if args.contains(&"--tui") {
+        let tui_log = "/tmp/tui_e2e.log";
+        log::info!("   TUI logs will be written to {}", tui_log);
+        format!("env AOBA_LOG_FILE={} {}", tui_log, cmd)
+    } else {
+        cmd
+    };
+
+    let session = expectrl::spawn(&cmd_with_env)
         .map_err(|e| anyhow!("Failed to spawn process via expectrl: {}", e))?;
 
     Ok(session)

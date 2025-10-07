@@ -20,16 +20,21 @@ pub use navigation::handle_navigation_input as handle_nav_input;
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     let editing = read_status(|status| {
-        Ok(!matches!(
+        let is_editing = !matches!(
             status.temporarily.input_raw_buffer,
             types::ui::InputRawBuffer::None
-        ))
+        );
+        log::info!("🟣 ModbusDashboard handle_input: key={:?}, editing={}", key.code, is_editing);
+        Ok(is_editing)
     })?;
 
     if editing {
+        log::info!("🟣 Routing to handle_editing_input");
         handle_editing_input(key, bus)?;
     } else {
+        log::info!("🟣 Routing to handle_navigation_input");
         handle_navigation_input(key, bus)?;
     }
+    log::info!("🟣 ModbusDashboard handle_input completed");
     Ok(())
 }

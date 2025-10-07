@@ -26,6 +26,33 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     log::info!("🧪 Starting CLI Master + TUI Slave hybrid test");
 
+    // Step 0: Start socat to create virtual COM ports
+    log::info!("🧪 Step 0: Setting up virtual COM ports with socat");
+    let socat_process = Command::new("socat")
+        .args([
+            "-d",
+            "-d",
+            "pty,raw,echo=0,link=/tmp/vcom1",
+            "pty,raw,echo=0,link=/tmp/vcom2",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| anyhow!("Failed to spawn socat: {}", e))?;
+
+    log::info!("  ✓ socat started with PID {}", socat_process.id());
+
+    // Wait for socat to create the symlinks
+    thread::sleep(Duration::from_secs(2));
+
+    if !std::path::Path::new("/tmp/vcom1").exists() {
+        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    }
+    if !std::path::Path::new("/tmp/vcom2").exists() {
+        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    }
+    log::info!("  ✓ Virtual COM ports created: /tmp/vcom1 and /tmp/vcom2");
+
     // Step 1: Prepare test data file for CLI
     log::info!("🧪 Step 1: Prepare test data file");
     let temp_dir = std::env::temp_dir();
@@ -43,10 +70,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     let mut cli_master = Command::new(&binary)
         .args([
-            "modbus",
-            "master",
-            "provide-persist",
-            "--port",
+            "--master-provide-persist",
             "/tmp/vcom2",
             "--baud-rate",
             "9600",
@@ -92,9 +116,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     // Step 4: Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 4: Verify TUI loaded with port list");
-    let actions = vec![
-        CursorAction::Sleep { ms: 2000 },
-        CursorAction::MatchPattern {
+    let actions = vec![        CursorAction::MatchPattern {
             pattern: Regex::new(r"AOBA")?,
             description: "TUI application title visible".to_string(),
             line_range: Some((0, 3)),
@@ -140,6 +162,9 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     let quit_actions = vec![CursorAction::CtrlC];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await?;
 
+    // Kill socat
+    drop(socat_process);
+
     std::fs::remove_file(&data_file)?;
 
     sleep_a_while().await;
@@ -155,13 +180,24 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
 ) -> Result<()> {
     log::info!("  📍 Finding vcom1 in port list...");
 
+    // First, press Home/Ctrl+A or just go all the way up to ensure we're at the top
+    log::info!("  Going to top of list...");
+    let go_to_top = vec![
+        CursorAction::PressArrow {
+            direction: aoba::ci::ArrowKey::Up,
+            count: 50, // Go way up to ensure we hit the top
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &go_to_top, "go_to_top").await?;
+
     // Capture screen to see current state
-    let screen = cap.capture(session, "before_navigation")?;
-    log::info!("📸 Screen before navigation:\n{}", screen);
+    let screen = cap.capture(session, "after_going_to_top")?;
+    log::info!("📸 Screen after going to top:\n{}", screen);
 
     // Verify vcom1 is visible
     if !screen.contains("/tmp/vcom1") {
-        return Err(anyhow!("vcom1 not found in port list"));
+        return Err(anyhow!("vcom1 not found in port list after going to top"));
     }
 
     // Find vcom1 line and current cursor position
@@ -183,7 +219,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     }
 
     let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
-    let curr_idx = cursor_line.unwrap_or(3); // Default to line 3 if not found
+    let curr_idx = cursor_line.ok_or_else(|| anyhow!("Could not find cursor line"))?;
 
     // Navigate to vcom1
     if vcom1_idx > curr_idx {
@@ -232,9 +268,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     // Press Enter to enter vcom1 details
     log::info!("  Pressing Enter to open vcom1...");
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"/tmp/vcom1")?,
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
@@ -274,9 +308,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     // Enter Modbus settings
     log::info!("  Enter Modbus Settings");
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 3)),
@@ -302,9 +334,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     // Create station first
     log::info!("  Create new station");
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"#1")?,
             description: "Station #1 created".to_string(),
             line_range: None,
@@ -335,9 +365,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
             direction: aoba::ci::ArrowKey::Right,
             count: 1,
         },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"Connection Mode\s+Slave")?,
             description: "Mode changed to Slave".to_string(),
             line_range: None,
@@ -365,9 +393,7 @@ async fn configure_tui_slave_carefully<T: Expect>(
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::TypeString("4".to_string()),
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"Register Length\s+0x0004")?,
             description: "Register Length set to 4".to_string(),
             line_range: None,
@@ -406,9 +432,7 @@ async fn enable_port_carefully<T: Expect>(
 
     // Should be on "Enable Port" option
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"Enabled")?,
             description: "Port enabled".to_string(),
             line_range: Some((2, 5)),
@@ -438,9 +462,7 @@ async fn check_received_values_carefully<T: Expect>(
             direction: aoba::ci::ArrowKey::Down,
             count: 2,
         },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
-        CursorAction::MatchPattern {
+        CursorAction::PressEnter,        CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus panel".to_string(),
             line_range: Some((0, 3)),

@@ -21,15 +21,29 @@ use crate::protocol::{
 /// Handle modbus communication for all active ports
 pub fn handle_modbus_communication() -> Result<()> {
     let now = std::time::Instant::now();
+    
+    log::trace!("handle_modbus_communication called");
 
     // Get all ports that are currently active
     let active_ports = read_status(|status| {
         let mut ports = Vec::new();
+        log::info!("Checking {} total ports for modbus activity", status.ports.map.len());
         for (port_name, port_arc) in &status.ports.map {
             if let Ok(port_data) = port_arc.read() {
+                log::info!("  Port {}: state={:?}", port_name, 
+                    match &port_data.state {
+                        types::port::PortState::Free => "Free",
+                        types::port::PortState::OccupiedByThis { .. } => "OccupiedByThis",
+                        types::port::PortState::OccupiedByOther { .. } => "OccupiedByOther",
+                    });
+                    
                 if let types::port::PortState::OccupiedByThis { runtime: _, .. } = &port_data.state
                 {
                     let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
+                    log::info!("    Config: Modbus with {} stations in {:?} mode", 
+                        stations.len(),
+                        if mode.is_master() { "Master" } else { "Slave" });
+                        
                     if !stations.is_empty() {
                         ports.push((
                             port_name.clone(),
@@ -37,20 +51,35 @@ pub fn handle_modbus_communication() -> Result<()> {
                             mode.clone(),
                             stations.clone(),
                         ));
-                        log::debug!(
+                        log::trace!(
                             "Found active port {} with {} stations in {:?} mode",
                             port_name,
                             stations.len(),
                             if mode.is_master() { "Master" } else { "Slave" }
                         );
+                    } else {
+                        log::info!("    ⚠️ Port has no stations configured");
                     }
                 }
             }
         }
         Ok(ports)
     })?;
+    
+    log::trace!("handle_modbus_communication found {} active ports", active_ports.len());
 
     for (port_name, port_arc, global_mode, stations) in active_ports {
+        log::trace!(
+            "Processing modbus communication for {} ({} mode, {} stations)",
+            port_name,
+            if global_mode.is_master() {
+                "Master"
+            } else {
+                "Slave"
+            },
+            stations.len()
+        );
+
         // Process each port's modbus communication
         // NOTE: The naming is counter-intuitive but kept for backwards compatibility:
         // - "Master" mode acts as a Modbus Slave (Server): listens and responds with data from storage
@@ -82,6 +111,12 @@ pub fn handle_slave_response_mode(
     global_mode: &types::modbus::ModbusConnectionMode,
     now: Instant,
 ) -> Result<()> {
+    log::trace!(
+        "handle_slave_response_mode called for {} with {} stations",
+        port_name,
+        stations.len()
+    );
+
     // Get runtime handle for receiving requests and sending responses
     let runtime_handle = with_port_read(port_arc, |port| {
         if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
@@ -96,7 +131,9 @@ pub fn handle_slave_response_mode(
     };
 
     // Process incoming requests from external slaves and generate responses
+    let mut event_count = 0;
     while let Ok(event) = runtime.evt_rx.try_recv() {
+        event_count += 1;
         match event {
             crate::protocol::runtime::RuntimeEvent::FrameReceived(frame) => {
                 let hex_frame = frame
@@ -239,8 +276,10 @@ pub fn handle_slave_response_mode(
 
                     log::info!("Sent modbus master response for {port_name}: {hex_response}");
                 } else {
-                    log::debug!(
-                        "Could not generate a response for the Modbus request: {hex_frame}"
+                    log::warn!(
+                        "Failed to generate modbus response for port {port_name} (station_id={}, stations configured: {})",
+                        station_id,
+                        stations.len()
                     );
                 }
             }
@@ -249,6 +288,16 @@ pub fn handle_slave_response_mode(
             }
             _ => {}
         }
+    }
+
+    if event_count > 0 {
+        log::info!(
+            "Master mode {}: processed {} events",
+            port_name,
+            event_count
+        );
+    } else {
+        log::trace!("Master mode {}: no events to process", port_name);
     }
 
     Ok(())
@@ -271,6 +320,11 @@ pub fn handle_master_query_mode(
     global_mode: &types::modbus::ModbusConnectionMode,
     now: Instant,
 ) -> Result<()> {
+    log::info!(
+        "🔄 handle_master_query_mode called for {port_name} with {} stations",
+        stations.len()
+    );
+
     // Get runtime handle for sending requests
     let runtime_handle = with_port_read(port_arc, |port| {
         if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
@@ -281,8 +335,11 @@ pub fn handle_master_query_mode(
     });
 
     let Some(Some(runtime)) = runtime_handle else {
+        log::warn!("⚠️  handle_master_query_mode: No runtime handle for {port_name}");
         return Ok(());
     };
+
+    log::info!("✅ handle_master_query_mode: Runtime handle obtained for {port_name}");
 
     // Get the current station index from the global mode
     let current_index = match global_mode {
@@ -292,6 +349,11 @@ pub fn handle_master_query_mode(
         } => *current_request_at_station_index,
         _ => 0,
     };
+
+    log::info!(
+        "📍 Current station index: {current_index} (total stations: {})",
+        stations.len()
+    );
 
     // Process incoming responses FIRST (before sending new requests)
     while let Ok(event) = runtime.evt_rx.try_recv() {
@@ -578,18 +640,19 @@ pub fn handle_master_query_mode(
 
     // Now check if we should send a request for the current station
     if let Some(station) = stations.get(current_index) {
-        log::debug!(
-            "Slave mode: checking station {} (index {}), next_poll_at: {:?}, now: {:?}",
+        log::info!(
+            "🔍 Slave mode: checking station {} (index {}), next_poll_at: {:?}, last_request_time: {:?}, now: {:?}",
             station.station_id,
             current_index,
             station.next_poll_at,
+            station.last_request_time,
             now
         );
 
         // Check if it's time to poll AND there's no pending request
         if now >= station.next_poll_at && station.last_request_time.is_none() {
-            log::debug!(
-                "Slave mode: time to send request for station {} (index {})",
+            log::info!(
+                "✅ Slave mode: IT'S TIME to send request for station {} (index {})",
                 station.station_id,
                 current_index
             );
@@ -691,12 +754,23 @@ pub fn handle_master_query_mode(
                     current_index
                 );
             }
-        } else if station.last_request_time.is_some() {
-            log::debug!(
-                "Slave mode: waiting for response from station {} (index {})",
-                station.station_id,
-                current_index
-            );
+        } else {
+            // Condition not met - log why
+            if now < station.next_poll_at {
+                log::info!(
+                    "⏳ Slave mode: NOT YET time for station {} - waiting {:?} more",
+                    station.station_id,
+                    station.next_poll_at.duration_since(now)
+                );
+            }
+            if station.last_request_time.is_some() {
+                log::info!(
+                    "⏳ Slave mode: waiting for response from station {} (index {}) - request sent at {:?}",
+                    station.station_id,
+                    current_index,
+                    station.last_request_time
+                );
+            }
         }
     } else {
         log::debug!(
@@ -757,7 +831,15 @@ pub fn generate_modbus_master_response(
     let _station = stations
         .iter()
         .find(|s| s.station_id == slave_id)
-        .ok_or_else(|| anyhow!("No station configured for slave ID {}", slave_id))?;
+        .ok_or_else(|| {
+            let available_ids: Vec<u8> = stations.iter().map(|s| s.station_id).collect();
+            log::warn!(
+                "No station configured for slave ID {}. Available station IDs: {:?}",
+                slave_id,
+                available_ids
+            );
+            anyhow!("No station configured for slave ID {}", slave_id)
+        })?;
 
     // Use the storage from the global mode instead of creating a new one
     let storage = match global_mode {
