@@ -112,21 +112,48 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     log::info!("🧪 Step 8: Verify CLI output");
     verify_cli_output(&cli_result)?;
 
+    // Step 8.5: Disable the port before quitting to release resources
+    log::info!("🧪 Step 8.5: Disable port before cleanup");
+    // Press Escape to go back to port details if we're in a sub-panel
+    let disable_actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        // Press Escape again to ensure we're back at port details
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        // Now we should be at port details, toggle Enable Port to disable it
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 2000 }, // Wait longer for port to fully disable
+    ];
+    let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &disable_actions, "disable_port").await;
+
     // Cleanup: quit TUI
     log::info!("🧪 Step 9: Cleanup - quit TUI");
     let quit_actions = vec![CursorAction::CtrlC];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await?;
 
-    sleep_a_while().await;
+    // Wait longer for TUI to fully release the port
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // Cleanup: kill socat
+    // Cleanup: kill socat explicitly
     log::info!("🧪 Step 10: Cleanup - kill socat");
+    // First try to kill the specific socat process
+    let _ = Command::new("kill")
+        .arg(format!("{}", socat_process.id()))
+        .output();
     drop(socat_process); // This will kill the process when it goes out of scope
-                         // But let's be explicit and try to kill it
-    Command::new("pkill")
+    
+    // Then kill any remaining socat processes that might be hanging
+    let _ = Command::new("pkill")
         .args(&["-f", "socat.*vcom"])
-        .output()
-        .ok(); // Ignore errors, socat might already be dead
+        .output();
+    
+    // Remove the symlinks to ensure they're cleaned up
+    let _ = std::fs::remove_file("/tmp/vcom1");
+    let _ = std::fs::remove_file("/tmp/vcom2");
+    
+    // Wait a bit to ensure resources are fully released
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
     log::info!("✅ TUI Master + CLI Slave test completed successfully");
     Ok(())

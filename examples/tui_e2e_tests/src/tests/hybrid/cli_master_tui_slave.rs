@@ -140,11 +140,35 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     // Step 6: Configure as Slave mode
     log::info!("🧪 Step 6: Configure TUI as Slave");
-    configure_tui_slave_carefully(&mut tui_session, &mut tui_cap).await?;
+    let config_result = configure_tui_slave_carefully(&mut tui_session, &mut tui_cap).await;
+    if let Err(e) = config_result {
+        log::error!("Configuration failed, cleaning up...");
+        let _ = cli_master.kill();
+        let _ = cli_master.wait();
+        let quit_actions = vec![CursorAction::CtrlC];
+        let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
+        let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
+        let _ = std::fs::remove_file("/tmp/vcom1");
+        let _ = std::fs::remove_file("/tmp/vcom2");
+        let _ = std::fs::remove_file(&data_file);
+        return Err(e);
+    }
 
     // Step 7: Enable the port
     log::info!("🧪 Step 7: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+    let enable_result = enable_port_carefully(&mut tui_session, &mut tui_cap).await;
+    if let Err(e) = enable_result {
+        log::error!("Port enable failed, cleaning up...");
+        let _ = cli_master.kill();
+        let _ = cli_master.wait();
+        let quit_actions = vec![CursorAction::CtrlC];
+        let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
+        let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
+        let _ = std::fs::remove_file("/tmp/vcom1");
+        let _ = std::fs::remove_file("/tmp/vcom2");
+        let _ = std::fs::remove_file(&data_file);
+        return Err(e);
+    }
 
     // Step 8: Wait for communication to happen
     log::info!("🧪 Step 8: Wait for master-slave communication (7 seconds)...");
@@ -152,9 +176,21 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     // Step 9: Navigate to Modbus panel to check received values
     log::info!("🧪 Step 9: Check received values in TUI");
-    check_received_values_carefully(&mut tui_session, &mut tui_cap).await?;
+    let check_result = check_received_values_carefully(&mut tui_session, &mut tui_cap).await;
+    if let Err(e) = check_result {
+        log::error!("Value check failed, cleaning up...");
+        let _ = cli_master.kill();
+        let _ = cli_master.wait();
+        let quit_actions = vec![CursorAction::CtrlC];
+        let _ = execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await;
+        let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
+        let _ = std::fs::remove_file("/tmp/vcom1");
+        let _ = std::fs::remove_file("/tmp/vcom2");
+        let _ = std::fs::remove_file(&data_file);
+        return Err(e);
+    }
 
-    // Cleanup
+    // Cleanup on success
     log::info!("🧪 Step 10: Cleanup");
     cli_master.kill()?;
     cli_master.wait()?;
@@ -162,10 +198,21 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     let quit_actions = vec![CursorAction::CtrlC];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await?;
 
-    // Kill socat
+    let _ = Command::new("kill")
+        .arg(format!("{}", socat_process.id()))
+        .output();
     drop(socat_process);
+    
+    let _ = Command::new("pkill")
+        .args(&["-f", "socat.*vcom"])
+        .output();
+    
+    let _ = std::fs::remove_file("/tmp/vcom1");
+    let _ = std::fs::remove_file("/tmp/vcom2");
 
     std::fs::remove_file(&data_file)?;
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     sleep_a_while().await;
 

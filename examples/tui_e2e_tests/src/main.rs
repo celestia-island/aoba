@@ -19,6 +19,17 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Add delay between tests to ensure resources are released
+    log::info!("⏱️  Waiting for resources to be released...");
+    // Kill any lingering processes that might be using the ports
+    let _ = std::process::Command::new("pkill")
+        .args(&["-f", "aoba.*--tui"])
+        .output();
+    let _ = std::process::Command::new("pkill")
+        .args(&["-f", "socat.*vcom"])
+        .output();
+    tokio::time::sleep(std::time::Duration::from_secs(8)).await;
+
     log::info!("\n🧪 Test 2: CLI Master + TUI Slave hybrid test");
     match tests::test_cli_master_with_tui_slave().await {
         Ok(_) => log::info!("✅ Test 2 passed"),
