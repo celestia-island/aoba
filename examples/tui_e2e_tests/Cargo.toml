@@ -19,3 +19,11 @@ path = "../../"
 [[bin]]
 name = "tui_e2e_tests"
 path = "src/main.rs"
+
+[[bin]]
+name = "tui_e2e_test1"
+path = "src/test1_main.rs"
+
+[[bin]]
+name = "tui_e2e_test2"
+path = "src/test2_main.rs"
