@@ -1,4 +1,4 @@
-name: TUI E2E Tests
+name: E2E Tests
 
 on:
   push:
@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  tui-e2e-test:
-    name: TUI E2E Tests
+  e2e-test:
+    name: E2E Tests
     runs-on: ubuntu-latest
     strategy:
       matrix:
