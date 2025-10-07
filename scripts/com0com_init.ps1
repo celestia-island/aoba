@@ -36,47 +36,21 @@ for ($i = 0; $i -le 5; $i++) {
 
 Start-Sleep -Seconds 2
 
-# Check if ports already exist after com0com installation
-Write-Host "[com0com_init] Checking if com0com already created ports..."
-$existingPorts = [System.IO.Ports.SerialPort]::GetPortNames()
-Write-Host "[com0com_init] Existing serial ports: $($existingPorts -join ', ')"
-
-# Check if we already have usable virtual ports
-$hasCNCAPorts = ($existingPorts | Where-Object { $_ -like "CNCA*" }).Count -gt 0
-$hasCNCBPorts = ($existingPorts | Where-Object { $_ -like "CNCB*" }) .Count -gt 0
-$hasCOMPorts = ($existingPorts | Where-Object { $_ -match "^COM\d+$" }).Count -ge 2
-
-if ($hasCNCAPorts -and $hasCNCBPorts) {
-    Write-Host "[com0com_init] com0com already has CNCA/CNCB ports configured, skipping install" -ForegroundColor Green
-} elseif ($hasCOMPorts) {
-    Write-Host "[com0com_init] Found existing COM ports, will try to use them" -ForegroundColor Green
-} else {
-    Write-Host "[com0com_init] No virtual ports found, attempting to create them..."
-    Write-Host "[com0com_init] NOTE: setupc.exe may hang - using timeout protection"
+# Create COM1 <-> COM2 virtual serial port pair
+Write-Host "[com0com_init] Creating COM1 <-> COM2 virtual serial port pair..."
+try {
+    # Use the direct command as suggested: install PortName=COM1 PortName=COM2
+    $output = & $setupcPath install PortName=COM1 PortName=COM2 2>&1 | Out-String
+    Write-Host "[com0com_init] setupc output: $output"
     
-    # Use Start-Job with aggressive timeout to prevent hanging
-    $installJob = Start-Job -ScriptBlock {
-        param($setupcPath)
-        try {
-            & $setupcPath install 2>&1
-        } catch {
-            return "Error: $_"
-        }
-    } -ArgumentList $setupcPath
-    
-    # Wait for job with timeout (15 seconds only)
-    Write-Host "[com0com_init] Waiting up to 15 seconds for port creation..."
-    $completed = Wait-Job $installJob -Timeout 15
-    
-    if ($completed) {
-        $output = Receive-Job $installJob
-        Write-Host "[com0com_init] setupc output: $output"
-        Remove-Job $installJob -Force
+    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
+        Write-Host "[com0com_init] Warning: setupc returned exit code $LASTEXITCODE" -ForegroundColor Yellow
     } else {
-        Write-Host "[com0com_init] Install command timed out after 15s - force stopping" -ForegroundColor Yellow
-        Stop-Job $installJob -ErrorAction SilentlyContinue
-        Remove-Job $installJob -Force -ErrorAction SilentlyContinue
+        Write-Host "[com0com_init] Port pair created successfully" -ForegroundColor Green
     }
+} catch {
+    Write-Host "[com0com_init] Error during port creation: $_" -ForegroundColor Yellow
+    Write-Host "[com0com_init] Continuing with port detection..."
 }
 
 Write-Host "[com0com_init] Port pair installation completed"
