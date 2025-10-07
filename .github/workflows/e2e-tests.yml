@@ -10,8 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  e2e-test:
-    name: E2E Tests
+  e2e-test-linux:
+    name: E2E Tests (Linux)
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -49,6 +49,9 @@ jobs:
           sudo scripts/socat_init.sh
 
       - name: Run TUI E2E tests
+        env:
+          AOBATEST_PORT1: /tmp/vcom1
+          AOBATEST_PORT2: /tmp/vcom2
         run: |
           cargo run --example ${{ matrix.example }}
 
@@ -59,4 +62,76 @@ jobs:
           sudo pkill socat || true
 
           # Remove virtual port links if they exist
-          sudo rm -f /dev/vcom1 /dev/vcom2 || true
+          sudo rm -f /tmp/vcom1 /tmp/vcom2 || true
+
+  e2e-test-windows:
+    name: E2E Tests (Windows)
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        example: [cli_e2e, tui_e2e_test_master, tui_e2e_test_slave]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Download and install com0com
+        run: |
+          Write-Host "Downloading com0com..."
+          $url = "https://sourceforge.net/projects/com0com/files/com0com/3.0.0.0/com0com-3.0.0.0-i386-and-x64-signed.zip/download"
+          $output = "$env:TEMP\com0com.zip"
+          Invoke-WebRequest -Uri $url -OutFile $output -UserAgent "Mozilla/5.0"
+          
+          Write-Host "Extracting com0com..."
+          Expand-Archive -Path $output -DestinationPath "$env:TEMP\com0com" -Force
+          
+          Write-Host "Installing com0com..."
+          $setupPath = Get-ChildItem -Path "$env:TEMP\com0com" -Filter "setup.exe" -Recurse | Select-Object -First 1
+          if ($setupPath) {
+            Start-Process -FilePath $setupPath.FullName -ArgumentList "/S" -Wait -NoNewWindow
+            Write-Host "com0com installed successfully"
+          } else {
+            Write-Host "ERROR: setup.exe not found in com0com archive"
+            exit 1
+          }
+          
+          # Wait for installation to complete
+          Start-Sleep -Seconds 5
+
+      - name: Build test dependencies
+        run: |
+          cargo build
+
+      - name: Setup virtual serial ports
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/com0com_init.ps1 -Mode tui
+
+      - name: Run TUI E2E tests
+        env:
+          AOBATEST_PORT1: COM1
+          AOBATEST_PORT2: COM2
+          CI_FORCE_VCOM: 1
+        run: |
+          cargo run --example ${{ matrix.example }}
+
+      - name: Cleanup virtual ports
+        if: always()
+        run: |
+          # Remove com0com port pairs
+          $setupcPath = "C:\Program Files (x86)\com0com\setupc.exe"
+          if (Test-Path $setupcPath) {
+            & $setupcPath remove 0 2>&1 | Out-Null
+          }
