@@ -2,14 +2,15 @@
 // Rewritten with step-by-step verification and regex probes after each action
 
 use anyhow::{anyhow, Result};
-use expectrl::Expect;
 use regex::Regex;
 use std::process::{Command, Stdio};
-use std::thread;
-use std::time::Duration;
 
-use aoba::ci::auto_cursor::{execute_cursor_actions, CursorAction};
-use aoba::ci::{should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture};
+use expectrl::Expect;
+
+use aoba::ci::{
+    auto_cursor::{execute_cursor_actions, CursorAction},
+    {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
+};
 
 /// Test TUI Master with CLI Slave
 /// TUI acts as Modbus Master (Slave/Server) responding to requests
@@ -24,25 +25,6 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 
     log::info!("🧪 Starting TUI Master + CLI Slave hybrid test");
 
-    // Step 0: Setup virtual COM ports
-    log::info!("🧪 Step 0: Setting up virtual COM ports with socat");
-    let socat_process = Command::new("socat")
-        .args(&[
-            "-d",
-            "-d",
-            "pty,raw,echo=0,link=/tmp/vcom1",
-            "pty,raw,echo=0,link=/tmp/vcom2",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| anyhow!("Failed to spawn socat: {}", e))?;
-
-    log::info!("  ✓ socat started with PID {}", socat_process.id());
-
-    // Wait for socat to create the symlinks
-    thread::sleep(Duration::from_secs(2));
-
     // Verify vcom ports exist
     if !std::path::Path::new("/tmp/vcom1").exists() {
         return Err(anyhow!("/tmp/vcom1 was not created by socat"));
@@ -50,11 +32,7 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     if !std::path::Path::new("/tmp/vcom2").exists() {
         return Err(anyhow!("/tmp/vcom2 was not created by socat"));
     }
-    log::info!("  ✓ /tmp/vcom1 and /tmp/vcom2 created successfully");
-
-    // Set environment variables so the test uses these ports
-    std::env::set_var("AOBATEST_PORT1", "/tmp/vcom1");
-    std::env::set_var("AOBATEST_PORT2", "/tmp/vcom2");
+    log::info!("✓ /tmp/vcom1 and /tmp/vcom2 created successfully");
 
     // Spawn TUI process (will be master on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
@@ -64,7 +42,7 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 
     sleep_a_while().await;
 
-    // Step 2: Wait for initial screen and verify TUI loaded
+    // Wait for initial screen and verify TUI loaded
     log::info!("🧪 Step 2: Verify TUI loaded with port list");
     let actions = vec![CursorAction::MatchPattern {
         pattern: Regex::new(r"AOBA")?,
@@ -81,101 +59,54 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     .await?;
 
     let screen = tui_cap.capture(&mut tui_session, "initial_screen")?;
-    log::info!("📸 Initial screen:\n{}", screen);
+    log::info!("📸 Initial screen:\n{screen}");
 
-    // Step 3: Navigate to vcom1
+    // Navigate to vcom1
     log::info!("🧪 Step 3: Navigate to vcom1 in port list");
-    navigate_to_vcom1_carefully(&mut tui_session, &mut tui_cap).await?;
+    navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Step 4: Configure Modbus settings FIRST (before enabling)
+    // Configure Modbus settings FIRST (before enabling)
     log::info!("🧪 Step 4: Configure TUI as Master with test values");
     configure_tui_master_carefully(&mut tui_session, &mut tui_cap).await?;
 
-    // Step 5: Enable the port (after configuration)
+    // Enable the port (after configuration)
     log::info!("🧪 Step 5: Enable the port");
     enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Give TUI time to fully initialize the port and start Modbus daemon
     log::info!("🧪 Step 6: Wait for port and Modbus daemon to initialize");
-    log::info!("  Waiting for Modbus daemon to start listening...");
+    log::info!("Waiting for Modbus daemon to start listening...");
     sleep_a_while().await;
-    // Increase wait time significantly to ensure daemon is fully started and listening
-    thread::sleep(Duration::from_secs(10));
 
-    // Step 7: Use CLI to poll the TUI master
+    // Use CLI to poll the TUI master
     log::info!("🧪 Step 7: Run CLI slave poll command");
     let cli_result = run_cli_slave_poll().await?;
 
-    // Step 8: Verify the CLI got the expected values
+    // Verify the CLI got the expected values
     log::info!("🧪 Step 8: Verify CLI output");
     verify_cli_output(&cli_result)?;
 
-    // Step 8.5: Disable the port before quitting to release resources
-    log::info!("🧪 Step 8.5: Disable port before cleanup");
-    // Press Escape to go back to port details if we're in a sub-panel
-    let disable_actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-        // Press Escape again to ensure we're back at port details
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-        // Now we should be at port details, toggle Enable Port to disable it
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // Wait longer for port to fully disable
-    ];
-    let _ = execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &disable_actions,
-        "disable_port",
-    )
-    .await;
-
-    // Cleanup: quit TUI
+    // Cleanup, quit TUI
     log::info!("🧪 Step 9: Cleanup - quit TUI");
     let quit_actions = vec![CursorAction::CtrlC];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await?;
-
-    // Wait longer for TUI to fully release the port
-    tokio::time::sleep(Duration::from_secs(3)).await;
-
-    // Cleanup: kill socat explicitly
-    log::info!("🧪 Step 10: Cleanup - kill socat");
-    // First try to kill the specific socat process
-    let _ = Command::new("kill")
-        .arg(format!("{}", socat_process.id()))
-        .output();
-    drop(socat_process); // This will kill the process when it goes out of scope
-
-    // Then kill any remaining socat processes that might be hanging
-    let _ = Command::new("pkill").args(&["-f", "socat.*vcom"]).output();
-
-    // Remove the symlinks to ensure they're cleaned up
-    let _ = std::fs::remove_file("/tmp/vcom1");
-    let _ = std::fs::remove_file("/tmp/vcom2");
-
-    // Wait a bit to ensure resources are fully released
-    tokio::time::sleep(Duration::from_secs(3)).await;
 
     log::info!("✅ TUI Master + CLI Slave test completed successfully");
     Ok(())
 }
 
 /// Navigate to vcom1 port in TUI with careful verification
-async fn navigate_to_vcom1_carefully<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<()> {
-    log::info!("  📍 Finding vcom1 in port list...");
+async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
+    log::info!("📍 Finding vcom1 in port list...");
 
     // Capture screen to see current state
     let screen = cap.capture(session, "before_navigation")?;
-    log::info!("📸 Screen before navigation:\n{}", screen);
+    log::info!("📸 Screen before navigation:\n{screen}");
 
     // Verify vcom1 is visible (check for /tmp/vcom1)
     let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
     if !screen.contains(&vcom_pattern) {
-        return Err(anyhow!("vcom1 ({}) not found in port list", vcom_pattern));
+        return Err(anyhow!("vcom1 ({vcom_pattern}) not found in port list"));
     }
 
     // Find vcom1 line and current cursor position
@@ -187,10 +118,8 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         if line.contains(&vcom_pattern) {
             vcom1_line = Some(idx);
             log::info!(
-                "  Found vcom1 ({}) at line {}: {}",
-                vcom_pattern,
-                idx,
-                line.trim()
+                "Found vcom1 ({vcom_pattern}) at line {idx}: {trim}",
+                trim = line.trim()
             );
         }
         // Look for cursor indicator - look for "> " or "│ > " pattern
@@ -200,7 +129,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
             let trimmed = line.trim();
             if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
                 cursor_line = Some(idx);
-                log::info!("  Current cursor at line {}: {}", idx, line.trim());
+                log::info!("Current cursor at line {idx}: {trim}", trim = line.trim());
             }
         }
     }
@@ -208,13 +137,13 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
     let curr_idx = cursor_line.unwrap_or(3); // Default to line 3 if not found
 
-    log::info!("  vcom1 is at line index: {}", vcom1_idx);
-    log::info!("  cursor is at line index: {}", curr_idx);
+    log::info!("vcom1 is at line index: {vcom1_idx}");
+    log::info!("cursor is at line index: {curr_idx}");
 
     // Navigate to vcom1
     if vcom1_idx > curr_idx {
         let steps = vcom1_idx - curr_idx;
-        log::info!("  Moving DOWN {} steps to reach vcom1", steps);
+        log::info!("Moving DOWN {steps} steps to reach vcom1");
         let actions = vec![
             CursorAction::PressArrow {
                 direction: aoba::ci::ArrowKey::Down,
@@ -225,7 +154,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         execute_cursor_actions(session, cap, &actions, "nav_down_to_vcom1").await?;
     } else if vcom1_idx < curr_idx {
         let steps = curr_idx - vcom1_idx;
-        log::info!("  Moving UP {} steps to reach vcom1", steps);
+        log::info!("Moving UP {steps} steps to reach vcom1");
         let actions = vec![
             CursorAction::PressArrow {
                 direction: aoba::ci::ArrowKey::Up,
@@ -235,12 +164,12 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, "nav_up_to_vcom1").await?;
     } else {
-        log::info!("  Already on vcom1 line, no navigation needed");
+        log::info!("Already on vcom1 line, no navigation needed");
     }
 
     // Verify cursor is now on vcom1
     let screen_after = cap.capture(session, "after_navigation")?;
-    log::info!("📸 Screen after navigation:\n{}", screen_after);
+    log::info!("📸 Screen after navigation:\n{screen_after}");
 
     let on_vcom1 = screen_after.lines().any(|line| {
         let trimmed = line.trim();
@@ -254,10 +183,10 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         ));
     }
 
-    log::info!("  ✓ Cursor is now on vcom1 ({})", vcom_pattern);
+    log::info!("✓ Cursor is now on vcom1 ({vcom_pattern})");
 
     // Press Enter to enter vcom1 details
-    log::info!("  Pressing Enter to open vcom1...");
+    log::info!("Pressing Enter to open vcom1...");
     let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
     let actions = vec![
         CursorAction::PressEnter,
@@ -271,9 +200,9 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
 
     let screen_details = cap.capture(session, "vcom1_details")?;
-    log::info!("📸 Inside vcom1 details:\n{}", screen_details);
+    log::info!("📸 Inside vcom1 details:\n{screen_details}");
 
-    log::info!("  ✓ Successfully entered vcom1 details");
+    log::info!("✓ Successfully entered vcom1 details");
     Ok(())
 }
 
@@ -282,11 +211,11 @@ async fn configure_tui_master_carefully<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
-    log::info!("  📝 Configuring as Master...");
+    log::info!("📝 Configuring as Master...");
 
     // We should be in vcom1 details page after enabling the port
     // Navigate to "Enter Business Configuration" (should be 2 down from Enable Port)
-    log::info!("  Navigate to 'Enter Business Configuration'");
+    log::info!("Navigate to 'Enter Business Configuration'");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -297,10 +226,10 @@ async fn configure_tui_master_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "nav_to_business_config").await?;
 
     let screen = cap.capture(session, "on_business_config_option")?;
-    log::info!("📸 On Business Configuration option:\n{}", screen);
+    log::info!("📸 On Business Configuration option:\n{screen}");
 
     // Enter Business Configuration (Modbus settings)
-    log::info!("  Enter Business Configuration (Modbus settings)");
+    log::info!("Enter Business Configuration (Modbus settings)");
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::MatchPattern {
@@ -313,10 +242,10 @@ async fn configure_tui_master_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "enter_business_config").await?;
 
     let screen = cap.capture(session, "in_modbus_settings")?;
-    log::info!("📸 In Modbus settings:\n{}", screen);
+    log::info!("📸 In Modbus settings:\n{screen}");
 
     // Create station (should be on "Create Station" by default)
-    log::info!("  Create new station");
+    log::info!("Create new station");
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::MatchPattern {
@@ -329,10 +258,10 @@ async fn configure_tui_master_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
     let screen = cap.capture(session, "station_created")?;
-    log::info!("📸 Station created:\n{}", screen);
+    log::info!("📸 Station created:\n{screen}");
 
     // Navigate to Register Length field (5 down from current)
-    log::info!("  Navigate to Register Length");
+    log::info!("Navigate to Register Length");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -343,7 +272,7 @@ async fn configure_tui_master_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "nav_to_reg_length").await?;
 
     // Set Register Length to 12 (0x000C) as required by test spec
-    log::info!("  Set Register Length to 12");
+    log::info!("Set Register Length to 12");
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::TypeString("12".to_string()), // Enter 12 in decimal
@@ -358,10 +287,10 @@ async fn configure_tui_master_carefully<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "set_reg_length").await?;
 
     let screen = cap.capture(session, "reg_length_set")?;
-    log::info!("📸 Register Length set:\n{}", screen);
+    log::info!("📸 Register Length set:\n{screen}");
 
     // Navigate to register values (1 down)
-    log::info!("  Navigate to register values");
+    log::info!("Navigate to register values");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -374,10 +303,10 @@ async fn configure_tui_master_carefully<T: Expect>(
     // Set register values: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110 (in decimal)
     // UI accepts HEX input and displays as hex, so we need to convert decimal to hex strings
     // Layout is 4 columns per row: [0,1,2,3] [4,5,6,7] [8,9,10,11]
-    let test_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
+    let test_values = [0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
     for (i, &val) in test_values.iter().enumerate() {
-        let hex_val = format!("{:X}", val); // Convert to HEX string
-        log::info!("  Set register {} to {} (0x{:04X})", i, val, val);
+        let hex_val = format!("{val:X}"); // Convert to HEX string
+        log::info!("Set register {i} to {val} (0x{val:04X})");
 
         let actions = vec![
             CursorAction::PressEnter,
@@ -385,11 +314,11 @@ async fn configure_tui_master_carefully<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("set_reg_{}", i)).await?;
+        execute_cursor_actions(session, cap, &actions, &format!("set_reg_{i}")).await?;
 
         // Navigate to next register - just use RIGHT arrow for all registers
         if i < test_values.len() - 1 {
-            log::info!("    Moving Right to next register");
+            log::info!("Moving Right to next register");
             let actions = vec![
                 CursorAction::PressArrow {
                     direction: aoba::ci::ArrowKey::Right,
@@ -397,13 +326,18 @@ async fn configure_tui_master_carefully<T: Expect>(
                 },
                 CursorAction::Sleep { ms: 250 },
             ];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
-                .await?;
+            execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("nav_to_reg_{num}", num = i + 1),
+            )
+            .await?;
         }
     }
 
     let screen = cap.capture(session, "registers_set")?;
-    log::info!("📸 All 12 registers set:\n{}", screen);
+    log::info!("📸 All 12 registers set:\n{screen}");
 
     // Verify at least some key values are visible (pattern check)
     let has_values = screen.contains("0x000A")
@@ -415,23 +349,23 @@ async fn configure_tui_master_carefully<T: Expect>(
     if !has_values {
         log::warn!("⚠️  Register values may not be set correctly");
     } else {
-        log::info!("  ✓ Register values verified (pattern visible)");
+        log::info!("✓ Register values verified (pattern visible)");
     }
 
     // Exit Modbus settings back to port details
     // We're in navigation mode (not editing), so one Escape goes back to port details
-    log::info!("  Exit Modbus settings back to port details (press Escape)");
+    log::info!("Exit Modbus settings back to port details (press Escape)");
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
     let screen = cap.capture(session, "after_exit")?;
-    log::info!("📸 After exiting Modbus settings:\n{}", screen);
+    log::info!("📸 After exiting Modbus settings:\n{screen}");
 
     // Check if we're back on port details or main port list
     if screen.contains("Enable Port") {
-        log::info!("  ✓ Already back on port details page");
+        log::info!("✓ Already back on port details page");
     } else if screen.contains("COM Ports") {
-        log::info!("  We went back to main port list, need to enter vcom1 again");
+        log::info!("We went back to main port list, need to enter vcom1 again");
 
         // Navigate back to vcom1 and enter it
         let vcom_pattern =
@@ -456,11 +390,7 @@ async fn configure_tui_master_carefully<T: Expect>(
 
         if let (Some(vcom1_idx), Some(curr_idx)) = (vcom1_line, cursor_line) {
             if vcom1_idx != curr_idx {
-                let delta = if vcom1_idx > curr_idx {
-                    vcom1_idx - curr_idx
-                } else {
-                    curr_idx - vcom1_idx
-                };
+                let delta = vcom1_idx.abs_diff(curr_idx);
 
                 let direction = if vcom1_idx > curr_idx {
                     aoba::ci::ArrowKey::Down
@@ -468,7 +398,7 @@ async fn configure_tui_master_carefully<T: Expect>(
                     aoba::ci::ArrowKey::Up
                 };
 
-                log::info!("  Navigating to vcom1 ({} steps)", delta);
+                log::info!("Navigating to vcom1 ({delta} steps)");
                 let actions = vec![
                     CursorAction::PressArrow {
                         direction,
@@ -481,12 +411,12 @@ async fn configure_tui_master_carefully<T: Expect>(
         }
 
         // Press Enter to enter vcom1 details
-        log::info!("  Press Enter to enter vcom1 details");
+        log::info!("Press Enter to enter vcom1 details");
         let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
         execute_cursor_actions(session, cap, &actions, "reenter_vcom1").await?;
 
         let screen = cap.capture(session, "back_in_vcom1_details")?;
-        log::info!("📸 Back in vcom1 details:\n{}", screen);
+        log::info!("📸 Back in vcom1 details:\n{screen}");
 
         if !screen.contains("Enable Port") {
             return Err(anyhow!("Failed to re-enter vcom1 details page"));
@@ -495,7 +425,7 @@ async fn configure_tui_master_carefully<T: Expect>(
         return Err(anyhow!("Unexpected screen after exiting Modbus settings"));
     }
 
-    log::info!("  ✓ Master configuration complete, ready to enable port");
+    log::info!("✓ Master configuration complete, ready to enable port");
     Ok(())
 }
 
@@ -505,10 +435,10 @@ async fn enable_port_carefully<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
-    log::info!("  🔌 Enabling port...");
+    log::info!("🔌 Enabling port...");
 
     let screen = cap.capture(session, "before_enable")?;
-    log::info!("📸 Before enabling:\n{}", screen);
+    log::info!("📸 Before enabling:\n{screen}");
 
     // We should be back in vcom1 details page after exiting Modbus settings
     // Verify we see "Enable Port" option
@@ -527,14 +457,14 @@ async fn enable_port_carefully<T: Expect>(
             && line.contains("Enable Port")
         {
             on_enable_port = true;
-            log::info!("  ✓ Cursor already on 'Enable Port' line");
+            log::info!("✓ Cursor already on 'Enable Port' line");
             break;
         }
     }
 
     // If not on Enable Port, navigate to it
     if !on_enable_port {
-        log::info!("  Navigate UP to 'Enable Port' option");
+        log::info!("Navigate UP to 'Enable Port' option");
         let actions = vec![
             CursorAction::PressArrow {
                 direction: aoba::ci::ArrowKey::Up,
@@ -545,16 +475,16 @@ async fn enable_port_carefully<T: Expect>(
         execute_cursor_actions(session, cap, &actions, "nav_to_enable_port").await?;
 
         let screen = cap.capture(session, "on_enable_port")?;
-        log::info!("📸 On Enable Port option:\n{}", screen);
+        log::info!("📸 On Enable Port option:\n{screen}");
     }
 
     // Press Enter to toggle Enable Port to Enabled
-    log::info!("  Press Enter to toggle Enable Port to Enabled");
+    log::info!("Press Enter to toggle Enable Port to Enabled");
     let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
     execute_cursor_actions(session, cap, &actions, "toggle_enable_port").await?;
 
     let screen = cap.capture(session, "after_toggle")?;
-    log::info!("📸 After toggling:\n{}", screen);
+    log::info!("📸 After toggling:\n{screen}");
 
     // Check that we're still on port details page
     if !screen.contains("Protocol Mode") {
@@ -565,7 +495,7 @@ async fn enable_port_carefully<T: Expect>(
 
     // Check if it shows "Enabled"
     if screen.contains("Enabled") {
-        log::info!("  ✓ Port shows as 'Enabled'");
+        log::info!("✓ Port shows as 'Enabled'");
     } else {
         log::warn!("⚠️  'Enabled' text not found - port may not be enabled");
     }
@@ -577,7 +507,7 @@ async fn enable_port_carefully<T: Expect>(
 async fn run_cli_slave_poll() -> Result<String> {
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
-    log::info!("  🖥️  Executing CLI command: slave poll (request data from master)");
+    log::info!("🖥️  Executing CLI command: slave poll (request data from master)");
 
     let output = Command::new(&binary)
         .args([
@@ -602,10 +532,10 @@ async fn run_cli_slave_poll() -> Result<String> {
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-    log::info!("  CLI exit status: {}", output.status);
-    log::info!("  CLI stdout: {}", stdout);
+    log::info!("CLI exit status: {status}", status = output.status);
+    log::info!("CLI stdout: {stdout}");
     if !stderr.is_empty() {
-        log::info!("  CLI stderr: {}", stderr);
+        log::info!("CLI stderr: {stderr}");
     }
 
     if !output.status.success() {
@@ -621,7 +551,7 @@ async fn run_cli_slave_poll() -> Result<String> {
 
 /// Verify CLI output contains expected register values
 fn verify_cli_output(output: &str) -> Result<()> {
-    log::info!("  🔍 Verifying CLI output contains expected values");
+    log::info!("🔍 Verifying CLI output contains expected values");
 
     // Expected values in decimal: 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110
     let expected_values = vec![0u16, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110];
@@ -632,21 +562,21 @@ fn verify_cli_output(output: &str) -> Result<()> {
         let patterns = vec![
             format!("0x{:04X}", val), // 0x000A
             format!("0x{:04x}", val), // 0x000a
-            format!("{}", val),       // 10
+            format!("{val}"),         // 10
         ];
 
         let mut found = false;
         for pattern in &patterns {
             if output.contains(pattern) {
                 found = true;
-                log::info!("    ✓ Found value {} (pattern: {})", val, pattern);
+                log::info!("✓ Found value {val} (pattern: {pattern})");
                 break;
             }
         }
 
         if !found {
             all_found = false;
-            log::error!("    ✗ Value {} not found in CLI output", val);
+            log::error!("✗ Value {val} not found in CLI output");
         }
     }
 
@@ -656,7 +586,7 @@ fn verify_cli_output(output: &str) -> Result<()> {
         ));
     }
 
-    log::info!("  ✅ All expected values verified in CLI output");
+    log::info!("✅ All expected values verified in CLI output");
     Ok(())
 }
 
@@ -673,7 +603,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            log::error!("❌ Test 1 failed: {}", e);
+            log::error!("❌ Test 1 failed: {e}");
             Err(e)
         }
     }
