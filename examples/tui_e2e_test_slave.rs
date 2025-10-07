@@ -13,7 +13,7 @@ use expectrl::Expect;
 
 use aoba::ci::{
     auto_cursor::{execute_cursor_actions, CursorAction},
-    should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture,
+    should_run_vcom_tests, sleep_a_while, spawn_expect_process, vcom_matchers, TerminalCapture,
 };
 
 /// Test CLI Master with TUI Slave
@@ -29,14 +29,31 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     log::info!("🧪 Starting CLI Master + TUI Slave hybrid test");
 
-    // Verify vcom ports exist
-    if !std::path::Path::new("/tmp/vcom1").exists() {
-        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    let vmatch = vcom_matchers();
+
+    // Verify vcom ports exist (skip on Windows where ports may not be files)
+    #[cfg(unix)]
+    {
+        if !std::path::Path::new(&vmatch.port1_name).exists() {
+            return Err(anyhow!("{} was not created by socat", vmatch.port1_name));
+        }
+        if !std::path::Path::new(&vmatch.port2_name).exists() {
+            return Err(anyhow!("{} was not created by socat", vmatch.port2_name));
+        }
+        log::info!(
+            "✓ Virtual COM ports created: {} and {}",
+            vmatch.port1_name,
+            vmatch.port2_name
+        );
     }
-    if !std::path::Path::new("/tmp/vcom2").exists() {
-        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    #[cfg(not(unix))]
+    {
+        log::info!(
+            "✓ Using virtual COM ports: {} and {}",
+            vmatch.port1_name,
+            vmatch.port2_name
+        );
     }
-    log::info!("✓ Virtual COM ports created: /tmp/vcom1 and /tmp/vcom2");
 
     // Prepare test data file for CLI
     log::info!("🧪 Step 1: Prepare test data file");
@@ -56,7 +73,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     let mut cli_master = Command::new(&binary)
         .args([
             "--master-provide-persist",
-            "/tmp/vcom2",
+            &vmatch.port2_name,
             "--baud-rate",
             "9600",
             "--station-id",
@@ -163,6 +180,9 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
+    use aoba::ci::vcom_matchers;
+
+    let vmatch = vcom_matchers();
     log::info!("📍 Finding vcom1 in port list...");
 
     // First, press Home/Ctrl+A or just go all the way up to ensure we're at the top
@@ -181,8 +201,11 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("📸 Screen after going to top:\n{screen}");
 
     // Verify vcom1 is visible
-    if !screen.contains("/tmp/vcom1") {
-        return Err(anyhow!("vcom1 not found in port list after going to top"));
+    if !screen.contains(&vmatch.port1_name) {
+        return Err(anyhow!(
+            "vcom1 ({}) not found in port list after going to top",
+            vmatch.port1_name
+        ));
     }
 
     // Find vcom1 line and current cursor position
@@ -191,13 +214,13 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains("/tmp/vcom1") {
+        if line.contains(&vmatch.port1_name) {
             vcom1_line = Some(idx);
             log::info!("Found vcom1 at line {idx}");
         }
         // Look for cursor indicator - the pattern "> " followed by a port name
         // The cursor can appear anywhere in the line (e.g., "│ > /tmp/vcom1")
-        if line.contains("> /tmp/") || line.contains("> /dev/") {
+        if line.contains("> /tmp/") || line.contains("> /dev/") || line.contains("> COM") {
             cursor_line = Some(idx);
             log::info!("Current cursor at line {idx}");
         }
@@ -237,13 +260,15 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let screen_after = cap.capture(session, "after_navigation")?;
     log::info!("📸 Screen after navigation:\n{screen_after}");
 
-    let on_vcom1 = screen_after
-        .lines()
-        .any(|line| line.contains("> /tmp/vcom1"));
+    let on_vcom1 = screen_after.lines().any(|line| {
+        let trimmed = line.trim();
+        (trimmed.starts_with("> ") || trimmed.contains("│ > ")) && line.contains(&vmatch.port1_name)
+    });
 
     if !on_vcom1 {
         return Err(anyhow!(
-            "Failed to navigate to vcom1 - cursor not on vcom1 line"
+            "Failed to navigate to vcom1 ({}) - cursor not on vcom1 line",
+            vmatch.port1_name
         ));
     }
 
@@ -254,7 +279,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::MatchPattern {
-            pattern: Regex::new(r"/tmp/vcom1")?,
+            pattern: vmatch.port1_rx.clone(),
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
             col_range: None,

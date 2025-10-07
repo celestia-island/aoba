@@ -9,7 +9,7 @@ use expectrl::Expect;
 
 use aoba::ci::{
     auto_cursor::{execute_cursor_actions, CursorAction},
-    {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
+    {should_run_vcom_tests, sleep_a_while, spawn_expect_process, vcom_matchers, TerminalCapture},
 };
 
 /// Test TUI Master with CLI Slave
@@ -25,14 +25,31 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 
     log::info!("🧪 Starting TUI Master + CLI Slave hybrid test");
 
-    // Verify vcom ports exist
-    if !std::path::Path::new("/tmp/vcom1").exists() {
-        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    let vmatch = vcom_matchers();
+
+    // Verify vcom ports exist (skip on Windows where ports may not be files)
+    #[cfg(unix)]
+    {
+        if !std::path::Path::new(&vmatch.port1_name).exists() {
+            return Err(anyhow!("{} was not created by socat", vmatch.port1_name));
+        }
+        if !std::path::Path::new(&vmatch.port2_name).exists() {
+            return Err(anyhow!("{} was not created by socat", vmatch.port2_name));
+        }
+        log::info!(
+            "✓ {} and {} created successfully",
+            vmatch.port1_name,
+            vmatch.port2_name
+        );
     }
-    if !std::path::Path::new("/tmp/vcom2").exists() {
-        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    #[cfg(not(unix))]
+    {
+        log::info!(
+            "✓ Using virtual COM ports: {} and {}",
+            vmatch.port1_name,
+            vmatch.port2_name
+        );
     }
-    log::info!("✓ /tmp/vcom1 and /tmp/vcom2 created successfully");
 
     // Spawn TUI process (will be master on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
@@ -99,14 +116,18 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
 async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
     log::info!("📍 Finding vcom1 in port list...");
 
+    let vmatch = vcom_matchers();
+
     // Capture screen to see current state
     let screen = cap.capture(session, "before_navigation")?;
     log::info!("📸 Screen before navigation:\n{screen}");
 
-    // Verify vcom1 is visible (check for /tmp/vcom1)
-    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
-    if !screen.contains(&vcom_pattern) {
-        return Err(anyhow!("vcom1 ({vcom_pattern}) not found in port list"));
+    // Verify vcom1 is visible
+    if !screen.contains(&vmatch.port1_name) {
+        return Err(anyhow!(
+            "vcom1 ({}) not found in port list",
+            vmatch.port1_name
+        ));
     }
 
     // Find vcom1 line and current cursor position
@@ -115,10 +136,11 @@ async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture)
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains(&vcom_pattern) {
+        if line.contains(&vmatch.port1_name) {
             vcom1_line = Some(idx);
             log::info!(
-                "Found vcom1 ({vcom_pattern}) at line {idx}: {trim}",
+                "Found vcom1 ({}) at line {idx}: {trim}",
+                vmatch.port1_name,
                 trim = line.trim()
             );
         }
@@ -173,25 +195,25 @@ async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture)
 
     let on_vcom1 = screen_after.lines().any(|line| {
         let trimmed = line.trim();
-        (trimmed.starts_with("│ > ") || trimmed.starts_with("> ")) && line.contains(&vcom_pattern)
+        (trimmed.starts_with("│ > ") || trimmed.starts_with("> "))
+            && line.contains(&vmatch.port1_name)
     });
 
     if !on_vcom1 {
         return Err(anyhow!(
             "Failed to navigate to vcom1 - cursor not on vcom1 line ({})",
-            vcom_pattern
+            vmatch.port1_name
         ));
     }
 
-    log::info!("✓ Cursor is now on vcom1 ({vcom_pattern})");
+    log::info!("✓ Cursor is now on vcom1 ({})", vmatch.port1_name);
 
     // Press Enter to enter vcom1 details
     log::info!("Pressing Enter to open vcom1...");
-    let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::MatchPattern {
-            pattern: vcom_pattern_regex,
+            pattern: vmatch.port1_rx.clone(),
             description: "In vcom1 port details".to_string(),
             line_range: Some((0, 3)),
             col_range: None,
@@ -367,9 +389,7 @@ async fn configure_tui_master_carefully<T: Expect>(
     } else if screen.contains("COM Ports") {
         log::info!("We went back to main port list, need to enter vcom1 again");
 
-        // Navigate back to vcom1 and enter it
-        let vcom_pattern =
-            std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
+        let vmatch = vcom_matchers();
 
         // Find vcom1 and navigate to it
         let lines: Vec<&str> = screen.lines().collect();
@@ -377,7 +397,7 @@ async fn configure_tui_master_carefully<T: Expect>(
         let mut cursor_line = None;
 
         for (idx, line) in lines.iter().enumerate() {
-            if line.contains(&vcom_pattern) {
+            if line.contains(&vmatch.port1_name) {
                 vcom1_line = Some(idx);
             }
             if line.contains("> ") {
@@ -505,6 +525,7 @@ async fn enable_port_carefully<T: Expect>(
 
 /// Run CLI slave poll command
 async fn run_cli_slave_poll() -> Result<String> {
+    let vmatch = vcom_matchers();
     let binary = aoba::ci::build_debug_bin("aoba")?;
 
     log::info!("🖥️  Executing CLI command: slave poll (request data from master)");
@@ -512,7 +533,7 @@ async fn run_cli_slave_poll() -> Result<String> {
     let output = Command::new(&binary)
         .args([
             "--slave-poll",
-            "/tmp/vcom2",
+            &vmatch.port2_name,
             "--baud-rate",
             "9600",
             "--station-id",
