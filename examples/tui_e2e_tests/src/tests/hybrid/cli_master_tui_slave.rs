@@ -180,13 +180,24 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
 ) -> Result<()> {
     log::info!("  📍 Finding vcom1 in port list...");
 
+    // First, press Home/Ctrl+A or just go all the way up to ensure we're at the top
+    log::info!("  Going to top of list...");
+    let go_to_top = vec![
+        CursorAction::PressArrow {
+            direction: aoba::ci::ArrowKey::Up,
+            count: 50, // Go way up to ensure we hit the top
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &go_to_top, "go_to_top").await?;
+
     // Capture screen to see current state
-    let screen = cap.capture(session, "before_navigation")?;
-    log::info!("📸 Screen before navigation:\n{}", screen);
+    let screen = cap.capture(session, "after_going_to_top")?;
+    log::info!("📸 Screen after going to top:\n{}", screen);
 
     // Verify vcom1 is visible
     if !screen.contains("/tmp/vcom1") {
-        return Err(anyhow!("vcom1 not found in port list"));
+        return Err(anyhow!("vcom1 not found in port list after going to top"));
     }
 
     // Find vcom1 line and current cursor position
@@ -208,7 +219,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     }
 
     let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
-    let curr_idx = cursor_line.unwrap_or(3); // Default to line 3 if not found
+    let curr_idx = cursor_line.ok_or_else(|| anyhow!("Could not find cursor line"))?;
 
     // Navigate to vcom1
     if vcom1_idx > curr_idx {
