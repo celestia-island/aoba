@@ -88,25 +88,12 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Download and install com0com
+      - name: Install com0com via Chocolatey
         run: |
-          Write-Host "Downloading com0com..."
-          $url = "https://sourceforge.net/projects/com0com/files/com0com/3.0.0.0/com0com-3.0.0.0-i386-and-x64-signed.zip/download"
-          $output = "$env:TEMP\com0com.zip"
-          Invoke-WebRequest -Uri $url -OutFile $output -UserAgent "Mozilla/5.0"
+          Write-Host "Installing com0com using Chocolatey..."
+          choco install com0com -y
           
-          Write-Host "Extracting com0com..."
-          Expand-Archive -Path $output -DestinationPath "$env:TEMP\com0com" -Force
-          
-          Write-Host "Installing com0com..."
-          $setupPath = Get-ChildItem -Path "$env:TEMP\com0com" -Filter "setup.exe" -Recurse | Select-Object -First 1
-          if ($setupPath) {
-            Start-Process -FilePath $setupPath.FullName -ArgumentList "/S" -Wait -NoNewWindow
-            Write-Host "com0com installed successfully"
-          } else {
-            Write-Host "ERROR: setup.exe not found in com0com archive"
-            exit 1
-          }
+          Write-Host "com0com installed successfully"
           
           # Wait for installation to complete
           Start-Sleep -Seconds 5
