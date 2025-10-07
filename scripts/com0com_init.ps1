@@ -1,5 +1,5 @@
 # PowerShell script to setup virtual serial ports using com0com on Windows
-# This is the Windows equivalent of socat_init.sh
+# Fixed version for GitHub Actions
 
 param(
     [string]$Mode = "tui"
@@ -14,105 +14,116 @@ if (-not $isAdmin) {
     exit 1
 }
 
-# Check if com0com is installed via Chocolatey
-$commandcPath = "commandc.exe"
-if (-not (Get-Command $commandcPath -ErrorAction SilentlyContinue)) {
-    Write-Host "[com0com_init] ERROR: commandc.exe not found in PATH" -ForegroundColor Red
-    Write-Host "[com0com_init] Please ensure com0com is installed via Chocolatey" -ForegroundColor Red
-    exit 1
+# Find commandc.exe
+$possiblePaths = @(
+    "C:\Program Files (x86)\com0com\commandc.exe",
+    "C:\Program Files\com0com\commandc.exe", 
+    "$env:ProgramFiles\com0com\commandc.exe",
+    "$env:ProgramFiles(x86)\com0com\commandc.exe",
+    "$env:ChocolateyInstall\lib\com0com\tools\commandc.exe"
+)
+
+$commandcPath = $null
+foreach ($path in $possiblePaths) {
+    if (Test-Path $path) {
+        $commandcPath = $path
+        Write-Host "[com0com_init] Found commandc at: $path"
+        break
+    }
 }
 
-Write-Host "[com0com_init] Found commandc.exe"
-
-# List existing ports before cleanup
-Write-Host "[com0com_init] Listing existing com0com ports..."
-& $commandcPath list
-
-# Remove existing port pairs using commandc (more reliable in CI)
-Write-Host "[com0com_init] Removing existing com0com port pairs..."
-try {
-    # Get existing pairs and remove them properly
-    $pairs = & $commandcPath list | Where-Object { $_ -match "CNCA" }
-    foreach ($pair in $pairs) {
-        if ($pair -match "CNCA(\d+).*CNCB(\d+)") {
-            $pairNumber = $matches[1]
-            Write-Host "[com0com_init] Removing pair $pairNumber"
-            & $commandcPath remove $pairNumber 2>&1 | Out-Null
-        }
+if (-not $commandcPath) {
+    # Try finding in PATH
+    try {
+        $cmd = Get-Command "commandc.exe" -ErrorAction Stop
+        $commandcPath = $cmd.Source
+        Write-Host "[com0com_init] Found commandc in PATH: $commandcPath"
+    } catch {
+        Write-Host "[com0com_init] ERROR: Could not find commandc.exe" -ForegroundColor Red
+        Write-Host "[com0com_init] Searched in: $($possiblePaths -join ', ')" -ForegroundColor Red
+        exit 1
     }
+}
+
+# Clean up any existing ports first
+Write-Host "[com0com_init] Cleaning up existing com0com ports..."
+try {
+    & $commandcPath remove 0 2>&1 | Out-Null
+    & $commandcPath remove 1 2>&1 | Out-Null
+    & $commandcPath remove 2 2>&1 | Out-Null
 } catch {
-    Write-Host "[com0com_init] Note: No existing pairs to remove or error during cleanup: $_" -ForegroundColor Yellow
+    # Ignore errors during cleanup
 }
 
 Start-Sleep -Seconds 1
 
-# Create COM1 <-> COM2 virtual serial port pair using commandc
+# Create COM1 <-> COM2 virtual serial port pair
 Write-Host "[com0com_init] Creating COM1 <-> COM2 virtual serial port pair..."
 try {
-    # Use commandc instead of setupc - this is non-blocking
-    $output = & $commandcPath install PortName=COM1 PortName=COM2 2>&1
-    Write-Host "[com0com_init] commandc output: $output"
+    # Method 1: Direct port assignment
+    $result1 = & $commandcPath install PortName=COM1 PortName=COM2 2>&1
+    Write-Host "[com0com_init] Creation output: $result1"
 
-    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
-        Write-Host "[com0com_init] Warning: commandc returned exit code $LASTEXITCODE" -ForegroundColor Yellow
-        # Try alternative approach if first method fails
-        Write-Host "[com0com_init] Trying alternative port creation method..."
-        & $commandcPath install CNCA0=COM1 CNCB0=COM2 2>&1 | Out-Null
+    # Verify the ports were created
+    Start-Sleep -Seconds 2
+    $portList = & $commandcPath list 2>&1
+    Write-Host "[com0com_init] Current port pairs: $portList"
+
+    # If first method failed, try alternative method
+    if ($LASTEXITCODE -ne 0 -or $portList -notmatch "COM1.*COM2|COM2.*COM1") {
+        Write-Host "[com0com_init] First method failed, trying alternative..."
+
+        # Method 2: Use CNCA/CNCB naming
+        & $commandcPath remove 0 2>&1 | Out-Null
+        $result2 = & $commandcPath install CNCA0=COM1 CNCB0=COM2 2>&1
+        Write-Host "[com0com_init] Alternative method output: $result2"
+
+        Start-Sleep -Seconds 2
+        $portList = & $commandcPath list 2>&1
+        Write-Host "[com0com_init] Port pairs after alternative: $portList"
     }
 
-    Write-Host "[com0com_init] Port pair creation command completed" -ForegroundColor Green
 } catch {
-    Write-Host "[com0com_init] Error during port creation: $_" -ForegroundColor Yellow
-    Write-Host "[com0com_init] Continuing with port detection..."
+    Write-Host "[com0com_init] Error during port creation: $_" -ForegroundColor Red
+    exit 1
 }
 
-Write-Host "[com0com_init] Port pair installation completed"
-
-# Wait for system to process the installation
-Write-Host "[com0com_init] Waiting for system to register ports..."
-Start-Sleep -Seconds 3
-
-# List ports after installation
-Write-Host "[com0com_init] Listing com0com ports after installation..."
-& $commandcPath list
-
-# Check what ports are available
+# Check available ports
 Write-Host "[com0com_init] Checking available serial ports..."
 try {
     $availablePorts = [System.IO.Ports.SerialPort]::GetPortNames()
     Write-Host "[com0com_init] Available ports: $($availablePorts -join ', ')"
 
-    # Look for COM1 and COM2 specifically
+    # Look specifically for COM1 and COM2
     $Port1 = $availablePorts | Where-Object { $_ -eq "COM1" } | Select-Object -First 1
     $Port2 = $availablePorts | Where-Object { $_ -eq "COM2" } | Select-Object -First 1
 
-    # If COM1/COM2 not found, look for CNCA/CNCB ports
-    if (-not $Port1 -or -not $Port2) {
-        $Port1 = $availablePorts | Where-Object { $_ -match "CNCA" } | Select-Object -First 1
-        $Port2 = $availablePorts | Where-Object { $_ -match "CNCB" } | Select-Object -First 1
-    }
-
-    # Fallback to any two available ports
-    if (-not $Port1 -or -not $Port2) {
+    if ($Port1 -and $Port2) {
+        Write-Host "[com0com_init] Successfully created COM1 and COM2" -ForegroundColor Green
+    } elseif ($Port1 -or $Port2) {
+        Write-Host "[com0com_init] WARNING: Only one port was created" -ForegroundColor Yellow
+        # Fallback to whatever ports are available
+        $Port1 = $availablePorts | Select-Object -First 1
+        $Port2 = $availablePorts | Select-Object -Skip 1 -First 1
+    } else {
+        # If no COM1/COM2, use the first two available ports
         $Port1 = $availablePorts | Select-Object -First 1
         $Port2 = $availablePorts | Select-Object -Skip 1 -First 1
     }
 
     if (-not $Port1 -or -not $Port2) {
         Write-Host "[com0com_init] ERROR: Could not find two virtual ports" -ForegroundColor Red
-        Write-Host "[com0com_init] Available ports were: $($availablePorts -join ', ')"
         exit 1
     }
 
     if ($Port1 -eq $Port2) {
         Write-Host "[com0com_init] ERROR: Both ports are the same: $Port1" -ForegroundColor Red
-        Write-Host "[com0com_init] Available ports were: $($availablePorts -join ', ')"
         exit 1
     }
 
     Write-Host "[com0com_init] Using ports: $Port1 and $Port2" -ForegroundColor Green
 
-    # Set environment variables for the tests to use
+    # Set environment variables
     [System.Environment]::SetEnvironmentVariable("AOBATEST_PORT1", $Port1, "Process")
     [System.Environment]::SetEnvironmentVariable("AOBATEST_PORT2", $Port2, "Process")
     Write-Host "[com0com_init] Set AOBATEST_PORT1=$Port1 and AOBATEST_PORT2=$Port2"
