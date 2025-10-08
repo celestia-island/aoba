@@ -125,7 +125,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()?;
-    
+
     if !test_poll.status.success() {
         let stderr = String::from_utf8_lossy(&test_poll.stderr);
         return Err(anyhow!(
@@ -134,9 +134,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
             stderr
         ));
     }
-    
+
     let test_output = String::from_utf8_lossy(&test_poll.stdout);
-    log::info!("✅ TUI master responding, test poll output: {}", test_output.trim());
+    log::info!(
+        "✅ TUI master responding, test poll output: {}",
+        test_output.trim()
+    );
 
     // Prepare output file for CLI slave
     let temp_dir = std::env::temp_dir();
@@ -229,7 +232,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Verify collected data from CLI output
     log::info!("🧪 Step 10: Verify collected data from CLI output");
-    
+
     // Check if file exists and has content
     if !output_file.exists() {
         return Err(anyhow!(
@@ -237,7 +240,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
             output_file.display()
         ));
     }
-    
+
     let file_size = std::fs::metadata(&output_file)?.len();
     if file_size == 0 {
         return Err(anyhow!(
@@ -245,8 +248,8 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
             output_file.display()
         ));
     }
-    
-    log::info!("Output file exists with {} bytes", file_size);
+
+    log::info!("Output file exists with {file_size} bytes");
     verify_continuous_data(&output_file, &all_expected_values, is_coil)?;
 
     // Capture screen to verify TUI display consistency
