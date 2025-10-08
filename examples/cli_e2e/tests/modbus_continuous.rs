@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use std::{
+    fs::File,
     io::{BufRead, BufReader, Write},
     process::Stdio,
     thread,
@@ -20,7 +21,7 @@ fn generate_random_data(length: usize) -> Vec<u16> {
 pub fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");
 
-    let binary = ci_utils::build_debug_bin("aoba")?;
+    let _binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
     // Create random data file for master
@@ -29,7 +30,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         let mut file = File::create(&data_file)?;
         for _ in 0..5 {
             let values = generate_random_data(5);
-            writeln!(file, "{{\"values\": {:?}}}", values)?;
+            writeln!(file, "{{\"values\": {values:?}}}")?;
         }
     }
 
@@ -146,7 +147,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 pub fn test_continuous_connection_with_pipes() -> Result<()> {
     log::info!("🧪 Testing continuous connection with Unix pipe data source and pipe output...");
 
-    let binary = ci_utils::build_debug_bin("aoba")?;
+    let _binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
     // Create named pipes
@@ -207,7 +208,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
 
         for i in 0..5 {
             let values = generate_random_data(5);
-            writeln!(file, "{{\"values\": {:?}}}", values)?;
+            writeln!(file, "{{\"values\": {values:?}}}")?;
             log::info!("🧪 Wrote data line {}: {:?}", i + 1, values);
             thread::sleep(Duration::from_millis(500));
         }
@@ -226,7 +227,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
 
         for line in reader.lines() {
             let line = line?;
-            log::info!("🧪 Read output line: {}", line);
+            log::info!("🧪 Read output line: {line}");
             lines.push(line);
 
             if lines.len() >= 3 {
@@ -257,7 +258,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     // Check results
     match writer_result {
         Ok(Ok(())) => log::info!("✅ Writer thread completed successfully"),
-        Ok(Err(e)) => log::warn!("⚠️ Writer thread error: {}", e),
+        Ok(Err(e)) => log::warn!("⚠️ Writer thread error: {e}"),
         Err(_) => log::warn!("⚠️ Writer thread panicked"),
     }
 
@@ -270,7 +271,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
                 }
             }
         }
-        Ok(Err(e)) => log::warn!("⚠️ Reader thread error: {}", e),
+        Ok(Err(e)) => log::warn!("⚠️ Reader thread error: {e}"),
         Err(_) => log::warn!("⚠️ Reader thread panicked"),
     }
 

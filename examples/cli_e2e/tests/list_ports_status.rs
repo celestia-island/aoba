@@ -53,7 +53,7 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
                     return Err(anyhow!("Invalid status value: {}", status));
                 }
 
-                log::info!("🧪 Port status field verified: {}", status);
+                log::info!("🧪 Port status field verified: {status}");
             }
         }
     } else {

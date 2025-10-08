@@ -41,8 +41,8 @@ pub fn test_slave_listen_temp() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to spawn slave listen: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn slave listen: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -82,8 +82,8 @@ pub fn test_slave_listen_persist() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to spawn slave listen persist: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn slave listen persist: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -135,8 +135,8 @@ pub fn test_master_provide_temp() -> Result<()> {
         }
         Err(e) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn master provide: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -193,8 +193,8 @@ pub fn test_master_provide_persist() -> Result<()> {
         }
         Err(e) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide persist: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn master provide persist: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }

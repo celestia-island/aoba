@@ -1,5 +1,4 @@
 use anyhow::Result;
-use std::path::Path;
 use std::process::Command;
 
 /// Factory function to create a Modbus command
@@ -20,9 +19,9 @@ pub fn create_modbus_command(
 ) -> Result<Command> {
     let binary = ci_utils::build_debug_bin("aoba")?;
     let mode = if is_persist { "-persist" } else { "" };
-    let mut args = vec![
-        &format!(
-            "--{}{}{}",
+    let mut args: Vec<String> = vec![
+        format!(
+            "--{}{}",
             if is_slave {
                 "slave-listen"
             } else {
@@ -30,29 +29,29 @@ pub fn create_modbus_command(
             },
             mode
         ),
-        port,
-        "--station-id",
-        "1",
-        "--register-address",
-        "0",
-        "--register-length",
-        "5",
-        "--register-mode",
-        "holding",
-        "--baud-rate",
-        "9600",
+        port.to_string(),
+        "--station-id".to_string(),
+        "1".to_string(),
+        "--register-address".to_string(),
+        "0".to_string(),
+        "--register-length".to_string(),
+        "5".to_string(),
+        "--register-mode".to_string(),
+        "holding".to_string(),
+        "--baud-rate".to_string(),
+        "9600".to_string(),
     ];
 
     if let Some(out_src) = output_or_source {
         if is_slave {
-            args.push("--output");
+            args.push("--output".to_string());
         } else {
-            args.push("--data-source");
+            args.push("--data-source".to_string());
         }
-        args.push(out_src);
+        args.push(out_src.to_string());
     }
 
     let mut cmd = Command::new(binary);
-    cmd.args(&args);
+    cmd.args(args.iter());
     Ok(cmd)
 }
