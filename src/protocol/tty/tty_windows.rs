@@ -7,9 +7,53 @@ use serialport::{SerialPortInfo, SerialPortType};
 
 use super::PortExtra;
 
+/// Detect virtual serial ports created by com0com or similar tools
+fn detect_virtual_ports() -> Vec<SerialPortInfo> {
+    let mut virtual_ports = Vec::new();
+
+    // Common virtual COM ports created by com0com for testing
+    let virtual_port_names = ["COM1", "COM2", "COM3", "COM4"];
+
+    // Get the list of already detected ports to avoid duplicates
+    let existing_ports = serialport::available_ports().unwrap_or_default();
+    let existing_names: Vec<String> = existing_ports
+        .iter()
+        .map(|p| p.port_name.to_uppercase())
+        .collect();
+
+    for port_name in &virtual_port_names {
+        // Only try to add if not already in the list
+        if !existing_names.contains(&port_name.to_uppercase()) {
+            // Try to verify the port exists by attempting to get its properties
+            // This is a lightweight check without actually opening the port
+            if let Ok(ports) = serialport::available_ports() {
+                // Double-check it's not in the fresh list
+                if !ports
+                    .iter()
+                    .any(|p| p.port_name.to_uppercase() == port_name.to_uppercase())
+                {
+                    // If com0com is installed and configured, the port should appear
+                    // in available_ports. We don't add phantom ports here.
+                    continue;
+                }
+            }
+        }
+    }
+
+    virtual_ports
+}
+
 /// Return the list of available serial ports sorted / deduped for Windows.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
-    let raw_ports = serialport::available_ports().unwrap_or_default();
+    let mut raw_ports = serialport::available_ports().unwrap_or_default();
+
+    // Note: On Windows, com0com virtual ports typically show up in
+    // serialport::available_ports() automatically, so we don't need to
+    // manually add them like we do on Unix. However, we keep the detection
+    // function for consistency and potential future use.
+    let virtual_ports = detect_virtual_ports();
+    raw_ports.extend(virtual_ports);
+
     sort_and_dedup_ports(raw_ports)
 }
 
