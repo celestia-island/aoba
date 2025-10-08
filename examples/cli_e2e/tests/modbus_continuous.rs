@@ -20,7 +20,7 @@ fn generate_random_data(length: usize) -> Vec<u16> {
 pub fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
     // Create random data file for master
@@ -146,7 +146,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 pub fn test_continuous_connection_with_pipes() -> Result<()> {
     log::info!("🧪 Testing continuous connection with Unix pipe data source and pipe output...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
     // Create named pipes

@@ -1,0 +1,17 @@
+[package]
+name = "ci_utils"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[lib]
+name = "ci_utils"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = { version = "^1", features = ["backtrace"] }
+log = "^0.4"
+regex = "^1"
+tokio = { version = "^1", features = ["full"] }
+expectrl = "^0.8"
+vt100 = "^0.15"

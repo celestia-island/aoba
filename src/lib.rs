@@ -5,9 +5,6 @@ pub mod tui;
 pub mod i18n;
 pub mod protocol;
 
-#[doc(hidden)]
-pub mod ci;
-
 use anyhow::Result;
 
 #[cfg(debug_assertions)]

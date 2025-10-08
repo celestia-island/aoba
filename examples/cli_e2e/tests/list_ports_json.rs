@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use aoba::ci::{run_binary_sync, should_run_vcom_tests, vcom_matchers};
+use ci_utils::{run_binary_sync, should_run_vcom_tests, vcom_matchers};
 
 pub fn test_cli_list_ports_json() -> Result<()> {
     let output = run_binary_sync(&["--list-ports", "--json"])?;

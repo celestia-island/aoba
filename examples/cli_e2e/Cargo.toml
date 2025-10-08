@@ -11,5 +11,5 @@ env_logger = "^0.11"
 log = "^0.4"
 serde_json = "^1"
 
-[dependencies.aoba]
-path = "../../"
+[dependencies.ci_utils]
+path = "../ci_utils"

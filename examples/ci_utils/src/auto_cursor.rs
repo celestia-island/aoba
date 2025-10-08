@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use expectrl::Expect;
 use regex::Regex;
 
-use crate::ci::{sleep_a_while, ArrowKey, ExpectKeyExt, TerminalCapture};
+use crate::{sleep_a_while, ArrowKey, ExpectKeyExt, TerminalCapture};
 
 /// Action instruction for automated cursor navigation
 #[derive(Debug, Clone)]

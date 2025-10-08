@@ -18,7 +18,7 @@ pub fn create_modbus_command(
     is_persist: bool,
     output_or_source: Option<&str>,
 ) -> Result<Command> {
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
     let mode = if is_persist { "-persist" } else { "" };
     let mut args = vec![
         &format!(

@@ -13,7 +13,7 @@ use crate::utils::create_modbus_command;
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     let temp_dir = std::env::temp_dir();
 
@@ -121,7 +121,7 @@ pub fn test_master_slave_communication() -> Result<()> {
 pub fn test_slave_listen_with_vcom() -> Result<()> {
     log::info!("🧪 Testing slave listen temporary mode with virtual serial ports...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Just verify the command works with virtual ports
     let output = create_modbus_command(true, "/tmp/vcom1", false, None)?
@@ -154,7 +154,7 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
 pub fn test_master_provide_with_vcom() -> Result<()> {
     log::info!("🧪 Testing master provide persistent mode with virtual serial ports...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Create a temporary file with test data
     let temp_dir = std::env::temp_dir();
