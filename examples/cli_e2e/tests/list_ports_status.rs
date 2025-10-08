@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use aoba::ci::run_binary_sync;
+use ci_utils::run_binary_sync;
 
 pub fn test_cli_list_ports_json_with_status() -> Result<()> {
     let output = run_binary_sync(&["--list-ports", "--json"])?;
@@ -53,7 +53,7 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
                     return Err(anyhow!("Invalid status value: {}", status));
                 }
 
-                log::info!("🧪 Port status field verified: {}", status);
+                log::info!("🧪 Port status field verified: {status}");
             }
         }
     } else {

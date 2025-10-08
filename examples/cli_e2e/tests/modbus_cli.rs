@@ -9,7 +9,7 @@ pub fn test_slave_listen_temp() -> Result<()> {
     log::info!("🧪 Testing slave listen temporary mode...");
 
     // Get the binary path
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     // This test requires actual serial port hardware or virtual serial ports
     // For now, we'll just verify the command line interface works
@@ -41,8 +41,8 @@ pub fn test_slave_listen_temp() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to spawn slave listen: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn slave listen: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -51,7 +51,7 @@ pub fn test_slave_listen_temp() -> Result<()> {
 pub fn test_slave_listen_persist() -> Result<()> {
     log::info!("🧪 Testing slave listen persistent mode...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     let output = Command::new(&binary)
         .args([
@@ -82,8 +82,8 @@ pub fn test_slave_listen_persist() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to spawn slave listen persist: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn slave listen persist: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -92,7 +92,7 @@ pub fn test_slave_listen_persist() -> Result<()> {
 pub fn test_master_provide_temp() -> Result<()> {
     log::info!("🧪 Testing master provide temporary mode...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Create a temporary file with test data
     let temp_dir = std::env::temp_dir();
@@ -135,8 +135,8 @@ pub fn test_master_provide_temp() -> Result<()> {
         }
         Err(e) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn master provide: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -145,7 +145,7 @@ pub fn test_master_provide_temp() -> Result<()> {
 pub fn test_master_provide_persist() -> Result<()> {
     log::info!("🧪 Testing master provide persistent mode...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Create a temporary file with multiple lines of test data
     let temp_dir = std::env::temp_dir();
@@ -193,8 +193,8 @@ pub fn test_master_provide_persist() -> Result<()> {
         }
         Err(e) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide persist: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn master provide persist: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }

@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Result};
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
+
+use crate::utils::create_modbus_command;
 
 /// Test master-slave communication with virtual serial ports
 /// Master device = Modbus Slave/Server (responds to requests)
@@ -11,7 +13,7 @@ use std::time::Duration;
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let _binary = ci_utils::build_debug_bin("aoba")?;
 
     let temp_dir = std::env::temp_dir();
 
@@ -20,21 +22,7 @@ pub fn test_master_slave_communication() -> Result<()> {
     let server_output = temp_dir.join("server_output.log");
     let server_output_file = File::create(&server_output)?;
 
-    let mut server = Command::new(&binary)
-        .args([
-            "--slave-listen-persist",
-            "/tmp/vcom1",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-        ])
+    let mut server = create_modbus_command(true, "/tmp/vcom1", true, None)?
         .stdout(Stdio::from(server_output_file))
         .stderr(Stdio::piped())
         .spawn()?;
@@ -76,26 +64,15 @@ pub fn test_master_slave_communication() -> Result<()> {
 
     // Now start client (Modbus master) on /tmp/vcom2 in temporary mode
     log::info!("🧪 Starting Modbus client (master) on /tmp/vcom2...");
-    let client_output = Command::new(&binary)
-        .args([
-            "--master-provide",
-            "/tmp/vcom2",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--data-source",
-            &format!("file:{}", data_file.display()),
-            "--baud-rate",
-            "9600",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let client_output = create_modbus_command(
+        false,
+        "/tmp/vcom2",
+        false,
+        Some(&format!("file:{}", data_file.display())),
+    )?
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
 
     // Wait for client to complete (temporary mode exits after one operation)
     let client_result = client_output.wait_with_output()?;
@@ -107,19 +84,22 @@ pub fn test_master_slave_communication() -> Result<()> {
     // Give extra time for ports to be fully released
     thread::sleep(Duration::from_secs(1));
 
-    log::info!("🧪 Client exit status: {}", client_result.status);
     log::info!(
-        "🧪 Client stdout: {}",
-        String::from_utf8_lossy(&client_result.stdout)
+        "🧪 Client exit status: {status}",
+        status = client_result.status
     );
     log::info!(
-        "🧪 Client stderr: {}",
-        String::from_utf8_lossy(&client_result.stderr)
+        "🧪 Client stdout: {stdout}",
+        stdout = String::from_utf8_lossy(&client_result.stdout)
+    );
+    log::info!(
+        "🧪 Client stderr: {stderr}",
+        stderr = String::from_utf8_lossy(&client_result.stderr)
     );
 
     // Read server output
     let server_output_content = std::fs::read_to_string(&server_output).unwrap_or_default();
-    log::info!("🧪 Server output: {}", server_output_content);
+    log::info!("🧪 Server output: {server_output_content}");
 
     // Clean up
     std::fs::remove_file(&data_file)?;
@@ -144,22 +124,10 @@ pub fn test_master_slave_communication() -> Result<()> {
 pub fn test_slave_listen_with_vcom() -> Result<()> {
     log::info!("🧪 Testing slave listen temporary mode with virtual serial ports...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let _binary = ci_utils::build_debug_bin("aoba")?;
 
     // Just verify the command works with virtual ports
-    let output = Command::new(&binary)
-        .args([
-            "--slave-listen",
-            "/tmp/vcom1",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-        ])
+    let output = create_modbus_command(true, "/tmp/vcom1", false, None)?
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn();
@@ -179,8 +147,8 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
             Ok(())
         }
         Err(e) => {
-            log::error!("Failed to spawn slave listen: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn slave listen: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }
@@ -189,7 +157,7 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
 pub fn test_master_provide_with_vcom() -> Result<()> {
     log::info!("🧪 Testing master provide persistent mode with virtual serial ports...");
 
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let _binary = ci_utils::build_debug_bin("aoba")?;
 
     // Create a temporary file with test data
     let temp_dir = std::env::temp_dir();
@@ -200,24 +168,15 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
         writeln!(file, r#"{{"values": [100, 200, 300, 400, 500]}}"#)?;
     }
 
-    let output = Command::new(&binary)
-        .args([
-            "--master-provide-persist",
-            "/tmp/vcom2",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--data-source",
-            &format!("file:{}", data_file.display()),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
+    let output = create_modbus_command(
+        false,
+        "/tmp/vcom2",
+        true,
+        Some(&format!("file:{}", data_file.display())),
+    )?
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn();
 
     match output {
         Ok(mut child) => {
@@ -238,8 +197,8 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
         }
         Err(e) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide persist: {}", e);
-            Err(anyhow!("Failed to spawn: {}", e))
+            log::error!("Failed to spawn master provide persist: {e}");
+            Err(anyhow!("Failed to spawn: {e}"))
         }
     }
 }

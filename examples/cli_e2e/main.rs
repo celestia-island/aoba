@@ -1,4 +1,5 @@
 mod tests;
+mod utils;
 
 use anyhow::Result;
 use std::process::Command;
@@ -55,17 +56,25 @@ fn main() -> Result<()> {
         log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
         // Run each E2E test with fresh port initialization
-        log::info!("🧪 Test 1/3: Slave listen with virtual ports");
+        log::info!("🧪 Test 1/5: Slave listen with virtual ports");
         setup_virtual_serial_ports()?;
         tests::test_slave_listen_with_vcom()?;
 
-        log::info!("🧪 Test 2/3: Master provide with virtual ports");
+        log::info!("🧪 Test 2/5: Master provide with virtual ports");
         setup_virtual_serial_ports()?;
         tests::test_master_provide_with_vcom()?;
 
-        log::info!("🧪 Test 3/3: Master-slave communication");
+        log::info!("🧪 Test 3/5: Master-slave communication");
         setup_virtual_serial_ports()?;
         tests::test_master_slave_communication()?;
+
+        log::info!("🧪 Test 4/5: Continuous connection with files");
+        setup_virtual_serial_ports()?;
+        tests::test_continuous_connection_with_files()?;
+
+        log::info!("🧪 Test 5/5: Continuous connection with pipes");
+        setup_virtual_serial_ports()?;
+        tests::test_continuous_connection_with_pipes()?;
     } else {
         log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
     }

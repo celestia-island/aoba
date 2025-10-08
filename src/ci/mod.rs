@@ -1,15 +1,16 @@
-//! Test CI helpers (hidden from docs)
-#![doc(hidden)]
+//! Re-export test CI utilities from the workspace examples/ci_utils crate
+//! so example tests can import `aoba::ci::...`.
 
-pub mod auto_cursor;
-pub mod key_input;
-pub mod log_utils;
-pub mod snapshot;
-pub mod terminal;
-pub mod utils;
+pub use ci_utils::auto_cursor;
+pub use ci_utils::key_input;
+pub use ci_utils::log_utils;
+pub use ci_utils::snapshot;
+pub use ci_utils::terminal;
+pub use ci_utils::utils;
 
-pub use auto_cursor::{execute_cursor_actions, CursorAction};
-pub use key_input::{ArrowKey, ExpectKeyExt};
-pub use snapshot::TerminalCapture;
-pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
-pub use utils::*;
+pub use ci_utils::should_run_vcom_tests;
+pub use ci_utils::sleep_a_while;
+pub use ci_utils::{
+    build_debug_bin, execute_cursor_actions, run_binary_sync, spawn_expect_process, ArrowKey,
+    CursorAction, ExpectKeyExt, TerminalCapture,
+};
