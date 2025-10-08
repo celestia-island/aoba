@@ -249,7 +249,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 
     // Log some entries from the log file for debugging
     if received_values.is_empty() {
-        log::warn!("⚠️ No values found in TUI log. Dumping last 20 lines of log:");
+        log::error!("❌ No values found in TUI log. Dumping last 20 lines of log:");
         if let Ok(content) = std::fs::read_to_string(tui_log_path) {
             for line in content
                 .lines()
@@ -259,9 +259,12 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
                 .iter()
                 .rev()
             {
-                log::warn!("  {line}");
+                log::error!("  {line}");
             }
         }
+        return Err(anyhow!(
+            "No values found in TUI log file - TUI slave did not receive any data from CLI master"
+        ));
     }
 
     // Verify that at least some expected values were received
@@ -286,11 +289,14 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     }
 
     if found_count == 0 {
-        log::warn!("⚠️ No expected value sets were found in TUI logs");
-        log::warn!("   Received value sets from log:");
+        log::error!("❌ No expected value sets were found in TUI logs");
+        log::error!("   Received value sets from log:");
         for (i, received) in received_values.iter().enumerate() {
-            log::warn!("     Set {}: {received:?}", i + 1);
+            log::error!("     Set {}: {received:?}", i + 1);
         }
+        return Err(anyhow!(
+            "None of the expected value sets were found in TUI log - data mismatch between CLI master and TUI slave"
+        ));
     } else {
         log::info!(
             "✅ Found {found_count}/{} expected value sets in TUI log",
