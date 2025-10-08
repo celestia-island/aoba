@@ -1,13 +1,13 @@
 // Test CLI Master (Slave/Server) with TUI Slave (Master/Client) - Continuous mode
 // This test performs continuous random data updates in CLI Master and verifies TUI Slave polls them correctly
-// Tests all 4 register types: holding, input, coils, discrete
+// Uses log file analysis for data verification while keeping TUI interaction tests
 
 use anyhow::{anyhow, Result};
 use rand::Rng;
 use regex::Regex;
 use std::{
     fs::File,
-    io::Write,
+    io::{BufRead, BufReader, Write},
     process::{Command, Stdio},
     thread,
     time::Duration,
@@ -32,6 +32,41 @@ fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
     }
 }
 
+/// Parse TUI log file for received register values
+fn parse_tui_log_for_values(log_path: &str, register_mode: &str) -> Result<Vec<Vec<u16>>> {
+    let file = File::open(log_path)?;
+    let reader = BufReader::new(file);
+    let mut result = Vec::new();
+    
+    // Pattern to match log entries like "Received holding registers (BE 0,1): [1234, 5678]"
+    let pattern_str = match register_mode {
+        "holding" => r"Received holding registers.*?: \[(.*?)\]",
+        "coils" => r"Received coils: \[(.*?)\]",
+        _ => return Err(anyhow!("Unsupported register mode for log parsing: {}", register_mode)),
+    };
+    
+    let pattern = Regex::new(pattern_str)?;
+    
+    for line in reader.lines() {
+        let line = line?;
+        if let Some(captures) = pattern.captures(&line) {
+            if let Some(values_str) = captures.get(1) {
+                // Parse the comma-separated values
+                let values: Vec<u16> = values_str
+                    .as_str()
+                    .split(',')
+                    .filter_map(|s| s.trim().parse::<u16>().ok())
+                    .collect();
+                if !values.is_empty() {
+                    result.push(values);
+                }
+            }
+        }
+    }
+    
+    Ok(result)
+}
+
 /// Test CLI Master with TUI Slave - Continuous mode
 /// This test runs continuous random updates from CLI and verifies TUI receives them
 pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> Result<()> {
@@ -52,8 +87,14 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     log::info!("✓ Virtual COM ports verified");
 
     // Determine if this is a coil type register
-    let is_coil = register_mode == "coils" || register_mode == "discrete";
+    let is_coil = register_mode == "coils";
     let register_length = if is_coil { 8 } else { 6 };
+
+    // Clear TUI log file before starting
+    let tui_log_path = "/tmp/tui_e2e.log";
+    if std::path::Path::new(tui_log_path).exists() {
+        std::fs::remove_file(tui_log_path)?;
+    }
 
     // Prepare data file for CLI master
     log::info!("🧪 Step 1: Prepare test data file with multiple random updates");
@@ -167,74 +208,51 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
         log::info!("  Waiting... ({}/5)", i + 1);
     }
 
-    // Check received values in TUI multiple times to capture updates
-    log::info!("🧪 Step 9: Check received values in TUI");
-    let mut captured_values = Vec::new();
-    for attempt in 0..3 {
-        log::info!("  Capture attempt {}/3", attempt + 1);
-        match capture_tui_values(&mut tui_session, &mut tui_cap).await {
-            Ok(values) => {
-                log::info!("  Captured: {values:?}");
-                captured_values.push(values);
-            }
-            Err(e) => {
-                log::warn!("  Capture failed: {e}");
-            }
+    // Parse TUI log file for received values
+    log::info!("🧪 Step 9: Verify data from TUI log file");
+    let tui_log_path = "/tmp/tui_e2e.log";
+    let received_values = parse_tui_log_for_values(tui_log_path, register_mode)?;
+    log::info!("Found {} value sets in TUI log", received_values.len());
+    
+    // Verify that at least some expected values were received
+    let mut found_count = 0;
+    for (i, expected) in all_expected_values.iter().enumerate() {
+        let found = received_values.iter().any(|received| {
+            // Check if all expected values appear in the received set
+            expected.iter().all(|exp_val| received.contains(exp_val))
+        });
+        if found {
+            log::info!("✅ Expected value set {} found in logs: {expected:?}", i + 1);
+            found_count += 1;
+        } else {
+            log::warn!("⚠️ Expected value set {} NOT found in logs: {expected:?}", i + 1);
         }
-        thread::sleep(Duration::from_secs(2));
     }
 
-    // Verify that at least some values were captured and they're not all zeros
-    log::info!("🧪 Step 10: Verify captured values");
-
-    if captured_values.is_empty() {
-        log::warn!("⚠️ No values captured from TUI display");
+    if found_count == 0 {
+        log::warn!("⚠️ No expected value sets were found in TUI logs");
+        log::warn!("   Received value sets from log:");
+        for (i, received) in received_values.iter().enumerate() {
+            log::warn!("     Set {}: {received:?}", i + 1);
+        }
     } else {
-        // Check if we captured any non-zero values (indicates data is being received)
-        let has_non_zero = captured_values
-            .iter()
-            .any(|vals| vals.iter().any(|&v| v != 0));
+        log::info!(
+            "✅ Found {found_count}/{} expected value sets in TUI log",
+            all_expected_values.len()
+        );
+    }
 
-        if has_non_zero {
-            log::info!("✅ Successfully captured non-zero values from TUI, indicating data flow");
-            log::info!("   Captured value samples: {:?}", &captured_values[0]);
-        } else {
-            log::warn!("⚠️ All captured values are zero - may indicate no data flow");
-            log::warn!("   This could be a timing issue or display format issue");
-        }
-
-        // Try to find if any of the expected values appear in captured data
-        let mut found_count = 0;
-        for expected in &all_expected_values {
-            // Check if this exact sequence appears in any capture
-            let found = captured_values.iter().any(|captured| {
-                // Check if all expected values appear in the captured set (order-independent)
-                expected.iter().all(|exp_val| captured.contains(exp_val))
-            });
-            if found {
-                found_count += 1;
-                log::info!("✅ Found expected value set: {expected:?}");
-            }
-        }
-
-        if found_count > 0 {
-            log::info!(
-                "✅ Found {found_count}/{total} expected value sets in TUI captures",
-                found_count = found_count,
-                total = all_expected_values.len()
-            );
-        } else {
-            log::warn!("⚠️ Expected values not found in captures");
-            log::warn!("   Expected value sets:");
-            for (i, expected) in all_expected_values.iter().enumerate() {
-                log::warn!("     Set {idx}: {expected:?}", idx = i + 1);
-            }
-            log::warn!("   Captured values:");
-            for (i, captured) in captured_values.iter().enumerate() {
-                log::warn!("     Capture {idx}: {capt:?}", idx = i + 1, capt = captured);
-            }
-            log::warn!("   Note: This may be due to display format differences or timing");
-        }
+    // Capture screen to verify both register display and log panel
+    log::info!("🧪 Step 10: Capture screen to verify display consistency");
+    let screen = tui_cap.capture(&mut tui_session, "final_screen")?;
+    log::info!("📸 Final screen captured");
+    
+    // Verify screen shows some activity (non-zero values)
+    let has_values = screen.contains("0x") && !screen.lines().all(|l| l.contains("0x0000"));
+    if has_values {
+        log::info!("✅ Screen shows register values (hex patterns found)");
+    } else {
+        log::warn!("⚠️ Screen may not show expected values");
     }
 
     // Cleanup
@@ -450,52 +468,6 @@ async fn enable_port<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> R
 }
 
 /// Capture current values from TUI Modbus panel
-async fn capture_tui_values<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<Vec<u16>> {
-    // Navigate to Modbus panel
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 2,
-        },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_modbus_panel").await?;
-
-    // Capture screen
-    let screen = cap.capture(session, "modbus_panel_values")?;
-
-    // Exit back
-    let actions = vec![CursorAction::PressEscape];
-    execute_cursor_actions(session, cap, &actions, "exit_modbus_panel").await?;
-
-    // Parse values from screen
-    let mut values = Vec::new();
-
-    // Look for hex patterns like 0x0000, 0x0001, etc.
-    // Move regex compilation outside the loop to avoid recompiling it repeatedly
-    let hex_pattern = regex::Regex::new(r"0x([0-9A-Fa-f]{4})")?;
-    for line in screen.lines() {
-        // Try to find hex values in the format 0xXXXX
-        for cap in hex_pattern.captures_iter(line) {
-            if let Some(hex_str) = cap.get(1) {
-                if let Ok(val) = u16::from_str_radix(hex_str.as_str(), 16) {
-                    values.push(val);
-                }
-            }
-        }
-    }
-
-    if values.is_empty() {
-        Err(anyhow!("No values found in TUI display"))
-    } else {
-        Ok(values)
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     env_logger::builder()
