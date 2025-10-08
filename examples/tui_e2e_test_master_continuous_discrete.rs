@@ -658,27 +658,10 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    log::info!("🧪 Running TUI E2E Continuous Tests: TUI Master + CLI Slave");
-
-    // Test all 4 register modes
-    let register_modes = ["holding", "input", "coils", "discrete"];
-
-    for mode in &register_modes {
-        log::info!("\n========== Testing register mode: {mode} ==========\n");
-        match test_tui_master_continuous_with_cli_slave(mode).await {
-            Ok(_) => {
-                log::info!("✅ Test passed for mode: {mode}");
-            }
-            Err(e) => {
-                log::error!("❌ Test failed for mode {mode}: {e}");
-                return Err(e);
-            }
-        }
-
-        // Wait between tests to ensure ports are released
-        sleep_a_while().await;
-    }
-
-    log::info!("\n✅ All TUI Master continuous tests passed!");
+    log::info!("🧪 Running TUI E2E Continuous Test: TUI Master + CLI Slave (discrete inputs)");
+    
+    test_tui_master_continuous_with_cli_slave("discrete").await?;
+    
+    log::info!("\n✅ TUI Master continuous test passed for discrete inputs!");
     Ok(())
 }
