@@ -441,10 +441,10 @@ async fn configure_tui_master<T: Expect>(
     // Set initial register values
     log::info!("Setting initial register values: {initial_values:?}");
     for (i, &val) in initial_values.iter().enumerate() {
-        let hex_val = format!("{val:X}");
+        let dec_val = format!("{val}");  // Format as decimal, not hex
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::TypeString(hex_val),
+            CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{i}")).await?;
@@ -459,52 +459,9 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Exit Modbus settings
+    // Exit Modbus settings - stay where we are, don't navigate back
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
-
-    // Check if we need to navigate back to vcom1 details
-    let screen = cap.capture(session, "after_exit")?;
-    if !screen.contains("Enable Port") {
-        // Navigate back to vcom1
-        let vcom_pattern =
-            std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
-        let lines: Vec<&str> = screen.lines().collect();
-        let mut vcom1_line = None;
-        let mut cursor_line = None;
-
-        for (idx, line) in lines.iter().enumerate() {
-            if line.contains(&vcom_pattern) {
-                vcom1_line = Some(idx);
-            }
-            if line.contains("> ") {
-                let trimmed = line.trim();
-                if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
-                    cursor_line = Some(idx);
-                }
-            }
-        }
-
-        if let (Some(vcom1_idx), Some(curr_idx)) = (vcom1_line, cursor_line) {
-            if vcom1_idx != curr_idx {
-                let delta = vcom1_idx.abs_diff(curr_idx);
-                let direction = if vcom1_idx > curr_idx {
-                    aoba::ci::ArrowKey::Down
-                } else {
-                    aoba::ci::ArrowKey::Up
-                };
-
-                let actions = vec![CursorAction::PressArrow {
-                    direction,
-                    count: delta,
-                }];
-                execute_cursor_actions(session, cap, &actions, "nav_back_to_vcom1").await?;
-            }
-        }
-
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
-        execute_cursor_actions(session, cap, &actions, "reenter_vcom1").await?;
-    }
 
     log::info!("✓ Master configuration complete");
     Ok(())
@@ -583,10 +540,10 @@ async fn update_tui_registers<T: Expect>(
 
     // Update each register value
     for (i, &val) in new_values.iter().enumerate() {
-        let hex_val = format!("{val:X}");
+        let dec_val = format!("{val}");  // Format as decimal, not hex
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::TypeString(hex_val),
+            CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
         ];
         execute_cursor_actions(session, cap, &actions, &format!("update_reg_{i}")).await?;
@@ -601,7 +558,7 @@ async fn update_tui_registers<T: Expect>(
         }
     }
 
-    // Exit back to port details
+    // Exit - stay where we are, don't navigate back
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
 
