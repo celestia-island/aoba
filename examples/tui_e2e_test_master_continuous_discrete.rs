@@ -98,6 +98,36 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     )
     .await?;
 
+    // After configuration, we need to restart the daemon to load the new config
+    // Exit the Modbus panel and toggle the port
+    log::info!("🧪 Step 5.5: Restart daemon to apply configuration");
+    let actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "exit_modbus_panel").await?;
+
+    // Disable the port (we should be back at port details or port list)
+    let screen = tui_cap.capture(&mut tui_session, "after_exit_modbus")?;
+    if screen.contains("COM Ports") {
+        // We're at the port list, need to enter vcom1 again
+        log::info!("Re-entering vcom1 from port list");
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
+        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_vcom1_again").await?;
+    }
+
+    // Now toggle the port (disable then re-enable)
+    let actions = vec![
+        CursorAction::PressEnter, // Toggle to Disabled
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter, // Toggle back to Enabled
+        CursorAction::Sleep { ms: 1500 },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "toggle_port_to_apply_config").await?;
+    log::info!("✓ Port restarted with new configuration");
+
     // Wait for port initialization
     log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
     // Need to wait longer for the Modbus daemon to actually start listening

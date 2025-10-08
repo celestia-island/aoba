@@ -81,12 +81,8 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 3: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Enable the port FIRST (before configuration)
-    log::info!("🧪 Step 4: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Configure TUI as Master with initial values (AFTER enabling port)
-    log::info!("🧪 Step 5: Configure TUI as Master (mode: {register_mode})");
+    // Configure TUI as Master with initial values (while port is DISABLED)
+    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
     let initial_values = generate_random_data(register_length, is_coil);
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
@@ -97,6 +93,10 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         &initial_values,
     )
     .await?;
+
+    // Now enable the port - daemon will start with the configuration we just set
+    log::info!("🧪 Step 5: Enable the port with configuration applied");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Wait for port initialization
     log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
@@ -459,9 +459,37 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Configuration complete - no need to exit the panel
-    // The test can continue with the panel open or just terminate
-    log::info!("✓ Master configuration complete (staying in panel)");
+    // Exit Modbus settings to return to port details page for enabling
+    log::info!("Exiting Modbus settings...");
+    let actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 800 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
+
+    // Check where we are after exit
+    let screen_after_exit = cap.capture(session, "after_exit_modbus")?;
+    if screen_after_exit.contains("COM Ports") || !screen_after_exit.contains("Enable Port") {
+        // We're either at port list or still in Modbus panel
+        if !screen_after_exit.contains("Protocol Mode") && !screen_after_exit.contains("Enable Port") {
+            // Still in Modbus panel or somewhere else, press Escape one more time
+            log::warn!("Not at expected location, pressing Escape again");
+            let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
+            execute_cursor_actions(session, cap, &actions, "exit_again").await?;
+        }
+        
+        // Now we should be at port list, re-enter vcom1
+        log::info!("Re-entering vcom1 port");
+        let actions = vec![
+            CursorAction::PressEnter, // Enter the vcom1 port
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "enter_vcom1_port").await?;
+    }
+
+    log::info!("✓ Master configuration complete");
     Ok(())
 }
 
