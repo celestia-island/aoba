@@ -81,8 +81,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 3: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure TUI as Master with initial values (BEFORE enabling port)
-    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
+    // Enable the port FIRST (before configuration)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure TUI as Master with initial values (AFTER enabling port)
+    log::info!("🧪 Step 5: Configure TUI as Master (mode: {register_mode})");
     let initial_values = generate_random_data(register_length, is_coil);
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
@@ -93,10 +97,6 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         &initial_values,
     )
     .await?;
-
-    // Enable the port (AFTER configuration is complete)
-    log::info!("🧪 Step 5: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Wait for port initialization
     log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
@@ -459,31 +459,9 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Navigate up away from register fields before exiting
-    // First, ensure we're not in edit mode, then navigate to a non-editable field
-    log::info!("Navigating away from register fields before exiting");
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 5, // Navigate well up to Connection Mode or Create Station
-        },
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "nav_away_from_registers").await?;
-
-    // Exit Modbus settings - press Escape TWICE to properly return to port details page
-    // First Escape: deselect current item in the panel
-    // Second Escape: leave the Modbus panel back to port details
-    log::info!("Exiting Modbus settings panel...");
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
-
-    log::info!("✓ Master configuration complete");
+    // Configuration complete - no need to exit the panel
+    // The test can continue with the panel open or just terminate
+    log::info!("✓ Master configuration complete (staying in panel)");
     Ok(())
 }
 
@@ -537,22 +515,17 @@ async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // Navigate to Business Configuration (2 down from Enable Port)
+    // We're already in the Modbus panel from initial configuration
+    // Navigate up to the top of the panel, then down to the first register
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 2,
+            direction: aoba::ci::ArrowKey::Up,
+            count: 10, // Go way up to ensure we're at the top
         },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_modbus_for_update").await?;
-
-    // Navigate to first register (station should be selected, go down to registers)
-    let actions = vec![
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
-            count: 6,
+            count: 6, // Then down to first register
         },
         CursorAction::Sleep { ms: 300 },
     ];
@@ -579,26 +552,8 @@ async fn update_tui_registers<T: Expect>(
         }
     }
 
-    // Navigate up away from register fields before exiting
-    // Navigate to a non-editable field
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 5, // Navigate well up to Connection Mode or Create Station
-        },
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "nav_away_from_registers_update").await?;
-
-    // Exit - press Escape TWICE to properly return to port details page
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
-
+    // No need to exit - stay in the panel for next update or test completion
+    log::info!("✓ Register values updated (staying in panel)");
     Ok(())
 }
 

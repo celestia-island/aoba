@@ -81,8 +81,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 3: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure TUI as Master with initial values (BEFORE enabling port)
-    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
+    // Enable the port FIRST (before configuration)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure TUI as Master with initial values (AFTER enabling port)
+    log::info!("🧪 Step 5: Configure TUI as Master (mode: {register_mode})");
     let initial_values = generate_random_data(register_length, is_coil);
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
@@ -93,10 +97,6 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         &initial_values,
     )
     .await?;
-
-    // Enable the port (AFTER configuration is complete)
-    log::info!("🧪 Step 5: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Wait for port initialization
     log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
@@ -459,44 +459,9 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Exit Modbus settings - press Escape twice
-    // First Escape moves up from register values
-    // Second Escape exits the panel
-    log::info!("Exiting Modbus settings panel...");
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 800 },
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
-
-    // After Escape, check where we are
-    let screen_after_exit = cap.capture(session, "after_exit_modbus")?;
-    log::info!("📸 After exiting Modbus:\\n{screen_after_exit}");
-
-    if screen_after_exit.contains("COM Ports") {
-        log::info!("Went back to port list, re-entering vcom1");
-        let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
-        let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::MatchPattern {
-                pattern: vcom_pattern_regex,
-                description: "Re-entered vcom1 port details".to_string(),
-                line_range: Some((0, 3)),
-                col_range: None,
-            },
-        ];
-        execute_cursor_actions(session, cap, &actions, "reenter_vcom1").await?;
-        log::info!("✓ Re-entered vcom1 port details");
-    } else if screen_after_exit.contains("Enable Port") {
-        log::info!("✓ Already at port details page");
-    } else {
-        return Err(anyhow!("Unexpected screen after exiting Modbus settings"));
-    }
-
-    log::info!("✓ Master configuration complete");
+    // Configuration complete - no need to exit the panel
+    // The test can continue with the panel open or just terminate
+    log::info!("✓ Master configuration complete (staying in panel)");
     Ok(())
 }
 
@@ -550,22 +515,17 @@ async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // Navigate to Business Configuration (2 down from Enable Port)
+    // We're already in the Modbus panel from initial configuration
+    // Navigate up to the top of the panel, then down to the first register
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 2,
+            direction: aoba::ci::ArrowKey::Up,
+            count: 10, // Go way up to ensure we're at the top
         },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_modbus_for_update").await?;
-
-    // Navigate to first register (station should be selected, go down to registers)
-    let actions = vec![
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
-            count: 6,
+            count: 6, // Then down to first register
         },
         CursorAction::Sleep { ms: 300 },
     ];
@@ -592,34 +552,8 @@ async fn update_tui_registers<T: Expect>(
         }
     }
 
-    // Exit - press Escape twice
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 800 },
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
-
-    // Check where we are and navigate back if needed
-    let screen_after_exit = cap.capture(session, "after_exit_update")?;
-    if screen_after_exit.contains("COM Ports") {
-        let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
-        let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::MatchPattern {
-                pattern: vcom_pattern_regex,
-                description: "Re-entered vcom1 port details".to_string(),
-                line_range: Some((0, 3)),
-                col_range: None,
-            },
-        ];
-        execute_cursor_actions(session, cap, &actions, "reenter_vcom1_after_update").await?;
-    }
-        execute_cursor_actions(session, cap, &actions, "reenter_vcom1_after_update").await?;
-    }
-
+    // No need to exit - stay in the panel for next update or test completion
+    log::info!("✓ Register values updated (staying in panel)");
     Ok(())
 }
 
