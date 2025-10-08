@@ -445,6 +445,7 @@ async fn configure_tui_master<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 }, // Wait for value to be saved
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{i}")).await?;
 
@@ -458,21 +459,42 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Navigate up away from register fields before exiting
-    // This ensures we're not in edit mode when we press Escape
-    log::info!("Navigating away from register fields before exiting");
+    // Exit Modbus settings - press Escape twice
+    // First Escape moves up from register values
+    // Second Escape exits the panel
+    log::info!("Exiting Modbus settings panel...");
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 800 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
     ];
-    execute_cursor_actions(session, cap, &actions, "nav_away_from_registers").await?;
-
-    // Exit Modbus settings - now we should properly return to port details page
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
+
+    // After Escape, check where we are
+    let screen_after_exit = cap.capture(session, "after_exit_modbus")?;
+    log::info!("📸 After exiting Modbus:\\n{screen_after_exit}");
+
+    if screen_after_exit.contains("COM Ports") {
+        log::info!("Went back to port list, re-entering vcom1");
+        let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
+        let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::MatchPattern {
+                pattern: vcom_pattern_regex,
+                description: "Re-entered vcom1 port details".to_string(),
+                line_range: Some((0, 3)),
+                col_range: None,
+            },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reenter_vcom1").await?;
+        log::info!("✓ Re-entered vcom1 port details");
+    } else if screen_after_exit.contains("Enable Port") {
+        log::info!("✓ Already at port details page");
+    } else {
+        return Err(anyhow!("Unexpected screen after exiting Modbus settings"));
+    }
 
     log::info!("✓ Master configuration complete");
     Ok(())
@@ -556,6 +578,7 @@ async fn update_tui_registers<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 }, // Wait for value to be saved
         ];
         execute_cursor_actions(session, cap, &actions, &format!("update_reg_{i}")).await?;
 
@@ -569,20 +592,33 @@ async fn update_tui_registers<T: Expect>(
         }
     }
 
-    // Navigate up away from register fields before exiting
-    // This ensures we're not in edit mode when we press Escape
+    // Exit - press Escape twice
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 800 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
     ];
-    execute_cursor_actions(session, cap, &actions, "nav_away_from_registers_update").await?;
-
-    // Exit - now we should properly return to port details page
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
+
+    // Check where we are and navigate back if needed
+    let screen_after_exit = cap.capture(session, "after_exit_update")?;
+    if screen_after_exit.contains("COM Ports") {
+        let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
+        let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::MatchPattern {
+                pattern: vcom_pattern_regex,
+                description: "Re-entered vcom1 port details".to_string(),
+                line_range: Some((0, 3)),
+                col_range: None,
+            },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reenter_vcom1_after_update").await?;
+    }
+        execute_cursor_actions(session, cap, &actions, "reenter_vcom1_after_update").await?;
+    }
 
     Ok(())
 }

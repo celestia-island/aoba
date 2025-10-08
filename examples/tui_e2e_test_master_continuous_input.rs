@@ -445,6 +445,7 @@ async fn configure_tui_master<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 }, // Wait for value to be saved
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{i}")).await?;
 
@@ -459,19 +460,27 @@ async fn configure_tui_master<T: Expect>(
     }
 
     // Navigate up away from register fields before exiting
-    // This ensures we're not in edit mode when we press Escape
+    // First, ensure we're not in edit mode, then navigate to a non-editable field
     log::info!("Navigating away from register fields before exiting");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Up,
-            count: 1,
+            count: 5, // Navigate well up to Connection Mode or Create Station
         },
         CursorAction::Sleep { ms: 300 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_away_from_registers").await?;
 
-    // Exit Modbus settings - now we should properly return to port details page
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
+    // Exit Modbus settings - press Escape TWICE to properly return to port details page
+    // First Escape: deselect current item in the panel
+    // Second Escape: leave the Modbus panel back to port details
+    log::info!("Exiting Modbus settings panel...");
+    let actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
+    ];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
     log::info!("✓ Master configuration complete");
@@ -556,6 +565,7 @@ async fn update_tui_registers<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 }, // Wait for value to be saved
         ];
         execute_cursor_actions(session, cap, &actions, &format!("update_reg_{i}")).await?;
 
@@ -570,18 +580,23 @@ async fn update_tui_registers<T: Expect>(
     }
 
     // Navigate up away from register fields before exiting
-    // This ensures we're not in edit mode when we press Escape
+    // Navigate to a non-editable field
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Up,
-            count: 1,
+            count: 5, // Navigate well up to Connection Mode or Create Station
         },
         CursorAction::Sleep { ms: 300 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_away_from_registers_update").await?;
 
-    // Exit - now we should properly return to port details page
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
+    // Exit - press Escape TWICE to properly return to port details page
+    let actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
+    ];
     execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
 
     Ok(())
