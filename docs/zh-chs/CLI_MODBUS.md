@@ -109,6 +109,85 @@ aoba --master-provide-persist /dev/ttyUSB0 \
 
 每行代表一次要发送给从站的更新。
 
+#### 使用文件作为数据源
+
+```bash
+aoba --master-provide-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-address 0 \
+  --register-length 5 \
+  --register-mode holding \
+  --data-source file:/path/to/data.json \
+  --baud-rate 9600
+```
+
+#### 使用 Unix 命名管道作为数据源
+
+Unix 命名管道（FIFO）可用于实时数据流传输：
+
+```bash
+# 创建命名管道
+mkfifo /tmp/modbus_input
+
+# 在一个终端中启动主站
+aoba --master-provide-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-address 0 \
+  --register-length 5 \
+  --register-mode holding \
+  --data-source pipe:/tmp/modbus_input \
+  --baud-rate 9600
+
+# 在另一个终端中写入数据
+echo '{"values": [10, 20, 30, 40, 50]}' > /tmp/modbus_input
+```
+
+### 输出目标
+
+对于从站模式，可以指定输出目标：
+
+#### 输出到标准输出（默认）
+
+```bash
+aoba --slave-listen-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-address 0 \
+  --register-length 5 \
+  --register-mode holding \
+  --baud-rate 9600
+```
+
+#### 输出到文件（追加模式）
+
+```bash
+aoba --slave-listen-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-address 0 \
+  --register-length 5 \
+  --register-mode holding \
+  --baud-rate 9600 \
+  --output file:/path/to/output.jsonl
+```
+
+#### 输出到 Unix 命名管道
+
+```bash
+# 创建命名管道
+mkfifo /tmp/modbus_output
+
+# 在一个终端中启动从站
+aoba --slave-listen-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-address 0 \
+  --register-length 5 \
+  --register-mode holding \
+  --baud-rate 9600 \
+  --output pipe:/tmp/modbus_output
+
+# 在另一个终端中读取数据
+cat /tmp/modbus_output
+```
+
 ## 参数
 
 | 参数 | 说明 | 默认值 |
@@ -118,6 +197,7 @@ aoba --master-provide-persist /dev/ttyUSB0 \
 | `--register-length` | 寄存器数量 | 10 |
 | `--register-mode` | 寄存器类型：holding、input、coils、discrete | holding |
 | `--data-source` | 数据源：`file:<path>` 或 `pipe:<name>` | - |
+| `--output` | 输出目标：`file:<path>` 或 `pipe:<name>`（默认：标准输出） | stdout |
 | `--baud-rate` | 串口波特率 | 9600 |
 
 ## 寄存器模式
@@ -126,3 +206,35 @@ aoba --master-provide-persist /dev/ttyUSB0 \
 - `input`: 输入寄存器（只读）
 - `coils`: 线圈（可读写位）
 - `discrete`: 离散输入（只读位）
+
+## 集成测试
+
+集成测试位于 `examples/cli_e2e/`。运行测试：
+
+```bash
+cd examples/cli_e2e
+cargo run
+```
+
+测试验证：
+
+- 带状态的增强端口列表
+- 从站临时监听模式
+- 从站常驻监听模式
+- 主站临时提供模式
+- 主站常驻提供模式
+- 持续连接测试（文件数据源和文件输出）
+- 持续连接测试（Unix 管道数据源和管道输出）
+
+### 持续连接测试
+
+持续连接测试验证主站和从站之间的长时间数据传输：
+
+1. **文件作为数据源和输出**：主站从文件读取数据并发送，从站接收数据并追加写入文件
+2. **Unix 管道作为数据源和输出**：主站从命名管道读取实时数据，从站输出到命名管道
+3. **随机数据生成**：每次测试运行时生成不同的随机数据，确保测试的可靠性
+
+## 未来增强
+
+- 虚拟串口的实时 Modbus 通信测试
+- 额外的寄存器模式支持
