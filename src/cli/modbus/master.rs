@@ -36,7 +36,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
         let port_handle = serialport::new(port, baud_rate)
             .timeout(Duration::from_secs(5))
             .open()
-            .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+            .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -87,7 +87,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(100))
         .open()
-        .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 

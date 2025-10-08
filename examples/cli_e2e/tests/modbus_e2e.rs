@@ -45,9 +45,7 @@ pub fn test_master_slave_communication() -> Result<()> {
             std::fs::remove_file(&server_output)?;
 
             return Err(anyhow!(
-                "Server exited prematurely with status {}: {}",
-                status,
-                stderr
+                "Server exited prematurely with status {status}: {stderr}"
             ));
         }
         None => {

@@ -110,7 +110,7 @@ fn handle_editing_input(
 
                                     if let Some((sender, cmd)) = maybe_cmd {
                                         sender.send(cmd).map_err(|err| {
-                                            anyhow!("Failed to send Reconfigure: {}", err)
+                                            anyhow!("Failed to send Reconfigure: {err}")
                                         })?;
                                     } else {
                                         log::warn!("Failed to apply custom baud: could not acquire write lock for the port");
@@ -449,7 +449,7 @@ fn handle_selector_commit(
                     if let Some((sender, cmd)) = maybe_cmd {
                         sender
                             .send(cmd)
-                            .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                            .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
                     }
                 }
             }
@@ -476,7 +476,7 @@ fn handle_selector_commit(
                 if let Some((sender, cmd)) = maybe_cmd {
                     sender
                         .send(cmd)
-                        .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                        .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
                 }
             }
             types::cursor::ConfigPanelCursor::StopBits => {
@@ -500,7 +500,7 @@ fn handle_selector_commit(
                 if let Some((sender, cmd)) = maybe_cmd {
                     sender
                         .send(cmd)
-                        .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                        .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
                 }
             }
             types::cursor::ConfigPanelCursor::Parity => {
@@ -525,7 +525,7 @@ fn handle_selector_commit(
                 if let Some((sender, cmd)) = maybe_cmd {
                     sender
                         .send(cmd)
-                        .map_err(|err| anyhow!("Failed to send Reconfigure: {}", err))?;
+                        .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
                 }
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {

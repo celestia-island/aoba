@@ -7,21 +7,18 @@ use std::{
     time::Duration,
 };
 
-use rand::Rng;
+use rand::random;
 
 use ci_utils::create_modbus_command;
 
 /// Generate pseudo-random modbus data using rand crate
 fn generate_random_data(length: usize) -> Vec<u16> {
-    let mut rng = rand::thread_rng();
-    (0..length).map(|_| rng.gen_range(0..u16::MAX)).collect()
+    (0..length).map(|_| random::<u16>()).collect()
 }
 
 /// Test continuous connection with file-based data source and file output
 pub fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");
-
-    let _binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
     // Create random data file for master with known test data
@@ -78,9 +75,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
             std::fs::remove_file(&data_file)?;
 
             return Err(anyhow!(
-                "Slave exited prematurely with status {}: {}",
-                status,
-                stderr
+                "Slave exited prematurely with status {status}: {stderr}"
             ));
         }
         None => {
@@ -202,8 +197,6 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 /// Test continuous connection with Unix pipe data source and pipe output
 pub fn test_continuous_connection_with_pipes() -> Result<()> {
     log::info!("🧪 Testing continuous connection with Unix pipe data source and pipe output...");
-
-    let _binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
     // Create named pipes

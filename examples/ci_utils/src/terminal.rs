@@ -56,10 +56,10 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .map_err(|e| anyhow!("Failed to execute cargo build: {}", e))?;
+        .map_err(|e| anyhow!("Failed to execute cargo build: {e}"))?;
 
     if !status.success() {
-        return Err(anyhow!("cargo build failed with status: {}", status));
+        return Err(anyhow!("cargo build failed with status: {status}"));
     }
 
     if !bin_path.exists() {
@@ -117,7 +117,7 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
     };
 
     let session = expectrl::spawn(&cmd_with_env)
-        .map_err(|e| anyhow!("Failed to spawn process via expectrl: {}", e))?;
+        .map_err(|e| anyhow!("Failed to spawn process via expectrl: {e}"))?;
 
     Ok(session)
 }

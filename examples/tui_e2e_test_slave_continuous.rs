@@ -3,7 +3,7 @@
 // Uses log file analysis for data verification while keeping TUI interaction tests
 
 use anyhow::{anyhow, Result};
-use rand::Rng;
+use rand::random;
 use regex::Regex;
 use std::{
     fs::File,
@@ -22,13 +22,14 @@ use aoba::ci::{
 
 /// Generate pseudo-random modbus data using rand crate
 fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
-    let mut rng = rand::thread_rng();
     if is_coil {
         // For coils/discrete, generate only 0 or 1
-        (0..length).map(|_| rng.gen_range(0..=1)).collect()
+        (0..length)
+            .map(|_| if random::<u8>() % 2 == 0 { 0 } else { 1 })
+            .collect()
     } else {
         // For holding/input, generate any u16 value
-        (0..length).map(|_| rng.gen_range(0..=0xFFFF)).collect()
+        (0..length).map(|_| random::<u16>()).collect()
     }
 }
 
@@ -37,16 +38,20 @@ fn parse_tui_log_for_values(log_path: &str, register_mode: &str) -> Result<Vec<V
     let file = File::open(log_path)?;
     let reader = BufReader::new(file);
     let mut result = Vec::new();
-    
+
     // Pattern to match log entries like "Received holding registers (BE 0,1): [1234, 5678]"
     let pattern_str = match register_mode {
         "holding" => r"Received holding registers.*?: \[(.*?)\]",
         "coils" => r"Received coils: \[(.*?)\]",
-        _ => return Err(anyhow!("Unsupported register mode for log parsing: {}", register_mode)),
+        _ => {
+            return Err(anyhow!(
+                "Unsupported register mode for log parsing: {register_mode}"
+            ))
+        }
     };
-    
+
     let pattern = Regex::new(pattern_str)?;
-    
+
     for line in reader.lines() {
         let line = line?;
         if let Some(captures) = pattern.captures(&line) {
@@ -63,7 +68,7 @@ fn parse_tui_log_for_values(log_path: &str, register_mode: &str) -> Result<Vec<V
             }
         }
     }
-    
+
     Ok(result)
 }
 
@@ -149,8 +154,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     match cli_master.try_wait()? {
         Some(status) => {
             return Err(anyhow!(
-                "CLI master exited prematurely with status {}",
-                status
+                "CLI master exited prematurely with status {status}"
             ));
         }
         None => {
@@ -161,7 +165,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     // Spawn TUI process (will be slave on vcom1)
     log::info!("🧪 Step 3: Spawn TUI process");
     let mut tui_session = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
+        .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
     let mut tui_cap = TerminalCapture::new(24, 80);
 
     sleep_a_while().await;
@@ -213,7 +217,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     let tui_log_path = "/tmp/tui_e2e.log";
     let received_values = parse_tui_log_for_values(tui_log_path, register_mode)?;
     log::info!("Found {} value sets in TUI log", received_values.len());
-    
+
     // Verify that at least some expected values were received
     let mut found_count = 0;
     for (i, expected) in all_expected_values.iter().enumerate() {
@@ -222,10 +226,16 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
             expected.iter().all(|exp_val| received.contains(exp_val))
         });
         if found {
-            log::info!("✅ Expected value set {} found in logs: {expected:?}", i + 1);
+            log::info!(
+                "✅ Expected value set {} found in logs: {expected:?}",
+                i + 1
+            );
             found_count += 1;
         } else {
-            log::warn!("⚠️ Expected value set {} NOT found in logs: {expected:?}", i + 1);
+            log::warn!(
+                "⚠️ Expected value set {} NOT found in logs: {expected:?}",
+                i + 1
+            );
         }
     }
 
@@ -246,7 +256,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     log::info!("🧪 Step 10: Capture screen to verify display consistency");
     let screen = tui_cap.capture(&mut tui_session, "final_screen")?;
     log::info!("📸 Final screen captured");
-    
+
     // Verify screen shows some activity (non-zero values)
     let has_values = screen.contains("0x") && !screen.lines().all(|l| l.contains("0x0000"));
     if has_values {
@@ -407,7 +417,7 @@ async fn configure_tui_slave<T: Expect>(
         "input" => 1,
         "coils" => 2,
         "discrete" => 3,
-        _ => return Err(anyhow!("Invalid register mode: {}", register_mode)),
+        _ => return Err(anyhow!("Invalid register mode: {register_mode}")),
     };
 
     if arrow_count > 0 {

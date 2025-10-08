@@ -37,7 +37,7 @@ pub async fn test_tui_master_with_cli_slave() -> Result<()> {
     // Spawn TUI process (will be master on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
+        .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
     let mut tui_cap = TerminalCapture::new(24, 80);
 
     sleep_a_while().await;
@@ -178,8 +178,7 @@ async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture)
 
     if !on_vcom1 {
         return Err(anyhow!(
-            "Failed to navigate to vcom1 - cursor not on vcom1 line ({})",
-            vcom_pattern
+            "Failed to navigate to vcom1 - cursor not on vcom1 line ({vcom_pattern})"
         ));
     }
 

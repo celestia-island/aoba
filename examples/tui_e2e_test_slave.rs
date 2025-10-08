@@ -78,8 +78,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     match cli_master.try_wait()? {
         Some(status) => {
             return Err(anyhow!(
-                "CLI master exited prematurely with status {}",
-                status
+                "CLI master exited prematurely with status {status}"
             ));
         }
         None => {
@@ -90,7 +89,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
     // Spawn TUI process (will be slave on vcom1)
     log::info!("🧪 Step 3: Spawn TUI process");
     let mut tui_session = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
+        .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
     let mut tui_cap = TerminalCapture::new(24, 80);
 
     sleep_a_while().await;

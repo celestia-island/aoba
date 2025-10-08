@@ -3,7 +3,7 @@
 // Tests all 4 register types: holding, input, coils, discrete
 
 use anyhow::{anyhow, Result};
-use rand::Rng;
+use rand::random;
 use regex::Regex;
 use std::{
     process::{Command, Stdio},
@@ -20,13 +20,14 @@ use aoba::ci::{
 
 /// Generate pseudo-random modbus data using rand crate
 fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
-    let mut rng = rand::thread_rng();
     if is_coil {
         // For coils/discrete, generate only 0 or 1
-        (0..length).map(|_| rng.gen_range(0..=1)).collect()
+        (0..length)
+            .map(|_| if random::<u8>() % 2 == 0 { 0 } else { 1 })
+            .collect()
     } else {
         // For holding/input, generate any u16 value
-        (0..length).map(|_| rng.gen_range(0..=0xFFFF)).collect()
+        (0..length).map(|_| random::<u16>()).collect()
     }
 }
 
@@ -56,7 +57,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     // Spawn TUI process (will be master on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {}", err))?;
+        .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
     let mut tui_cap = TerminalCapture::new(24, 80);
 
     sleep_a_while().await;
@@ -139,10 +140,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     // Check if CLI slave is still running
     match cli_slave.try_wait()? {
         Some(status) => {
-            return Err(anyhow!(
-                "CLI slave exited prematurely with status {}",
-                status
-            ));
+            return Err(anyhow!("CLI slave exited prematurely with status {status}"));
         }
         None => {
             log::info!("✅ CLI slave is running");
@@ -186,7 +184,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 11: Capture screen to verify TUI display");
     let screen = tui_cap.capture(&mut tui_session, "final_screen")?;
     log::info!("📸 Final screen captured");
-    
+
     // Verify screen shows register values
     let has_values = screen.contains("0x") && !screen.lines().all(|l| l.contains("0x0000"));
     if has_values {
@@ -219,7 +217,7 @@ async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture)
     let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
 
     if !screen.contains(&vcom_pattern) {
-        return Err(anyhow!("vcom1 ({}) not found in port list", vcom_pattern));
+        return Err(anyhow!("vcom1 ({vcom_pattern}) not found in port list"));
     }
 
     let lines: Vec<&str> = screen.lines().collect();
@@ -332,7 +330,7 @@ async fn configure_tui_master<T: Expect>(
         "input" => 1,
         "coils" => 2,
         "discrete" => 3,
-        _ => return Err(anyhow!("Invalid register mode: {}", register_mode)),
+        _ => return Err(anyhow!("Invalid register mode: {register_mode}")),
     };
 
     if arrow_count > 0 {

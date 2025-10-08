@@ -81,15 +81,15 @@ pub fn start() -> Result<()> {
 
     core_handle
         .join()
-        .map_err(|err| anyhow!("Failed to join core thread: {:?}", err))??;
+        .map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;
     render_handle
         .join()
-        .map_err(|err| anyhow!("Failed to join render thread: {:?}", err))??;
+        .map_err(|err| anyhow!("Failed to join render thread: {err:?}"))??;
 
     input_kill_tx.send(())?;
     input_handle
         .join()
-        .map_err(|err| anyhow!("Failed to join input thread: {:?}", err))??;
+        .map_err(|err| anyhow!("Failed to join input thread: {err:?}"))??;
     Ok(())
 }
 
@@ -177,7 +177,7 @@ fn run_core_thread(
                     // Notify UI to quit and then exit core thread
                     core_tx
                         .send(CoreToUi::Quit)
-                        .map_err(|e| anyhow!("Failed to send Quit to UI core: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to send Quit to UI core: {e}"))?;
                     return Ok(());
                 }
                 UiToCore::Refresh => {
@@ -195,7 +195,7 @@ fn run_core_thread(
                     polling_enabled = true;
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("Failed to send Refreshed event to UI core: {}", e))?;
+                        .map_err(|e| anyhow!("Failed to send Refreshed event to UI core: {e}"))?;
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
@@ -371,7 +371,7 @@ fn run_core_thread(
 
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
                 }
             }
         }
@@ -400,7 +400,7 @@ fn run_core_thread(
 
         core_tx
             .send(CoreToUi::Tick)
-            .map_err(|e| anyhow!("failed to send Tick: {}", e))?;
+            .map_err(|e| anyhow!("failed to send Tick: {e}"))?;
         thread::sleep(Duration::from_millis(50));
     }
 }

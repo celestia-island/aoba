@@ -29,7 +29,7 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
 
     // Check that output contains JSON array
     if !stdout.starts_with('[') && !stdout.contains(']') {
-        return Err(anyhow!("Expected JSON array output, got: {}", stdout));
+        return Err(anyhow!("Expected JSON array output, got: {stdout}"));
     }
 
     // Parse JSON to verify structure
@@ -50,7 +50,7 @@ pub fn test_cli_list_ports_json_with_status() -> Result<()> {
 
                 let status = port.get("status").and_then(|v| v.as_str()).unwrap_or("");
                 if status != "Free" && status != "Occupied" {
-                    return Err(anyhow!("Invalid status value: {}", status));
+                    return Err(anyhow!("Invalid status value: {status}"));
                 }
 
                 log::info!("🧪 Port status field verified: {status}");
