@@ -530,28 +530,21 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    log::info!("🧪 Running TUI E2E Continuous Tests: CLI Master + TUI Slave");
+    log::info!("🧪 Running TUI E2E Continuous Tests: CLI Master + TUI Slave (Coils)");
 
-    // Test only writable register modes (master can only write to holding and coils)
-    // Input and discrete are read-only and cannot be written by master-provide
-    let register_modes = ["holding", "coils"];
-
-    for mode in &register_modes {
-        log::info!("\n========== Testing register mode: {mode} ==========\n");
-        match test_cli_master_continuous_with_tui_slave(mode).await {
-            Ok(_) => {
-                log::info!("✅ Test passed for mode: {mode}");
-            }
-            Err(e) => {
-                log::error!("❌ Test failed for mode {mode}: {e}");
-                return Err(e);
-            }
+    // Test only coils
+    let mode = "coils";
+    log::info!("\n========== Testing register mode: {mode} ==========\n");
+    match test_cli_master_continuous_with_tui_slave(mode).await {
+        Ok(_) => {
+            log::info!("✅ Test passed for mode: {mode}");
         }
-
-        // Wait between tests to ensure ports are released
-        thread::sleep(Duration::from_secs(2));
+        Err(e) => {
+            log::error!("❌ Test failed for mode {mode}: {e}");
+            return Err(e);
+        }
     }
 
-    log::info!("\n✅ All TUI Slave continuous tests passed!");
+    log::info!("\n✅ TUI Slave continuous test (coils) passed!");
     Ok(())
 }

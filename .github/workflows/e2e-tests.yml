@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example: [cli_e2e, tui_e2e_test_master, tui_e2e_test_slave, tui_e2e_test_master_continuous, tui_e2e_test_slave_continuous]
+        example: [cli_e2e, tui_e2e_test_master, tui_e2e_test_slave, tui_e2e_test_master_continuous, tui_e2e_test_slave_continuous_holding, tui_e2e_test_slave_continuous_coils]
 
     steps:
       - uses: actions/checkout@v5
