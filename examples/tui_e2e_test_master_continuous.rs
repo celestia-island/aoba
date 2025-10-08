@@ -178,12 +178,25 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     cli_slave.kill()?;
     cli_slave.wait()?;
 
-    // Verify collected data
-    log::info!("🧪 Step 10: Verify collected data");
+    // Verify collected data from CLI output
+    log::info!("🧪 Step 10: Verify collected data from CLI output");
     verify_continuous_data(&output_file, &all_expected_values, is_coil)?;
 
+    // Capture screen to verify TUI display consistency
+    log::info!("🧪 Step 11: Capture screen to verify TUI display");
+    let screen = tui_cap.capture(&mut tui_session, "final_screen")?;
+    log::info!("📸 Final screen captured");
+    
+    // Verify screen shows register values
+    let has_values = screen.contains("0x") && !screen.lines().all(|l| l.contains("0x0000"));
+    if has_values {
+        log::info!("✅ TUI screen shows register values (hex patterns found)");
+    } else {
+        log::warn!("⚠️ TUI screen may not show expected values");
+    }
+
     // Cleanup
-    log::info!("🧪 Step 11: Cleanup");
+    log::info!("🧪 Step 12: Cleanup");
     let quit_actions = vec![CursorAction::CtrlC];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &quit_actions, "quit_tui").await?;
 

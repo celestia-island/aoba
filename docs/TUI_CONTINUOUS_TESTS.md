@@ -60,8 +60,9 @@ cargo run --example tui_e2e_test_master_continuous
 - Tests writable register types only (holding, coils) - master can only write to these
 - CLI master provides continuous data stream
 - TUI slave automatically polls and updates display
-- Multiple capture attempts to account for timing variations
-- Validates data flow with non-zero value checks
+- **Uses TUI log file (`/tmp/tui_e2e.log`) for data verification** - more reliable than screen scraping
+- Maintains TUI interaction tests for UI validation
+- Screen capture checkpoints to verify display consistency
 
 **Usage**:
 ```bash
@@ -146,10 +147,18 @@ All tests run on Ubuntu with virtual serial ports created by `socat`.
 - Uses `rand` crate for pseudo-random generation
 
 ### Data Verification
-- Master test: Verifies CLI slave output contains expected values
-- Slave test: Captures TUI display and parses hex values
+- **Master test**: Verifies CLI slave JSONL output file contains expected values
+- **Slave test**: Parses TUI log file (`/tmp/tui_e2e.log`) for "Received holding registers" / "Received coils" entries
+- Screen capture checkpoints verify display consistency
 - Accepts partial matches due to timing variations
 - Logs detailed information for debugging
+
+### Why Log-Based Verification?
+The slave test uses TUI log parsing instead of screen scraping because:
+1. **More Reliable**: Log entries have structured format that's easier to parse
+2. **Complete Data**: Logs capture all received values, not just what's visible on screen
+3. **Better Debugging**: Log file can be inspected independently if tests fail
+4. **Maintains UI Tests**: Screen capture still happens at checkpoints for visual verification
 
 ### Error Handling
 - Graceful handling of timing issues
