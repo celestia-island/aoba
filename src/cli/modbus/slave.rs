@@ -338,8 +338,38 @@ fn send_request_and_wait(
             }
             values
         }
-        _ => {
-            return Err(anyhow!("Unsupported register mode for parsing response"));
+        crate::protocol::status::types::modbus::RegisterMode::Coils
+        | crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            // Response format for read coils/discrete inputs:
+            // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
+            if bytes_read < 5 {
+                return Err(anyhow!("Response too short"));
+            }
+
+            let byte_count = response[2] as usize;
+            if bytes_read < 3 + byte_count + 2 {
+                return Err(anyhow!("Incomplete response"));
+            }
+
+            let mut values = Vec::new();
+            // Each byte contains 8 bits (coils/discrete inputs)
+            for byte_idx in 0..byte_count {
+                let byte_val = response[3 + byte_idx];
+                for bit_idx in 0..8 {
+                    if values.len() >= register_length as usize {
+                        break;
+                    }
+                    // Extract bit value (LSB first)
+                    let bit_value = if (byte_val & (1 << bit_idx)) != 0 { 1 } else { 0 };
+                    values.push(bit_value);
+                }
+                if values.len() >= register_length as usize {
+                    break;
+                }
+            }
+            // Truncate to requested length
+            values.truncate(register_length as usize);
+            values
         }
     };
 
