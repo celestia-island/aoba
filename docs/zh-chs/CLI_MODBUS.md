@@ -69,9 +69,7 @@ aoba --slave-listen-persist /dev/ttyUSB0 \
 
 ### 3. 主站提供模式
 
-#### 临时模式
-
-提供一次数据后退出：
+- 临时模式，提供一次数据后退出：
 
 ```bash
 aoba --master-provide /dev/ttyUSB0 \
@@ -85,9 +83,7 @@ aoba --master-provide /dev/ttyUSB0 \
 
 从数据源读取一行，发送数据后退出。
 
-#### 常驻模式
-
-持续提供数据：
+- 常驻模式，持续提供数据：
 
 ```bash
 aoba --master-provide-persist /dev/ttyUSB0 \
@@ -130,26 +126,3 @@ aoba --master-provide-persist /dev/ttyUSB0 \
 - `input`: 输入寄存器（只读）
 - `coils`: 线圈（可读写位）
 - `discrete`: 离散输入（只读位）
-
-## 集成测试
-
-集成测试位于 `examples/cli_e2e_tests/`。运行测试：
-
-```bash
-cd examples/cli_e2e_tests
-cargo run
-```
-
-测试验证：
-
-- 带状态的增强端口列表
-- 从站临时监听模式
-- 从站常驻监听模式
-- 主站临时提供模式
-- 主站常驻提供模式
-
-## 未来增强
-
-- 数据源的命名管道支持（当前已预留接口）
-- 虚拟串口的实时 Modbus 通信测试
-- 额外的寄存器模式支持
