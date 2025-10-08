@@ -49,6 +49,9 @@ jobs:
           sudo scripts/socat_init.sh
 
       - name: Run TUI E2E tests
+        env:
+          AOBATEST_PORT1: /tmp/vcom1
+          AOBATEST_PORT2: /tmp/vcom2
         run: |
           cargo run --example ${{ matrix.example }}
 
