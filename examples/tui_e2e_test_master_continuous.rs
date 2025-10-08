@@ -101,7 +101,9 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Wait for port initialization
     log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
-    sleep_a_while().await;
+    // Need to wait longer for the Modbus daemon to actually start listening
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    log::info!("  Waited 3 seconds for daemon initialization");
 
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
