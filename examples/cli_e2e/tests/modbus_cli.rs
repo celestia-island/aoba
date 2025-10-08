@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Result};
-use std::fs::File;
-use std::io::Write;
-use std::process::{Command, Stdio};
-use std::time::Duration;
+use std::{
+    fs::File,
+    io::Write,
+    process::{Command, Stdio},
+    time::Duration,
+};
 
 /// Test slave listen temporary mode (single response)
 pub fn test_slave_listen_temp() -> Result<()> {

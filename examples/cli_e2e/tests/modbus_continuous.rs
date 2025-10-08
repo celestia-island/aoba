@@ -3,7 +3,6 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
     process::Stdio,
-    thread,
     time::Duration,
 };
 
@@ -58,7 +57,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     .spawn()?;
 
     // Give slave time to start
-    thread::sleep(Duration::from_secs(3));
+    std::thread::sleep(Duration::from_secs(3));
 
     // Check if slave is still running
     match slave.try_wait()? {
@@ -97,7 +96,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 
     // Let them communicate for a bit
     log::info!("🧪 Letting master and slave communicate...");
-    thread::sleep(Duration::from_secs(3));
+    std::thread::sleep(Duration::from_secs(3));
 
     // Kill both processes
     master.kill()?;
@@ -106,7 +105,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     slave.wait()?;
 
     // Give extra time for ports to be released
-    thread::sleep(Duration::from_secs(1));
+    std::thread::sleep(Duration::from_secs(1));
 
     // Verify that slave output file has data
     if !slave_output_file.exists() {
@@ -230,7 +229,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     .spawn()?;
 
     // Give slave time to start
-    thread::sleep(Duration::from_secs(2));
+    std::thread::sleep(Duration::from_secs(2));
 
     // Start master (client) on /tmp/vcom2 with pipe data source
     log::info!("🧪 Starting Modbus master on /tmp/vcom2 with pipe data source...");
@@ -245,11 +244,11 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     .spawn()?;
 
     // Give master time to start and open the pipe
-    thread::sleep(Duration::from_secs(2));
+    std::thread::sleep(Duration::from_secs(2));
 
     // Start a thread to write random data to the input pipe
     let data_pipe_clone = data_pipe.clone();
-    let writer_thread = thread::spawn(move || -> Result<()> {
+    let writer_thread = std::thread::spawn(move || -> Result<()> {
         log::info!("🧪 Writing random data to input pipe...");
         let mut file = std::fs::OpenOptions::new()
             .write(true)
@@ -259,16 +258,16 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
             let values = generate_random_data(5);
             writeln!(file, "{{\"values\": {values:?}}}")?;
             log::info!("🧪 Wrote data line {}: {:?}", i + 1, values);
-            thread::sleep(Duration::from_millis(500));
+            std::thread::sleep(Duration::from_millis(500));
         }
         Ok(())
     });
 
     // Start a thread to read from the output pipe
     let output_pipe_clone = output_pipe.clone();
-    let reader_thread = thread::spawn(move || -> Result<Vec<String>> {
+    let reader_thread = std::thread::spawn(move || -> Result<Vec<String>> {
         log::info!("🧪 Reading from output pipe...");
-        thread::sleep(Duration::from_secs(1)); // Wait for slave to start writing
+        std::thread::sleep(Duration::from_secs(1)); // Wait for slave to start writing
 
         let file = std::fs::File::open(&output_pipe_clone)?;
         let reader = BufReader::new(file);
@@ -298,7 +297,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     slave.wait()?;
 
     // Give extra time for ports to be released
-    thread::sleep(Duration::from_secs(1));
+    std::thread::sleep(Duration::from_secs(1));
 
     // Clean up pipes
     let _ = std::fs::remove_file(&data_pipe);
