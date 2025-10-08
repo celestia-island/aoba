@@ -103,6 +103,41 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
     sleep_a_while().await;
 
+    // Verify TUI master is responding before starting persistent polling
+    log::info!("🧪 Step 6.5: Verify TUI master is responding");
+    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let test_poll = Command::new(&binary)
+        .args([
+            "--slave-poll",
+            "/tmp/vcom2",
+            "--baud-rate",
+            "9600",
+            "--station-id",
+            "1",
+            "--register-mode",
+            register_mode,
+            "--register-address",
+            "0",
+            "--register-length",
+            &register_length.to_string(),
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+    
+    if !test_poll.status.success() {
+        let stderr = String::from_utf8_lossy(&test_poll.stderr);
+        return Err(anyhow!(
+            "TUI master is not responding to test poll. Status: {}, stderr: {}",
+            test_poll.status,
+            stderr
+        ));
+    }
+    
+    let test_output = String::from_utf8_lossy(&test_poll.stdout);
+    log::info!("✅ TUI master responding, test poll output: {}", test_output.trim());
+
     // Prepare output file for CLI slave
     let temp_dir = std::env::temp_dir();
     let output_file = temp_dir.join(format!("tui_master_continuous_{register_mode}.json"));
@@ -112,7 +147,6 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Start CLI slave in persistent mode to continuously poll
     log::info!("🧪 Step 7: Start CLI slave in persistent mode");
-    let binary = aoba::ci::build_debug_bin("aoba")?;
     let mut cli_slave = Command::new(&binary)
         .args([
             "--slave-poll-persist",
