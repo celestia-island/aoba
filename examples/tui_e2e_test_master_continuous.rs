@@ -7,7 +7,6 @@ use rand::random;
 use regex::Regex;
 use std::{
     process::{Command, Stdio},
-    thread,
     time::Duration,
 };
 
@@ -174,7 +173,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         .spawn()?;
 
     // Give CLI slave time to start
-    thread::sleep(Duration::from_secs(2));
+    sleep_a_while().await;
 
     // Check if CLI slave is still running
     match cli_slave.try_wait()? {
@@ -205,7 +204,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         log::info!("--- Iteration {} ---", iteration + 1);
 
         // Wait a bit for previous values to be polled
-        thread::sleep(Duration::from_secs(2));
+        sleep_a_while().await;
 
         // Generate new random values
         let new_values = generate_random_data(register_length, is_coil);
@@ -219,12 +218,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     }
 
     // Wait for final values to be polled
-    thread::sleep(Duration::from_secs(3));
+    sleep_a_while().await;
 
     // Check if output file was created
     if !output_file.exists() {
         log::warn!("⚠️ Output file doesn't exist yet, waiting longer...");
-        thread::sleep(Duration::from_secs(2));
+        sleep_a_while().await;
     }
 
     // Stop CLI slave
@@ -441,7 +440,7 @@ async fn configure_tui_master<T: Expect>(
     // Set initial register values
     log::info!("Setting initial register values: {initial_values:?}");
     for (i, &val) in initial_values.iter().enumerate() {
-        let dec_val = format!("{val}");  // Format as decimal, not hex
+        let dec_val = format!("{val}"); // Format as decimal, not hex
         let actions = vec![
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
@@ -540,7 +539,7 @@ async fn update_tui_registers<T: Expect>(
 
     // Update each register value
     for (i, &val) in new_values.iter().enumerate() {
-        let dec_val = format!("{val}");  // Format as decimal, not hex
+        let dec_val = format!("{val}"); // Format as decimal, not hex
         let actions = vec![
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
@@ -677,7 +676,7 @@ async fn main() -> Result<()> {
         }
 
         // Wait between tests to ensure ports are released
-        thread::sleep(Duration::from_secs(2));
+        sleep_a_while().await;
     }
 
     log::info!("\n✅ All TUI Master continuous tests passed!");

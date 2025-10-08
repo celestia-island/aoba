@@ -9,8 +9,6 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
     process::{Command, Stdio},
-    thread,
-    time::Duration,
 };
 
 use expectrl::Expect;
@@ -150,7 +148,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
         .spawn()?;
 
     // Check if CLI master is still running
-    thread::sleep(Duration::from_secs(2));
+    sleep_a_while().await;
     match cli_master.try_wait()? {
         Some(status) => {
             // CLI master exited - capture stderr for debugging
@@ -170,8 +168,8 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
             } else {
                 String::new()
             };
-            log::error!("CLI master stdout: {}", stdout);
-            log::error!("CLI master stderr: {}", stderr);
+            log::error!("CLI master stdout: {stdout}");
+            log::error!("CLI master stderr: {stderr}");
             return Err(anyhow!(
                 "CLI master exited prematurely with status {status}, stderr: {stderr}"
             ));
@@ -225,11 +223,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 
     // Wait for communication to happen (polls should occur automatically)
     log::info!("🧪 Step 8: Wait for master-slave communication...");
-    // Wait longer to allow multiple polls to happen
-    for i in 0..5 {
-        thread::sleep(Duration::from_secs(2));
-        log::info!("  Waiting... ({}/5)", i + 1);
-    }
+    sleep_a_while().await;
 
     // Parse TUI log file for received values
     log::info!("🧪 Step 9: Verify data from TUI log file");
