@@ -35,7 +35,10 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
             expected_data_lines.push(values);
         }
     }
-    log::info!("🧪 Created test data file with {} lines", expected_data_lines.len());
+    log::info!(
+        "🧪 Created test data file with {} lines",
+        expected_data_lines.len()
+    );
 
     // Create output file for slave
     let slave_output_file = temp_dir.join("test_continuous_slave_output.json");
@@ -152,14 +155,27 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     }
 
     // Verify that all expected input lines were transmitted
-    log::info!("🧪 Verifying that all {} input lines were transmitted...", expected_data_lines.len());
+    log::info!(
+        "🧪 Verifying that all {} input lines were transmitted...",
+        expected_data_lines.len()
+    );
     let mut all_found = true;
     for (i, expected_values) in expected_data_lines.iter().enumerate() {
-        let found = parsed_outputs.iter().any(|output| output == expected_values);
+        let found = parsed_outputs
+            .iter()
+            .any(|output| output == expected_values);
         if found {
-            log::info!("✅ Input line {} found in output: {:?}", i + 1, expected_values);
+            log::info!(
+                "✅ Input line {} found in output: {:?}",
+                i + 1,
+                expected_values
+            );
         } else {
-            log::warn!("⚠️ Input line {} NOT found in output: {:?}", i + 1, expected_values);
+            log::warn!(
+                "⚠️ Input line {} NOT found in output: {:?}",
+                i + 1,
+                expected_values
+            );
             all_found = false;
         }
     }
@@ -170,7 +186,10 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         return Err(anyhow!("Not all input lines were found in the output"));
     }
 
-    log::info!("✅ All {} input lines were successfully transmitted and verified", expected_data_lines.len());
+    log::info!(
+        "✅ All {} input lines were successfully transmitted and verified",
+        expected_data_lines.len()
+    );
 
     // Clean up
     std::fs::remove_file(&data_file)?;

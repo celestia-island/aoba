@@ -50,11 +50,9 @@ fn main() -> Result<()> {
                     let mut direct_dep_names: Vec<String> = Vec::new();
                     for (k, val) in table.iter().take(500) {
                         // Skip local / path dependencies (they are workspace crates and not relevant for external license summary)
-                        if val.is_table() {
-                            if val.get("path").is_some() {
-                                // skip this dependency entirely
-                                continue;
-                            }
+                        if val.is_table() && val.get("path").is_some() {
+                            // skip this dependency entirely
+                            continue;
                         }
 
                         let ver = if val.is_str() {
