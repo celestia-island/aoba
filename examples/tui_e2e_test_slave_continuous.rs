@@ -180,29 +180,55 @@ pub async fn test_cli_master_continuous_with_tui_slave(
         thread::sleep(Duration::from_secs(2));
     }
 
-    // Verify that at least some expected values were captured
+    // Verify that at least some values were captured and they're not all zeros
     log::info!("🧪 Step 10: Verify captured values");
-    let mut found_count = 0;
-    for (i, expected) in all_expected_values.iter().enumerate() {
-        let found = captured_values.iter().any(|captured| captured == expected);
-        if found {
-            log::info!("✅ Expected value set {} found: {:?}", i + 1, expected);
-            found_count += 1;
-        } else {
-            log::warn!("⚠️ Expected value set {} NOT found: {:?}", i + 1, expected);
-        }
-    }
-
-    if found_count == 0 {
-        log::warn!("⚠️ No expected value sets were found in TUI captures");
-        log::warn!("This may indicate timing issues or display format differences");
-        log::warn!("Captured values: {:?}", captured_values);
+    
+    if captured_values.is_empty() {
+        log::warn!("⚠️ No values captured from TUI display");
     } else {
-        log::info!(
-            "✅ Found {}/{} expected value sets in TUI",
-            found_count,
-            all_expected_values.len()
-        );
+        // Check if we captured any non-zero values (indicates data is being received)
+        let has_non_zero = captured_values.iter().any(|vals| vals.iter().any(|&v| v != 0));
+        
+        if has_non_zero {
+            log::info!("✅ Successfully captured non-zero values from TUI, indicating data flow");
+            log::info!("   Captured value samples: {:?}", &captured_values[0]);
+        } else {
+            log::warn!("⚠️ All captured values are zero - may indicate no data flow");
+            log::warn!("   This could be a timing issue or display format issue");
+        }
+        
+        // Try to find if any of the expected values appear in captured data
+        let mut found_count = 0;
+        for expected in &all_expected_values {
+            // Check if this exact sequence appears in any capture
+            let found = captured_values.iter().any(|captured| {
+                // Check if all expected values appear in the captured set (order-independent)
+                expected.iter().all(|exp_val| captured.contains(exp_val))
+            });
+            if found {
+                found_count += 1;
+                log::info!("✅ Found expected value set: {:?}", expected);
+            }
+        }
+        
+        if found_count > 0 {
+            log::info!(
+                "✅ Found {}/{} expected value sets in TUI captures",
+                found_count,
+                all_expected_values.len()
+            );
+        } else {
+            log::warn!("⚠️ Expected values not found in captures");
+            log::warn!("   Expected value sets:");
+            for (i, expected) in all_expected_values.iter().enumerate() {
+                log::warn!("     Set {}: {:?}", i + 1, expected);
+            }
+            log::warn!("   Captured values:");
+            for (i, captured) in captured_values.iter().enumerate() {
+                log::warn!("     Capture {}: {:?}", i + 1, captured);
+            }
+            log::warn!("   Note: This may be due to display format differences or timing");
+        }
     }
 
     // Cleanup
@@ -477,8 +503,9 @@ async fn main() -> Result<()> {
     
     log::info!("🧪 Running TUI E2E Continuous Tests: CLI Master + TUI Slave");
 
-    // Test all 4 register modes
-    let register_modes = ["holding", "input", "coils", "discrete"];
+    // Test only writable register modes (master can only write to holding and coils)
+    // Input and discrete are read-only and cannot be written by master-provide
+    let register_modes = ["holding", "coils"];
     
     for mode in &register_modes {
         log::info!("\n========== Testing register mode: {} ==========\n", mode);

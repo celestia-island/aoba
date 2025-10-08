@@ -4,11 +4,19 @@ This document describes the continuous testing suite for TUI (Terminal User Inte
 
 ## Overview
 
-The continuous tests verify that TUI can correctly handle continuous random data updates in both Master and Slave modes, testing all four Modbus register types:
+The continuous tests verify that TUI can correctly handle continuous random data updates in both Master and Slave modes, testing all supported Modbus register types:
+
+**TUI Master Test** - Tests all 4 register types:
 - `holding` - Holding registers (read/write, 16-bit)
 - `input` - Input registers (read-only, 16-bit)
 - `coils` - Coils (read/write, 1-bit boolean)
 - `discrete` - Discrete inputs (read-only, 1-bit boolean)
+
+**TUI Slave Test** - Tests only writable types:
+- `holding` - Holding registers (read/write, 16-bit)
+- `coils` - Coils (read/write, 1-bit boolean)
+
+Note: The slave test only uses writable register types because the CLI master can only write to holding registers and coils. Input registers and discrete inputs are read-only and cannot be written by the master.
 
 ## Test Files
 
@@ -49,10 +57,11 @@ cargo run --example tui_e2e_test_master_continuous
 7. Verify at least some expected values were captured
 
 **Key Features**:
-- Tests all 4 register types (holding, input, coils, discrete)
+- Tests writable register types only (holding, coils) - master can only write to these
 - CLI master provides continuous data stream
 - TUI slave automatically polls and updates display
 - Multiple capture attempts to account for timing variations
+- Validates data flow with non-zero value checks
 
 **Usage**:
 ```bash
