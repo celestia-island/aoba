@@ -153,8 +153,27 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     thread::sleep(Duration::from_secs(2));
     match cli_master.try_wait()? {
         Some(status) => {
+            // CLI master exited - capture stderr for debugging
+            let stderr = if let Some(mut stderr_handle) = cli_master.stderr.take() {
+                let mut buf = String::new();
+                use std::io::Read;
+                stderr_handle.read_to_string(&mut buf).ok();
+                buf
+            } else {
+                String::new()
+            };
+            let stdout = if let Some(mut stdout_handle) = cli_master.stdout.take() {
+                let mut buf = String::new();
+                use std::io::Read;
+                stdout_handle.read_to_string(&mut buf).ok();
+                buf
+            } else {
+                String::new()
+            };
+            log::error!("CLI master stdout: {}", stdout);
+            log::error!("CLI master stderr: {}", stderr);
             return Err(anyhow!(
-                "CLI master exited prematurely with status {status}"
+                "CLI master exited prematurely with status {status}, stderr: {stderr}"
             ));
         }
         None => {
