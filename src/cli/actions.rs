@@ -125,6 +125,15 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
         return true;
     }
 
+    // Handle modbus slave poll persist (client mode - continuous polling)
+    if let Some(port) = matches.get_one::<String>("slave-poll-persist") {
+        if let Err(e) = super::modbus::slave::handle_slave_poll_persist(matches, port) {
+            eprintln!("Error in slave-poll-persist: {e}");
+            std::process::exit(1);
+        }
+        return true;
+    }
+
     // Handle modbus master provide
     if let Some(port) = matches.get_one::<String>("master-provide") {
         if let Err(e) = super::modbus::master::handle_master_provide(matches, port) {
