@@ -140,7 +140,18 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     // Check if CLI slave is still running
     match cli_slave.try_wait()? {
         Some(status) => {
-            return Err(anyhow!("CLI slave exited prematurely with status {status}"));
+            // CLI slave exited - capture stderr for debugging
+            let stderr = if let Some(mut stderr_handle) = cli_slave.stderr.take() {
+                let mut buf = String::new();
+                use std::io::Read;
+                stderr_handle.read_to_string(&mut buf).ok();
+                buf
+            } else {
+                String::new()
+            };
+            return Err(anyhow!(
+                "CLI slave exited prematurely with status {status}, stderr: {stderr}"
+            ));
         }
         None => {
             log::info!("✅ CLI slave is running");
@@ -171,6 +182,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     // Wait for final values to be polled
     thread::sleep(Duration::from_secs(3));
 
+    // Check if output file was created
+    if !output_file.exists() {
+        log::warn!("⚠️ Output file doesn't exist yet, waiting longer...");
+        thread::sleep(Duration::from_secs(2));
+    }
+
     // Stop CLI slave
     log::info!("🧪 Step 9: Stop CLI slave");
     cli_slave.kill()?;
@@ -178,6 +195,24 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Verify collected data from CLI output
     log::info!("🧪 Step 10: Verify collected data from CLI output");
+    
+    // Check if file exists and has content
+    if !output_file.exists() {
+        return Err(anyhow!(
+            "Output file does not exist: {}. CLI slave may not have successfully polled any data.",
+            output_file.display()
+        ));
+    }
+    
+    let file_size = std::fs::metadata(&output_file)?.len();
+    if file_size == 0 {
+        return Err(anyhow!(
+            "Output file is empty: {}. CLI slave may not have received responses from TUI master.",
+            output_file.display()
+        ));
+    }
+    
+    log::info!("Output file exists with {} bytes", file_size);
     verify_continuous_data(&output_file, &all_expected_values, is_coil)?;
 
     // Capture screen to verify TUI display consistency

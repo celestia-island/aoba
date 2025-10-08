@@ -215,8 +215,28 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     // Parse TUI log file for received values
     log::info!("🧪 Step 9: Verify data from TUI log file");
     let tui_log_path = "/tmp/tui_e2e.log";
+    
+    // Check if log file exists
+    if !std::path::Path::new(tui_log_path).exists() {
+        log::warn!("⚠️ TUI log file doesn't exist at {}", tui_log_path);
+        log::warn!("   TUI may not have logged any data yet");
+    } else {
+        let log_size = std::fs::metadata(tui_log_path)?.len();
+        log::info!("TUI log file exists with {} bytes", log_size);
+    }
+    
     let received_values = parse_tui_log_for_values(tui_log_path, register_mode)?;
     log::info!("Found {} value sets in TUI log", received_values.len());
+    
+    // Log some entries from the log file for debugging
+    if received_values.is_empty() {
+        log::warn!("⚠️ No values found in TUI log. Dumping last 20 lines of log:");
+        if let Ok(content) = std::fs::read_to_string(tui_log_path) {
+            for line in content.lines().rev().take(20).collect::<Vec<_>>().iter().rev() {
+                log::warn!("  {}", line);
+            }
+        }
+    }
 
     // Verify that at least some expected values were received
     let mut found_count = 0;
