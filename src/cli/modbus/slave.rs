@@ -16,7 +16,7 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    
+
     let output_sink = matches
         .get_one::<String>("output")
         .map(|s| s.parse::<OutputSink>())

@@ -11,10 +11,13 @@ fn generate_random_data(length: usize) -> Vec<u16> {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos() as u64;
-    
+
     (0..length)
         .map(|i| {
-            let x = seed.wrapping_add(i as u64).wrapping_mul(1103515245).wrapping_add(12345);
+            let x = seed
+                .wrapping_add(i as u64)
+                .wrapping_mul(1103515245)
+                .wrapping_add(12345);
             ((x / 65536) % 1000) as u16
         })
         .collect()
@@ -33,17 +36,13 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         let mut file = File::create(&data_file)?;
         for _ in 0..5 {
             let values = generate_random_data(5);
-            writeln!(
-                file,
-                "{{\"values\": {:?}}}",
-                values
-            )?;
+            writeln!(file, "{{\"values\": {:?}}}", values)?;
         }
     }
 
     // Create output file for slave
     let slave_output_file = temp_dir.join("test_continuous_slave_output.json");
-    
+
     // Remove output file if it exists
     if slave_output_file.exists() {
         std::fs::remove_file(&slave_output_file)?;
@@ -142,7 +141,11 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     }
 
     let slave_output_content = std::fs::read_to_string(&slave_output_file)?;
-    log::info!("🧪 Slave output ({} bytes):\n{}", slave_output_content.len(), slave_output_content);
+    log::info!(
+        "🧪 Slave output ({} bytes):\n{}",
+        slave_output_content.len(),
+        slave_output_content
+    );
 
     if slave_output_content.trim().is_empty() {
         std::fs::remove_file(&data_file)?;
@@ -252,7 +255,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .open(&data_pipe_clone)?;
-        
+
         for i in 0..5 {
             let values = generate_random_data(5);
             writeln!(file, "{{\"values\": {:?}}}", values)?;
@@ -267,21 +270,21 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     let reader_thread = thread::spawn(move || -> Result<Vec<String>> {
         log::info!("🧪 Reading from output pipe...");
         thread::sleep(Duration::from_secs(1)); // Wait for slave to start writing
-        
+
         let file = std::fs::File::open(&output_pipe_clone)?;
         let reader = BufReader::new(file);
         let mut lines = Vec::new();
-        
+
         for line in reader.lines() {
             let line = line?;
             log::info!("🧪 Read output line: {}", line);
             lines.push(line);
-            
+
             if lines.len() >= 3 {
                 break;
             }
         }
-        
+
         Ok(lines)
     });
 

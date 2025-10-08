@@ -65,7 +65,7 @@ impl OutputSink {
     pub fn write(&self, data: &str) -> Result<()> {
         match self {
             OutputSink::Stdout => {
-                println!("{}", data);
+                println!("{data}");
                 Ok(())
             }
             OutputSink::File(path) => {
@@ -73,14 +73,12 @@ impl OutputSink {
                     .create(true)
                     .append(true)
                     .open(path)?;
-                writeln!(file, "{}", data)?;
+                writeln!(file, "{data}")?;
                 Ok(())
             }
             OutputSink::Pipe(path) => {
-                let mut file = std::fs::OpenOptions::new()
-                    .write(true)
-                    .open(path)?;
-                writeln!(file, "{}", data)?;
+                let mut file = std::fs::OpenOptions::new().write(true).open(path)?;
+                writeln!(file, "{data}")?;
                 Ok(())
             }
         }
