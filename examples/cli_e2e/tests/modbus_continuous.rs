@@ -24,15 +24,18 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     let _binary = ci_utils::build_debug_bin("aoba")?;
     let temp_dir = std::env::temp_dir();
 
-    // Create random data file for master
+    // Create random data file for master with known test data
     let data_file = temp_dir.join("test_continuous_data.json");
+    let mut expected_data_lines = Vec::new();
     {
         let mut file = File::create(&data_file)?;
         for _ in 0..5 {
             let values = generate_random_data(5);
             writeln!(file, "{{\"values\": {values:?}}}")?;
+            expected_data_lines.push(values);
         }
     }
+    log::info!("🧪 Created test data file with {} lines", expected_data_lines.len());
 
     // Create output file for slave
     let slave_output_file = temp_dir.join("test_continuous_slave_output.json");
@@ -129,11 +132,45 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     let lines: Vec<&str> = slave_output_content.lines().collect();
     log::info!("✅ Slave produced {} output lines", lines.len());
 
+    // Parse all output lines and verify they are valid JSON
+    let mut parsed_outputs = Vec::new();
     for (i, line) in lines.iter().enumerate() {
-        if let Err(e) = serde_json::from_str::<serde_json::Value>(line) {
-            log::warn!("⚠️ Line {} is not valid JSON: {}", i + 1, e);
+        match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(json) => {
+                if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
+                    let values_u16: Vec<u16> = values
+                        .iter()
+                        .filter_map(|v| v.as_u64().map(|n| n as u16))
+                        .collect();
+                    parsed_outputs.push(values_u16);
+                }
+            }
+            Err(e) => {
+                log::warn!("⚠️ Line {} is not valid JSON: {}", i + 1, e);
+            }
         }
     }
+
+    // Verify that all expected input lines were transmitted
+    log::info!("🧪 Verifying that all {} input lines were transmitted...", expected_data_lines.len());
+    let mut all_found = true;
+    for (i, expected_values) in expected_data_lines.iter().enumerate() {
+        let found = parsed_outputs.iter().any(|output| output == expected_values);
+        if found {
+            log::info!("✅ Input line {} found in output: {:?}", i + 1, expected_values);
+        } else {
+            log::warn!("⚠️ Input line {} NOT found in output: {:?}", i + 1, expected_values);
+            all_found = false;
+        }
+    }
+
+    if !all_found {
+        std::fs::remove_file(&data_file)?;
+        std::fs::remove_file(&slave_output_file)?;
+        return Err(anyhow!("Not all input lines were found in the output"));
+    }
+
+    log::info!("✅ All {} input lines were successfully transmitted and verified", expected_data_lines.len());
 
     // Clean up
     std::fs::remove_file(&data_file)?;
