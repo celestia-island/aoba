@@ -3,6 +3,7 @@ pub mod slave;
 
 use anyhow::{anyhow, Result};
 use serde::Serialize;
+use std::io::Write;
 
 /// Response structure for modbus operations
 #[derive(Serialize, Clone)]
@@ -32,6 +33,54 @@ impl std::str::FromStr for DataSource {
             Err(anyhow!(
                 "Invalid data source format. Use file:<path> or pipe:<name>"
             ))
+        }
+    }
+}
+
+/// Output sink for slave mode
+pub enum OutputSink {
+    Stdout,
+    File(String),
+    Pipe(String),
+}
+
+impl std::str::FromStr for OutputSink {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(path) = s.strip_prefix("file:") {
+            Ok(OutputSink::File(path.to_string()))
+        } else if let Some(name) = s.strip_prefix("pipe:") {
+            Ok(OutputSink::Pipe(name.to_string()))
+        } else {
+            Err(anyhow!(
+                "Invalid output format. Use file:<path> or pipe:<name>"
+            ))
+        }
+    }
+}
+
+impl OutputSink {
+    /// Write output to the sink
+    pub fn write(&self, data: &str) -> Result<()> {
+        match self {
+            OutputSink::Stdout => {
+                println!("{data}");
+                Ok(())
+            }
+            OutputSink::File(path) => {
+                let mut file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(path)?;
+                writeln!(file, "{data}")?;
+                Ok(())
+            }
+            OutputSink::Pipe(path) => {
+                let mut file = std::fs::OpenOptions::new().write(true).open(path)?;
+                writeln!(file, "{data}")?;
+                Ok(())
+            }
         }
     }
 }
