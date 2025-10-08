@@ -1,4 +1,5 @@
 mod tests;
+mod utils;
 
 use anyhow::Result;
 use std::process::Command;

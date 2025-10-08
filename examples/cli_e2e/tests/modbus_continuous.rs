@@ -1,18 +1,19 @@
 use anyhow::{anyhow, Result};
 use std::{
-    fs::File,
     io::{BufRead, BufReader, Write},
-    process::{Command, Stdio},
+    process::Stdio,
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use rand::Rng;
 
+use crate::utils::create_modbus_command;
+
 /// Generate pseudo-random modbus data using rand crate
 fn generate_random_data(length: usize) -> Vec<u16> {
     let mut rng = rand::thread_rng();
-    (0..length).map(|_| rng.gen_range(0..1000)).collect()
+    (0..length).map(|_| rng.gen_range(0..u16::MAX)).collect()
 }
 
 /// Test continuous connection with file-based data source and file output
@@ -42,26 +43,15 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 
     // Start slave (server) on /tmp/vcom1 in persistent mode with file output
     log::info!("🧪 Starting Modbus slave on /tmp/vcom1 with file output...");
-    let mut slave = Command::new(&binary)
-        .args([
-            "--slave-listen-persist",
-            "/tmp/vcom1",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--output",
-            &format!("file:{}", slave_output_file.display()),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut slave = create_modbus_command(
+        true,
+        "/tmp/vcom1",
+        true,
+        Some(&format!("file:{}", slave_output_file.display())),
+    )?
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
 
     // Give slave time to start
     thread::sleep(Duration::from_secs(3));
@@ -93,26 +83,15 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 
     // Start master (client) on /tmp/vcom2 in persistent mode
     log::info!("🧪 Starting Modbus master on /tmp/vcom2 with file data source...");
-    let mut master = Command::new(&binary)
-        .args([
-            "--master-provide-persist",
-            "/tmp/vcom2",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--data-source",
-            &format!("file:{}", data_file.display()),
-            "--baud-rate",
-            "9600",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut master = create_modbus_command(
+        false,
+        "/tmp/vcom2",
+        true,
+        Some(&format!("file:{}", data_file.display())),
+    )?
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
 
     // Let them communicate for a bit
     log::info!("🧪 Letting master and slave communicate...");
@@ -190,52 +169,30 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
 
     // Start slave (server) on /tmp/vcom1 with pipe output
     log::info!("🧪 Starting Modbus slave on /tmp/vcom1 with pipe output...");
-    let mut slave = Command::new(&binary)
-        .args([
-            "--slave-listen-persist",
-            "/tmp/vcom1",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--output",
-            &format!("pipe:{}", output_pipe.display()),
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut slave = create_modbus_command(
+        true,
+        "/tmp/vcom1",
+        true,
+        Some(&format!("pipe:{}", output_pipe.display())),
+    )?
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
 
     // Give slave time to start
     thread::sleep(Duration::from_secs(2));
 
     // Start master (client) on /tmp/vcom2 with pipe data source
     log::info!("🧪 Starting Modbus master on /tmp/vcom2 with pipe data source...");
-    let mut master = Command::new(&binary)
-        .args([
-            "--master-provide-persist",
-            "/tmp/vcom2",
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            "5",
-            "--register-mode",
-            "holding",
-            "--data-source",
-            &format!("pipe:{}", data_pipe.display()),
-            "--baud-rate",
-            "9600",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut master = create_modbus_command(
+        false,
+        "/tmp/vcom2",
+        true,
+        Some(&format!("pipe:{}", data_pipe.display())),
+    )?
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()?;
 
     // Give master time to start and open the pipe
     thread::sleep(Duration::from_secs(2));
