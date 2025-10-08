@@ -95,6 +95,10 @@ name = "percent-encoding"
 version = "^2"
 
 [[dependencies]]
+name = "rand"
+version = "^0.8"
+
+[[dependencies]]
 name = "ratatui"
 version = "^0.29"
 
@@ -191,6 +195,7 @@ num_enum = "BSD-3-Clause OR MIT OR Apache-2.0"
 once_cell = "MIT OR Apache-2.0"
 oneshot = "MIT OR Apache-2.0"
 percent-encoding = "MIT OR Apache-2.0"
+rand = "MIT OR Apache-2.0"
 ratatui = "MIT"
 regex = "MIT OR Apache-2.0"
 rmodbus = "Apache-2.0"

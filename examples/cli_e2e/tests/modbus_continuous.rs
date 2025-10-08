@@ -1,26 +1,18 @@
 use anyhow::{anyhow, Result};
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
-use std::process::{Command, Stdio};
-use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader, Write},
+    process::{Command, Stdio},
+    thread,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-/// Generate pseudo-random modbus data using timestamp
+use rand::Rng;
+
+/// Generate pseudo-random modbus data using rand crate
 fn generate_random_data(length: usize) -> Vec<u16> {
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos() as u64;
-
-    (0..length)
-        .map(|i| {
-            let x = seed
-                .wrapping_add(i as u64)
-                .wrapping_mul(1103515245)
-                .wrapping_add(12345);
-            ((x / 65536) % 1000) as u16
-        })
-        .collect()
+    let mut rng = rand::thread_rng();
+    (0..length).map(|_| rng.gen_range(0..1000)).collect()
 }
 
 /// Test continuous connection with file-based data source and file output

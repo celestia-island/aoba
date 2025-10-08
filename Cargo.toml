@@ -43,6 +43,7 @@ uuid = { version = "^1", features = [
   'serde',
 ] }
 yuuka = "^0.6"
+rand = "^0.8"
 
 clap = "^4"
 env_logger = "^0.11"
