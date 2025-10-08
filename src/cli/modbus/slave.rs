@@ -360,7 +360,11 @@ fn send_request_and_wait(
                         break;
                     }
                     // Extract bit value (LSB first)
-                    let bit_value = if (byte_val & (1 << bit_idx)) != 0 { 1 } else { 0 };
+                    let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
+                        1
+                    } else {
+                        0
+                    };
                     values.push(bit_value);
                 }
                 if values.len() >= register_length as usize {

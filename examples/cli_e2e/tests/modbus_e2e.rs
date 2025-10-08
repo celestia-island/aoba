@@ -5,7 +5,7 @@ use std::process::Stdio;
 use std::thread;
 use std::time::Duration;
 
-use crate::utils::create_modbus_command;
+use ci_utils::create_modbus_command;
 
 /// Test master-slave communication with virtual serial ports
 /// Master device = Modbus Slave/Server (responds to requests)

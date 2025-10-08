@@ -32,18 +32,13 @@ fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
 
 /// Test TUI Master with CLI Slave - Continuous mode
 /// This test runs continuous random updates and verifies data integrity
-pub async fn test_tui_master_continuous_with_cli_slave(
-    register_mode: &str,
-) -> Result<()> {
+pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> Result<()> {
     if !should_run_vcom_tests() {
         log::info!("Skipping TUI Master continuous test on this platform");
         return Ok(());
     }
 
-    log::info!(
-        "🧪 Starting TUI Master + CLI Slave continuous test (mode: {})",
-        register_mode
-    );
+    log::info!("🧪 Starting TUI Master + CLI Slave continuous test (mode: {register_mode})");
 
     // Verify vcom ports exist
     if !std::path::Path::new("/tmp/vcom1").exists() {
@@ -87,9 +82,9 @@ pub async fn test_tui_master_continuous_with_cli_slave(
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
     // Configure TUI as Master with initial values
-    log::info!("🧪 Step 4: Configure TUI as Master (mode: {})", register_mode);
+    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
     let initial_values = generate_random_data(register_length, is_coil);
-    log::info!("Initial values: {:?}", initial_values);
+    log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
         &mut tui_session,
         &mut tui_cap,
@@ -109,7 +104,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(
 
     // Prepare output file for CLI slave
     let temp_dir = std::env::temp_dir();
-    let output_file = temp_dir.join(format!("tui_master_continuous_{}.json", register_mode));
+    let output_file = temp_dir.join(format!("tui_master_continuous_{register_mode}.json"));
     if output_file.exists() {
         std::fs::remove_file(&output_file)?;
     }
@@ -170,13 +165,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(
         all_expected_values.push(new_values.clone());
 
         // Update registers in TUI
-        update_tui_registers(
-            &mut tui_session,
-            &mut tui_cap,
-            &new_values,
-            is_coil,
-        )
-        .await?;
+        update_tui_registers(&mut tui_session, &mut tui_cap, &new_values, is_coil).await?;
 
         log::info!("✓ Updated registers in TUI");
     }
@@ -204,8 +193,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(
     }
 
     log::info!(
-        "✅ TUI Master + CLI Slave continuous test completed successfully (mode: {})",
-        register_mode
+        "✅ TUI Master + CLI Slave continuous test completed successfully (mode: {register_mode})"
     );
     Ok(())
 }
@@ -283,7 +271,7 @@ async fn configure_tui_master<T: Expect>(
     register_length: usize,
     initial_values: &[u16],
 ) -> Result<()> {
-    log::info!("📝 Configuring as Master (mode: {})...", register_mode);
+    log::info!("📝 Configuring as Master (mode: {register_mode})...");
 
     // Navigate to Business Configuration
     let actions = vec![
@@ -315,7 +303,7 @@ async fn configure_tui_master<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
     // Navigate to Register Mode and set it
-    log::info!("Setting register mode to: {}", register_mode);
+    log::info!("Setting register mode to: {register_mode}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -346,7 +334,7 @@ async fn configure_tui_master<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "confirm_reg_mode").await?;
 
     // Navigate to Register Length and set it
-    log::info!("Setting register length to: {}", register_length);
+    log::info!("Setting register length to: {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -366,22 +354,23 @@ async fn configure_tui_master<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
 
     // Set initial register values
-    log::info!("Setting initial register values: {:?}", initial_values);
+    log::info!("Setting initial register values: {initial_values:?}");
     for (i, &val) in initial_values.iter().enumerate() {
-        let hex_val = format!("{:X}", val);
+        let hex_val = format!("{val:X}");
         let actions = vec![
             CursorAction::PressEnter,
             CursorAction::TypeString(hex_val),
             CursorAction::PressEnter,
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("set_reg_{}", i)).await?;
+        execute_cursor_actions(session, cap, &actions, &format!("set_reg_{i}")).await?;
 
         if i < initial_values.len() - 1 {
             let actions = vec![CursorAction::PressArrow {
                 direction: aoba::ci::ArrowKey::Right,
                 count: 1,
             }];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1)).await?;
+            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
+                .await?;
         }
     }
 
@@ -446,7 +435,9 @@ async fn enable_port_carefully<T: Expect>(
     let screen = cap.capture(session, "before_enable")?;
 
     if !screen.contains("Enable Port") {
-        return Err(anyhow!("Not in port details page - 'Enable Port' not found"));
+        return Err(anyhow!(
+            "Not in port details page - 'Enable Port' not found"
+        ));
     }
 
     // Check if cursor is on "Enable Port" line
@@ -507,20 +498,21 @@ async fn update_tui_registers<T: Expect>(
 
     // Update each register value
     for (i, &val) in new_values.iter().enumerate() {
-        let hex_val = format!("{:X}", val);
+        let hex_val = format!("{val:X}");
         let actions = vec![
             CursorAction::PressEnter,
             CursorAction::TypeString(hex_val),
             CursorAction::PressEnter,
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("update_reg_{}", i)).await?;
+        execute_cursor_actions(session, cap, &actions, &format!("update_reg_{i}")).await?;
 
         if i < new_values.len() - 1 {
             let actions = vec![CursorAction::PressArrow {
                 direction: aoba::ci::ArrowKey::Right,
                 count: 1,
             }];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1)).await?;
+            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
+                .await?;
         }
     }
 
@@ -537,14 +529,21 @@ fn verify_continuous_data(
     expected_values_list: &[Vec<u16>],
     _is_coil: bool,
 ) -> Result<()> {
-    log::info!("🔍 Verifying collected data from: {}", output_file.display());
+    log::info!(
+        "🔍 Verifying collected data from: {path}",
+        path = output_file.display()
+    );
 
     if !output_file.exists() {
         return Err(anyhow!("Output file does not exist"));
     }
 
     let content = std::fs::read_to_string(output_file)?;
-    log::info!("Output file content ({} bytes):\n{}", content.len(), content);
+    log::info!(
+        "Output file content ({len} bytes):\n{content}",
+        len = content.len(),
+        content = content
+    );
 
     if content.trim().is_empty() {
         return Err(anyhow!("Output file is empty"));
@@ -564,7 +563,11 @@ fn verify_continuous_data(
                 }
             }
             Err(e) => {
-                log::warn!("⚠️ Line {} is not valid JSON: {}", i + 1, e);
+                log::warn!(
+                    "⚠️ Line {line} is not valid JSON: {err}",
+                    line = i + 1,
+                    err = e
+                );
             }
         }
     }
@@ -575,23 +578,35 @@ fn verify_continuous_data(
     // Verify that at least some of the expected values were captured
     let mut found_count = 0;
     for (i, expected_values) in expected_values_list.iter().enumerate() {
-        let found = parsed_outputs.iter().any(|output| output == expected_values);
+        let found = parsed_outputs
+            .iter()
+            .any(|output| output == expected_values);
         if found {
-            log::info!("✅ Expected value set {} found: {:?}", i + 1, expected_values);
+            log::info!(
+                "✅ Expected value set {idx} found: {vals:?}",
+                idx = i + 1,
+                vals = expected_values
+            );
             found_count += 1;
         } else {
-            log::warn!("⚠️ Expected value set {} NOT found: {:?}", i + 1, expected_values);
+            log::warn!(
+                "⚠️ Expected value set {idx} NOT found: {vals:?}",
+                idx = i + 1,
+                vals = expected_values
+            );
         }
     }
 
     if found_count == 0 {
-        return Err(anyhow!("None of the expected value sets were found in output"));
+        return Err(anyhow!(
+            "None of the expected value sets were found in output"
+        ));
     }
 
     log::info!(
-        "✅ Found {}/{} expected value sets in output",
-        found_count,
-        expected_values_list.len()
+        "✅ Found {found}/{total} expected value sets in output",
+        found = found_count,
+        total = expected_values_list.len()
     );
     Ok(())
 }
@@ -601,24 +616,24 @@ async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    
+
     log::info!("🧪 Running TUI E2E Continuous Tests: TUI Master + CLI Slave");
 
     // Test all 4 register modes
     let register_modes = ["holding", "input", "coils", "discrete"];
-    
+
     for mode in &register_modes {
-        log::info!("\n========== Testing register mode: {} ==========\n", mode);
+        log::info!("\n========== Testing register mode: {mode} ==========\n");
         match test_tui_master_continuous_with_cli_slave(mode).await {
             Ok(_) => {
-                log::info!("✅ Test passed for mode: {}", mode);
+                log::info!("✅ Test passed for mode: {mode}");
             }
             Err(e) => {
-                log::error!("❌ Test failed for mode {}: {}", mode, e);
+                log::error!("❌ Test failed for mode {mode}: {e}");
                 return Err(e);
             }
         }
-        
+
         // Wait between tests to ensure ports are released
         thread::sleep(Duration::from_secs(2));
     }

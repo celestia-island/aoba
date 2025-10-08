@@ -34,18 +34,13 @@ fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
 
 /// Test CLI Master with TUI Slave - Continuous mode
 /// This test runs continuous random updates from CLI and verifies TUI receives them
-pub async fn test_cli_master_continuous_with_tui_slave(
-    register_mode: &str,
-) -> Result<()> {
+pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> Result<()> {
     if !should_run_vcom_tests() {
         log::info!("Skipping CLI Master continuous test on this platform");
         return Ok(());
     }
 
-    log::info!(
-        "🧪 Starting CLI Master + TUI Slave continuous test (mode: {})",
-        register_mode
-    );
+    log::info!("🧪 Starting CLI Master + TUI Slave continuous test (mode: {register_mode})");
 
     // Verify vcom ports exist
     if !std::path::Path::new("/tmp/vcom1").exists() {
@@ -63,19 +58,22 @@ pub async fn test_cli_master_continuous_with_tui_slave(
     // Prepare data file for CLI master
     log::info!("🧪 Step 1: Prepare test data file with multiple random updates");
     let temp_dir = std::env::temp_dir();
-    let data_file = temp_dir.join(format!("cli_master_continuous_{}.json", register_mode));
-    
+    let data_file = temp_dir.join(format!("cli_master_continuous_{register_mode}.json"));
+
     let mut all_expected_values = Vec::new();
     {
         let mut file = File::create(&data_file)?;
         // Create 5 lines of random data
         for _ in 0..5 {
             let values = generate_random_data(register_length, is_coil);
-            writeln!(file, "{{\"values\": {:?}}}", values)?;
+            writeln!(file, "{{\"values\": {values:?}}}")?;
             all_expected_values.push(values);
         }
     }
-    log::info!("✓ Test data file created with {} value sets", all_expected_values.len());
+    log::info!(
+        "✓ Test data file created with {} value sets",
+        all_expected_values.len()
+    );
     for (i, values) in all_expected_values.iter().enumerate() {
         log::info!("  Set {}: {:?}", i + 1, values);
     }
@@ -148,8 +146,14 @@ pub async fn test_cli_master_continuous_with_tui_slave(
     navigate_to_vcom1(&mut tui_session, &mut tui_cap).await?;
 
     // Configure as Slave mode
-    log::info!("🧪 Step 6: Configure TUI as Slave (mode: {})", register_mode);
-    configure_tui_slave(&mut tui_session, &mut tui_cap, register_mode, register_length).await?;
+    log::info!("🧪 Step 6: Configure TUI as Slave (mode: {register_mode})");
+    configure_tui_slave(
+        &mut tui_session,
+        &mut tui_cap,
+        register_mode,
+        register_length,
+    )
+    .await?;
 
     // Enable the port
     log::info!("🧪 Step 7: Enable the port");
@@ -170,11 +174,11 @@ pub async fn test_cli_master_continuous_with_tui_slave(
         log::info!("  Capture attempt {}/3", attempt + 1);
         match capture_tui_values(&mut tui_session, &mut tui_cap).await {
             Ok(values) => {
-                log::info!("  Captured: {:?}", values);
+                log::info!("  Captured: {values:?}");
                 captured_values.push(values);
             }
             Err(e) => {
-                log::warn!("  Capture failed: {}", e);
+                log::warn!("  Capture failed: {e}");
             }
         }
         thread::sleep(Duration::from_secs(2));
@@ -182,13 +186,15 @@ pub async fn test_cli_master_continuous_with_tui_slave(
 
     // Verify that at least some values were captured and they're not all zeros
     log::info!("🧪 Step 10: Verify captured values");
-    
+
     if captured_values.is_empty() {
         log::warn!("⚠️ No values captured from TUI display");
     } else {
         // Check if we captured any non-zero values (indicates data is being received)
-        let has_non_zero = captured_values.iter().any(|vals| vals.iter().any(|&v| v != 0));
-        
+        let has_non_zero = captured_values
+            .iter()
+            .any(|vals| vals.iter().any(|&v| v != 0));
+
         if has_non_zero {
             log::info!("✅ Successfully captured non-zero values from TUI, indicating data flow");
             log::info!("   Captured value samples: {:?}", &captured_values[0]);
@@ -196,7 +202,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(
             log::warn!("⚠️ All captured values are zero - may indicate no data flow");
             log::warn!("   This could be a timing issue or display format issue");
         }
-        
+
         // Try to find if any of the expected values appear in captured data
         let mut found_count = 0;
         for expected in &all_expected_values {
@@ -207,25 +213,25 @@ pub async fn test_cli_master_continuous_with_tui_slave(
             });
             if found {
                 found_count += 1;
-                log::info!("✅ Found expected value set: {:?}", expected);
+                log::info!("✅ Found expected value set: {expected:?}");
             }
         }
-        
+
         if found_count > 0 {
             log::info!(
-                "✅ Found {}/{} expected value sets in TUI captures",
-                found_count,
-                all_expected_values.len()
+                "✅ Found {found_count}/{total} expected value sets in TUI captures",
+                found_count = found_count,
+                total = all_expected_values.len()
             );
         } else {
             log::warn!("⚠️ Expected values not found in captures");
             log::warn!("   Expected value sets:");
             for (i, expected) in all_expected_values.iter().enumerate() {
-                log::warn!("     Set {}: {:?}", i + 1, expected);
+                log::warn!("     Set {idx}: {expected:?}", idx = i + 1);
             }
             log::warn!("   Captured values:");
             for (i, captured) in captured_values.iter().enumerate() {
-                log::warn!("     Capture {}: {:?}", i + 1, captured);
+                log::warn!("     Capture {idx}: {capt:?}", idx = i + 1, capt = captured);
             }
             log::warn!("   Note: This may be due to display format differences or timing");
         }
@@ -244,18 +250,12 @@ pub async fn test_cli_master_continuous_with_tui_slave(
         std::fs::remove_file(&data_file)?;
     }
 
-    log::info!(
-        "✅ CLI Master + TUI Slave continuous test completed (mode: {})",
-        register_mode
-    );
+    log::info!("✅ CLI Master + TUI Slave continuous test completed (mode: {register_mode})");
     Ok(())
 }
 
 /// Navigate to vcom1 port in TUI
-async fn navigate_to_vcom1<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<()> {
+async fn navigate_to_vcom1<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
     log::info!("📍 Finding vcom1 in port list...");
 
     // Go to top first
@@ -325,7 +325,7 @@ async fn configure_tui_slave<T: Expect>(
     register_mode: &str,
     register_length: usize,
 ) -> Result<()> {
-    log::info!("📝 Configuring as Slave (mode: {})...", register_mode);
+    log::info!("📝 Configuring as Slave (mode: {register_mode})...");
 
     // Navigate to Modbus settings
     let actions = vec![
@@ -373,7 +373,7 @@ async fn configure_tui_slave<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "set_slave_mode").await?;
 
     // Navigate to Register Mode and set it
-    log::info!("Setting register mode to: {}", register_mode);
+    log::info!("Setting register mode to: {register_mode}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -404,7 +404,7 @@ async fn configure_tui_slave<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "confirm_reg_mode").await?;
 
     // Navigate to Register Length and set it
-    log::info!("Setting register length to: {}", register_length);
+    log::info!("Setting register length to: {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: aoba::ci::ArrowKey::Down,
@@ -474,11 +474,12 @@ async fn capture_tui_values<T: Expect>(
 
     // Parse values from screen
     let mut values = Vec::new();
-    
+
     // Look for hex patterns like 0x0000, 0x0001, etc.
+    // Move regex compilation outside the loop to avoid recompiling it repeatedly
+    let hex_pattern = regex::Regex::new(r"0x([0-9A-Fa-f]{4})")?;
     for line in screen.lines() {
         // Try to find hex values in the format 0xXXXX
-        let hex_pattern = regex::Regex::new(r"0x([0-9A-Fa-f]{4})")?;
         for cap in hex_pattern.captures_iter(line) {
             if let Some(hex_str) = cap.get(1) {
                 if let Ok(val) = u16::from_str_radix(hex_str.as_str(), 16) {
@@ -500,25 +501,25 @@ async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    
+
     log::info!("🧪 Running TUI E2E Continuous Tests: CLI Master + TUI Slave");
 
     // Test only writable register modes (master can only write to holding and coils)
     // Input and discrete are read-only and cannot be written by master-provide
     let register_modes = ["holding", "coils"];
-    
+
     for mode in &register_modes {
-        log::info!("\n========== Testing register mode: {} ==========\n", mode);
+        log::info!("\n========== Testing register mode: {mode} ==========\n");
         match test_cli_master_continuous_with_tui_slave(mode).await {
             Ok(_) => {
-                log::info!("✅ Test passed for mode: {}", mode);
+                log::info!("✅ Test passed for mode: {mode}");
             }
             Err(e) => {
-                log::error!("❌ Test failed for mode {}: {}", mode, e);
+                log::error!("❌ Test failed for mode {mode}: {e}");
                 return Err(e);
             }
         }
-        
+
         // Wait between tests to ensure ports are released
         thread::sleep(Duration::from_secs(2));
     }
