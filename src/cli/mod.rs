@@ -112,6 +112,12 @@ pub fn parse_args() -> ArgMatches {
                 ]),
         )
         .arg(
+            Arg::new("output")
+                .long("output")
+                .help("Output destination for slave mode: file:<path> or pipe:<name> (default: stdout)")
+                .value_name("OUTPUT"),
+        )
+        .arg(
             Arg::new("baud-rate")
                 .long("baud-rate")
                 .help("Serial port baud rate")

@@ -6,7 +6,7 @@ use std::{
 
 use clap::ArgMatches;
 
-use super::{extract_values_from_storage, parse_register_mode, ModbusResponse};
+use super::{extract_values_from_storage, parse_register_mode, ModbusResponse, OutputSink};
 use crate::cli::cleanup;
 
 /// Handle slave listen (temporary: output once and exit)
@@ -16,6 +16,12 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    
+    let output_sink = matches
+        .get_one::<String>("output")
+        .map(|s| s.parse::<OutputSink>())
+        .transpose()?
+        .unwrap_or(OutputSink::Stdout);
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -56,9 +62,9 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
         response
     };
 
-    // Output JSON
+    // Output JSON to configured sink
     let json = serde_json::to_string(&response)?;
-    println!("{json}");
+    output_sink.write(&json)?;
 
     Ok(())
 }
@@ -70,6 +76,12 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+
+    let output_sink = matches
+        .get_one::<String>("output")
+        .map(|s| s.parse::<OutputSink>())
+        .transpose()?
+        .unwrap_or(OutputSink::Stdout);
 
     let reg_mode = parse_register_mode(register_mode)?;
 
@@ -111,7 +123,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         ) {
             Ok(response) => {
                 let json = serde_json::to_string(&response)?;
-                println!("{json}");
+                output_sink.write(&json)?;
             }
             Err(e) => {
                 log::warn!("Error processing request: {e}");
