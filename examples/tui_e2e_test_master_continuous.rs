@@ -82,8 +82,18 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 3: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure TUI as Master with initial values
-    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
+    // Enable the port FIRST (before configuring values)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Wait for port initialization
+    log::info!("🧪 Step 5: Wait for Modbus daemon to initialize");
+    // Need to wait longer for the Modbus daemon to actually start listening
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    log::info!("  Waited 3 seconds for daemon initialization");
+
+    // Configure TUI as Master with initial values (AFTER port is enabled)
+    log::info!("🧪 Step 6: Configure TUI as Master (mode: {register_mode})");
     let initial_values = generate_random_data(register_length, is_coil);
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
@@ -94,16 +104,6 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         &initial_values,
     )
     .await?;
-
-    // Enable the port
-    log::info!("🧪 Step 5: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Wait for port initialization
-    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
-    // Need to wait longer for the Modbus daemon to actually start listening
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    log::info!("  Waited 3 seconds for daemon initialization");
 
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
