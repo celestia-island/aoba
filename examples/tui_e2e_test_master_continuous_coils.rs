@@ -458,7 +458,19 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Exit Modbus settings - stay where we are, don't navigate back
+    // Navigate up away from register fields before exiting
+    // This ensures we're not in edit mode when we press Escape
+    log::info!("Navigating away from register fields before exiting");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: aoba::ci::ArrowKey::Up,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_away_from_registers").await?;
+
+    // Exit Modbus settings - now we should properly return to port details page
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
 
@@ -557,7 +569,18 @@ async fn update_tui_registers<T: Expect>(
         }
     }
 
-    // Exit - stay where we are, don't navigate back
+    // Navigate up away from register fields before exiting
+    // This ensures we're not in edit mode when we press Escape
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: aoba::ci::ArrowKey::Up,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_away_from_registers_update").await?;
+
+    // Exit - now we should properly return to port details page
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
 
