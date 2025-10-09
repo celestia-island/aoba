@@ -62,18 +62,17 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     log::info!("🧪 Step 4: Enable the port");
     enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
-    // Generate random data sets and update TUI, then poll with CLI
-    let mut expected_data_sets: Vec<Vec<u16>> = Vec::new();
+    // Run 10 rounds of continuous random data testing
+    // Validate after each round and exit immediately on failure
     for round in 1..=ROUNDS {
         let data = generate_random_registers(REGISTER_LENGTH);
-        expected_data_sets.push(data.clone());
-        log::info!("🧪 Round {}: Generated data {:?}", round, data);
+        log::info!("🧪 Round {}/{}: Generated data {:?}", round, ROUNDS, data);
 
         // Update TUI registers with new data
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
         // Start CLI slave to poll data
-        log::info!("🧪 Round {}: Starting CLI slave to poll", round);
+        log::info!("🧪 Round {}/{}: Starting CLI slave to poll", round, ROUNDS);
         let binary = build_debug_bin("aoba")?;
 
         let cli_output = Command::new(&binary)
@@ -98,14 +97,14 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
         if !cli_output.status.success() {
             let stderr = String::from_utf8_lossy(&cli_output.stderr);
-            log::warn!("Round {}: CLI slave failed: {}", round, stderr);
-            continue;
+            log::error!("❌ Round {}/{}: CLI slave failed: {}", round, ROUNDS, stderr);
+            return Err(anyhow!("CLI slave failed on round {}", round));
         }
 
         let stdout = String::from_utf8_lossy(&cli_output.stdout);
-        log::info!("Round {}: CLI received: {}", round, stdout.trim());
+        log::info!("🧪 Round {}/{}: CLI received: {}", round, ROUNDS, stdout.trim());
 
-        // Verify the data matches
+        // Verify the data matches immediately
         let json: serde_json::Value = serde_json::from_str(&stdout)?;
         if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
             let received: Vec<u16> = values
@@ -114,15 +113,26 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
                 .collect();
 
             if received == data {
-                log::info!("✅ Round {}: Data verified successfully", round);
+                log::info!("✅ Round {}/{}: Data verified successfully!", round, ROUNDS);
             } else {
-                log::warn!(
-                    "⚠️ Round {}: Data mismatch. Expected {:?}, got {:?}",
+                log::error!(
+                    "❌ Round {}/{}: Data mismatch! Expected {:?}, got {:?}",
                     round,
+                    ROUNDS,
                     data,
                     received
                 );
+                // Exit immediately on first failure
+                return Err(anyhow!(
+                    "Data verification failed on round {}: expected {:?}, got {:?}",
+                    round,
+                    data,
+                    received
+                ));
             }
+        } else {
+            log::error!("❌ Round {}/{}: Failed to parse values from JSON", round, ROUNDS);
+            return Err(anyhow!("Failed to parse JSON values on round {}", round));
         }
 
         // Small delay between rounds
@@ -133,7 +143,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     tui_session.send_ctrl_c()?;
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    log::info!("✅ TUI Master + CLI Slave continuous test completed!");
+    log::info!("✅ TUI Master + CLI Slave continuous test completed! All {} rounds passed.", ROUNDS);
     Ok(())
 }
 

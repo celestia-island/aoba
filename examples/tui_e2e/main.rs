@@ -45,6 +45,14 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
+    // Check for debug mode argument
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"--debug".to_string()) || args.contains(&"debug".to_string()) {
+        std::env::set_var("DEBUG_MODE", "1");
+        log::info!("🔴 DEBUG MODE ENABLED - DebugBreakpoint actions will be active");
+        log::info!("💡 Test will capture screen and exit at breakpoints");
+    }
+
     // Check if we should loop the tests
     let loop_count = std::env::var("TEST_LOOP")
         .ok()

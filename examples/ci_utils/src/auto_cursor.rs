@@ -31,6 +31,9 @@ pub enum CursorAction {
         line_range: Option<(usize, usize)>, // (start_line, end_line) inclusive, 0-indexed
         col_range: Option<(usize, usize)>,  // (start_col, end_col) inclusive, 0-indexed
     },
+    /// Debug breakpoint: capture screen, print it, reset ports, and exit
+    /// Only active when debug mode is enabled
+    DebugBreakpoint { description: String },
 }
 
 /// Execute a sequence of cursor actions on an expect session
@@ -178,6 +181,40 @@ pub async fn execute_cursor_actions<T: Expect>(
             CursorAction::Sleep { ms } => {
                 log::info!("💤 Sleeping for {ms} ms");
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
+            }
+            CursorAction::DebugBreakpoint { description } => {
+                // Only active in debug mode
+                let debug_mode = std::env::var("DEBUG_MODE").is_ok();
+                if debug_mode {
+                    log::info!("🔴 DEBUG BREAKPOINT: {description}");
+                    
+                    // Capture and print current screen
+                    let screen = cap.capture(session, &format!("debug_breakpoint_{description}"))?;
+                    log::info!("📺 Current screen state:\n{}\n", screen);
+                    
+                    // Reset ports
+                    log::info!("🔄 Resetting virtual serial ports...");
+                    let script_path = std::path::Path::new("scripts/socat_init.sh");
+                    if script_path.exists() {
+                        let output = std::process::Command::new("sudo")
+                            .arg("bash")
+                            .arg(script_path)
+                            .arg("--mode")
+                            .arg("tui")
+                            .output()?;
+                        if output.status.success() {
+                            log::info!("✅ Ports reset successfully");
+                        } else {
+                            log::warn!("⚠️ Port reset failed");
+                        }
+                    }
+                    
+                    // Exit immediately
+                    log::info!("🛑 Exiting at debug breakpoint");
+                    std::process::exit(0);
+                } else {
+                    log::debug!("Debug breakpoint '{description}' skipped (DEBUG_MODE not set)");
+                }
             }
         }
 
