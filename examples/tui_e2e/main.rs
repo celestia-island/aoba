@@ -60,12 +60,12 @@ async fn main() -> Result<()> {
         .unwrap_or(1);
 
     if loop_count > 1 {
-        log::info!("🧪 Running tests in loop mode: {} iterations", loop_count);
+        log::info!("🧪 Running tests in loop mode: {loop_count} iterations");
     }
 
     for iteration in 1..=loop_count {
         if loop_count > 1 {
-            log::info!("🧪 ===== Iteration {}/{} =====", iteration, loop_count);
+            log::info!("🧪 ===== Iteration {iteration}/{loop_count} =====");
         }
 
         log::info!("🧪 Starting TUI E2E Tests...");
@@ -75,9 +75,11 @@ async fn main() -> Result<()> {
             log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
             // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
-            log::info!("🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)");
+            log::info!(
+                "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
+            );
             tests::test_tui_slave_with_cli_master_continuous().await?;
-            
+
             // Reset ports after test completes
             log::info!("🧪 Resetting virtual serial ports after Test 1...");
             setup_virtual_serial_ports()?;
@@ -85,7 +87,7 @@ async fn main() -> Result<()> {
             // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
             log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
             tests::test_tui_master_with_cli_slave_continuous().await?;
-            
+
             // Reset ports after test completes
             log::info!("🧪 Resetting virtual serial ports after Test 2...");
             setup_virtual_serial_ports()?;
@@ -94,14 +96,14 @@ async fn main() -> Result<()> {
         }
 
         if loop_count > 1 {
-            log::info!("✅ Iteration {}/{} completed successfully!", iteration, loop_count);
+            log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
         } else {
             log::info!("🧪 All TUI E2E tests passed!");
         }
     }
 
     if loop_count > 1 {
-        log::info!("🎉 All {} iterations completed successfully!", loop_count);
+        log::info!("🎉 All {loop_count} iterations completed successfully!");
     }
 
     Ok(())

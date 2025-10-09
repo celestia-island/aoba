@@ -38,22 +38,22 @@ fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
-    
+
     // Check if we should loop the tests
     let loop_count = std::env::var("TEST_LOOP")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1);
-    
+
     if loop_count > 1 {
-        log::info!("🧪 Running tests in loop mode: {} iterations", loop_count);
+        log::info!("🧪 Running tests in loop mode: {loop_count} iterations");
     }
-    
+
     for iteration in 1..=loop_count {
         if loop_count > 1 {
-            log::info!("🧪 ===== Iteration {}/{} =====", iteration, loop_count);
+            log::info!("🧪 ===== Iteration {iteration}/{loop_count} =====");
         }
-        
+
         log::info!("🧪 Starting CLI E2E Tests...");
 
         tests::test_cli_help()?;
@@ -96,15 +96,15 @@ fn main() -> Result<()> {
         }
 
         if loop_count > 1 {
-            log::info!("✅ Iteration {}/{} completed successfully!", iteration, loop_count);
+            log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
         } else {
             log::info!("🧪 All CLI E2E tests passed!");
         }
     }
-    
+
     if loop_count > 1 {
-        log::info!("🎉 All {} iterations completed successfully!", loop_count);
+        log::info!("🎉 All {loop_count} iterations completed successfully!");
     }
-    
+
     Ok(())
 }

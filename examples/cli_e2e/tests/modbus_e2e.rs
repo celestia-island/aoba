@@ -66,7 +66,7 @@ pub fn test_master_slave_communication() -> Result<()> {
 
     // Now start client (slave-poll) on /tmp/vcom2 in temporary mode
     log::info!("🧪 Starting Modbus client (slave-poll) on /tmp/vcom2...");
-    
+
     let binary = ci_utils::build_debug_bin("aoba")?;
     let client_output = std::process::Command::new(&binary)
         .args([

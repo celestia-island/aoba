@@ -80,7 +80,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 
     // Start client (slave-poll-persist) on /tmp/vcom2 in persistent mode with file output
     log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with file output...");
-    
+
     let binary = ci_utils::build_debug_bin("aoba")?;
     let mut client = std::process::Command::new(&binary)
         .args([
@@ -242,7 +242,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
 
     // Start client (slave-poll-persist) on /tmp/vcom2 with pipe output
     log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with pipe output...");
-    
+
     let binary = ci_utils::build_debug_bin("aoba")?;
     let mut client = std::process::Command::new(&binary)
         .args([

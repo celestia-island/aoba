@@ -187,11 +187,12 @@ pub async fn execute_cursor_actions<T: Expect>(
                 let debug_mode = std::env::var("DEBUG_MODE").is_ok();
                 if debug_mode {
                     log::info!("🔴 DEBUG BREAKPOINT: {description}");
-                    
+
                     // Capture and print current screen
-                    let screen = cap.capture(session, &format!("debug_breakpoint_{description}"))?;
-                    log::info!("📺 Current screen state:\n{}\n", screen);
-                    
+                    let screen =
+                        cap.capture(session, &format!("debug_breakpoint_{description}"))?;
+                    log::info!("📺 Current screen state:\n{screen}\n");
+
                     // Reset ports
                     log::info!("🔄 Resetting virtual serial ports...");
                     let script_path = std::path::Path::new("scripts/socat_init.sh");
@@ -208,7 +209,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                             log::warn!("⚠️ Port reset failed");
                         }
                     }
-                    
+
                     // Exit immediately
                     log::info!("🛑 Exiting at debug breakpoint");
                     std::process::exit(0);

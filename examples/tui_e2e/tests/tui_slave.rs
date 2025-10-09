@@ -63,7 +63,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     if debug_mode {
         log::info!("🔴 DEBUG: After configuration, capturing screen state");
         let screen = tui_cap.capture(&mut tui_session, "after_config")?;
-        log::info!("📺 Screen after configuration:\n{}\n", screen);
+        log::info!("📺 Screen after configuration:\n{screen}\n");
     }
 
     // Enable the port
@@ -75,17 +75,20 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     if debug_mode {
         log::info!("🔴 DEBUG: Port enabled, capturing screen state");
         let screen = tui_cap.capture(&mut tui_session, "after_enable_port")?;
-        log::info!("📺 Screen after enabling port:\n{}\n", screen);
-        
+        log::info!("📺 Screen after enabling port:\n{screen}\n");
+
         // Check port status with lsof
         log::info!("🔍 Checking which processes are using the vcom ports");
         let lsof_output = std::process::Command::new("sudo")
             .args(["lsof", "/tmp/vcom1", "/tmp/vcom2"])
             .output();
         if let Ok(output) = lsof_output {
-            log::info!("📊 lsof output:\n{}", String::from_utf8_lossy(&output.stdout));
+            log::info!(
+                "📊 lsof output:\n{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
         }
-        
+
         return Err(anyhow!("Debug breakpoint - exiting for inspection"));
     }
 
@@ -93,13 +96,13 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     // Validate after each round and exit immediately on failure
     for round in 1..=ROUNDS {
         let data = generate_random_registers(REGISTER_LENGTH);
-        log::info!("🧪 Round {}/{}: Generated data {:?}", round, ROUNDS, data);
+        log::info!("🧪 Round {round}/{ROUNDS}: Generated data {data:?}");
 
         // Update TUI registers with new data
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
         // Start CLI master to poll data
-        log::info!("🧪 Round {}/{}: Starting CLI master to poll", round, ROUNDS);
+        log::info!("🧪 Round {round}/{ROUNDS}: Starting CLI master to poll");
         let binary = build_debug_bin("aoba")?;
 
         let cli_output = Command::new(&binary)
@@ -124,12 +127,15 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
 
         if !cli_output.status.success() {
             let stderr = String::from_utf8_lossy(&cli_output.stderr);
-            log::error!("❌ Round {}/{}: CLI master failed: {}", round, ROUNDS, stderr);
-            return Err(anyhow!("CLI master failed on round {}", round));
+            log::error!("❌ Round {round}/{ROUNDS}: CLI master failed: {stderr}");
+            return Err(anyhow!("CLI master failed on round {round}"));
         }
 
         let stdout = String::from_utf8_lossy(&cli_output.stdout);
-        log::info!("🧪 Round {}/{}: CLI received: {}", round, ROUNDS, stdout.trim());
+        log::info!(
+            "🧪 Round {round}/{ROUNDS}: CLI received: {output}",
+            output = stdout.trim()
+        );
 
         // Verify the data matches immediately
         let json: serde_json::Value = serde_json::from_str(&stdout)?;
@@ -140,26 +146,19 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
                 .collect();
 
             if received == data {
-                log::info!("✅ Round {}/{}: Data verified successfully!", round, ROUNDS);
+                log::info!("✅ Round {round}/{ROUNDS}: Data verified successfully!");
             } else {
                 log::error!(
-                    "❌ Round {}/{}: Data mismatch! Expected {:?}, got {:?}",
-                    round,
-                    ROUNDS,
-                    data,
-                    received
+                    "❌ Round {round}/{ROUNDS}: Data mismatch! Expected {data:?}, got {received:?}"
                 );
                 // Exit immediately on first failure
                 return Err(anyhow!(
-                    "Data verification failed on round {}: expected {:?}, got {:?}",
-                    round,
-                    data,
-                    received
+                    "Data verification failed on round {round}: expected {data:?}, got {received:?}"
                 ));
             }
         } else {
-            log::error!("❌ Round {}/{}: Failed to parse values from JSON", round, ROUNDS);
-            return Err(anyhow!("Failed to parse JSON values on round {}", round));
+            log::error!("❌ Round {round}/{ROUNDS}: Failed to parse values from JSON");
+            return Err(anyhow!("Failed to parse JSON values on round {round}"));
         }
 
         // Small delay between rounds
@@ -170,17 +169,14 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     tui_session.send_ctrl_c()?;
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    log::info!("✅ TUI Master-Provide + CLI Slave-Poll continuous test completed! All {} rounds passed.", ROUNDS);
+    log::info!("✅ TUI Master-Provide + CLI Slave-Poll continuous test completed! All {ROUNDS} rounds passed.");
     Ok(())
 }
 
 /// Configure TUI as Master (server providing data, responding to requests)
-async fn configure_tui_master<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<()> {
+async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
     use regex::Regex;
-    
+
     log::info!("📝 Configuring as Master (to provide data)...");
 
     // Navigate to Modbus settings (should be 2 down from current position)
@@ -225,7 +221,7 @@ async fn configure_tui_master<T: Expect>(
     if debug_mode {
         log::info!("🔴 DEBUG: After creating station");
         let screen = cap.capture(session, "after_create_station")?;
-        log::info!("📺 Screen after creating station:\n{}\n", screen);
+        log::info!("📺 Screen after creating station:\n{screen}\n");
     }
 
     // Set Register Length to 5 (matching REGISTER_LENGTH constant)

@@ -10,7 +10,7 @@ use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
 use crate::cli::cleanup;
-use crate::protocol::modbus::{build_slave_holdings_response, build_slave_coils_response};
+use crate::protocol::modbus::{build_slave_coils_response, build_slave_holdings_response};
 
 /// Handle master provide (temporary: output once and exit)
 pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
@@ -88,12 +88,8 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                     drop(port);
 
                     let request = assembling.clone();
-                    let response = respond_to_request(
-                        port_arc.clone(),
-                        &request,
-                        station_id,
-                        &storage,
-                    )?;
+                    let response =
+                        respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
 
                     // Output JSON
                     let json = serde_json::to_string(&response)?;
@@ -112,12 +108,8 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                     drop(port);
 
                     let request = assembling.clone();
-                    let response = respond_to_request(
-                        port_arc.clone(),
-                        &request,
-                        station_id,
-                        &storage,
-                    )?;
+                    let response =
+                        respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
 
                     // Output JSON
                     let json = serde_json::to_string(&response)?;
@@ -215,7 +207,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let mut assembling: Vec<u8> = Vec::new();
     let mut last_byte_time: Option<std::time::Instant> = None;
     let frame_gap = Duration::from_millis(10); // Inter-frame gap
-    
+
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
     loop {
@@ -227,7 +219,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         let mut port = port_arc.lock().unwrap();
         match port.read(&mut buffer) {
             Ok(n) if n > 0 => {
-                log::info!("CLI Master: Read {n} bytes from port: {:02X?}", &buffer[..n]);
+                log::info!(
+                    "CLI Master: Read {n} bytes from port: {:02X?}",
+                    &buffer[..n]
+                );
                 assembling.extend_from_slice(&buffer[..n]);
                 last_byte_time = Some(std::time::Instant::now());
             }
@@ -237,9 +232,12 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                     if let Some(last_time) = last_byte_time {
                         if last_time.elapsed() >= frame_gap {
                             // Frame complete - process it
-                            log::info!("CLI Master: Frame complete ({} bytes), processing request", assembling.len());
+                            log::info!(
+                                "CLI Master: Frame complete ({} bytes), processing request",
+                                assembling.len()
+                            );
                             drop(port); // Release port lock before processing
-                            
+
                             let request = assembling.clone();
                             assembling.clear();
                             last_byte_time = None;
@@ -259,7 +257,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     log::warn!("Error responding to request: {e}");
                                 }
                             }
-                            
+
                             continue; // Re-acquire lock in next iteration
                         }
                     }
@@ -272,7 +270,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         if last_time.elapsed() >= frame_gap {
                             // Frame complete - process it
                             drop(port); // Release port lock before processing
-                            
+
                             let request = assembling.clone();
                             assembling.clear();
                             last_byte_time = None;
@@ -292,7 +290,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     log::warn!("Error responding to request: {e}");
                                 }
                             }
-                            
+
                             continue; // Re-acquire lock in next iteration
                         }
                     }
@@ -304,7 +302,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             }
         }
         drop(port);
-        
+
         // Small sleep to avoid busy loop
         std::thread::sleep(Duration::from_millis(1));
     }
@@ -326,14 +324,10 @@ fn respond_to_request(
     let request_station_id = request[0];
     if request_station_id != station_id {
         log::debug!(
-            "Ignoring request for station {} (we are station {})",
-            request_station_id,
-            station_id
+            "Ignoring request for station {request_station_id} (we are station {station_id})",
         );
         return Err(anyhow!(
-            "Request for different station ID: {} (we are {})",
-            request_station_id,
-            station_id
+            "Request for different station ID: {request_station_id} (we are {station_id})",
         ));
     }
 
@@ -422,7 +416,7 @@ fn update_storage_loop(
                                 _ => {}
                             }
                             drop(context);
-                            
+
                             // Wait a bit before next update to avoid overwhelming
                             std::thread::sleep(Duration::from_millis(100));
                         }
@@ -464,7 +458,7 @@ fn update_storage_loop(
                                 _ => {}
                             }
                             drop(context);
-                            
+
                             // Wait a bit before next update
                             std::thread::sleep(Duration::from_millis(100));
                         }
