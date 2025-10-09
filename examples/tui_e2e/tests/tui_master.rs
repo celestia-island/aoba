@@ -69,8 +69,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "after_configure_master".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_config")
-        .await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_after_config",
+    )
+    .await?;
 
     // Enable the port
     log::info!("🧪 Step 4: Enable the port");
@@ -80,7 +85,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "after_enable_port".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_enable_port").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_enable_port",
+    )
+    .await?;
 
     // CRUCIAL: Enter Modbus panel to access registers for updates
     log::info!("🧪 Step 5: Enter Modbus configuration panel");
@@ -102,8 +113,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         let actions = vec![CursorAction::DebugBreakpoint {
             description: format!("before_update_registers_round_{round}"),
         }];
-        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_before_update")
-            .await?;
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            "debug_before_update",
+        )
+        .await?;
 
         // Update TUI registers with new data
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
@@ -112,8 +128,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         let actions = vec![CursorAction::DebugBreakpoint {
             description: format!("after_update_registers_round_{round}"),
         }];
-        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_update")
-            .await?;
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            "debug_after_update",
+        )
+        .await?;
 
         // Start CLI slave to poll data
         log::info!("🧪 Round {round}/{ROUNDS}: Starting CLI slave to poll");
