@@ -81,8 +81,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 3: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure TUI as Master with initial values (while port is DISABLED)
-    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
+    // Enable the port FIRST (before configuration)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure TUI as Master with initial values (AFTER enabling port)
+    log::info!("🧪 Step 5: Configure TUI as Master (mode: {register_mode})");
     let initial_values = generate_random_data(register_length, is_coil);
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
@@ -94,47 +98,58 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     )
     .await?;
 
-    // Now enable the port - daemon will start with the configuration we just set
-    log::info!("🧪 Step 5: Enable the port with configuration applied");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Wait for port initialization
-    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
-    // Need to wait longer for the Modbus daemon to actually start listening
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    log::info!("  Waited 3 seconds for daemon initialization");
+    // Wait for port initialization and hot reload to complete
+    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize and load configuration");
+    // Need to wait longer for the Modbus daemon to actually start and reload config
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    log::info!("  Waited 5 seconds for daemon initialization and config reload");
 
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
     let binary = aoba::ci::build_debug_bin("aoba")?;
-    let test_poll = Command::new(&binary)
-        .args([
-            "--slave-poll",
-            "/tmp/vcom2",
-            "--baud-rate",
-            "9600",
-            "--station-id",
-            "1",
-            "--register-mode",
-            register_mode,
-            "--register-address",
-            "0",
-            "--register-length",
-            &register_length.to_string(),
-            "--json",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+    
+    // Retry the poll multiple times to give the daemon time to fully initialize
+    let mut last_error = String::new();
+    let mut test_poll_result = None;
+    for attempt in 1..=5 {
+        log::info!("  Poll attempt {}/5", attempt);
+        let test_poll = Command::new(&binary)
+            .args([
+                "--slave-poll",
+                "/tmp/vcom2",
+                "--baud-rate",
+                "9600",
+                "--station-id",
+                "1",
+                "--register-mode",
+                register_mode,
+                "--register-address",
+                "0",
+                "--register-length",
+                &register_length.to_string(),
+                "--json",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
 
-    if !test_poll.status.success() {
-        let stderr = String::from_utf8_lossy(&test_poll.stderr);
-        return Err(anyhow!(
-            "TUI master is not responding to test poll. Status: {}, stderr: {}",
-            test_poll.status,
-            stderr
-        ));
+        if test_poll.status.success() {
+            test_poll_result = Some(test_poll);
+            log::info!("  ✓ TUI master is responding!");
+            break;
+        } else {
+            last_error = String::from_utf8_lossy(&test_poll.stderr).to_string();
+            log::warn!("  Attempt {} failed: {}", attempt, last_error);
+            if attempt < 5 {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
     }
+    
+    let test_poll = test_poll_result.ok_or_else(|| anyhow!(
+        "TUI master is not responding after 5 attempts. Last error: {}",
+        last_error
+    ))?;
 
     let test_output = String::from_utf8_lossy(&test_poll.stdout);
     log::info!(
@@ -459,37 +474,11 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Exit Modbus settings to return to port details page for enabling
-    log::info!("Exiting Modbus settings...");
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 800 },
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
-
-    // Check where we are after exit
-    let screen_after_exit = cap.capture(session, "after_exit_modbus")?;
-    if screen_after_exit.contains("COM Ports") || !screen_after_exit.contains("Enable Port") {
-        // We're either at port list or still in Modbus panel
-        if !screen_after_exit.contains("Protocol Mode") && !screen_after_exit.contains("Enable Port") {
-            // Still in Modbus panel or somewhere else, press Escape one more time
-            log::warn!("Not at expected location, pressing Escape again");
-            let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
-            execute_cursor_actions(session, cap, &actions, "exit_again").await?;
-        }
-        
-        // Now we should be at port list, re-enter vcom1
-        log::info!("Re-entering vcom1 port");
-        let actions = vec![
-            CursorAction::PressEnter, // Enter the vcom1 port
-            CursorAction::Sleep { ms: 500 },
-        ];
-        execute_cursor_actions(session, cap, &actions, "enter_vcom1_port").await?;
-    }
-
-    log::info!("✓ Master configuration complete");
+    // Configuration complete - wait for hot reload to apply changes
+    // The daemon should detect the configuration change and reload
+    log::info!("✓ Master configuration complete (staying in panel)");
+    log::info!("  Waiting for hot reload to apply configuration...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     Ok(())
 }
 

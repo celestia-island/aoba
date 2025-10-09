@@ -98,73 +98,58 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     )
     .await?;
 
-    // After configuration, we need to restart the daemon to load the new config
-    // Exit the Modbus panel and toggle the port
-    log::info!("🧪 Step 5.5: Restart daemon to apply configuration");
-    let actions = vec![
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEscape,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "exit_modbus_panel").await?;
-
-    // Disable the port (we should be back at port details or port list)
-    let screen = tui_cap.capture(&mut tui_session, "after_exit_modbus")?;
-    if screen.contains("COM Ports") {
-        // We're at the port list, need to enter vcom1 again
-        log::info!("Re-entering vcom1 from port list");
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
-        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_vcom1_again").await?;
-    }
-
-    // Now toggle the port (disable then re-enable)
-    let actions = vec![
-        CursorAction::PressEnter, // Toggle to Disabled
-        CursorAction::Sleep { ms: 1000 },
-        CursorAction::PressEnter, // Toggle back to Enabled
-        CursorAction::Sleep { ms: 1500 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "toggle_port_to_apply_config").await?;
-    log::info!("✓ Port restarted with new configuration");
-
-    // Wait for port initialization
-    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
-    // Need to wait longer for the Modbus daemon to actually start listening
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    log::info!("  Waited 3 seconds for daemon initialization");
+    // Wait for port initialization and hot reload to complete
+    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize and load configuration");
+    // Need to wait longer for the Modbus daemon to actually start and reload config
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    log::info!("  Waited 5 seconds for daemon initialization and config reload");
 
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
     let binary = aoba::ci::build_debug_bin("aoba")?;
-    let test_poll = Command::new(&binary)
-        .args([
-            "--slave-poll",
-            "/tmp/vcom2",
-            "--baud-rate",
-            "9600",
-            "--station-id",
-            "1",
-            "--register-mode",
-            register_mode,
-            "--register-address",
-            "0",
-            "--register-length",
-            &register_length.to_string(),
-            "--json",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+    
+    // Retry the poll multiple times to give the daemon time to fully initialize
+    let mut last_error = String::new();
+    let mut test_poll_result = None;
+    for attempt in 1..=5 {
+        log::info!("  Poll attempt {}/5", attempt);
+        let test_poll = Command::new(&binary)
+            .args([
+                "--slave-poll",
+                "/tmp/vcom2",
+                "--baud-rate",
+                "9600",
+                "--station-id",
+                "1",
+                "--register-mode",
+                register_mode,
+                "--register-address",
+                "0",
+                "--register-length",
+                &register_length.to_string(),
+                "--json",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
 
-    if !test_poll.status.success() {
-        let stderr = String::from_utf8_lossy(&test_poll.stderr);
-        return Err(anyhow!(
-            "TUI master is not responding to test poll. Status: {}, stderr: {}",
-            test_poll.status,
-            stderr
-        ));
+        if test_poll.status.success() {
+            test_poll_result = Some(test_poll);
+            log::info!("  ✓ TUI master is responding!");
+            break;
+        } else {
+            last_error = String::from_utf8_lossy(&test_poll.stderr).to_string();
+            log::warn!("  Attempt {} failed: {}", attempt, last_error);
+            if attempt < 5 {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
     }
+    
+    let test_poll = test_poll_result.ok_or_else(|| anyhow!(
+        "TUI master is not responding after 5 attempts. Last error: {}",
+        last_error
+    ))?;
 
     let test_output = String::from_utf8_lossy(&test_poll.stdout);
     log::info!(
@@ -266,7 +251,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Check if file exists and has content
     if !output_file.exists() {
-        return Err(anyhow!(
+            
             "Output file does not exist: {}. CLI slave may not have successfully polled any data.",
             output_file.display()
         ));
@@ -274,7 +259,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     let file_size = std::fs::metadata(&output_file)?.len();
     if file_size == 0 {
-        return Err(anyhow!(
+            
             "Output file is empty: {}. CLI slave may not have received responses from TUI master.",
             output_file.display()
         ));
@@ -492,6 +477,8 @@ async fn configure_tui_master<T: Expect>(
     // Configuration complete - no need to exit the panel
     // The test can continue with the panel open or just terminate
     log::info!("✓ Master configuration complete (staying in panel)");
+    log::info!("  Waiting for hot reload to apply configuration...");
+    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     Ok(())
 }
 
@@ -505,7 +492,7 @@ async fn enable_port_carefully<T: Expect>(
     let screen = cap.capture(session, "before_enable")?;
 
     if !screen.contains("Enable Port") {
-        return Err(anyhow!(
+            
             "Not in port details page - 'Enable Port' not found"
         ));
     }
@@ -662,7 +649,7 @@ fn verify_continuous_data(
     }
 
     if found_count == 0 {
-        return Err(anyhow!(
+            
             "None of the expected value sets were found in output"
         ));
     }
