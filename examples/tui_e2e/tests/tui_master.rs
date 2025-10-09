@@ -142,32 +142,47 @@ async fn configure_tui_master<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
-    // Enter port configuration
-    session.send_line("")?;
-    sleep_a_while().await;
+    use regex::Regex;
+    
+    log::info!("📝 Configuring as Master...");
 
-    // Navigate to Mode selection and set to Master
+    // Navigate to Modbus settings (should be 2 down from current position)
+    log::info!("Navigate to Modbus Settings");
     let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Move to Mode
-        CursorAction::PressEnter, // Enter Mode
-        CursorAction::PressEnter, // Select Master (default)
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Move to Role
-        CursorAction::PressEnter, // Enter Role
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Select Server
-        CursorAction::PressEnter, // Confirm
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::Sleep { ms: 500 },
     ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_modbus").await?;
 
-    execute_cursor_actions(session, cap, &actions, "configure_master").await?;
-
-    // Save configuration
-    let save_actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 },  // Move through config
-        CursorAction::PressEnter, // Save
+    // Enter Modbus settings
+    log::info!("Enter Modbus Settings");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"ModBus Master/Slave Settings")?,
+            description: "In Modbus settings".to_string(),
+            line_range: Some((0, 3)),
+            col_range: None,
+        },
     ];
+    execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
 
-    execute_cursor_actions(session, cap, &save_actions, "save_master_config").await?;
+    // Connection Mode should default to Master, just confirm
+    log::info!("Confirm Master mode (default)");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        }, // Move to Connection Mode
+        CursorAction::PressEnter, // Enter Connection Mode
+        CursorAction::PressEnter, // Confirm Master (default)
+    ];
+    execute_cursor_actions(session, cap, &actions, "set_master_mode").await?;
 
-    // Press Escape to return to port details page
+    // Press Escape to exit Modbus settings
     session.send_escape()?;
     sleep_a_while().await;
 

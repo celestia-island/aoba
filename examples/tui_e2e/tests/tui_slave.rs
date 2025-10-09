@@ -142,33 +142,51 @@ async fn configure_tui_slave<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
-    // Enter port configuration
-    session.send_line("")?;
-    sleep_a_while().await;
+    use regex::Regex;
+    
+    log::info!("📝 Configuring as Slave...");
 
-    // Navigate to Mode selection and set to Slave
+    // Navigate to Modbus settings (should be 2 down from current position)
+    log::info!("Navigate to Modbus Settings");
     let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Move to Mode
-        CursorAction::PressEnter, // Enter Mode
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Select Slave
-        CursorAction::PressEnter, // Confirm
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Move to Role
-        CursorAction::PressEnter, // Enter Role
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },  // Select Server
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_modbus").await?;
+
+    // Enter Modbus settings
+    log::info!("Enter Modbus Settings");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"ModBus Master/Slave Settings")?,
+            description: "In Modbus settings".to_string(),
+            line_range: Some((0, 3)),
+            col_range: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
+
+    // Navigate to connection mode and select Slave
+    log::info!("Configure as Slave");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        }, // Move to Connection Mode
+        CursorAction::PressEnter,     // Enter Connection Mode
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        }, // Select Slave
         CursorAction::PressEnter, // Confirm
     ];
+    execute_cursor_actions(session, cap, &actions, "set_slave_mode").await?;
 
-    execute_cursor_actions(session, cap, &actions, "configure_slave").await?;
-
-    // Save configuration
-    let save_actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 },  // Move through config
-        CursorAction::PressEnter, // Save
-    ];
-
-    execute_cursor_actions(session, cap, &save_actions, "save_slave_config").await?;
-
-    // Press Escape to return to port details page
+    // Press Escape to exit Modbus settings
     session.send_escape()?;
     sleep_a_while().await;
 
