@@ -74,16 +74,16 @@ async fn main() -> Result<()> {
         if setup_virtual_serial_ports()? {
             log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
-            // Test 1: TUI Slave + CLI Master with 10 rounds of continuous random data
-            log::info!("🧪 Test 1/2: TUI Slave + CLI Master (10 rounds, holding registers)");
+            // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
+            log::info!("🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)");
             tests::test_tui_slave_with_cli_master_continuous().await?;
             
             // Reset ports after test completes
             log::info!("🧪 Resetting virtual serial ports after Test 1...");
             setup_virtual_serial_ports()?;
 
-            // Test 2: TUI Master + CLI Slave with 10 rounds of continuous random data
-            log::info!("🧪 Test 2/2: TUI Master + CLI Slave (10 rounds, holding registers)");
+            // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
+            log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
             tests::test_tui_master_with_cli_slave_continuous().await?;
             
             // Reset ports after test completes

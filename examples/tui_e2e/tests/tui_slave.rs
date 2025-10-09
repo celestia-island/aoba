@@ -20,16 +20,16 @@ use ci_utils::{
 const ROUNDS: usize = 10;
 const REGISTER_LENGTH: usize = 5;
 
-/// Test TUI Slave + CLI Master with continuous random data (10 rounds)
-/// TUI acts as Modbus Slave (server) responding to requests
-/// CLI acts as Modbus Master (client) polling for data
+/// Test TUI Master-Provide + CLI Slave-Poll with continuous random data (10 rounds)
+/// TUI acts as Modbus Master (server providing data, responding to poll requests)
+/// CLI acts as Modbus Slave (client polling for data)
 pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     if !should_run_vcom_tests() {
-        log::info!("Skipping TUI Slave + CLI Master test on this platform");
+        log::info!("Skipping TUI Master-Provide + CLI Slave-Poll test on this platform");
         return Ok(());
     }
 
-    log::info!("🧪 Starting TUI Slave + CLI Master continuous test (10 rounds)");
+    log::info!("🧪 Starting TUI Master-Provide + CLI Slave-Poll continuous test (10 rounds)");
 
     let ports = vcom_matchers();
 
@@ -54,13 +54,40 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure as slave (server mode)
-    log::info!("🧪 Step 3: Configure TUI as Slave");
-    configure_tui_slave(&mut tui_session, &mut tui_cap).await?;
+    // Configure as master (server mode providing data)
+    log::info!("🧪 Step 3: Configure TUI as Master (to provide data)");
+    configure_tui_master(&mut tui_session, &mut tui_cap).await?;
+
+    // Check if debug mode is enabled for smoke testing
+    let debug_mode = std::env::var("DEBUG_MODE").is_ok();
+    if debug_mode {
+        log::info!("🔴 DEBUG: After configuration, capturing screen state");
+        let screen = tui_cap.capture(&mut tui_session, "after_config")?;
+        log::info!("📺 Screen after configuration:\n{}\n", screen);
+    }
 
     // Enable the port
     log::info!("🧪 Step 4: Enable the port");
     enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Check if debug mode is enabled for smoke testing
+    let debug_mode = std::env::var("DEBUG_MODE").is_ok();
+    if debug_mode {
+        log::info!("🔴 DEBUG: Port enabled, capturing screen state");
+        let screen = tui_cap.capture(&mut tui_session, "after_enable_port")?;
+        log::info!("📺 Screen after enabling port:\n{}\n", screen);
+        
+        // Check port status with lsof
+        log::info!("🔍 Checking which processes are using the vcom ports");
+        let lsof_output = std::process::Command::new("sudo")
+            .args(["lsof", "/tmp/vcom1", "/tmp/vcom2"])
+            .output();
+        if let Ok(output) = lsof_output {
+            log::info!("📊 lsof output:\n{}", String::from_utf8_lossy(&output.stdout));
+        }
+        
+        return Err(anyhow!("Debug breakpoint - exiting for inspection"));
+    }
 
     // Run 10 rounds of continuous random data testing
     // Validate after each round and exit immediately on failure
@@ -143,18 +170,18 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     tui_session.send_ctrl_c()?;
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    log::info!("✅ TUI Slave + CLI Master continuous test completed! All {} rounds passed.", ROUNDS);
+    log::info!("✅ TUI Master-Provide + CLI Slave-Poll continuous test completed! All {} rounds passed.", ROUNDS);
     Ok(())
 }
 
-/// Configure TUI as Slave (server responding to requests)
-async fn configure_tui_slave<T: Expect>(
+/// Configure TUI as Master (server providing data, responding to requests)
+async fn configure_tui_master<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     use regex::Regex;
     
-    log::info!("📝 Configuring as Slave...");
+    log::info!("📝 Configuring as Master (to provide data)...");
 
     // Navigate to Modbus settings (should be 2 down from current position)
     log::info!("Navigate to Modbus Settings");
@@ -180,21 +207,40 @@ async fn configure_tui_slave<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
 
-    // Navigate to connection mode and select Slave
-    log::info!("Configure as Slave");
+    // Create station (should be on "Create Station" by default)
+    log::info!("Create new Modbus station");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"#1")?,
+            description: "Station #1 created".to_string(),
+            line_range: None,
+            col_range: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "create_station").await?;
+
+    // Debug: Check if station was created
+    let debug_mode = std::env::var("DEBUG_MODE").is_ok();
+    if debug_mode {
+        log::info!("🔴 DEBUG: After creating station");
+        let screen = cap.capture(session, "after_create_station")?;
+        log::info!("📺 Screen after creating station:\n{}\n", screen);
+    }
+
+    // Set Register Length to 5 (matching REGISTER_LENGTH constant)
+    log::info!("Navigate to Register Length and set to 5");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 1,
-        }, // Move to Connection Mode
-        CursorAction::PressEnter,     // Enter Connection Mode
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        }, // Select Slave
-        CursorAction::PressEnter, // Confirm
+            count: 5,
+        }, // Navigate to Register Length field
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,
+        CursorAction::TypeString("5".to_string()),
+        CursorAction::PressEnter,
     ];
-    execute_cursor_actions(session, cap, &actions, "set_slave_mode").await?;
+    execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
 
     // Press Escape to exit Modbus settings
     session.send_escape()?;

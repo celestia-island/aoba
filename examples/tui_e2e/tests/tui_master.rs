@@ -20,16 +20,17 @@ use ci_utils::{
 const ROUNDS: usize = 10;
 const REGISTER_LENGTH: usize = 5;
 
-/// Test TUI Master + CLI Slave with continuous random data (10 rounds)
-/// TUI acts as Modbus Master (server) providing data
-/// CLI acts as Modbus Slave (client) polling for data
+/// Test TUI Master-Provide + CLI Slave-Poll with continuous random data (10 rounds) - Repeat test
+/// TUI acts as Modbus Master (server providing data, responding to poll requests)
+/// CLI acts as Modbus Slave (client polling for data)
+/// This is a repeat of the first test for stability verification
 pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     if !should_run_vcom_tests() {
-        log::info!("Skipping TUI Master + CLI Slave test on this platform");
+        log::info!("Skipping TUI Master-Provide + CLI Slave-Poll test on this platform");
         return Ok(());
     }
 
-    log::info!("🧪 Starting TUI Master + CLI Slave continuous test (10 rounds)");
+    log::info!("🧪 Starting TUI Master-Provide + CLI Slave-Poll continuous test (10 rounds)");
 
     let ports = vcom_matchers();
 
@@ -143,18 +144,18 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     tui_session.send_ctrl_c()?;
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    log::info!("✅ TUI Master + CLI Slave continuous test completed! All {} rounds passed.", ROUNDS);
+    log::info!("✅ TUI Master-Provide + CLI Slave-Poll continuous test completed! All {} rounds passed.", ROUNDS);
     Ok(())
 }
 
-/// Configure TUI as Master (server providing data)
+/// Configure TUI as Master (server providing data, responding to requests)
 async fn configure_tui_master<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
     use regex::Regex;
     
-    log::info!("📝 Configuring as Master...");
+    log::info!("📝 Configuring as Master (to provide data)...");
 
     // Navigate to Modbus settings (should be 2 down from current position)
     log::info!("Navigate to Modbus Settings");
@@ -180,17 +181,32 @@ async fn configure_tui_master<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
 
-    // Connection Mode should default to Master, just confirm
-    log::info!("Confirm Master mode (default)");
+    // Create station (should be on "Create Station" by default)
+    log::info!("Create new Modbus station");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"#1")?,
+            description: "Station #1 created".to_string(),
+            line_range: None,
+            col_range: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "create_station").await?;
+
+    // Set Register Length to 5 (matching REGISTER_LENGTH constant)
+    log::info!("Navigate to Register Length and set to 5");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 1,
-        }, // Move to Connection Mode
-        CursorAction::PressEnter, // Enter Connection Mode
-        CursorAction::PressEnter, // Confirm Master (default)
+            count: 5,
+        }, // Navigate to Register Length field
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,
+        CursorAction::TypeString("5".to_string()),
+        CursorAction::PressEnter,
     ];
-    execute_cursor_actions(session, cap, &actions, "set_master_mode").await?;
+    execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
 
     // Press Escape to exit Modbus settings
     session.send_escape()?;
