@@ -6,15 +6,11 @@ use std::{
     time::Duration,
 };
 
-use rand::random;
+use ci_utils::generate_random_registers;
 
 use ci_utils::create_modbus_command;
 
 /// Generate pseudo-random modbus data using rand crate
-fn generate_random_data(length: usize) -> Vec<u16> {
-    (0..length).map(|_| random::<u16>()).collect()
-}
-
 /// Test continuous connection with file-based data source and file output
 pub fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");
@@ -26,7 +22,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     {
         let mut file = File::create(&data_file)?;
         for _ in 0..5 {
-            let values = generate_random_data(5);
+            let values = generate_random_registers(5);
             writeln!(file, "{{\"values\": {values:?}}}")?;
             expected_data_lines.push(values);
         }
@@ -255,7 +251,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
             .open(&data_pipe_clone)?;
 
         for i in 0..5 {
-            let values = generate_random_data(5);
+            let values = generate_random_registers(5);
             writeln!(file, "{{\"values\": {values:?}}}")?;
             log::info!("🧪 Wrote data line {}: {:?}", i + 1, values);
             std::thread::sleep(Duration::from_millis(500));

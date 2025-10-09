@@ -3,7 +3,6 @@
 // Tests all 4 register types: holding, input, coils, discrete
 
 use anyhow::{anyhow, Result};
-use rand::random;
 use regex::Regex;
 use std::{
     process::{Command, Stdio},
@@ -12,23 +11,13 @@ use std::{
 
 use expectrl::Expect;
 
-use aoba::ci::{
+use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
+    data::{generate_random_coils, generate_random_registers},
+    tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers},
+    verify::verify_continuous_data,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
-
-/// Generate pseudo-random modbus data using rand crate
-fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
-    if is_coil {
-        // For coils/discrete, generate only 0 or 1
-        (0..length)
-            .map(|_| if random::<u8>() % 2 == 0 { 0 } else { 1 })
-            .collect()
-    } else {
-        // For holding/input, generate any u16 value
-        (0..length).map(|_| random::<u16>()).collect()
-    }
-}
 
 /// Test TUI Master with CLI Slave - Continuous mode
 /// This test runs continuous random updates and verifies data integrity
@@ -81,9 +70,17 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 3: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure TUI as Master with initial values (BEFORE enabling port)
-    log::info!("🧪 Step 4: Configure TUI as Master (mode: {register_mode})");
-    let initial_values = generate_random_data(register_length, is_coil);
+    // Enable the port FIRST (before configuration)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure TUI as Master with initial values (AFTER enabling port)
+    log::info!("🧪 Step 5: Configure TUI as Master (mode: {register_mode})");
+    let initial_values = if is_coil {
+        generate_random_coils(register_length)
+    } else {
+        generate_random_registers(register_length)
+    };
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
         &mut tui_session,
@@ -94,47 +91,57 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     )
     .await?;
 
-    // Enable the port (AFTER configuration is complete)
-    log::info!("🧪 Step 5: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Wait for port initialization
-    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize");
-    // Need to wait longer for the Modbus daemon to actually start listening
-    tokio::time::sleep(Duration::from_secs(3)).await;
-    log::info!("  Waited 3 seconds for daemon initialization");
+    // Wait for port initialization and hot reload to complete
+    log::info!("🧪 Step 6: Wait for Modbus daemon to initialize and load configuration");
+    // Need to wait longer for the Modbus daemon to actually start and reload config
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    log::info!("  Waited 5 seconds for daemon initialization and config reload");
 
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
-    let binary = aoba::ci::build_debug_bin("aoba")?;
-    let test_poll = Command::new(&binary)
-        .args([
-            "--slave-poll",
-            "/tmp/vcom2",
-            "--baud-rate",
-            "9600",
-            "--station-id",
-            "1",
-            "--register-mode",
-            register_mode,
-            "--register-address",
-            "0",
-            "--register-length",
-            &register_length.to_string(),
-            "--json",
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
-    if !test_poll.status.success() {
-        let stderr = String::from_utf8_lossy(&test_poll.stderr);
-        return Err(anyhow!(
-            "TUI master is not responding to test poll. Status: {}, stderr: {}",
-            test_poll.status,
-            stderr
-        ));
+    // Retry the poll multiple times to give the daemon time to fully initialize
+    let mut last_error = String::new();
+    let mut test_poll_result = None;
+    for attempt in 1..=5 {
+        log::info!("  Poll attempt {attempt}/5");
+        let test_poll = Command::new(&binary)
+            .args([
+                "--slave-poll",
+                "/tmp/vcom2",
+                "--baud-rate",
+                "9600",
+                "--station-id",
+                "1",
+                "--register-mode",
+                register_mode,
+                "--register-address",
+                "0",
+                "--register-length",
+                &register_length.to_string(),
+                "--json",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
+
+        if test_poll.status.success() {
+            test_poll_result = Some(test_poll);
+            log::info!("  ✓ TUI master is responding!");
+            break;
+        } else {
+            last_error = String::from_utf8_lossy(&test_poll.stderr).to_string();
+            log::warn!("  Attempt {attempt} failed: {last_error}");
+            if attempt < 5 {
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
     }
+
+    let test_poll = test_poll_result.ok_or_else(|| {
+        anyhow!("TUI master is not responding after 5 attempts. Last error: {last_error}")
+    })?;
 
     let test_output = String::from_utf8_lossy(&test_poll.stdout);
     log::info!(
@@ -206,8 +213,16 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         // Wait a bit for previous values to be polled
         sleep_a_while().await;
 
+        // Enter Modbus panel to update registers
+        log::info!("Entering Modbus panel for iteration {}", iteration + 1);
+        enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
         // Generate new random values
-        let new_values = generate_random_data(register_length, is_coil);
+        let new_values = if is_coil {
+            generate_random_coils(register_length)
+        } else {
+            generate_random_registers(register_length)
+        };
         log::info!("New values (iteration {}): {:?}", iteration + 1, new_values);
         all_expected_values.push(new_values.clone());
 
@@ -215,13 +230,20 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         update_tui_registers(&mut tui_session, &mut tui_cap, &new_values, is_coil).await?;
 
         log::info!("✓ Updated registers in TUI");
+        
+        // Exit Modbus panel after updating (press Escape to get back to port details)
+        let actions = vec![
+            CursorAction::PressEscape,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, &format!("exit_panel_iter_{}", iteration + 1)).await?;
     }
 
     // Wait for final values to be polled
     sleep_a_while().await;
 
     // Check if output file was created
-    if !output_file.exists() {
+    while !output_file.exists() {
         log::warn!("⚠️ Output file doesn't exist yet, waiting longer...");
         sleep_a_while().await;
     }
@@ -282,71 +304,6 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     Ok(())
 }
 
-/// Navigate to vcom1 port in TUI
-async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
-    log::info!("📍 Finding vcom1 in port list...");
-
-    let screen = cap.capture(session, "before_navigation")?;
-    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
-
-    if !screen.contains(&vcom_pattern) {
-        return Err(anyhow!("vcom1 ({vcom_pattern}) not found in port list"));
-    }
-
-    let lines: Vec<&str> = screen.lines().collect();
-    let mut vcom1_line = None;
-    let mut cursor_line = None;
-
-    for (idx, line) in lines.iter().enumerate() {
-        if line.contains(&vcom_pattern) {
-            vcom1_line = Some(idx);
-        }
-        if line.contains("> ") {
-            let trimmed = line.trim();
-            if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
-                cursor_line = Some(idx);
-            }
-        }
-    }
-
-    let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
-    let curr_idx = cursor_line.unwrap_or(3);
-
-    if vcom1_idx != curr_idx {
-        let delta = vcom1_idx.abs_diff(curr_idx);
-        let direction = if vcom1_idx > curr_idx {
-            aoba::ci::ArrowKey::Down
-        } else {
-            aoba::ci::ArrowKey::Up
-        };
-
-        let actions = vec![
-            CursorAction::PressArrow {
-                direction,
-                count: delta,
-            },
-            CursorAction::Sleep { ms: 500 },
-        ];
-        execute_cursor_actions(session, cap, &actions, "nav_to_vcom1").await?;
-    }
-
-    // Press Enter to enter vcom1 details
-    let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::MatchPattern {
-            pattern: vcom_pattern_regex,
-            description: "In vcom1 port details".to_string(),
-            line_range: Some((0, 3)),
-            col_range: None,
-        },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
-
-    log::info!("✓ Successfully entered vcom1 details");
-    Ok(())
-}
-
 /// Configure TUI as Modbus Master with initial values
 async fn configure_tui_master<T: Expect>(
     session: &mut T,
@@ -360,7 +317,7 @@ async fn configure_tui_master<T: Expect>(
     // Navigate to Business Configuration
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::Sleep { ms: 500 },
@@ -390,7 +347,7 @@ async fn configure_tui_master<T: Expect>(
     log::info!("Setting register mode to: {register_mode}");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 3,
         },
         CursorAction::PressEnter,
@@ -408,7 +365,7 @@ async fn configure_tui_master<T: Expect>(
 
     if arrow_count > 0 {
         let actions = vec![CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Right,
+            direction: ci_utils::ArrowKey::Right,
             count: arrow_count,
         }];
         execute_cursor_actions(session, cap, &actions, "select_reg_mode").await?;
@@ -421,7 +378,7 @@ async fn configure_tui_master<T: Expect>(
     log::info!("Setting register length to: {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
@@ -432,7 +389,7 @@ async fn configure_tui_master<T: Expect>(
 
     // Navigate to register values
     let actions = vec![CursorAction::PressArrow {
-        direction: aoba::ci::ArrowKey::Down,
+        direction: ci_utils::ArrowKey::Down,
         count: 1,
     }];
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
@@ -445,12 +402,13 @@ async fn configure_tui_master<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::TypeString(dec_val),
             CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 }, // Wait for value to be saved
         ];
         execute_cursor_actions(session, cap, &actions, &format!("set_reg_{i}")).await?;
 
         if i < initial_values.len() - 1 {
             let actions = vec![CursorAction::PressArrow {
-                direction: aoba::ci::ArrowKey::Right,
+                direction: ci_utils::ArrowKey::Right,
                 count: 1,
             }];
             execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
@@ -458,197 +416,39 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Exit Modbus settings - stay where we are, don't navigate back
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
-    execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
-
+    // Configuration complete - no need to exit the panel
+    // The test can continue with the panel open or just terminate
     log::info!("✓ Master configuration complete");
-    Ok(())
-}
+    log::info!("  Exiting Modbus panel to restart port...");
 
-/// Enable the serial port in TUI
-async fn enable_port_carefully<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<()> {
-    log::info!("🔌 Enabling port...");
-
-    let screen = cap.capture(session, "before_enable")?;
-
-    if !screen.contains("Enable Port") {
-        return Err(anyhow!(
-            "Not in port details page - 'Enable Port' not found"
-        ));
-    }
-
-    // Check if cursor is on "Enable Port" line
-    let lines: Vec<&str> = screen.lines().collect();
-    let mut on_enable_port = false;
-    for line in lines {
-        let trimmed = line.trim();
-        if (trimmed.starts_with("│ > ") || trimmed.starts_with("> "))
-            && line.contains("Enable Port")
-        {
-            on_enable_port = true;
-            break;
-        }
-    }
-
-    if !on_enable_port {
-        let actions = vec![CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 3,
-        }];
-        execute_cursor_actions(session, cap, &actions, "nav_to_enable_port").await?;
-    }
-
-    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
-    execute_cursor_actions(session, cap, &actions, "toggle_enable_port").await?;
-
-    log::info!("✓ Port enabled");
-    Ok(())
-}
-
-/// Update TUI registers with new values
-async fn update_tui_registers<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-    new_values: &[u16],
-    _is_coil: bool,
-) -> Result<()> {
-    // Navigate to Business Configuration (2 down from Enable Port)
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 2,
-        },
-        CursorAction::PressEnter,
+        CursorAction::PressEscape,
         CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
     ];
-    execute_cursor_actions(session, cap, &actions, "enter_modbus_for_update").await?;
+    execute_cursor_actions(session, cap, &actions, "exit_modbus_panel").await?;
 
-    // Navigate to first register (station should be selected, go down to registers)
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 6,
-        },
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "nav_to_first_register").await?;
-
-    // Update each register value
-    for (i, &val) in new_values.iter().enumerate() {
-        let dec_val = format!("{val}"); // Format as decimal, not hex
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::TypeString(dec_val),
-            CursorAction::PressEnter,
-        ];
-        execute_cursor_actions(session, cap, &actions, &format!("update_reg_{i}")).await?;
-
-        if i < new_values.len() - 1 {
-            let actions = vec![CursorAction::PressArrow {
-                direction: aoba::ci::ArrowKey::Right,
-                count: 1,
-            }];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
-                .await?;
-        }
+    // Check where we are and navigate to port details if needed
+    let screen = cap.capture(session, "after_exit")?;
+    if screen.contains("COM Ports") {
+        // We're at port list, need to enter vcom1
+        log::info!("  Re-entering vcom1 port");
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
+        execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
     }
 
-    // Exit - stay where we are, don't navigate back
-    let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 1000 }];
-    execute_cursor_actions(session, cap, &actions, "exit_after_update").await?;
+    // Now toggle the port OFF (disable)
+    log::info!("  Toggling port OFF to apply configuration");
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
+    execute_cursor_actions(session, cap, &actions, "disable_port").await?;
 
-    Ok(())
-}
+    // Toggle the port back ON (enable)
+    log::info!("  Toggling port ON with new configuration");
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
+    execute_cursor_actions(session, cap, &actions, "re_enable_port").await?;
 
-/// Verify continuous data collected by CLI slave
-fn verify_continuous_data(
-    output_file: &std::path::Path,
-    expected_values_list: &[Vec<u16>],
-    _is_coil: bool,
-) -> Result<()> {
-    log::info!(
-        "🔍 Verifying collected data from: {path}",
-        path = output_file.display()
-    );
-
-    if !output_file.exists() {
-        return Err(anyhow!("Output file does not exist"));
-    }
-
-    let content = std::fs::read_to_string(output_file)?;
-    log::info!(
-        "Output file content ({len} bytes):\n{content}",
-        len = content.len(),
-        content = content
-    );
-
-    if content.trim().is_empty() {
-        return Err(anyhow!("Output file is empty"));
-    }
-
-    // Parse JSON lines
-    let mut parsed_outputs = Vec::new();
-    for (i, line) in content.lines().enumerate() {
-        match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(json) => {
-                if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
-                    let values_u16: Vec<u16> = values
-                        .iter()
-                        .filter_map(|v| v.as_u64().map(|n| n as u16))
-                        .collect();
-                    parsed_outputs.push(values_u16);
-                }
-            }
-            Err(e) => {
-                log::warn!(
-                    "⚠️ Line {line} is not valid JSON: {err}",
-                    line = i + 1,
-                    err = e
-                );
-            }
-        }
-    }
-
-    log::info!("Parsed {} output lines", parsed_outputs.len());
-    log::info!("Expected {} value sets", expected_values_list.len());
-
-    // Verify that at least some of the expected values were captured
-    let mut found_count = 0;
-    for (i, expected_values) in expected_values_list.iter().enumerate() {
-        let found = parsed_outputs
-            .iter()
-            .any(|output| output == expected_values);
-        if found {
-            log::info!(
-                "✅ Expected value set {idx} found: {vals:?}",
-                idx = i + 1,
-                vals = expected_values
-            );
-            found_count += 1;
-        } else {
-            log::warn!(
-                "⚠️ Expected value set {idx} NOT found: {vals:?}",
-                idx = i + 1,
-                vals = expected_values
-            );
-        }
-    }
-
-    if found_count == 0 {
-        return Err(anyhow!(
-            "None of the expected value sets were found in output"
-        ));
-    }
-
-    log::info!(
-        "✅ Found {found}/{total} expected value sets in output",
-        found = found_count,
-        total = expected_values_list.len()
-    );
+    log::info!("✓ Port restarted with configuration");
     Ok(())
 }
 
@@ -659,9 +459,9 @@ async fn main() -> Result<()> {
         .init();
 
     log::info!("🧪 Running TUI E2E Continuous Test: TUI Master + CLI Slave (discrete inputs)");
-    
+
     test_tui_master_continuous_with_cli_slave("discrete").await?;
-    
+
     log::info!("\n✅ TUI Master continuous test passed for discrete inputs!");
     Ok(())
 }

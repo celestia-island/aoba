@@ -11,7 +11,7 @@ use std::{
 
 use expectrl::Expect;
 
-use aoba::ci::{
+use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture,
 };
@@ -51,7 +51,7 @@ pub async fn test_cli_master_with_tui_slave() -> Result<()> {
 
     // Start CLI master in persistent mode
     log::info!("🧪 Step 2: Start CLI master on vcom2");
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     let mut cli_master = Command::new(&binary)
         .args([
@@ -168,7 +168,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
     log::info!("Going to top of list...");
     let go_to_top = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
+            direction: ci_utils::ArrowKey::Up,
             count: 50, // Go way up to ensure we hit the top
         },
         CursorAction::Sleep { ms: 300 },
@@ -211,7 +211,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         log::info!("Moving DOWN {steps} steps to reach vcom1");
         let actions = vec![
             CursorAction::PressArrow {
-                direction: aoba::ci::ArrowKey::Down,
+                direction: ci_utils::ArrowKey::Down,
                 count: steps,
             },
             CursorAction::Sleep { ms: 500 },
@@ -222,7 +222,7 @@ async fn navigate_to_vcom1_carefully<T: Expect>(
         log::info!("Moving UP {steps} steps to reach vcom1");
         let actions = vec![
             CursorAction::PressArrow {
-                direction: aoba::ci::ArrowKey::Up,
+                direction: ci_utils::ArrowKey::Up,
                 count: steps,
             },
             CursorAction::Sleep { ms: 500 },
@@ -276,7 +276,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     log::info!("Navigate to Modbus Settings");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::Sleep { ms: 500 },
@@ -306,7 +306,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     log::info!("Navigate up to Connection Mode");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
+            direction: ci_utils::ArrowKey::Up,
             count: 1,
         },
         CursorAction::Sleep { ms: 500 },
@@ -333,7 +333,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     log::info!("Navigate to Connection Mode");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 1,
         },
         CursorAction::Sleep { ms: 500 },
@@ -345,7 +345,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Right,
+            direction: ci_utils::ArrowKey::Right,
             count: 1,
         },
         CursorAction::PressEnter,
@@ -365,7 +365,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     log::info!("Navigate to Register Length");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 4,
         },
         CursorAction::Sleep { ms: 500 },
@@ -439,7 +439,7 @@ async fn check_received_values<T: Expect>(
     log::info!("Navigate to Modbus panel");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
