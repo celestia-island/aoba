@@ -34,7 +34,7 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
         let port_handle = serialport::new(port, baud_rate)
             .timeout(Duration::from_secs(5))
             .open()
-            .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+            .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -93,7 +93,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(100))
         .open()
-        .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -230,7 +230,7 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
         let port_handle = serialport::new(port, baud_rate)
             .timeout(Duration::from_secs(5))
             .open()
-            .map_err(|e| anyhow!("Failed to open port {}: {}", port, e))?;
+            .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -338,8 +338,42 @@ fn send_request_and_wait(
             }
             values
         }
-        _ => {
-            return Err(anyhow!("Unsupported register mode for parsing response"));
+        crate::protocol::status::types::modbus::RegisterMode::Coils
+        | crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            // Response format for read coils/discrete inputs:
+            // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
+            if bytes_read < 5 {
+                return Err(anyhow!("Response too short"));
+            }
+
+            let byte_count = response[2] as usize;
+            if bytes_read < 3 + byte_count + 2 {
+                return Err(anyhow!("Incomplete response"));
+            }
+
+            let mut values = Vec::new();
+            // Each byte contains 8 bits (coils/discrete inputs)
+            for byte_idx in 0..byte_count {
+                let byte_val = response[3 + byte_idx];
+                for bit_idx in 0..8 {
+                    if values.len() >= register_length as usize {
+                        break;
+                    }
+                    // Extract bit value (LSB first)
+                    let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
+                        1
+                    } else {
+                        0
+                    };
+                    values.push(bit_value);
+                }
+                if values.len() >= register_length as usize {
+                    break;
+                }
+            }
+            // Truncate to requested length
+            values.truncate(register_length as usize);
+            values
         }
     };
 
@@ -350,4 +384,64 @@ fn send_request_and_wait(
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
+}
+
+/// Handle slave poll persist (continuous polling mode)
+pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()> {
+    let station_id = *matches.get_one::<u8>("station-id").unwrap();
+    let register_address = *matches.get_one::<u16>("register-address").unwrap();
+    let register_length = *matches.get_one::<u16>("register-length").unwrap();
+    let register_mode = matches.get_one::<String>("register-mode").unwrap();
+    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+
+    let output_sink = matches
+        .get_one::<String>("output")
+        .map(|s| s.parse::<OutputSink>())
+        .transpose()?
+        .unwrap_or(OutputSink::Stdout);
+
+    let reg_mode = parse_register_mode(register_mode)?;
+
+    log::info!(
+        "Starting persistent slave poll on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
+    );
+
+    // Open serial port
+    let port_handle = serialport::new(port, baud_rate)
+        .timeout(Duration::from_millis(500))
+        .open()
+        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+
+    let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Register cleanup to ensure port is released on program exit
+    {
+        let pa = port_arc.clone();
+        cleanup::register_cleanup(move || {
+            drop(pa);
+            std::thread::sleep(Duration::from_millis(100));
+        });
+    }
+
+    // Continuously poll
+    loop {
+        match send_request_and_wait(
+            port_arc.clone(),
+            station_id,
+            register_address,
+            register_length,
+            reg_mode,
+        ) {
+            Ok(response) => {
+                let json = serde_json::to_string(&response)?;
+                output_sink.write(&json)?;
+            }
+            Err(e) => {
+                log::warn!("Poll error: {e}");
+            }
+        }
+
+        // Small delay between polls
+        std::thread::sleep(Duration::from_millis(500));
+    }
 }

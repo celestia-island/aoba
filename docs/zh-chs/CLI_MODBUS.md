@@ -216,6 +216,24 @@ cd examples/cli_e2e
 cargo run
 ```
 
+### 循环模式运行测试
+
+为了进行稳定性测试和调试，可以使用 `TEST_LOOP` 环境变量多次运行测试：
+
+```bash
+# 连续运行测试 5 次
+TEST_LOOP=5 cargo run --example cli_e2e
+
+# 运行测试 10 次以验证端口清理和稳定性
+TEST_LOOP=10 cargo run --example cli_e2e
+```
+
+这对于以下场景很有用：
+- 验证测试运行之间的端口清理
+- 测试稳定性和可重复性
+- 调试间歇性问题
+- 确保 socat 虚拟端口重置正常工作
+
 测试验证：
 
 - 带状态的增强端口列表

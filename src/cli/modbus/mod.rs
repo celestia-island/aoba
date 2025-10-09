@@ -16,6 +16,7 @@ pub struct ModbusResponse {
 }
 
 /// Data source for master mode
+#[derive(Clone)]
 pub enum DataSource {
     File(String),
     Pipe(String),
@@ -95,7 +96,7 @@ pub fn parse_register_mode(
         "input" => Ok(RegisterMode::Input),
         "coils" => Ok(RegisterMode::Coils),
         "discrete" => Ok(RegisterMode::DiscreteInputs),
-        _ => Err(anyhow!("Invalid register mode: {}", mode)),
+        _ => Err(anyhow!("Invalid register mode: {mode}")),
     }
 }
 

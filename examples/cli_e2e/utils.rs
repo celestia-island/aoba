@@ -11,6 +11,7 @@ use std::process::Command;
 ///
 /// # Returns
 /// A Command that can be further configured and executed
+#[allow(dead_code)]
 pub fn create_modbus_command(
     is_slave: bool,
     port: &str,
