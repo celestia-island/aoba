@@ -3,7 +3,6 @@
 // Tests all 4 register types: holding, input, coils, discrete
 
 use anyhow::{anyhow, Result};
-use rand::random;
 use regex::Regex;
 use std::{
     process::{Command, Stdio},
@@ -12,23 +11,13 @@ use std::{
 
 use expectrl::Expect;
 
-use aoba::ci::{
+use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
+    data::{generate_random_coils, generate_random_registers},
+    tui::{enable_port_carefully, navigate_to_vcom, update_tui_registers},
+    verify::verify_continuous_data,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
-
-/// Generate pseudo-random modbus data using rand crate
-fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
-    if is_coil {
-        // For coils/discrete, generate only 0 or 1
-        (0..length)
-            .map(|_| if random::<u8>() % 2 == 0 { 0 } else { 1 })
-            .collect()
-    } else {
-        // For holding/input, generate any u16 value
-        (0..length).map(|_| random::<u16>()).collect()
-    }
-}
 
 /// Test TUI Master with CLI Slave - Continuous mode
 /// This test runs continuous random updates and verifies data integrity
@@ -87,7 +76,11 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Configure TUI as Master with initial values (AFTER enabling port)
     log::info!("🧪 Step 5: Configure TUI as Master (mode: {register_mode})");
-    let initial_values = generate_random_data(register_length, is_coil);
+    let initial_values = if is_coil {
+        generate_random_coils(register_length)
+    } else {
+        generate_random_registers(register_length)
+    };
     log::info!("Initial values: {initial_values:?}");
     configure_tui_master(
         &mut tui_session,
@@ -106,7 +99,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Retry the poll multiple times to give the daemon time to fully initialize
     let mut last_error = String::new();
@@ -221,7 +214,11 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         sleep_a_while().await;
 
         // Generate new random values
-        let new_values = generate_random_data(register_length, is_coil);
+        let new_values = if is_coil {
+            generate_random_coils(register_length)
+        } else {
+            generate_random_registers(register_length)
+        };
         log::info!("New values (iteration {}): {:?}", iteration + 1, new_values);
         all_expected_values.push(new_values.clone());
 
@@ -235,7 +232,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     sleep_a_while().await;
 
     // Check if output file was created
-    if !output_file.exists() {
+    while !output_file.exists() {
         log::warn!("⚠️ Output file doesn't exist yet, waiting longer...");
         sleep_a_while().await;
     }
@@ -249,7 +246,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 10: Verify collected data from CLI output");
 
     // Check if file exists and has content
-    if !output_file.exists() {
+    while !output_file.exists() {
         return Err(anyhow!(
             "Output file does not exist: {}. CLI slave may not have successfully polled any data.",
             output_file.display()
@@ -296,71 +293,6 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     Ok(())
 }
 
-/// Navigate to vcom1 port in TUI
-async fn navigate_to_vcom<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
-    log::info!("📍 Finding vcom1 in port list...");
-
-    let screen = cap.capture(session, "before_navigation")?;
-    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
-
-    if !screen.contains(&vcom_pattern) {
-        return Err(anyhow!("vcom1 ({vcom_pattern}) not found in port list"));
-    }
-
-    let lines: Vec<&str> = screen.lines().collect();
-    let mut vcom1_line = None;
-    let mut cursor_line = None;
-
-    for (idx, line) in lines.iter().enumerate() {
-        if line.contains(&vcom_pattern) {
-            vcom1_line = Some(idx);
-        }
-        if line.contains("> ") {
-            let trimmed = line.trim();
-            if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
-                cursor_line = Some(idx);
-            }
-        }
-    }
-
-    let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
-    let curr_idx = cursor_line.unwrap_or(3);
-
-    if vcom1_idx != curr_idx {
-        let delta = vcom1_idx.abs_diff(curr_idx);
-        let direction = if vcom1_idx > curr_idx {
-            aoba::ci::ArrowKey::Down
-        } else {
-            aoba::ci::ArrowKey::Up
-        };
-
-        let actions = vec![
-            CursorAction::PressArrow {
-                direction,
-                count: delta,
-            },
-            CursorAction::Sleep { ms: 500 },
-        ];
-        execute_cursor_actions(session, cap, &actions, "nav_to_vcom1").await?;
-    }
-
-    // Press Enter to enter vcom1 details
-    let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::MatchPattern {
-            pattern: vcom_pattern_regex,
-            description: "In vcom1 port details".to_string(),
-            line_range: Some((0, 3)),
-            col_range: None,
-        },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
-
-    log::info!("✓ Successfully entered vcom1 details");
-    Ok(())
-}
-
 /// Configure TUI as Modbus Master with initial values
 async fn configure_tui_master<T: Expect>(
     session: &mut T,
@@ -374,7 +306,7 @@ async fn configure_tui_master<T: Expect>(
     // Navigate to Business Configuration
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::Sleep { ms: 500 },
@@ -404,7 +336,7 @@ async fn configure_tui_master<T: Expect>(
     log::info!("Setting register mode to: {register_mode}");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 3,
         },
         CursorAction::PressEnter,
@@ -422,7 +354,7 @@ async fn configure_tui_master<T: Expect>(
 
     if arrow_count > 0 {
         let actions = vec![CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Right,
+            direction: ci_utils::ArrowKey::Right,
             count: arrow_count,
         }];
         execute_cursor_actions(session, cap, &actions, "select_reg_mode").await?;
@@ -435,7 +367,7 @@ async fn configure_tui_master<T: Expect>(
     log::info!("Setting register length to: {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
@@ -446,7 +378,7 @@ async fn configure_tui_master<T: Expect>(
 
     // Navigate to register values
     let actions = vec![CursorAction::PressArrow {
-        direction: aoba::ci::ArrowKey::Down,
+        direction: ci_utils::ArrowKey::Down,
         count: 1,
     }];
     execute_cursor_actions(session, cap, &actions, "nav_to_registers").await?;
@@ -465,7 +397,7 @@ async fn configure_tui_master<T: Expect>(
 
         if i < initial_values.len() - 1 {
             let actions = vec![CursorAction::PressArrow {
-                direction: aoba::ci::ArrowKey::Right,
+                direction: ci_utils::ArrowKey::Right,
                 count: 1,
             }];
             execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
@@ -506,186 +438,6 @@ async fn configure_tui_master<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "re_enable_port").await?;
 
     log::info!("✓ Port restarted with configuration");
-    Ok(())
-}
-
-/// Enable the serial port in TUI
-async fn enable_port_carefully<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<()> {
-    log::info!("🔌 Enabling port...");
-
-    let screen = cap.capture(session, "before_enable")?;
-
-    if !screen.contains("Enable Port") {
-        return Err(anyhow!(
-            "Not in port details page - 'Enable Port' not found"
-        ));
-    }
-
-    // Check if cursor is on "Enable Port" line
-    let lines: Vec<&str> = screen.lines().collect();
-    let mut on_enable_port = false;
-    for line in lines {
-        let trimmed = line.trim();
-        if (trimmed.starts_with("│ > ") || trimmed.starts_with("> "))
-            && line.contains("Enable Port")
-        {
-            on_enable_port = true;
-            break;
-        }
-    }
-
-    if !on_enable_port {
-        let actions = vec![CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 3,
-        }];
-        execute_cursor_actions(session, cap, &actions, "nav_to_enable_port").await?;
-    }
-
-    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
-    execute_cursor_actions(session, cap, &actions, "toggle_enable_port").await?;
-
-    log::info!("✓ Port enabled");
-    Ok(())
-}
-
-/// Update TUI registers with new values
-async fn update_tui_registers<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-    new_values: &[u16],
-    _is_coil: bool,
-) -> Result<()> {
-    // We're already in the Modbus panel from initial configuration
-    // Navigate up to the top of the panel, then down to the first register
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Up,
-            count: 10, // Go way up to ensure we're at the top
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
-            count: 6, // Then down to first register
-        },
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "nav_to_first_register").await?;
-
-    // Update each register value
-    for (i, &val) in new_values.iter().enumerate() {
-        let dec_val = format!("{val}"); // Format as decimal, not hex
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::TypeString(dec_val),
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 }, // Wait for value to be saved
-        ];
-        execute_cursor_actions(session, cap, &actions, &format!("update_reg_{i}")).await?;
-
-        if i < new_values.len() - 1 {
-            let actions = vec![CursorAction::PressArrow {
-                direction: aoba::ci::ArrowKey::Right,
-                count: 1,
-            }];
-            execute_cursor_actions(session, cap, &actions, &format!("nav_to_reg_{}", i + 1))
-                .await?;
-        }
-    }
-
-    // No need to exit - stay in the panel for next update or test completion
-    log::info!("✓ Register values updated (staying in panel)");
-    Ok(())
-}
-
-/// Verify continuous data collected by CLI slave
-fn verify_continuous_data(
-    output_file: &std::path::Path,
-    expected_values_list: &[Vec<u16>],
-    _is_coil: bool,
-) -> Result<()> {
-    log::info!(
-        "🔍 Verifying collected data from: {path}",
-        path = output_file.display()
-    );
-
-    if !output_file.exists() {
-        return Err(anyhow!("Output file does not exist"));
-    }
-
-    let content = std::fs::read_to_string(output_file)?;
-    log::info!(
-        "Output file content ({len} bytes):\n{content}",
-        len = content.len(),
-        content = content
-    );
-
-    if content.trim().is_empty() {
-        return Err(anyhow!("Output file is empty"));
-    }
-
-    // Parse JSON lines
-    let mut parsed_outputs = Vec::new();
-    for (i, line) in content.lines().enumerate() {
-        match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(json) => {
-                if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
-                    let values_u16: Vec<u16> = values
-                        .iter()
-                        .filter_map(|v| v.as_u64().map(|n| n as u16))
-                        .collect();
-                    parsed_outputs.push(values_u16);
-                }
-            }
-            Err(e) => {
-                log::warn!(
-                    "⚠️ Line {line} is not valid JSON: {err}",
-                    line = i + 1,
-                    err = e
-                );
-            }
-        }
-    }
-
-    log::info!("Parsed {} output lines", parsed_outputs.len());
-    log::info!("Expected {} value sets", expected_values_list.len());
-
-    // Verify that at least some of the expected values were captured
-    let mut found_count = 0;
-    for (i, expected_values) in expected_values_list.iter().enumerate() {
-        let found = parsed_outputs
-            .iter()
-            .any(|output| output == expected_values);
-        if found {
-            log::info!(
-                "✅ Expected value set {idx} found: {vals:?}",
-                idx = i + 1,
-                vals = expected_values
-            );
-            found_count += 1;
-        } else {
-            log::warn!(
-                "⚠️ Expected value set {idx} NOT found: {vals:?}",
-                idx = i + 1,
-                vals = expected_values
-            );
-        }
-    }
-
-    if found_count == 0 {
-        return Err(anyhow!(
-            "None of the expected value sets were found in output"
-        ));
-    }
-
-    log::info!(
-        "✅ Found {found}/{total} expected value sets in output",
-        found = found_count,
-        total = expected_values_list.len()
-    );
     Ok(())
 }
 

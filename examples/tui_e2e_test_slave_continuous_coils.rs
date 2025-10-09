@@ -3,7 +3,6 @@
 // Uses log file analysis for data verification while keeping TUI interaction tests
 
 use anyhow::{anyhow, Result};
-use rand::random;
 use regex::Regex;
 use std::{
     fs::File,
@@ -13,23 +12,12 @@ use std::{
 
 use expectrl::Expect;
 
-use aoba::ci::{
+use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
+    data::{generate_random_coils, generate_random_registers},
+    tui::{enable_port_carefully, navigate_to_vcom, update_tui_registers},
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
-
-/// Generate pseudo-random modbus data using rand crate
-fn generate_random_data(length: usize, is_coil: bool) -> Vec<u16> {
-    if is_coil {
-        // For coils/discrete, generate only 0 or 1
-        (0..length)
-            .map(|_| if random::<u8>() % 2 == 0 { 0 } else { 1 })
-            .collect()
-    } else {
-        // For holding/input, generate any u16 value
-        (0..length).map(|_| random::<u16>()).collect()
-    }
-}
 
 /// Parse TUI log file for received register values
 fn parse_tui_log_for_values(log_path: &str, register_mode: &str) -> Result<Vec<Vec<u16>>> {
@@ -109,7 +97,11 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
         let mut file = File::create(&data_file)?;
         // Create 5 lines of random data
         for _ in 0..5 {
-            let values = generate_random_data(register_length, is_coil);
+            let values = if is_coil {
+                generate_random_coils(register_length)
+            } else {
+                generate_random_registers(register_length)
+            };
             writeln!(file, "{{\"values\": {values:?}}}")?;
             all_expected_values.push(values);
         }
@@ -124,7 +116,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 
     // Start CLI master in persistent mode
     log::info!("🧪 Step 2: Start CLI master on vcom2");
-    let binary = aoba::ci::build_debug_bin("aoba")?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
 
     let mut cli_master = Command::new(&binary)
         .args([
@@ -205,7 +197,7 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 
     // Navigate to vcom1
     log::info!("🧪 Step 5: Navigate to vcom1");
-    navigate_to_vcom1(&mut tui_session, &mut tui_cap).await?;
+    navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
     // Configure as Slave mode
     log::info!("🧪 Step 6: Configure TUI as Slave (mode: {register_mode})");
@@ -329,68 +321,6 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 }
 
 /// Navigate to vcom1 port in TUI
-async fn navigate_to_vcom1<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
-    log::info!("📍 Finding vcom1 in port list...");
-
-    // Go to top first
-    let go_to_top = vec![CursorAction::PressArrow {
-        direction: aoba::ci::ArrowKey::Up,
-        count: 50,
-    }];
-    execute_cursor_actions(session, cap, &go_to_top, "go_to_top").await?;
-
-    let screen = cap.capture(session, "after_going_to_top")?;
-
-    if !screen.contains("/tmp/vcom1") {
-        return Err(anyhow!("vcom1 not found in port list"));
-    }
-
-    let lines: Vec<&str> = screen.lines().collect();
-    let mut vcom1_line = None;
-    let mut cursor_line = None;
-
-    for (idx, line) in lines.iter().enumerate() {
-        if line.contains("/tmp/vcom1") {
-            vcom1_line = Some(idx);
-        }
-        if line.contains("> /tmp/") || line.contains("> /dev/") {
-            cursor_line = Some(idx);
-        }
-    }
-
-    let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
-    let curr_idx = cursor_line.ok_or_else(|| anyhow!("Could not find cursor line"))?;
-
-    if vcom1_idx != curr_idx {
-        let delta = vcom1_idx.abs_diff(curr_idx);
-        let direction = if vcom1_idx > curr_idx {
-            aoba::ci::ArrowKey::Down
-        } else {
-            aoba::ci::ArrowKey::Up
-        };
-
-        let actions = vec![CursorAction::PressArrow {
-            direction,
-            count: delta,
-        }];
-        execute_cursor_actions(session, cap, &actions, "nav_to_vcom1").await?;
-    }
-
-    // Press Enter to enter vcom1 details
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::MatchPattern {
-            pattern: Regex::new(r"/tmp/vcom1")?,
-            description: "In vcom1 port details".to_string(),
-            line_range: Some((0, 3)),
-            col_range: None,
-        },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
-
-    log::info!("✓ Successfully entered vcom1 details");
-    Ok(())
-}
 
 /// Configure TUI as Modbus Slave
 async fn configure_tui_slave<T: Expect>(
@@ -404,7 +334,7 @@ async fn configure_tui_slave<T: Expect>(
     // Navigate to Modbus settings
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::Sleep { ms: 500 },
@@ -434,12 +364,12 @@ async fn configure_tui_slave<T: Expect>(
     log::info!("Setting connection mode to Slave");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 1,
         },
         CursorAction::PressEnter,
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Right,
+            direction: ci_utils::ArrowKey::Right,
             count: 1,
         },
         CursorAction::PressEnter,
@@ -450,7 +380,7 @@ async fn configure_tui_slave<T: Expect>(
     log::info!("Setting register mode to: {register_mode}");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
@@ -468,7 +398,7 @@ async fn configure_tui_slave<T: Expect>(
 
     if arrow_count > 0 {
         let actions = vec![CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Right,
+            direction: ci_utils::ArrowKey::Right,
             count: arrow_count,
         }];
         execute_cursor_actions(session, cap, &actions, "select_reg_mode").await?;
@@ -481,7 +411,7 @@ async fn configure_tui_slave<T: Expect>(
     log::info!("Setting register length to: {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
-            direction: aoba::ci::ArrowKey::Down,
+            direction: ci_utils::ArrowKey::Down,
             count: 2,
         },
         CursorAction::PressEnter,
