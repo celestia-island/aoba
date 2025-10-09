@@ -107,12 +107,12 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     // Verify TUI master is responding before starting persistent polling
     log::info!("🧪 Step 6.5: Verify TUI master is responding");
     let binary = aoba::ci::build_debug_bin("aoba")?;
-    
+
     // Retry the poll multiple times to give the daemon time to fully initialize
     let mut last_error = String::new();
     let mut test_poll_result = None;
     for attempt in 1..=5 {
-        log::info!("  Poll attempt {}/5", attempt);
+        log::info!("  Poll attempt {attempt}/5");
         let test_poll = Command::new(&binary)
             .args([
                 "--slave-poll",
@@ -139,17 +139,16 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
             break;
         } else {
             last_error = String::from_utf8_lossy(&test_poll.stderr).to_string();
-            log::warn!("  Attempt {} failed: {}", attempt, last_error);
+            log::warn!("  Attempt {attempt} failed: {last_error}");
             if attempt < 5 {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
         }
     }
-    
-    let test_poll = test_poll_result.ok_or_else(|| anyhow!(
-        "TUI master is not responding after 5 attempts. Last error: {}",
-        last_error
-    ))?;
+
+    let test_poll = test_poll_result.ok_or_else(|| {
+        anyhow!("TUI master is not responding after 5 attempts. Last error: {last_error}")
+    })?;
 
     let test_output = String::from_utf8_lossy(&test_poll.stdout);
     log::info!(
@@ -478,7 +477,7 @@ async fn configure_tui_master<T: Expect>(
     // The test can continue with the panel open or just terminate
     log::info!("✓ Master configuration complete");
     log::info!("  Exiting Modbus panel to restart port...");
-    
+
     let actions = vec![
         CursorAction::PressEscape,
         CursorAction::Sleep { ms: 500 },
@@ -486,7 +485,7 @@ async fn configure_tui_master<T: Expect>(
         CursorAction::Sleep { ms: 1000 },
     ];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_panel").await?;
-    
+
     // Check where we are and navigate to port details if needed
     let screen = cap.capture(session, "after_exit")?;
     if screen.contains("COM Ports") {
@@ -495,17 +494,17 @@ async fn configure_tui_master<T: Expect>(
         let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
         execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
     }
-    
+
     // Now toggle the port OFF (disable)
     log::info!("  Toggling port OFF to apply configuration");
     let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "disable_port").await?;
-    
+
     // Toggle the port back ON (enable)
     log::info!("  Toggling port ON with new configuration");
     let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
     execute_cursor_actions(session, cap, &actions, "re_enable_port").await?;
-    
+
     log::info!("✓ Port restarted with configuration");
     Ok(())
 }
@@ -677,7 +676,9 @@ fn verify_continuous_data(
     }
 
     if found_count == 0 {
-        return Err(anyhow!("None of the expected value sets were found in output"));
+        return Err(anyhow!(
+            "None of the expected value sets were found in output"
+        ));
     }
 
     log::info!(
@@ -695,9 +696,9 @@ async fn main() -> Result<()> {
         .init();
 
     log::info!("🧪 Running TUI E2E Continuous Test: TUI Master + CLI Slave (input registers)");
-    
+
     test_tui_master_continuous_with_cli_slave("input").await?;
-    
+
     log::info!("\n✅ TUI Master continuous test passed for input registers!");
     Ok(())
 }

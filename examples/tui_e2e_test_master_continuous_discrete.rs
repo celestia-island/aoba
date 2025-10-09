@@ -112,7 +112,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     let mut last_error = String::new();
     let mut test_poll_result = None;
     for attempt in 1..=5 {
-        log::info!("  Poll attempt {}/5", attempt);
+        log::info!("  Poll attempt {attempt}/5");
         let test_poll = Command::new(&binary)
             .args([
                 "--slave-poll",
@@ -139,7 +139,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
             break;
         } else {
             last_error = String::from_utf8_lossy(&test_poll.stderr).to_string();
-            log::warn!("  Attempt {} failed: {}", attempt, last_error);
+            log::warn!("  Attempt {attempt} failed: {last_error}");
             if attempt < 5 {
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }
@@ -147,10 +147,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     }
 
     let test_poll = test_poll_result.ok_or_else(|| {
-        anyhow!(
-            "TUI master is not responding after 5 attempts. Last error: {}",
-            last_error
-        )
+        anyhow!("TUI master is not responding after 5 attempts. Last error: {last_error}")
     })?;
 
     let test_output = String::from_utf8_lossy(&test_poll.stdout);
