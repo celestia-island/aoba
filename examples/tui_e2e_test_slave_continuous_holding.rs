@@ -213,8 +213,10 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     }
 
     // Wait for communication to happen (polls should occur automatically)
+    // Need to wait at least 1-2 poll cycles (1 second each) plus time for CLI master to send updates
     log::info!("🧪 Step 8: Wait for master-slave communication...");
-    sleep_a_while().await;
+    log::info!("   Waiting 4 seconds for polling cycles to complete...");
+    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
 
     // Parse TUI log file for received values
     log::info!("🧪 Step 9: Verify data from TUI log file");
