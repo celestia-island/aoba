@@ -113,8 +113,50 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
         log::info!("  Set {}: {:?}", i + 1, values);
     }
 
-    // Start CLI master in persistent mode
-    log::info!("🧪 Step 2: Start CLI master on vcom2");
+    // Spawn TUI process first (will be slave on vcom1)
+    log::info!("🧪 Step 2: Spawn TUI process");
+    let mut tui_session = spawn_expect_process(&["--tui"])
+        .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
+    let mut tui_cap = TerminalCapture::new(24, 80);
+
+    sleep_a_while().await;
+
+    // Wait for initial screen and verify TUI loaded
+    log::info!("🧪 Step 3: Verify TUI loaded");
+    let actions = vec![CursorAction::MatchPattern {
+        pattern: Regex::new(r"AOBA")?,
+        description: "TUI application title visible".to_string(),
+        line_range: Some((0, 3)),
+        col_range: None,
+    }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "verify_tui_loaded",
+    )
+    .await?;
+
+    // Navigate to vcom1
+    log::info!("🧪 Step 4: Navigate to vcom1");
+    ci_utils::tui::navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure as Slave mode
+    log::info!("🧪 Step 6: Configure TUI as Slave (mode: {register_mode})");
+    configure_tui_slave(
+        &mut tui_session,
+        &mut tui_cap,
+        register_mode,
+        register_length,
+    )
+    .await?;
+
+    // Enable the port
+    log::info!("🧪 Step 6: Enable the port");
+    enable_port(&mut tui_session, &mut tui_cap).await?;
+
+    // Now start CLI master after TUI slave is ready
+    log::info!("🧪 Step 7: Start CLI master on vcom2");
     let binary = ci_utils::build_debug_bin("aoba")?;
 
     let mut cli_master = Command::new(&binary)
@@ -169,48 +211,6 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
             log::info!("✅ CLI master is running");
         }
     }
-
-    // Spawn TUI process (will be slave on vcom1)
-    log::info!("🧪 Step 3: Spawn TUI process");
-    let mut tui_session = spawn_expect_process(&["--tui"])
-        .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
-
-    sleep_a_while().await;
-
-    // Wait for initial screen and verify TUI loaded
-    log::info!("🧪 Step 4: Verify TUI loaded");
-    let actions = vec![CursorAction::MatchPattern {
-        pattern: Regex::new(r"AOBA")?,
-        description: "TUI application title visible".to_string(),
-        line_range: Some((0, 3)),
-        col_range: None,
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "verify_tui_loaded",
-    )
-    .await?;
-
-    // Navigate to vcom1
-    log::info!("🧪 Step 5: Navigate to vcom1");
-    ci_utils::tui::navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
-
-    // Configure as Slave mode
-    log::info!("🧪 Step 6: Configure TUI as Slave (mode: {register_mode})");
-    configure_tui_slave(
-        &mut tui_session,
-        &mut tui_cap,
-        register_mode,
-        register_length,
-    )
-    .await?;
-
-    // Enable the port
-    log::info!("🧪 Step 7: Enable the port");
-    enable_port(&mut tui_session, &mut tui_cap).await?;
 
     // Wait for communication to happen (polls should occur automatically)
     log::info!("🧪 Step 8: Wait for master-slave communication...");
