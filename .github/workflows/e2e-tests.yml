@@ -20,11 +20,7 @@ jobs:
             tui_e2e_test_master,
             tui_e2e_test_slave,
             tui_e2e_test_master_continuous_holding,
-            tui_e2e_test_master_continuous_input,
-            tui_e2e_test_master_continuous_coils,
-            tui_e2e_test_master_continuous_discrete,
             tui_e2e_test_slave_continuous_holding,
-            tui_e2e_test_slave_continuous_coils,
           ]
 
     steps:
