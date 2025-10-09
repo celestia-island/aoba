@@ -142,8 +142,12 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     log::info!("🧪 Step 4: Navigate to vcom1");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure as Slave mode
-    log::info!("🧪 Step 5: Configure TUI as Slave (mode: {register_mode})");
+    // Enable the port FIRST (before configuration)
+    log::info!("🧪 Step 5: Enable the port");
+    enable_port(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure as Slave mode (AFTER enabling port)
+    log::info!("🧪 Step 6: Configure TUI as Slave (mode: {register_mode})");
     configure_tui_slave(
         &mut tui_session,
         &mut tui_cap,
@@ -151,10 +155,6 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
         register_length,
     )
     .await?;
-
-    // Enable the port
-    log::info!("🧪 Step 6: Enable the port");
-    enable_port(&mut tui_session, &mut tui_cap).await?;
 
     // Now start CLI master after TUI slave is ready
     log::info!("🧪 Step 7: Start CLI master on vcom2");
@@ -424,6 +424,9 @@ async fn configure_tui_slave<T: Expect>(
     // Exit Modbus settings
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
+
+    // Give the TUI time to process configuration changes before enabling
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     log::info!("✓ Slave configuration complete");
     Ok(())
