@@ -2,7 +2,6 @@ pub mod cli;
 pub mod gui;
 pub mod tui;
 
-pub mod ci;
 pub mod i18n;
 pub mod protocol;
 

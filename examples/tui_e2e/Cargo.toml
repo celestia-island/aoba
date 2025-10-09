@@ -1,5 +1,5 @@
 [package]
-name = "cli_e2e"
+name = "tui_e2e"
 version = "0.0.1"
 edition = "2021"
 publish = false
@@ -11,6 +11,8 @@ env_logger = "^0.11"
 log = "^0.4"
 serde_json = "^1"
 rand = "0.9"
+regex = "^1"
+expectrl = "^0.8"
 
 [dependencies.ci_utils]
 path = "../ci_utils"
