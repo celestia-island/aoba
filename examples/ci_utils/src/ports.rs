@@ -20,7 +20,7 @@ pub fn vcom_matchers() -> VcomMatchers {
     } else if cfg!(windows) {
         ("COM1".to_string(), "COM2".to_string())
     } else {
-        ("/dev/vcom1".to_string(), "/dev/vcom2".to_string())
+        ("/tmp/vcom1".to_string(), "/tmp/vcom2".to_string())
     };
 
     let (port1_rx, port2_rx, cursor_rx) = if cfg!(windows) {

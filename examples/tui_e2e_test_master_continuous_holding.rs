@@ -14,6 +14,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::{generate_random_coils, generate_random_registers},
+    ports::vcom_matchers,
     tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers},
     verify::verify_continuous_data,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
@@ -29,14 +30,16 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     log::info!("🧪 Starting TUI Master + CLI Slave continuous test (mode: {register_mode})");
 
+    let ports = vcom_matchers();
+    
     // Verify vcom ports exist
-    if !std::path::Path::new("/tmp/vcom1").exists() {
-        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    if !std::path::Path::new(&ports.port1_name).exists() {
+        return Err(anyhow!("{} was not created by socat", ports.port1_name));
     }
-    if !std::path::Path::new("/tmp/vcom2").exists() {
-        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    if !std::path::Path::new(&ports.port2_name).exists() {
+        return Err(anyhow!("{} was not created by socat", ports.port2_name));
     }
-    log::info!("✓ /tmp/vcom1 and /tmp/vcom2 verified");
+    log::info!("✓ {} and {} verified", ports.port1_name, ports.port2_name);
 
     // Determine if this is a coil type register
     let is_coil = register_mode == "coils" || register_mode == "discrete";
@@ -109,7 +112,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         let test_poll = Command::new(&binary)
             .args([
                 "--slave-poll",
-                "/tmp/vcom2",
+                &ports.port2_name,
                 "--baud-rate",
                 "9600",
                 "--station-id",
@@ -161,7 +164,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     let mut cli_slave = Command::new(&binary)
         .args([
             "--slave-poll-persist",
-            "/tmp/vcom2",
+            &ports.port2_name,
             "--baud-rate",
             "9600",
             "--station-id",

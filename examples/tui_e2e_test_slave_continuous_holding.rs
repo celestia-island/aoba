@@ -15,6 +15,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::{generate_random_coils, generate_random_registers},
+    ports::vcom_matchers,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
 
@@ -67,12 +68,14 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 
     log::info!("🧪 Starting CLI Master + TUI Slave continuous test (mode: {register_mode})");
 
+    let ports = vcom_matchers();
+    
     // Verify vcom ports exist
-    if !std::path::Path::new("/tmp/vcom1").exists() {
-        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    if !std::path::Path::new(&ports.port1_name).exists() {
+        return Err(anyhow!("{} was not created by socat", ports.port1_name));
     }
-    if !std::path::Path::new("/tmp/vcom2").exists() {
-        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    if !std::path::Path::new(&ports.port2_name).exists() {
+        return Err(anyhow!("{} was not created by socat", ports.port2_name));
     }
     log::info!("✓ Virtual COM ports verified");
 
@@ -156,13 +159,13 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     .await?;
 
     // Now start CLI master after TUI slave is ready
-    log::info!("🧪 Step 7: Start CLI master on vcom2");
+    log::info!("🧪 Step 7: Start CLI master on {}", ports.port2_name);
     let binary = ci_utils::build_debug_bin("aoba")?;
 
     let mut cli_master = Command::new(&binary)
         .args([
             "--master-provide-persist",
-            "/tmp/vcom2",
+            &ports.port2_name,
             "--baud-rate",
             "9600",
             "--station-id",
