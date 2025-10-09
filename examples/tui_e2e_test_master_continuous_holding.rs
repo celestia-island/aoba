@@ -474,11 +474,39 @@ async fn configure_tui_master<T: Expect>(
         }
     }
 
-    // Configuration complete - wait for hot reload to apply changes
-    // The daemon should detect the configuration change and reload
-    log::info!("✓ Master configuration complete (staying in panel)");
-    log::info!("  Waiting for hot reload to apply configuration...");
-    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+    // After configuration, restart the port to ensure daemon loads the config
+    // Exit the Modbus panel first
+    log::info!("✓ Master configuration complete");
+    log::info!("  Exiting Modbus panel to restart port...");
+    
+    let actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "exit_modbus_panel").await?;
+    
+    // Check where we are and navigate to port details if needed
+    let screen = cap.capture(session, "after_exit")?;
+    if screen.contains("COM Ports") {
+        // We're at port list, need to enter vcom1
+        log::info!("  Re-entering vcom1 port");
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
+        execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
+    }
+    
+    // Now toggle the port OFF (disable)
+    log::info!("  Toggling port OFF to apply configuration");
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
+    execute_cursor_actions(session, cap, &actions, "disable_port").await?;
+    
+    // Toggle the port back ON (enable)
+    log::info!("  Toggling port ON with new configuration");
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
+    execute_cursor_actions(session, cap, &actions, "re_enable_port").await?;
+    
+    log::info!("✓ Port restarted with configuration");
     Ok(())
 }
 
