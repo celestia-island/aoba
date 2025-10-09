@@ -251,18 +251,18 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
 
     // Check if file exists and has content
     if !output_file.exists() {
-        return Err(anyhow!(
-            "Output file does not exist: {}. CLI slave may not have successfully polled any data.",
-            output_file.display()
-        ));
+            return Err(anyhow!(
+                "Output file does not exist: {}. CLI slave may not have successfully polled any data.",
+                output_file.display()
+            ));
     }
 
     let file_size = std::fs::metadata(&output_file)?.len();
     if file_size == 0 {
-        return Err(anyhow!(
-            "Output file is empty: {}. CLI slave may not have received responses from TUI master.",
-            output_file.display()
-        ));
+            return Err(anyhow!(
+                "Output file is empty: {}. CLI slave may not have received responses from TUI master.",
+                output_file.display()
+            ));
     }
 
     log::info!("Output file exists with {file_size} bytes");
