@@ -14,7 +14,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::{generate_random_coils, generate_random_registers},
-    tui::{enable_port_carefully, navigate_to_vcom, update_tui_registers},
+    tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers},
     verify::verify_continuous_data,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
@@ -213,6 +213,10 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         // Wait a bit for previous values to be polled
         sleep_a_while().await;
 
+        // Enter Modbus panel to update registers
+        log::info!("Entering Modbus panel for iteration {}", iteration + 1);
+        enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
         // Generate new random values
         let new_values = if is_coil {
             generate_random_coils(register_length)
@@ -226,6 +230,13 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
         update_tui_registers(&mut tui_session, &mut tui_cap, &new_values, is_coil).await?;
 
         log::info!("✓ Updated registers in TUI");
+        
+        // Exit Modbus panel after updating (press Escape to get back to port details)
+        let actions = vec![
+            CursorAction::PressEscape,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, &format!("exit_panel_iter_{}", iteration + 1)).await?;
     }
 
     // Wait for final values to be polled

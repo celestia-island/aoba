@@ -111,7 +111,33 @@ pub async fn enable_port_carefully<T: Expect>(
     Ok(())
 }
 
+/// Enter the Modbus configuration panel from port details page
+pub async fn enter_modbus_panel<T: Expect>(
+    session: &mut T,
+    cap: &mut crate::snapshot::TerminalCapture,
+) -> Result<()> {
+    // From port details page, navigate down to "Business Configuration" and enter
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Down,
+            count: 2,
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
+        crate::auto_cursor::CursorAction::PressEnter,
+        crate::auto_cursor::CursorAction::MatchPattern {
+            pattern: Regex::new(r"ModBus Master/Slave Settings")?,
+            description: "In Modbus settings".to_string(),
+            line_range: Some((0, 3)),
+            col_range: None,
+        },
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_modbus_panel")
+        .await?;
+    Ok(())
+}
+
 /// Update TUI registers with new values (shared implementation)
+/// NOTE: Assumes you're already IN the Modbus panel at the register editing area
 pub async fn update_tui_registers<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
