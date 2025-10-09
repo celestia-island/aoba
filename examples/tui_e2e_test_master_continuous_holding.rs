@@ -457,15 +457,10 @@ async fn configure_tui_master<T: Expect>(
         execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
     }
 
-    // Now toggle the port OFF (disable)
-    log::info!("  Toggling port OFF to apply configuration");
-    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
-    execute_cursor_actions(session, cap, &actions, "disable_port").await?;
-
-    // Toggle the port back ON (enable)
-    log::info!("  Toggling port ON with new configuration");
-    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }];
-    execute_cursor_actions(session, cap, &actions, "re_enable_port").await?;
+    // Use enable_port_carefully to ensure the port is properly enabled with the new configuration
+    // This handles cursor navigation and ensures we're on the "Enable Port" option
+    log::info!("  Ensuring port is enabled with new configuration");
+    ci_utils::tui::enable_port_carefully(session, cap).await?;
 
     log::info!("✓ Port restarted with configuration");
     Ok(())
