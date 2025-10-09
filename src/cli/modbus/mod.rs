@@ -16,6 +16,7 @@ pub struct ModbusResponse {
 }
 
 /// Data source for master mode
+#[derive(Clone)]
 pub enum DataSource {
     File(String),
     Pipe(String),
