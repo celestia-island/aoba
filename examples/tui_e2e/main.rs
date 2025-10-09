@@ -21,7 +21,12 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     }
 
     // Run the script with sudo to reset/reinitialize virtual serial ports
-    let output = Command::new("sudo").arg("bash").arg(script_path).output()?;
+    let output = Command::new("sudo")
+        .arg("bash")
+        .arg(script_path)
+        .arg("--mode")
+        .arg("tui")
+        .output()?;
 
     if output.status.success() {
         log::info!("✅ Virtual serial ports reset successfully");
@@ -34,10 +39,19 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
+
+    // Check for debug mode argument
+    let args: Vec<String> = std::env::args().collect();
+    if args.contains(&"--debug".to_string()) || args.contains(&"debug".to_string()) {
+        std::env::set_var("DEBUG_MODE", "1");
+        log::info!("🔴 DEBUG MODE ENABLED - DebugBreakpoint actions will be active");
+        log::info!("💡 Test will capture screen and exit at breakpoints");
+    }
 
     // Check if we should loop the tests
     let loop_count = std::env::var("TEST_LOOP")
@@ -54,43 +68,29 @@ fn main() -> Result<()> {
             log::info!("🧪 ===== Iteration {iteration}/{loop_count} =====");
         }
 
-        log::info!("🧪 Starting CLI E2E Tests...");
-
-        tests::test_cli_help()?;
-        tests::test_cli_list_ports()?;
-        tests::test_cli_list_ports_json()?;
-        tests::test_cli_list_ports_json_with_status()?;
-
-        log::info!("🧪 Testing Modbus CLI features (basic)...");
-        tests::test_slave_listen_temp()?;
-        tests::test_slave_listen_persist()?;
-        tests::test_master_provide_temp()?;
-        tests::test_master_provide_persist()?;
+        log::info!("🧪 Starting TUI E2E Tests...");
 
         // Check if we can setup virtual serial ports for E2E tests
         if setup_virtual_serial_ports()? {
             log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
-            // Run each E2E test with fresh port initialization
-            log::info!("🧪 Test 1/5: Slave listen with virtual ports");
-            setup_virtual_serial_ports()?;
-            tests::test_slave_listen_with_vcom()?;
+            // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
+            log::info!(
+                "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
+            );
+            tests::test_tui_slave_with_cli_master_continuous().await?;
 
-            log::info!("🧪 Test 2/5: Master provide with virtual ports");
+            // Reset ports after test completes
+            log::info!("🧪 Resetting virtual serial ports after Test 1...");
             setup_virtual_serial_ports()?;
-            tests::test_master_provide_with_vcom()?;
 
-            log::info!("🧪 Test 3/5: Master-slave communication");
-            setup_virtual_serial_ports()?;
-            tests::test_master_slave_communication()?;
+            // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
+            log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
+            tests::test_tui_master_with_cli_slave_continuous().await?;
 
-            log::info!("🧪 Test 4/5: Continuous connection with files");
+            // Reset ports after test completes
+            log::info!("🧪 Resetting virtual serial ports after Test 2...");
             setup_virtual_serial_ports()?;
-            tests::test_continuous_connection_with_files()?;
-
-            log::info!("🧪 Test 5/5: Continuous connection with pipes");
-            setup_virtual_serial_ports()?;
-            tests::test_continuous_connection_with_pipes()?;
         } else {
             log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
         }
@@ -98,7 +98,7 @@ fn main() -> Result<()> {
         if loop_count > 1 {
             log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
         } else {
-            log::info!("🧪 All CLI E2E tests passed!");
+            log::info!("🧪 All TUI E2E tests passed!");
         }
     }
 

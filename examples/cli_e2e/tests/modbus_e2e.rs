@@ -9,21 +9,33 @@ use std::{
 use ci_utils::create_modbus_command;
 
 /// Test master-slave communication with virtual serial ports
-/// Master device = Modbus Slave/Server (responds to requests)
-/// Slave device = Modbus Master/Client (sends requests)
+/// Server = Modbus Master (provides data, responds to requests) on vcom1
+/// Client = Modbus Slave polling (sends requests, receives data) on vcom2
 pub fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
     let temp_dir = std::env::temp_dir();
 
-    // Start server (Modbus slave) on /tmp/vcom1 in persistent mode
-    log::info!("🧪 Starting Modbus server (slave) on /tmp/vcom1...");
+    // Create a data file for the server to provide
+    let data_file = temp_dir.join("test_modbus_e2e_data.json");
+    {
+        let mut file = File::create(&data_file)?;
+        writeln!(file, r#"{{"values": [10, 20, 30, 40, 50]}}"#)?;
+    }
+
+    // Start server (Modbus master-provide) on /tmp/vcom1 in persistent mode
+    log::info!("🧪 Starting Modbus server (master-provide) on /tmp/vcom1...");
     let server_output = temp_dir.join("server_output.log");
     let server_output_file = File::create(&server_output)?;
 
-    let mut server = create_modbus_command(true, "/tmp/vcom1", true, None)?
-        .stdout(Stdio::from(server_output_file))
-        .stderr(Stdio::piped())
-        .spawn()?;
+    let mut server = create_modbus_command(
+        false, // master-provide
+        "/tmp/vcom1",
+        true, // persistent
+        Some(&format!("file:{}", data_file.display())),
+    )?
+    .stdout(Stdio::from(server_output_file))
+    .stderr(Stdio::piped())
+    .spawn()?;
 
     // Give server time to start and fully acquire the port
     std::thread::sleep(Duration::from_secs(3));
@@ -40,6 +52,7 @@ pub fn test_master_slave_communication() -> Result<()> {
                 String::new()
             };
 
+            std::fs::remove_file(&data_file)?;
             std::fs::remove_file(&server_output)?;
 
             return Err(anyhow!(
@@ -51,24 +64,29 @@ pub fn test_master_slave_communication() -> Result<()> {
         }
     }
 
-    // Create a data file for the client to send
-    let data_file = temp_dir.join("test_modbus_e2e_data.json");
-    {
-        let mut file = File::create(&data_file)?;
-        writeln!(file, r#"{{"values": [10, 20, 30, 40, 50]}}"#)?;
-    }
+    // Now start client (slave-poll) on /tmp/vcom2 in temporary mode
+    log::info!("🧪 Starting Modbus client (slave-poll) on /tmp/vcom2...");
 
-    // Now start client (Modbus master) on /tmp/vcom2 in temporary mode
-    log::info!("🧪 Starting Modbus client (master) on /tmp/vcom2...");
-    let client_output = create_modbus_command(
-        false,
-        "/tmp/vcom2",
-        false,
-        Some(&format!("file:{}", data_file.display())),
-    )?
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()?;
+    let binary = ci_utils::build_debug_bin("aoba")?;
+    let client_output = std::process::Command::new(&binary)
+        .args([
+            "--slave-poll",
+            "/tmp/vcom2",
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            "5",
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
 
     // Wait for client to complete (temporary mode exits after one operation)
     let client_result = client_output.wait_with_output()?;

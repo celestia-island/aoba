@@ -40,25 +40,25 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         std::fs::remove_file(&slave_output_file)?;
     }
 
-    // Start slave (server) on /tmp/vcom1 in persistent mode with file output
-    log::info!("🧪 Starting Modbus slave on /tmp/vcom1 with file output...");
-    let mut slave = create_modbus_command(
-        true,
+    // Start server (master-provide) on /tmp/vcom1 in persistent mode with data source
+    log::info!("🧪 Starting Modbus server (master-provide) on /tmp/vcom1 with data source...");
+    let mut server = create_modbus_command(
+        false, // master-provide
         "/tmp/vcom1",
         true,
-        Some(&format!("file:{}", slave_output_file.display())),
+        Some(&format!("file:{}", data_file.display())),
     )?
     .stdout(Stdio::piped())
     .stderr(Stdio::piped())
     .spawn()?;
 
-    // Give slave time to start
+    // Give server time to start
     std::thread::sleep(Duration::from_secs(3));
 
-    // Check if slave is still running
-    match slave.try_wait()? {
+    // Check if server is still running
+    match server.try_wait()? {
         Some(status) => {
-            let stderr = if let Some(stderr) = slave.stderr.take() {
+            let stderr = if let Some(stderr) = server.stderr.take() {
                 let mut buf = String::new();
                 let mut reader = BufReader::new(stderr);
                 reader.read_line(&mut buf)?;
@@ -70,60 +70,73 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
             std::fs::remove_file(&data_file)?;
 
             return Err(anyhow!(
-                "Slave exited prematurely with status {status}: {stderr}"
+                "Server exited prematurely with status {status}: {stderr}"
             ));
         }
         None => {
-            log::info!("✅ Slave is running");
+            log::info!("✅ Server is running");
         }
     }
 
-    // Start master (client) on /tmp/vcom2 in persistent mode
-    log::info!("🧪 Starting Modbus master on /tmp/vcom2 with file data source...");
-    let mut master = create_modbus_command(
-        false,
-        "/tmp/vcom2",
-        true,
-        Some(&format!("file:{}", data_file.display())),
-    )?
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()?;
+    // Start client (slave-poll-persist) on /tmp/vcom2 in persistent mode with file output
+    log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with file output...");
 
-    // Let them communicate for a bit
-    log::info!("🧪 Letting master and slave communicate...");
-    std::thread::sleep(Duration::from_secs(3));
+    let binary = ci_utils::build_debug_bin("aoba")?;
+    let mut client = std::process::Command::new(&binary)
+        .args([
+            "--slave-poll-persist",
+            "/tmp/vcom2",
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            "5",
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--output",
+            &format!("file:{}", slave_output_file.display()),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    // Let them communicate for a bit - give enough time to cycle through all data
+    log::info!("🧪 Letting server and client communicate...");
+    std::thread::sleep(Duration::from_secs(5));
 
     // Kill both processes
-    master.kill()?;
-    slave.kill()?;
-    master.wait()?;
-    slave.wait()?;
+    client.kill()?;
+    server.kill()?;
+    client.wait()?;
+    server.wait()?;
 
     // Give extra time for ports to be released
     std::thread::sleep(Duration::from_secs(1));
 
-    // Verify that slave output file has data
+    // Verify that client output file has data
     if !slave_output_file.exists() {
-        return Err(anyhow!("Slave output file was not created"));
+        return Err(anyhow!("Client output file was not created"));
     }
 
-    let slave_output_content = std::fs::read_to_string(&slave_output_file)?;
+    let client_output_content = std::fs::read_to_string(&slave_output_file)?;
     log::info!(
-        "🧪 Slave output ({} bytes):\n{}",
-        slave_output_content.len(),
-        slave_output_content
+        "🧪 Client output ({} bytes):\n{}",
+        client_output_content.len(),
+        client_output_content
     );
 
-    if slave_output_content.trim().is_empty() {
+    if client_output_content.trim().is_empty() {
         std::fs::remove_file(&data_file)?;
         std::fs::remove_file(&slave_output_file)?;
-        return Err(anyhow!("Slave output file is empty"));
+        return Err(anyhow!("Client output file is empty"));
     }
 
     // Verify JSON lines
-    let lines: Vec<&str> = slave_output_content.lines().collect();
-    log::info!("✅ Slave produced {} output lines", lines.len());
+    let lines: Vec<&str> = client_output_content.lines().collect();
+    log::info!("✅ Client produced {} output lines", lines.len());
 
     // Parse all output lines and verify they are valid JSON
     let mut parsed_outputs = Vec::new();
@@ -212,26 +225,11 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
 
     log::info!("✅ Created named pipes");
 
-    // Start slave (server) on /tmp/vcom1 with pipe output
-    log::info!("🧪 Starting Modbus slave on /tmp/vcom1 with pipe output...");
-    let mut slave = create_modbus_command(
-        true,
+    // Start server (master-provide) on /tmp/vcom1 with pipe data source
+    log::info!("🧪 Starting Modbus server (master-provide) on /tmp/vcom1 with pipe data source...");
+    let mut server = create_modbus_command(
+        false, // master-provide
         "/tmp/vcom1",
-        true,
-        Some(&format!("pipe:{}", output_pipe.display())),
-    )?
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()?;
-
-    // Give slave time to start
-    std::thread::sleep(Duration::from_secs(2));
-
-    // Start master (client) on /tmp/vcom2 with pipe data source
-    log::info!("🧪 Starting Modbus master on /tmp/vcom2 with pipe data source...");
-    let mut master = create_modbus_command(
-        false,
-        "/tmp/vcom2",
         true,
         Some(&format!("pipe:{}", data_pipe.display())),
     )?
@@ -239,13 +237,40 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     .stderr(Stdio::piped())
     .spawn()?;
 
-    // Give master time to start and open the pipe
+    // Give server time to start
     std::thread::sleep(Duration::from_secs(2));
 
-    // Start a thread to write random data to the input pipe
+    // Start client (slave-poll-persist) on /tmp/vcom2 with pipe output
+    log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with pipe output...");
+
+    let binary = ci_utils::build_debug_bin("aoba")?;
+    let mut client = std::process::Command::new(&binary)
+        .args([
+            "--slave-poll-persist",
+            "/tmp/vcom2",
+            "--station-id",
+            "1",
+            "--register-address",
+            "0",
+            "--register-length",
+            "5",
+            "--register-mode",
+            "holding",
+            "--baud-rate",
+            "9600",
+            "--output",
+            &format!("pipe:{}", output_pipe.display()),
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    // Give client time to start and open the pipe
+    std::thread::sleep(Duration::from_secs(2));
+
+    // Start a thread to write random data to the input pipe (for server)
     let data_pipe_clone = data_pipe.clone();
     let writer_thread = std::thread::spawn(move || -> Result<()> {
-        log::info!("🧪 Writing random data to input pipe...");
+        log::info!("🧪 Writing random data to server input pipe...");
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .open(&data_pipe_clone)?;
@@ -259,11 +284,11 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
         Ok(())
     });
 
-    // Start a thread to read from the output pipe
+    // Start a thread to read from the client output pipe
     let output_pipe_clone = output_pipe.clone();
     let reader_thread = std::thread::spawn(move || -> Result<Vec<String>> {
-        log::info!("🧪 Reading from output pipe...");
-        std::thread::sleep(Duration::from_secs(1)); // Wait for slave to start writing
+        log::info!("🧪 Reading from client output pipe...");
+        std::thread::sleep(Duration::from_secs(1)); // Wait for client to start writing
 
         let file = std::fs::File::open(&output_pipe_clone)?;
         let reader = BufReader::new(file);
@@ -287,10 +312,10 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     let reader_result = reader_thread.join();
 
     // Kill processes
-    master.kill()?;
-    slave.kill()?;
-    master.wait()?;
-    slave.wait()?;
+    client.kill()?;
+    server.kill()?;
+    client.wait()?;
+    server.wait()?;
 
     // Give extra time for ports to be released
     std::thread::sleep(Duration::from_secs(1));

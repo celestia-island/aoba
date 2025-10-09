@@ -80,9 +80,9 @@ pub async fn enable_port_carefully<T: Expect>(
     }
 
     // Check if port is already enabled - look for "Enable Port           Enabled"
-    let already_enabled = screen.lines().any(|line| {
-        line.contains("Enable Port") && line.contains("Enabled")
-    });
+    let already_enabled = screen
+        .lines()
+        .any(|line| line.contains("Enable Port") && line.contains("Enabled"));
 
     if already_enabled {
         log::info!("Port is already enabled, skipping toggle");
