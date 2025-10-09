@@ -14,14 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example:
-          [
-            cli_e2e,
-            tui_e2e_test_master,
-            tui_e2e_test_slave,
-            tui_e2e_test_master_continuous_holding,
-            tui_e2e_test_slave_continuous_holding,
-          ]
+        example: [cli_e2e, tui_e2e]
 
     steps:
       - uses: actions/checkout@v5
@@ -54,7 +47,7 @@ jobs:
           chmod +x scripts/socat_init.sh
           sudo scripts/socat_init.sh
 
-      - name: Run TUI E2E tests
+      - name: Run E2E tests
         run: |
           cargo run --example ${{ matrix.example }}
 
