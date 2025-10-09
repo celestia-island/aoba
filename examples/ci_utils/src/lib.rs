@@ -22,5 +22,5 @@ pub use key_input::{ArrowKey, ExpectKeyExt};
 pub use ports::{should_run_vcom_tests, vcom_matchers, VcomMatchers};
 pub use snapshot::TerminalCapture;
 pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
-pub use tui::{enable_port_carefully, navigate_to_vcom, update_tui_registers};
+pub use tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers};
 pub use verify::{verify_cli_output, verify_continuous_data};
