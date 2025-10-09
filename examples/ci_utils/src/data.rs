@@ -1,7 +1,7 @@
 /// Generate pseudo-random coil data (0 or 1 values).
 pub fn generate_random_coils(length: usize) -> Vec<u16> {
     (0..length)
-        .map(|_| if rand::random::<u8>() % 2 == 0 { 0 } else { 1 })
+        .map(|_| if rand::random::<u8>().is_multiple_of(2) { 0 } else { 1 })
         .collect()
 }
 
