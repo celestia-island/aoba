@@ -79,6 +79,16 @@ pub async fn enable_port_carefully<T: Expect>(
         ));
     }
 
+    // Check if port is already enabled - look for "Enable Port           Enabled"
+    let already_enabled = screen.lines().any(|line| {
+        line.contains("Enable Port") && line.contains("Enabled")
+    });
+
+    if already_enabled {
+        log::info!("Port is already enabled, skipping toggle");
+        return Ok(());
+    }
+
     // Check if cursor is on "Enable Port" line
     let lines: Vec<&str> = screen.lines().collect();
     let mut on_enable_port = false;

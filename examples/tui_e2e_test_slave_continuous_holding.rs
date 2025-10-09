@@ -15,6 +15,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::{generate_random_coils, generate_random_registers},
+    ports::vcom_matchers,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
 
@@ -67,12 +68,14 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 
     log::info!("🧪 Starting CLI Master + TUI Slave continuous test (mode: {register_mode})");
 
+    let ports = vcom_matchers();
+    
     // Verify vcom ports exist
-    if !std::path::Path::new("/tmp/vcom1").exists() {
-        return Err(anyhow!("/tmp/vcom1 was not created by socat"));
+    if !std::path::Path::new(&ports.port1_name).exists() {
+        return Err(anyhow!("{} was not created by socat", ports.port1_name));
     }
-    if !std::path::Path::new("/tmp/vcom2").exists() {
-        return Err(anyhow!("/tmp/vcom2 was not created by socat"));
+    if !std::path::Path::new(&ports.port2_name).exists() {
+        return Err(anyhow!("{} was not created by socat", ports.port2_name));
     }
     log::info!("✓ Virtual COM ports verified");
 
@@ -141,7 +144,11 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     log::info!("🧪 Step 4: Navigate to vcom1");
     ci_utils::tui::navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Configure as Slave mode
+    // Enable the port FIRST (before configuration)
+    log::info!("🧪 Step 5: Enable the port");
+    enable_port(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure as Slave mode (AFTER enabling port)
     log::info!("🧪 Step 6: Configure TUI as Slave (mode: {register_mode})");
     configure_tui_slave(
         &mut tui_session,
@@ -151,18 +158,14 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
     )
     .await?;
 
-    // Enable the port
-    log::info!("🧪 Step 6: Enable the port");
-    enable_port(&mut tui_session, &mut tui_cap).await?;
-
     // Now start CLI master after TUI slave is ready
-    log::info!("🧪 Step 7: Start CLI master on vcom2");
+    log::info!("🧪 Step 7: Start CLI master on {}", ports.port2_name);
     let binary = ci_utils::build_debug_bin("aoba")?;
 
     let mut cli_master = Command::new(&binary)
         .args([
             "--master-provide-persist",
-            "/tmp/vcom2",
+            &ports.port2_name,
             "--baud-rate",
             "9600",
             "--station-id",
@@ -177,34 +180,16 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
             &format!("file:{}", data_file.display()),
         ])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::inherit()) // Show CLI master logs in test output
         .spawn()?;
 
     // Check if CLI master is still running
     sleep_a_while().await;
     match cli_master.try_wait()? {
         Some(status) => {
-            // CLI master exited - capture stderr for debugging
-            let stderr = if let Some(mut stderr_handle) = cli_master.stderr.take() {
-                let mut buf = String::new();
-                use std::io::Read;
-                stderr_handle.read_to_string(&mut buf).ok();
-                buf
-            } else {
-                String::new()
-            };
-            let stdout = if let Some(mut stdout_handle) = cli_master.stdout.take() {
-                let mut buf = String::new();
-                use std::io::Read;
-                stdout_handle.read_to_string(&mut buf).ok();
-                buf
-            } else {
-                String::new()
-            };
-            log::error!("CLI master stdout: {stdout}");
-            log::error!("CLI master stderr: {stderr}");
+            // CLI master exited - note: stderr is inherited so already visible in logs
             return Err(anyhow!(
-                "CLI master exited prematurely with status {status}, stderr: {stderr}"
+                "CLI master exited prematurely with status {status}"
             ));
         }
         None => {
@@ -422,6 +407,9 @@ async fn configure_tui_slave<T: Expect>(
     // Exit Modbus settings
     let actions = vec![CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }];
     execute_cursor_actions(session, cap, &actions, "exit_modbus_settings").await?;
+
+    // Give the TUI time to process configuration changes before enabling
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
     log::info!("✓ Slave configuration complete");
     Ok(())
