@@ -8,7 +8,7 @@ pub fn verify_continuous_data(
     expected_values_list: &[Vec<u16>],
     _is_coil: bool,
 ) -> Result<()> {
-    while !output_file.exists() {
+    if !output_file.exists() {
         return Err(anyhow!("Output file does not exist"));
     }
 

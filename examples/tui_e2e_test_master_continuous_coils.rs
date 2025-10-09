@@ -247,7 +247,7 @@ pub async fn test_tui_master_continuous_with_cli_slave(register_mode: &str) -> R
     log::info!("🧪 Step 10: Verify collected data from CLI output");
 
     // Check if file exists and has content
-    while !output_file.exists() {
+    if !output_file.exists() {
         return Err(anyhow!(
             "Output file does not exist: {}. CLI slave may not have successfully polled any data.",
             output_file.display()

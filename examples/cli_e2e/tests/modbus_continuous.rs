@@ -11,7 +11,6 @@ use ci_utils::generate_random_registers;
 use ci_utils::create_modbus_command;
 
 /// Generate pseudo-random modbus data using rand crate
-
 /// Test continuous connection with file-based data source and file output
 pub fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");

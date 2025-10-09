@@ -15,7 +15,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::{generate_random_coils, generate_random_registers},
-    tui::{enable_port_carefully, navigate_to_vcom, update_tui_registers},
+    tui::navigate_to_vcom,
     {should_run_vcom_tests, sleep_a_while, spawn_expect_process, TerminalCapture},
 };
 
@@ -321,7 +321,6 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
 }
 
 /// Navigate to vcom1 port in TUI
-
 /// Configure TUI as Modbus Slave
 async fn configure_tui_slave<T: Expect>(
     session: &mut T,
