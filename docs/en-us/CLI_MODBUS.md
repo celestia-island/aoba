@@ -216,6 +216,24 @@ cd examples/cli_e2e
 cargo run
 ```
 
+### Running Tests in Loop Mode
+
+For stability testing and debugging, you can run tests multiple times using the `TEST_LOOP` environment variable:
+
+```bash
+# Run tests 5 times consecutively
+TEST_LOOP=5 cargo run --example cli_e2e
+
+# Run tests 10 times to verify port cleanup and stability
+TEST_LOOP=10 cargo run --example cli_e2e
+```
+
+This is useful for:
+- Verifying port cleanup between test runs
+- Testing stability and repeatability
+- Debugging intermittent issues
+- Ensuring socat virtual port reset works correctly
+
 Tests verify:
 
 - Enhanced port listing with status
