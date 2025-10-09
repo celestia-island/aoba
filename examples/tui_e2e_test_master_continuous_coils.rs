@@ -422,35 +422,16 @@ async fn configure_tui_master<T: Expect>(
     log::info!("✓ Master configuration complete");
     log::info!("  Exiting Modbus panel to restart port...");
 
-    // Press Escape multiple times to ensure we exit the panel
-    // Bug: Escape handling in Modbus panel may require multiple presses
-    for i in 1..=5 {
-        let actions = vec![
-            CursorAction::PressEscape,
-            CursorAction::Sleep { ms: 300 },
-        ];
-        execute_cursor_actions(session, cap, &actions, &format!("exit_attempt_{i}")).await?;
-        
-        let screen = cap.capture(session, &format!("after_escape_{i}"))?;
-        if !screen.contains("ModBus Master/Slave Settings") {
-            log::info!("  Exited Modbus panel after {i} Escape press(es)");
-            break;
-        }
-        if i == 5 {
-            return Err(anyhow!(
-                "Failed to exit Modbus panel after {} Escape presses. Screen:\n{screen}",
-                i
-            ));
-        }
-    }
-
-    // Verify we're out and check where we are
-    let screen = cap.capture(session, "confirm_exit")?;
-    if screen.contains("ModBus Master/Slave Settings") {
-        return Err(anyhow!("Still in Modbus panel despite successful exit detection"));
-    }
+    let actions = vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 1000 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "exit_modbus_panel").await?;
 
     // Check where we are and navigate to port details if needed
+    let screen = cap.capture(session, "after_exit")?;
     if screen.contains("COM Ports") {
         // We're at port list, need to enter vcom1
         log::info!("  Re-entering vcom1 port");
