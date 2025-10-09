@@ -841,7 +841,7 @@ pub fn generate_modbus_master_response(
         .ok_or_else(|| {
             let available_ids: Vec<u8> = stations.iter().map(|s| s.station_id).collect();
             log::warn!("No station configured for slave ID {slave_id}. Available station IDs: {available_ids:?}");
-            anyhow!("No station configured for slave ID {}", slave_id)
+            anyhow!("No station configured for slave ID {slave_id}")
         })?;
 
     // Use the storage from the global mode instead of creating a new one
@@ -852,7 +852,7 @@ pub fn generate_modbus_master_response(
 
     let mut context = storage
         .lock()
-        .map_err(|e| anyhow!("Failed to lock storage: {}", e))?;
+        .map_err(|e| anyhow!("Failed to lock storage: {e}"))?;
 
     let mut response = Vec::new();
     let mut frame = ModbusFrame::new(slave_id, request, ModbusProto::Rtu, &mut response);

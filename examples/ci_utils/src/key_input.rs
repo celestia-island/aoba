@@ -43,33 +43,33 @@ impl<T: Expect> ExpectKeyExt for T {
             ArrowKey::Left => "\x1b[D",
         };
         self.send(seq)
-            .map_err(|err| anyhow!("Failed to send {:?} arrow: {}", direction, err))
+            .map_err(|err| anyhow!("Failed to send {direction:?} arrow: {err}"))
     }
 
     fn send_enter(&mut self) -> Result<()> {
         self.send("\r")
-            .map_err(|err| anyhow!("Failed to send Enter: {}", err))
+            .map_err(|err| anyhow!("Failed to send Enter: {err}"))
     }
 
     fn send_tab(&mut self) -> Result<()> {
         self.send("\t")
-            .map_err(|err| anyhow!("Failed to send Tab: {}", err))
+            .map_err(|err| anyhow!("Failed to send Tab: {err}"))
     }
 
     fn send_escape(&mut self) -> Result<()> {
         self.send("\x1b")
-            .map_err(|err| anyhow!("Failed to send Escape: {}", err))
+            .map_err(|err| anyhow!("Failed to send Escape: {err}"))
     }
 
     fn send_ctrl_c(&mut self) -> Result<()> {
         self.send("\x03")
-            .map_err(|err| anyhow!("Failed to send Ctrl+C: {}", err))
+            .map_err(|err| anyhow!("Failed to send Ctrl+C: {err}"))
     }
 
     fn send_char(&mut self, ch: char) -> Result<()> {
         let s = ch.to_string();
         self.send(&s)
-            .map_err(|err| anyhow!("Failed to send character '{}': {}", ch, err))
+            .map_err(|err| anyhow!("Failed to send character '{ch}': {err}"))
     }
 }
 

@@ -54,7 +54,14 @@ pub fn parse_args() -> ArgMatches {
                 .long("slave-poll")
                 .help("Modbus slave: send request and wait for response once, then exit (acts as client)")
                 .value_name("PORT")
-                .conflicts_with_all(["slave-listen", "slave-listen-persist", "master-provide", "master-provide-persist"]),
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll-persist", "master-provide", "master-provide-persist"]),
+        )
+        .arg(
+            Arg::new("slave-poll-persist")
+                .long("slave-poll-persist")
+                .help("Modbus slave: continuously poll for data and output responses (JSONL output)")
+                .value_name("PORT")
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "master-provide", "master-provide-persist"]),
         )
         .arg(
             Arg::new("master-provide")

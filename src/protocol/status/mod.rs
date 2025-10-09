@@ -36,7 +36,7 @@ where
         .ok_or_else(|| anyhow!("Status not initialized"))?;
     let guard = status
         .read()
-        .map_err(|err| anyhow!("status lock poisoned: {}", err))?;
+        .map_err(|err| anyhow!("status lock poisoned: {err}"))?;
     // Call user closure with borrowed reference
     let val = f(&guard)?;
     // Clone once to decouple lifetime
@@ -59,7 +59,7 @@ where
         .ok_or_else(|| anyhow!("Status not initialized"))?;
     let mut guard = status
         .write()
-        .map_err(|err| anyhow!("status lock poisoned: {}", err))?;
+        .map_err(|err| anyhow!("status lock poisoned: {err}"))?;
     let val = f(&mut guard)?;
     Ok(val.clone())
 }

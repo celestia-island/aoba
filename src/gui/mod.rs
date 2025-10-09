@@ -40,7 +40,7 @@ pub fn start() -> Result<()> {
         options,
         Box::new(|cc| Ok(Box::new(GuiApp::new(cc)))),
     )
-    .map_err(|err| anyhow!("GUI has crashed: {}", err))
+    .map_err(|err| anyhow!("GUI has crashed: {err}"))
 }
 
 pub struct GuiApp {
@@ -83,30 +83,30 @@ fn run_demo_core(ui_rx: flume::Receiver<UiToCore>, core_tx: flume::Sender<CoreTo
                     log::info!("Received Refresh");
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
                 }
                 UiToCore::Quit => {
                     log::info!("Received Quit, exiting demo core");
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
                     break;
                 }
                 UiToCore::PausePolling => {
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
                 }
                 UiToCore::ResumePolling => {
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
                 }
                 UiToCore::ToggleRuntime(_) => {
                     // Demo GUI core ignores ToggleRuntime
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {}", e))?;
+                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
                 }
             },
             Err(_) => {
