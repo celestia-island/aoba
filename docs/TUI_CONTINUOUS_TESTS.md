@@ -191,6 +191,39 @@ sudo rm -f /tmp/vcom1 /tmp/vcom2
 
 ## Troubleshooting
 
+### Debug Mode with Breakpoints
+
+The TUI E2E tests now support a debug mode using `CursorAction::DebugBreakpoint` to verify the workflow at key stages. This is especially useful when tests fail due to navigation or timing issues.
+
+**How to use debug breakpoints**:
+1. Set the `DEBUG_MODE` environment variable:
+```bash
+export DEBUG_MODE=1
+cargo run --example tui_e2e
+```
+
+2. The test will stop at each `DebugBreakpoint`, capture the screen state, and print it to the log
+3. After a breakpoint is hit, the virtual serial ports are automatically reset
+4. The process exits immediately for manual inspection
+
+**Key debug breakpoints in TUI tests**:
+- `after_navigate_to_vcom1` - Verifies port selection
+- `after_configure_master` - Verifies return to port details after configuration
+- `after_enable_port` - Verifies port is enabled
+- `after_enter_modbus_panel` - Verifies entry into Modbus configuration panel
+- `after_create_station` - Verifies station creation
+- `after_set_register_length` - Verifies register length configuration
+- `before_update_registers_round_N` - Verifies state before updating registers
+- `after_update_registers_round_N` - Verifies register updates were applied
+
+**Expected workflow verified by breakpoints**:
+1. Port selection → Navigate to vcom1 in port list
+2. Enable port → Toggle "Enable Port" option
+3. Enter configuration panel → Navigate to "Enter Business Configuration"
+4. Add station → Create new Modbus station
+5. Configure station length → Set register/coil count
+6. Register update loop → Update values and wait for communication
+
 ### Port Access Issues
 If you get permission errors, ensure virtual ports have correct permissions:
 ```bash
@@ -208,3 +241,20 @@ For TUI slave tests, if values aren't captured:
 - Verify TUI is updating display properly
 - Check that CLI master is sending data
 - Review test logs for timing information
+
+### Common Issues and Solutions
+
+**Issue**: Test times out waiting for CLI master/slave to complete
+- **Cause**: Missing `enter_modbus_panel()` call after enabling port
+- **Solution**: Tests must enter the Modbus panel after enabling the port to access registers for updates
+- **Debug**: Use `DEBUG_MODE=1` and check `after_enable_port` and `after_enter_modbus_panel` breakpoints
+
+**Issue**: Port shows as "Disabled" after trying to enable
+- **Cause**: Cursor not on "Enable Port" option before pressing Enter
+- **Solution**: Navigate to "Enable Port" option first (usually by pressing Up arrow 3 times)
+- **Debug**: Use `DEBUG_MODE=1` and check `before_enable` breakpoint to verify cursor position
+
+**Issue**: Register values not updating in TUI
+- **Cause**: Not in Modbus configuration panel when trying to update
+- **Solution**: Call `enter_modbus_panel()` before `update_tui_registers()`
+- **Debug**: Check `before_update_registers_round_1` breakpoint to verify screen shows register editing interface
