@@ -178,34 +178,16 @@ pub async fn test_cli_master_continuous_with_tui_slave(register_mode: &str) -> R
             &format!("file:{}", data_file.display()),
         ])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::inherit()) // Show CLI master logs in test output
         .spawn()?;
 
     // Check if CLI master is still running
     sleep_a_while().await;
     match cli_master.try_wait()? {
         Some(status) => {
-            // CLI master exited - capture stderr for debugging
-            let stderr = if let Some(mut stderr_handle) = cli_master.stderr.take() {
-                let mut buf = String::new();
-                use std::io::Read;
-                stderr_handle.read_to_string(&mut buf).ok();
-                buf
-            } else {
-                String::new()
-            };
-            let stdout = if let Some(mut stdout_handle) = cli_master.stdout.take() {
-                let mut buf = String::new();
-                use std::io::Read;
-                stdout_handle.read_to_string(&mut buf).ok();
-                buf
-            } else {
-                String::new()
-            };
-            log::error!("CLI master stdout: {stdout}");
-            log::error!("CLI master stderr: {stderr}");
+            // CLI master exited - note: stderr is inherited so already visible in logs
             return Err(anyhow!(
-                "CLI master exited prematurely with status {status}, stderr: {stderr}"
+                "CLI master exited prematurely with status {status}"
             ));
         }
         None => {

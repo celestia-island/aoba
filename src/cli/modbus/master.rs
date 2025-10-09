@@ -215,6 +215,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let mut assembling: Vec<u8> = Vec::new();
     let mut last_byte_time: Option<std::time::Instant> = None;
     let frame_gap = Duration::from_millis(10); // Inter-frame gap
+    
+    log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
     loop {
         // Check if update thread has panicked
@@ -225,6 +227,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         let mut port = port_arc.lock().unwrap();
         match port.read(&mut buffer) {
             Ok(n) if n > 0 => {
+                log::info!("CLI Master: Read {n} bytes from port: {:02X?}", &buffer[..n]);
                 assembling.extend_from_slice(&buffer[..n]);
                 last_byte_time = Some(std::time::Instant::now());
             }
@@ -234,6 +237,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                     if let Some(last_time) = last_byte_time {
                         if last_time.elapsed() >= frame_gap {
                             // Frame complete - process it
+                            log::info!("CLI Master: Frame complete ({} bytes), processing request", assembling.len());
                             drop(port); // Release port lock before processing
                             
                             let request = assembling.clone();
