@@ -4,7 +4,6 @@
 /// and verify state transitions without relying on terminal screen capture.
 use anyhow::{anyhow, Result};
 use serde_json::Value;
-use std::fs;
 use std::path::Path;
 
 /// A parsed state dump from the TUI log file
@@ -36,7 +35,7 @@ pub struct ConfigEditState {
 
 /// Read and parse all STATE_DUMP entries from a log file
 pub fn parse_state_dumps<P: AsRef<Path>>(log_path: P) -> Result<Vec<StateDump>> {
-    let content = fs::read_to_string(log_path.as_ref())
+    let content = std::fs::read_to_string(log_path.as_ref())
         .map_err(|err| anyhow!("Failed to read log file: {err}"))?;
 
     let mut dumps = Vec::new();
