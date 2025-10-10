@@ -1,5 +1,4 @@
 pub mod input;
-pub mod subprocess;
 pub mod ui;
 pub mod utils;
 
@@ -16,7 +15,8 @@ use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 use crate::{
     protocol::status::{
         init_status, read_status,
-        types::{self, port::PortState, Status}, with_port_write, write_status,
+        types::{self, port::PortState, Status},
+        with_port_read, with_port_write, write_status,
     },
     tui::{
         ui::components::error_msg::ui_error_set,
@@ -165,76 +165,15 @@ fn run_core_thread(
     let mut last_scan = std::time::Instant::now() - scan_interval;
     let mut scan_in_progress = false; // Track if scan is currently running
 
-    // Create subprocess manager
-    let mut subprocess_manager = subprocess::SubprocessManager::new();
-
     // do_scan extracted to module-level function below
 
     let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     loop {
-        // Poll IPC messages from subprocesses
-        for (port_name, ipc_msg) in subprocess_manager.poll_ipc_messages() {
-            match ipc_msg {
-                crate::protocol::ipc::IpcMessage::PortOpened { port_name: _  } => {
-                    log::info!("Subprocess for {} reported port opened", port_name);
-                    // Update status to show port as occupied (by subprocess)
-                    write_status(|status| {
-                        if let Some(port) = status.ports.map.get(&port_name) {
-                            if with_port_write(port, |port| {
-                                // Mark as OccupiedByOther since it's in a subprocess
-                                port.state = PortState::OccupiedByOther;
-                            })
-                            .is_some()
-                            {
-                                // updated
-                            }
-                        }
-                        Ok(())
-                    })?;
-                }
-                crate::protocol::ipc::IpcMessage::PortError { port_name: _, error } => {
-                    log::error!("Subprocess for {} reported error: {}", port_name, error);
-                    // Set error in status
-                    write_status(|status| {
-                        status.temporarily.error = Some(types::ErrorInfo {
-                            message: format!("Port {}: {}", port_name, error),
-                            timestamp: chrono::Local::now(),
-                        });
-                        Ok(())
-                    })?;
-                }
-                crate::protocol::ipc::IpcMessage::Shutdown => {
-                    log::info!("Subprocess for {} is shutting down", port_name);
-                }
-                _ => {}
-            }
-        }
-        
-        // Check for dead subprocesses
-        for (port_name, exit_status) in subprocess_manager.reap_dead_processes() {
-            log::warn!("Subprocess for {} died with status: {:?}", port_name, exit_status);
-            // Update status to show port as free
-            write_status(|status| {
-                if let Some(port) = status.ports.map.get(&port_name) {
-                    if with_port_write(port, |port| {
-                        port.state = PortState::Free;
-                    })
-                    .is_some()
-                    {
-                        // updated
-                    }
-                }
-                Ok(())
-            })?;
-        }
-
         // Drain UI -> core messages
         while let Ok(msg) = ui_rx.try_recv() {
             match msg {
                 UiToCore::Quit => {
                     log::info!("Received quit signal");
-                    // Stop all subprocesses
-                    subprocess_manager.shutdown_all();
                     // Notify UI to quit and then exit core thread
                     core_tx
                         .send(CoreToUi::Quit)
@@ -260,17 +199,31 @@ fn run_core_thread(
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
-                    
-                    // Check if subprocess already exists for this port
-                    let active_ports = subprocess_manager.active_ports();
-                    if active_ports.contains(&port_name) {
-                        // Stop the subprocess
-                        log::info!("Stopping subprocess for {}", port_name);
-                        if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
-                            log::error!("Failed to stop subprocess for {}: {}", port_name, err);
+                    // Step 1: extract any existing runtime handle (clone) so we can stop it
+                    let existing_rt = read_status(|status| {
+                        if let Some(port) = status.ports.map.get(&port_name) {
+                            // use helper to avoid panics on poisoned locks
+                            if let Some(opt_rt) = with_port_read(port, |port| {
+                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
+                                    &port.state
+                                {
+                                    Some(runtime.clone())
+                                } else {
+                                    None
+                                }
+                            }) {
+                                Ok(opt_rt)
+                            } else {
+                                Ok(None)
+                            }
+                        } else {
+                            Ok(None)
                         }
-                        
-                        // Update status
+                    })
+                    .unwrap_or(None);
+
+                    if let Some(rt) = existing_rt {
+                        // Clear runtime reference in Status under write lock quickly
                         write_status(|status| {
                             if let Some(port) = status.ports.map.get(&port_name) {
                                 if with_port_write(port, |port| {
@@ -279,46 +232,141 @@ fn run_core_thread(
                                 .is_some()
                                 {
                                     // updated
+                                } else {
+                                    log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (Free)");
                                 }
                             }
                             Ok(())
                         })?;
-                    } else {
-                        // Start a new subprocess
-                        log::info!("Starting subprocess for {}", port_name);
-                        
-                        // For simplicity, use default modbus configuration
-                        // In a real implementation, this would come from the UI configuration per port
-                        // Default to slave mode (listen)
-                        let mode = subprocess::CliMode::SlaveListen;
-                        
-                        let config = subprocess::CliSubprocessConfig {
-                            port_name: port_name.clone(),
-                            mode,
-                            station_id: 1,  // Default
-                            register_address: 0,  // Default
-                            register_length: 10,  // Default
-                            register_mode: "holding".to_string(),  // Default
-                            baud_rate: 9600,  // Default
-                            data_source: None,  // Not needed for slave mode
-                        };
-                        
-                        match subprocess_manager.start_subprocess(config) {
-                            Ok(()) => {
-                                log::info!("Successfully started subprocess for {}", port_name);
+
+                        // Send stop outside of the write lock and wait briefly for the runtime to acknowledge
+                        // Try to request runtime stop. Sending may fail if the runtime
+                        // already exited; treat that non-fatally to avoid bringing down
+                        // the entire core thread when user double-presses Enter.
+                        if let Err(err) = rt
+                            .cmd_tx
+                            .send(crate::protocol::runtime::RuntimeCommand::Stop)
+                        {
+                            let warn_msg = format!("ToggleRuntime: failed to send Stop: {err}");
+                            log::warn!("{warn_msg}");
+
+                            // Also write to the port's logs so the UI shows the error
+                            write_status(|status| {
+                                if let Some(port) = status.ports.map.get(&port_name) {
+                                    if with_port_write(port, |port| {
+                                        port.logs.push(
+                                            crate::protocol::status::types::port::PortLogEntry {
+                                                when: chrono::Local::now(),
+                                                raw: warn_msg.clone(),
+                                                parsed: None,
+                                            },
+                                        );
+                                        if port.logs.len() > 1000 {
+                                            let excess = port.logs.len() - 1000;
+                                            port.logs.drain(0..excess);
+                                        }
+                                        true
+                                    })
+                                    .is_none()
+                                    {
+                                        // If we couldn't acquire the port write lock, log a warning
+                                        log::warn!("ToggleRuntime: failed to acquire write lock to append stop-warn for {port_name}");
+                                    }
+                                }
+                                Ok(())
+                            })?;
+                        }
+                        // Wait up to 1s for the runtime thread to emit Stopped. Use a single
+                        // recv_timeout so we avoid short-interval polling while keeping the
+                        // operation bounded. Treat failure non-fatally (log) to match
+                        // surrounding code which tolerates stop failures.
+                        match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                            Ok(evt) => {
+                                if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
+                                    log::warn!(
+                                                "ToggleRuntime: received unexpected event while stopping {port_name}: {evt:?}",
+                                            );
+                                }
+                            }
+                            Err(flume::RecvTimeoutError::Timeout) => {
+                                log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
                             }
                             Err(err) => {
-                                log::error!("Failed to start subprocess for {}: {}", port_name, err);
-                                // Set error in status
-                                write_status(|status| {
-                                    status.temporarily.error = Some(types::ErrorInfo {
-                                        message: format!("Failed to start subprocess for {}: {}", port_name, err),
-                                        timestamp: chrono::Local::now(),
-                                    });
-                                    Ok(())
-                                })?;
+                                log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {err}");
                             }
                         }
+
+                        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                            log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
+                        }
+                        continue;
+                    }
+
+                    // No runtime currently: attempt to spawn with a retry loop outside of any write lock
+                    let cfg = crate::protocol::runtime::SerialConfig::default();
+                    let mut spawn_err: Option<anyhow::Error> = None;
+                    let mut handle_opt: Option<crate::protocol::runtime::PortRuntimeHandle> = None;
+                    const MAX_RETRIES: usize = 8;
+                    for attempt in 0..MAX_RETRIES {
+                        match crate::protocol::runtime::PortRuntimeHandle::spawn(
+                            port_name.clone(),
+                            cfg.clone(),
+                        ) {
+                            Ok(h) => {
+                                handle_opt = Some(h);
+                                log::info!("ToggleRuntime: Successfully spawned runtime for {port_name} on attempt {}", attempt + 1);
+                                break;
+                            }
+                            Err(err) => {
+                                spawn_err = Some(err);
+                                log::warn!("ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {}: {}", attempt + 1, spawn_err.as_ref().unwrap());
+                                // If not last attempt, wait a bit and retry; this allows the OS to release the port
+                                if attempt + 1 < MAX_RETRIES {
+                                    // Slightly longer backoff on first attempts
+                                    let wait_ms = if attempt < 2 { 200 } else { 100 };
+                                    std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(handle) = handle_opt {
+                        // Clone handle for insertion under write lock to avoid moving
+                        let handle_for_write = handle.clone();
+                        log::info!(
+                            "ToggleRuntime: Writing runtime handle to port status for {port_name}"
+                        );
+                        // Write handle into status under write lock
+                        write_status(|status| {
+                            if let Some(port) = status.ports.map.get(&port_name) {
+                                if with_port_write(port, |port| {
+                                    port.state = PortState::OccupiedByThis {
+                                        handle: Some(types::port::SerialPortWrapper::new(
+                                            handle_for_write.shared_serial.clone(),
+                                        )),
+                                        runtime: handle_for_write.clone(),
+                                    };
+                                })
+                                .is_some()
+                                {
+                                    log::info!("ToggleRuntime: Successfully set port {port_name} to OccupiedByThis with runtime");
+                                    // updated
+                                } else {
+                                    log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (OccupiedByThis)");
+                                }
+                            }
+                            Ok(())
+                        })?;
+                    } else if let Some(err) = spawn_err {
+                        // All attempts failed: set transient error for UI
+                        write_status(|status| {
+                            status.temporarily.error = Some(types::ErrorInfo {
+                                message: format!("Failed to start runtime: {err}"),
+                                timestamp: chrono::Local::now(),
+                            });
+                            Ok(())
+                        })?;
                     }
 
                     core_tx
@@ -344,13 +392,10 @@ fn run_core_thread(
 
         // Handle modbus communication at most once per 10ms to ensure very responsive behavior
         // This high frequency is critical for TUI Master mode to respond quickly to CLI slave requests
-        // NOTE: With subprocess management, this might not be needed anymore as communication
-        // happens in the CLI subprocesses. Keeping it for now for compatibility.
         if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_millis(10) {
             // Update the timestamp first to ensure we don't re-enter while still running
             last_modbus_run = std::time::Instant::now();
-            // crate::protocol::daemon::handle_modbus_communication()?;
-            // TODO: Remove this once fully transitioned to subprocess management
+            crate::protocol::daemon::handle_modbus_communication()?;
         }
 
         core_tx

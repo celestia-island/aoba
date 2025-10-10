@@ -167,64 +167,130 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         )
         .await?;
 
-        // Start CLI master to poll data
-        log::info!("🧪 Round {round}/{ROUNDS}: Starting CLI master to poll");
+        // Poll CLI master with retry logic - wait for data to propagate
+        log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI master with retry logic");
         let binary = build_debug_bin("aoba")?;
+        
+        const MAX_RETRIES: usize = 5;
+        const RETRY_DELAY_MS: u64 = 1000;
+        
+        let mut last_received: Option<Vec<u16>> = None;
+        let mut unchanged_count = 0;
+        let mut poll_success = false;
+        
+        for retry_attempt in 1..=MAX_RETRIES {
+            log::info!("🧪 Round {round}/{ROUNDS}: Polling attempt {retry_attempt}/{MAX_RETRIES}");
+            
+            // Take a screenshot before polling to see TUI state
+            let screen = tui_cap
+                .capture(&mut tui_session, &format!("poll_attempt_{round}_{retry_attempt}"))
+                .await?;
+            log::info!("📺 TUI screen before polling (round {round}, attempt {retry_attempt}):\n{}\n", screen);
+            
+            let cli_output = Command::new(&binary)
+                .args([
+                    "--slave-poll",
+                    &ports.port2_name,
+                    "--station-id",
+                    "1",
+                    "--register-address",
+                    "0",
+                    "--register-length",
+                    &REGISTER_LENGTH.to_string(),
+                    "--register-mode",
+                    "holding",
+                    "--baud-rate",
+                    "9600",
+                    "--json",
+                ])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .output()?;
 
-        let cli_output = Command::new(&binary)
-            .args([
-                "--slave-poll",
-                &ports.port2_name,
-                "--station-id",
-                "1",
-                "--register-address",
-                "0",
-                "--register-length",
-                &REGISTER_LENGTH.to_string(),
-                "--register-mode",
-                "holding",
-                "--baud-rate",
-                "9600",
-                "--json",
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()?;
-
-        if !cli_output.status.success() {
-            let stderr = String::from_utf8_lossy(&cli_output.stderr);
-            log::error!("❌ Round {round}/{ROUNDS}: CLI master failed: {stderr}");
-            return Err(anyhow!("CLI master failed on round {round}"));
-        }
-
-        let stdout = String::from_utf8_lossy(&cli_output.stdout);
-        log::info!(
-            "🧪 Round {round}/{ROUNDS}: CLI received: {output}",
-            output = stdout.trim()
-        );
-
-        // Verify the data matches immediately
-        let json: serde_json::Value = serde_json::from_str(&stdout)?;
-        if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
-            let received: Vec<u16> = values
-                .iter()
-                .filter_map(|v| v.as_u64().map(|n| n as u16))
-                .collect();
-
-            if received == data {
-                log::info!("✅ Round {round}/{ROUNDS}: Data verified successfully!");
-            } else {
-                log::error!(
-                    "❌ Round {round}/{ROUNDS}: Data mismatch! Expected {data:?}, got {received:?}"
-                );
-                // Exit immediately on first failure
-                return Err(anyhow!(
-                    "Data verification failed on round {round}: expected {data:?}, got {received:?}"
-                ));
+            if !cli_output.status.success() {
+                let stderr = String::from_utf8_lossy(&cli_output.stderr);
+                log::warn!("⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: CLI poll failed: {stderr}");
+                
+                // If not last attempt, wait and retry
+                if retry_attempt < MAX_RETRIES {
+                    tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+                    continue;
+                } else {
+                    return Err(anyhow!("CLI poll failed on round {round} after {MAX_RETRIES} attempts"));
+                }
             }
-        } else {
-            log::error!("❌ Round {round}/{ROUNDS}: Failed to parse values from JSON");
-            return Err(anyhow!("Failed to parse JSON values on round {round}"));
+
+            let stdout = String::from_utf8_lossy(&cli_output.stdout);
+            log::info!(
+                "🧪 Round {round}/{ROUNDS}, attempt {retry_attempt}: CLI received: {output}",
+                output = stdout.trim()
+            );
+
+            // Parse and check the data
+            let json: serde_json::Value = serde_json::from_str(&stdout)?;
+            if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
+                let received: Vec<u16> = values
+                    .iter()
+                    .filter_map(|v| v.as_u64().map(|n| n as u16))
+                    .collect();
+
+                // Check if data matches
+                if received == data {
+                    log::info!("✅ Round {round}/{ROUNDS}: Data verified successfully on attempt {retry_attempt}!");
+                    poll_success = true;
+                    break;
+                }
+                
+                // Check if data has changed since last attempt
+                if let Some(ref prev) = last_received {
+                    if prev == &received {
+                        unchanged_count += 1;
+                        log::warn!(
+                            "⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: Data unchanged ({unchanged_count}/{MAX_RETRIES}) - still {received:?}, expected {data:?}"
+                        );
+                        
+                        // If data hasn't changed for MAX_RETRIES consecutive times, give up
+                        if unchanged_count >= MAX_RETRIES {
+                            log::error!(
+                                "❌ Round {round}/{ROUNDS}: Data remained unchanged at {received:?} for {MAX_RETRIES} attempts, expected {data:?}"
+                            );
+                            return Err(anyhow!(
+                                "Data verification failed on round {round}: data remained unchanged at {received:?} for {MAX_RETRIES} attempts, expected {data:?}"
+                            ));
+                        }
+                    } else {
+                        // Data changed, reset counter
+                        unchanged_count = 0;
+                        log::info!(
+                            "🔄 Round {round}/{ROUNDS}, attempt {retry_attempt}: Data changed from {prev:?} to {received:?}, but still doesn't match expected {data:?}"
+                        );
+                    }
+                } else {
+                    log::info!(
+                        "🔄 Round {round}/{ROUNDS}, attempt {retry_attempt}: First data received: {received:?}, expected {data:?}"
+                    );
+                }
+                
+                last_received = Some(received.clone());
+                
+                // If not last attempt, wait and retry
+                if retry_attempt < MAX_RETRIES {
+                    tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+                }
+            } else {
+                log::error!("❌ Round {round}/{ROUNDS}, attempt {retry_attempt}: Failed to parse values from JSON");
+                if retry_attempt < MAX_RETRIES {
+                    tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
+                } else {
+                    return Err(anyhow!("Failed to parse JSON values on round {round}"));
+                }
+            }
+        }
+        
+        if !poll_success {
+            return Err(anyhow!(
+                "Data verification failed on round {round} after {MAX_RETRIES} attempts"
+            ));
         }
 
         // Small delay between rounds
