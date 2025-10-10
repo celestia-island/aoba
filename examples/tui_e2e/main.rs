@@ -85,6 +85,10 @@ async fn main() -> Result<()> {
 
         log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
+        // Test 0: CLI port release test - verify CLI properly releases ports on exit
+        log::info!("🧪 Test 0/2: CLI port release verification");
+        tests::test_cli_port_release().await?;
+
         // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
         log::info!(
             "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
