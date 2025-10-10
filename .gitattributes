@@ -22,3 +22,25 @@
 *.woff2 binary
 *.ttf binary
 *.otf binary
+
+# GitHub Linguist overrides to ensure 100% Rust language detection
+# Mark documentation files
+*.md linguist-documentation
+docs/** linguist-documentation
+
+# Mark configuration and data files as vendored
+*.toml linguist-vendored
+*.yml linguist-vendored
+*.yaml linguist-vendored
+*.sh linguist-vendored
+
+# Mark resource files as vendored
+res/** linguist-vendored
+
+# Mark generated files
+res/about_cache.toml linguist-generated
+
+# Mark CI/CD and tooling files as vendored
+.github/** linguist-vendored
+.cargo/** linguist-vendored
+scripts/** linguist-vendored
