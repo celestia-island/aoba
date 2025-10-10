@@ -1,8 +1,12 @@
 use anyhow::{anyhow, Result};
+use std::cell::RefCell;
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::Hasher;
 use std::{
     io::{BufRead, BufReader},
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use clap::ArgMatches;
@@ -196,11 +200,107 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     }
 
     // Start a background thread to update storage with new values from data source
+    // For pipe data sources we spawn the background updater; for file data sources
+    // the updater will still be spawned but printing of JSON to stdout is
+    // de-duplicated below to avoid repeated identical log lines when polled
     let storage_clone = storage.clone();
     let data_source_clone = data_source.clone();
+
+    // Track recent changed ranges so the main loop can bypass debounce when a
+    // request overlaps a recently-updated register range.
+    let changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
+    let changed_ranges_clone = changed_ranges.clone();
     let update_thread = std::thread::spawn(move || {
-        update_storage_loop(storage_clone, data_source_clone, reg_mode, register_address)
+        update_storage_loop(
+            storage_clone,
+            data_source_clone,
+            reg_mode,
+            register_address,
+            changed_ranges_clone,
+        )
     });
+
+    // Parse optional debounce seconds argument (floating seconds). Default 1.0s
+    // Single-precision seconds argument
+    let debounce_seconds = matches
+        .get_one::<f32>("debounce-seconds")
+        .copied()
+        .unwrap_or(1.0_f32);
+
+    // Printing/de-duplication state
+    // We track by a key derived from the request bytes + response values to
+    // handle two duplicate scenarios:
+    // 1) The same request arrives multiple times in a short window -> debounce
+    // 2) Different requests produce the same values -> dedupe by values
+    // Use RefCell for interior mutability so the closure doesn't capture a
+    // long-lived mutable borrow of these maps and block other borrows.
+    let last_print_times: RefCell<HashMap<u64, Instant>> = RefCell::new(HashMap::new());
+    let last_values_by_key: RefCell<HashMap<u64, Vec<u16>>> = RefCell::new(HashMap::new());
+
+    // Debounce window: if same request key printed within this duration, skip
+    // Convert floating seconds to Duration (support fractional seconds)
+    let debounce_window = if debounce_seconds <= 0.0 {
+        Duration::from_secs(0)
+    } else {
+        let ms = (debounce_seconds * 1000.0).round() as u64;
+        Duration::from_millis(ms)
+    };
+
+    // TTL for stale cache entries (so the maps don't grow forever). Use a
+    // multiple of debounce_window; if debounce_window is zero, use 10s default.
+    let cache_ttl = if debounce_window == Duration::from_secs(0) {
+        Duration::from_secs(10)
+    } else {
+        debounce_window * 4
+    };
+
+    // Helper to optionally print response JSON while handling duplicate suppression
+    // Uses a key (hash) which should be derived from the original request bytes
+    // so repeated identical requests within the debounce window won't spam stdout.
+    let print_response = |request_key: u64, response: &ModbusResponse, force: bool| -> Result<()> {
+        let now = Instant::now();
+
+        // If force flag is set, bypass debounce and emit immediately
+        if force {
+            let json = serde_json::to_string(response)?;
+            println!("{json}");
+            last_values_by_key
+                .borrow_mut()
+                .insert(request_key, response.values.clone());
+            last_print_times.borrow_mut().insert(request_key, now);
+            return Ok(());
+        }
+
+        // If values are identical to last printed for this key, skip
+        if let Some(prev_vals) = last_values_by_key.borrow().get(&request_key) {
+            if prev_vals == &response.values {
+                // Update last print time to extend debounce even if we don't print
+                last_print_times.borrow_mut().insert(request_key, now);
+                return Ok(());
+            }
+        }
+
+        // If we printed something for this key recently, skip printing (debounce)
+        if let Some(last) = last_print_times.borrow().get(&request_key) {
+            if now.duration_since(*last) < debounce_window {
+                // Update stored values and time, but do not emit
+                last_values_by_key
+                    .borrow_mut()
+                    .insert(request_key, response.values.clone());
+                last_print_times.borrow_mut().insert(request_key, now);
+                return Ok(());
+            }
+        }
+
+        // Otherwise emit JSON and record time/values
+        let json = serde_json::to_string(response)?;
+        println!("{json}");
+        last_values_by_key
+            .borrow_mut()
+            .insert(request_key, response.values.clone());
+        last_print_times.borrow_mut().insert(request_key, now);
+        Ok(())
+    };
 
     // Main loop: listen for requests and respond
     let mut buffer = [0u8; 256];
@@ -214,6 +314,28 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         // Check if update thread has panicked
         if update_thread.is_finished() {
             return Err(anyhow!("Data update thread terminated unexpectedly"));
+        }
+
+        // Cleanup stale entries from the print caches on each loop iteration
+        // to prevent unbounded growth. We remove entries older than cache_ttl.
+        if !last_print_times.borrow().is_empty() {
+            let now = Instant::now();
+            // Collect expired keys first (avoid holding an immutable borrow while mutating)
+            let expired: Vec<u64> = last_print_times
+                .borrow()
+                .iter()
+                .filter_map(|(k, &t)| {
+                    if now.duration_since(t) > cache_ttl {
+                        Some(*k)
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            for k in expired {
+                last_print_times.borrow_mut().remove(&k);
+                last_values_by_key.borrow_mut().remove(&k);
+            }
         }
 
         let mut port = port_arc.lock().unwrap();
@@ -243,6 +365,26 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                             last_byte_time = None;
 
                             // Process the request and generate response
+                            // Try to parse request range from raw bytes (func at index 1)
+                            let parsed_range = if request.len() >= 8 {
+                                let func = request[1];
+                                match func {
+                                    0x01 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                    }
+                                    0x03 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            };
+
                             match respond_to_request(
                                 port_arc.clone(),
                                 &request,
@@ -250,8 +392,33 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                 &storage,
                             ) {
                                 Ok(response) => {
-                                    let json = serde_json::to_string(&response)?;
-                                    println!("{json}");
+                                    let mut hasher = DefaultHasher::new();
+                                    hasher.write(&request);
+                                    let request_key = hasher.finish();
+
+                                    // Determine overlap with recent changes
+                                    let mut force = false;
+                                    if let Some((start, qty, _mode)) = parsed_range {
+                                        let now = Instant::now();
+                                        let cr = changed_ranges.lock().unwrap();
+                                        for (cstart, clen, t) in cr.iter() {
+                                            if now.duration_since(*t) > cache_ttl {
+                                                continue;
+                                            }
+                                            let a1 = start as u32;
+                                            let a2 = (start + qty) as u32;
+                                            let b1 = *cstart as u32;
+                                            let b2 = (cstart + clen) as u32;
+                                            if a1 < b2 && b1 < a2 {
+                                                force = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if let Err(e) = print_response(request_key, &response, force) {
+                                        log::warn!("Failed to print response: {e}");
+                                    }
                                 }
                                 Err(err) => {
                                     log::warn!("Error responding to request: {err}");
@@ -276,6 +443,26 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                             last_byte_time = None;
 
                             // Process the request and generate response
+                            // Try to parse request range from raw bytes (func at index 1)
+                            let parsed_range = if request.len() >= 8 {
+                                let func = request[1];
+                                match func {
+                                    0x01 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                    }
+                                    0x03 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            };
+
                             match respond_to_request(
                                 port_arc.clone(),
                                 &request,
@@ -283,8 +470,34 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                 &storage,
                             ) {
                                 Ok(response) => {
-                                    let json = serde_json::to_string(&response)?;
-                                    println!("{json}");
+                                    // Build a stable key from the request bytes to use for debounce
+                                    let mut hasher = DefaultHasher::new();
+                                    hasher.write(&request);
+                                    let request_key = hasher.finish();
+
+                                    // Determine overlap with recent changes
+                                    let mut force = false;
+                                    if let Some((start, qty, _mode)) = parsed_range {
+                                        let now = Instant::now();
+                                        let cr = changed_ranges.lock().unwrap();
+                                        for (cstart, clen, t) in cr.iter() {
+                                            if now.duration_since(*t) > cache_ttl {
+                                                continue;
+                                            }
+                                            let a1 = start as u32;
+                                            let a2 = (start + qty) as u32;
+                                            let b1 = *cstart as u32;
+                                            let b2 = (cstart + clen) as u32;
+                                            if a1 < b2 && b1 < a2 {
+                                                force = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if let Err(e) = print_response(request_key, &response, force) {
+                                        log::warn!("Failed to print response: {e}");
+                                    }
                                 }
                                 Err(err) => {
                                     log::warn!("Error responding to request: {err}");
@@ -372,7 +585,7 @@ fn respond_to_request(
 
     Ok(ModbusResponse {
         station_id,
-        register_address: 0, // Would need to parse from request
+        register_address: 0, // left as 0; we parse ranges from raw request in caller
         register_mode: format!("{:?}", frame.func),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
@@ -385,6 +598,7 @@ fn update_storage_loop(
     data_source: DataSource,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
+    changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
 ) -> Result<()> {
     loop {
         match &data_source {
@@ -416,6 +630,17 @@ fn update_storage_loop(
                                 _ => {}
                             }
                             drop(context);
+
+                            // Record changed range for other thread to detect overlap
+                            {
+                                let len = values.len() as u16;
+                                let mut cr = changed_ranges.lock().unwrap();
+                                cr.push((register_address, len, Instant::now()));
+                                // Keep size bounded: trim old entries
+                                while cr.len() > 1000 {
+                                    cr.remove(0);
+                                }
+                            }
 
                             // Wait a bit before next update to avoid overwhelming
                             std::thread::sleep(Duration::from_millis(100));
@@ -458,6 +683,16 @@ fn update_storage_loop(
                                 _ => {}
                             }
                             drop(context);
+
+                            // Record changed range for other thread to detect overlap
+                            {
+                                let len = values.len() as u16;
+                                let mut cr = changed_ranges.lock().unwrap();
+                                cr.push((register_address, len, Instant::now()));
+                                while cr.len() > 1000 {
+                                    cr.remove(0);
+                                }
+                            }
 
                             // Wait a bit before next update
                             std::thread::sleep(Duration::from_millis(100));

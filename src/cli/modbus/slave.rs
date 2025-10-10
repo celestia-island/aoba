@@ -112,6 +112,9 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     ));
 
     // Continuously listen and output JSONL
+    // Track last written values to avoid duplicate consecutive outputs
+    let mut last_written_values: Option<Vec<u16>> = None;
+
     loop {
         match listen_for_one_request(
             port_arc.clone(),
@@ -122,8 +125,16 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             storage.clone(),
         ) {
             Ok(response) => {
-                let json = serde_json::to_string(&response)?;
-                output_sink.write(&json)?;
+                let write_this = match &last_written_values {
+                    Some(prev) => &response.values != prev,
+                    None => true,
+                };
+
+                if write_this {
+                    let json = serde_json::to_string(&response)?;
+                    output_sink.write(&json)?;
+                    last_written_values = Some(response.values.clone());
+                }
             }
             Err(err) => {
                 log::warn!("Error processing request: {err}");
@@ -424,6 +435,9 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     }
 
     // Continuously poll
+    // Keep track of last written values to avoid consecutive duplicate outputs
+    let mut last_written_values: Option<Vec<u16>> = None;
+
     loop {
         match send_request_and_wait(
             port_arc.clone(),
@@ -433,8 +447,17 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             reg_mode,
         ) {
             Ok(response) => {
-                let json = serde_json::to_string(&response)?;
-                output_sink.write(&json)?;
+                // If the values are identical to the last written ones, skip writing
+                let write_this = match &last_written_values {
+                    Some(prev) => &response.values != prev,
+                    None => true,
+                };
+
+                if write_this {
+                    let json = serde_json::to_string(&response)?;
+                    output_sink.write(&json)?;
+                    last_written_values = Some(response.values.clone());
+                }
             }
             Err(err) => {
                 log::warn!("Poll error: {err}");

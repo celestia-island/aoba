@@ -3,6 +3,7 @@
 /// This module provides a clean API for sending keyboard input to TUI applications
 /// using semantic names instead of hardcoded escape sequences.
 use anyhow::{anyhow, Result};
+
 use expectrl::Expect;
 
 /// Extension trait for expectrl::Expect to add semantic key sending methods

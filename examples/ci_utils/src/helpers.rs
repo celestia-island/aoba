@@ -7,3 +7,10 @@ pub async fn sleep_a_while() {
     const DEFAULT_MS: u64 = 500;
     tokio::time::sleep(Duration::from_millis(DEFAULT_MS)).await;
 }
+
+/// Sleep for an exact number of seconds (async-only helper used in tests)
+///
+/// Accepts an integer number of seconds and awaits that duration.
+pub async fn sleep_seconds(secs: u64) {
+    tokio::time::sleep(Duration::from_secs(secs)).await;
+}

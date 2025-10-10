@@ -3,6 +3,8 @@ use anyhow::Result;
 use expectrl::{Expect, Regex as ExpectRegex};
 use vt100::Parser;
 
+use crate::helpers::sleep_a_while;
+
 /// TerminalCapture maintains a vt100 Parser to apply incremental updates from
 /// a pty session and expose the current rendered screen as a String. This
 /// centralizes consumption of the session output so callers can repeatedly
@@ -23,7 +25,11 @@ impl TerminalCapture {
     /// Read available bytes from the expectrl session, feed them to the
     /// internal vt100 parser (so cursor moves / clears are applied), log a
     /// snapshot, and return the current rendered screen contents.
-    pub fn capture(&mut self, session: &mut impl Expect, step_description: &str) -> Result<String> {
+    pub async fn capture(
+        &mut self,
+        session: &mut impl Expect,
+        step_description: &str,
+    ) -> Result<String> {
         log::info!("📺 Screen capture point: {step_description}");
 
         // Pull any available bytes from the session. Using a permissive
@@ -43,7 +49,7 @@ impl TerminalCapture {
         log::info!("\n{out}\n");
 
         // Add a small delay after capture to let the terminal stabilize
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        sleep_a_while().await;
 
         Ok(out)
     }
