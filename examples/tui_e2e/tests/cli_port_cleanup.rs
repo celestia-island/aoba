@@ -12,6 +12,9 @@ use ci_utils::{ports::vcom_matchers, terminal::build_debug_bin};
 /// 2. CLI releases the port on exit
 /// 3. Another CLI process can immediately open the same port
 pub async fn test_cli_port_release() -> Result<()> {
+    // Temporarily set log level to debug for this test
+    std::env::set_var("RUST_LOG", "debug");
+    
     log::info!("🧪 Starting CLI port release test");
 
     let ports = vcom_matchers();
@@ -87,8 +90,23 @@ pub async fn test_cli_port_release() -> Result<()> {
     log::info!("✅ First CLI process exited with status: {:?}", exit_status);
 
     // Give OS more time to release the port - serialport cleanup can take time
-    log::info!("Waiting for port to be fully released...");
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // After testing, found that OS needs significant time to release the FD
+    // and reset the port state
+    log::info!("Waiting for port to be fully released and reset...");
+    tokio::time::sleep(Duration::from_millis(3000)).await;
+    
+    // Debug: Check if port is still locked
+    let lsof_output = Command::new("sudo")
+        .args(["lsof", &ports.port1_name])
+        .output();
+    if let Ok(output) = lsof_output {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if !stdout.is_empty() {
+            log::warn!("⚠️ Port {} is still in use:\n{}", ports.port1_name, stdout);
+        } else {
+            log::info!("✅ Port {} appears to be free according to lsof", ports.port1_name);
+        }
+    }
 
     log::info!("🧪 Step 3: Try to open the same port with a second CLI process");
     

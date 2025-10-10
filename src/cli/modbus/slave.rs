@@ -124,10 +124,21 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
+        let port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
+            log::debug!("Cleanup handler: Releasing port {}", port_name_clone);
+            // Explicitly drop the port and wait for OS to release it
+            if let Ok(mut port) = pa.lock() {
+                // Try to flush any pending data
+                let _ = std::io::Write::flush(&mut **port);
+                log::debug!("Cleanup handler: Flushed port {}", port_name_clone);
+            }
             drop(pa);
-            std::thread::sleep(Duration::from_millis(100));
+            // Give the OS time to fully release the file descriptor
+            std::thread::sleep(Duration::from_millis(200));
+            log::debug!("Cleanup handler: Port {} released", port_name_clone);
         });
+        log::debug!("Registered cleanup handler for port {}", port);
     }
 
     // Initialize modbus storage
