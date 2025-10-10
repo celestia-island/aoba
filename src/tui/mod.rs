@@ -16,8 +16,7 @@ use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 use crate::{
     protocol::status::{
         init_status, read_status,
-        types::{self, port::PortState, Status},
-        with_port_read, with_port_write, write_status,
+        types::{self, port::PortState, Status}, with_port_write, write_status,
     },
     tui::{
         ui::components::error_msg::ui_error_set,
@@ -174,22 +173,16 @@ fn run_core_thread(
     let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     loop {
         // Poll IPC messages from subprocesses
-        for (port_name, ipc_msg) = subprocess_manager.poll_ipc_messages() {
+        for (port_name, ipc_msg) in subprocess_manager.poll_ipc_messages() {
             match ipc_msg {
                 crate::protocol::ipc::IpcMessage::PortOpened { port_name: _  } => {
                     log::info!("Subprocess for {} reported port opened", port_name);
-                    // Update status to show port as occupied
+                    // Update status to show port as occupied (by subprocess)
                     write_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
                             if with_port_write(port, |port| {
-                                port.state = PortState::OccupiedByThis {
-                                    handle: None,
-                                    runtime: crate::protocol::runtime::PortRuntimeHandle {
-                                        shared_serial: std::sync::Arc::new(std::sync::Mutex::new(None)),
-                                        cmd_tx: flume::unbounded().0,
-                                        evt_rx: flume::unbounded().1,
-                                    },
-                                };
+                                // Mark as OccupiedByOther since it's in a subprocess
+                                port.state = PortState::OccupiedByOther;
                             })
                             .is_some()
                             {
@@ -294,38 +287,20 @@ fn run_core_thread(
                         // Start a new subprocess
                         log::info!("Starting subprocess for {}", port_name);
                         
-                        // Get modbus configuration from status
-                        let modbus_config = read_status(|status| {
-                            Ok(status.modbus.clone())
-                        }).unwrap_or_default();
-                        
-                        // Determine mode based on modbus config
-                        let mode = if modbus_config.is_master {
-                            subprocess::CliMode::MasterProvide
-                        } else {
-                            subprocess::CliMode::SlaveListen
-                        };
-                        
-                        // For now, use a dummy data source for master mode
-                        // In a real implementation, this would come from the UI configuration
-                        let data_source = if mode == subprocess::CliMode::MasterProvide {
-                            // Create a temporary file with dummy data
-                            let temp_file = std::env::temp_dir().join(format!("aoba-data-{}.jsonl", uuid::Uuid::new_v4()));
-                            std::fs::write(&temp_file, "{\"values\":[1,2,3,4,5]}\n")?;
-                            Some(format!("file:{}", temp_file.display()))
-                        } else {
-                            None
-                        };
+                        // For simplicity, use default modbus configuration
+                        // In a real implementation, this would come from the UI configuration per port
+                        // Default to slave mode (listen)
+                        let mode = subprocess::CliMode::SlaveListen;
                         
                         let config = subprocess::CliSubprocessConfig {
                             port_name: port_name.clone(),
                             mode,
-                            station_id: modbus_config.station_id,
-                            register_address: modbus_config.register_address,
-                            register_length: modbus_config.register_length,
-                            register_mode: format!("{:?}", modbus_config.register_mode).to_lowercase(),
-                            baud_rate: 9600, // TODO: Get from config
-                            data_source,
+                            station_id: 1,  // Default
+                            register_address: 0,  // Default
+                            register_length: 10,  // Default
+                            register_mode: "holding".to_string(),  // Default
+                            baud_rate: 9600,  // Default
+                            data_source: None,  // Not needed for slave mode
                         };
                         
                         match subprocess_manager.start_subprocess(config) {
