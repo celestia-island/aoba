@@ -1,0 +1,252 @@
+/// CLI subprocess manager for TUI
+/// 
+/// This module manages CLI subprocesses that handle actual serial port communication.
+/// The TUI acts as a control shell, spawning and managing CLI processes via IPC.
+
+use anyhow::{anyhow, Result};
+use std::{
+    collections::HashMap,
+    process::{Child, Command, Stdio},
+};
+
+use crate::protocol::ipc::{IpcClient, IpcConnection, IpcMessage};
+
+/// Configuration for a CLI subprocess
+#[derive(Debug, Clone)]
+pub struct CliSubprocessConfig {
+    pub port_name: String,
+    pub mode: CliMode,
+    pub station_id: u8,
+    pub register_address: u16,
+    pub register_length: u16,
+    pub register_mode: String,
+    pub baud_rate: u32,
+    pub data_source: Option<String>,
+}
+
+/// CLI mode (master or slave)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CliMode {
+    /// Slave mode (listens and responds to requests)
+    SlaveListen,
+    /// Master mode (provides data and responds to poll requests)
+    MasterProvide,
+}
+
+/// A managed CLI subprocess
+pub struct ManagedSubprocess {
+    pub config: CliSubprocessConfig,
+    pub child: Child,
+    pub ipc_socket_name: String,
+    pub ipc_connection: Option<IpcConnection>,
+}
+
+impl ManagedSubprocess {
+    /// Spawn a new CLI subprocess with the given configuration
+    pub fn spawn(config: CliSubprocessConfig) -> Result<Self> {
+        // Generate unique IPC socket name
+        let ipc_socket_name = crate::protocol::ipc::generate_socket_name();
+        
+        log::info!(
+            "Spawning CLI subprocess for port {} in mode {:?}",
+            config.port_name,
+            config.mode
+        );
+        
+        // Setup IPC listener before spawning the process
+        let ipc_client = IpcClient::listen(ipc_socket_name.clone())?;
+        
+        // Get the current executable path
+        let exe_path = std::env::current_exe()?;
+        
+        // Build CLI arguments
+        let mut args = Vec::new();
+        
+        // Add mode-specific arguments
+        match config.mode {
+            CliMode::SlaveListen => {
+                args.push("--slave-listen-persist".to_string());
+                args.push(config.port_name.clone());
+            }
+            CliMode::MasterProvide => {
+                args.push("--master-provide-persist".to_string());
+                args.push(config.port_name.clone());
+                
+                // Add data source if provided
+                if let Some(ref data_source) = config.data_source {
+                    args.push("--data-source".to_string());
+                    args.push(data_source.clone());
+                } else {
+                    return Err(anyhow!("Master mode requires data-source"));
+                }
+            }
+        }
+        
+        // Add common arguments
+        args.push("--station-id".to_string());
+        args.push(config.station_id.to_string());
+        args.push("--register-address".to_string());
+        args.push(config.register_address.to_string());
+        args.push("--register-length".to_string());
+        args.push(config.register_length.to_string());
+        args.push("--register-mode".to_string());
+        args.push(config.register_mode.clone());
+        args.push("--baud-rate".to_string());
+        args.push(config.baud_rate.to_string());
+        
+        // Add IPC channel UUID
+        args.push("--ipc-channel".to_string());
+        args.push(ipc_socket_name.clone());
+        
+        log::debug!("CLI subprocess command: {:?} {:?}", exe_path, args);
+        
+        // Spawn the subprocess
+        let child = Command::new(exe_path)
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        
+        log::info!("CLI subprocess spawned with PID: {:?}", child.id());
+        
+        // Accept the IPC connection (with timeout)
+        let ipc_connection = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            ipc_client.accept()
+        })
+        .join()
+        .map_err(|_| anyhow!("Failed to join IPC accept thread"))??;
+        
+        Ok(Self {
+            config,
+            child,
+            ipc_socket_name,
+            ipc_connection: Some(ipc_connection),
+        })
+    }
+    
+    /// Check if the subprocess is still running
+    pub fn is_alive(&mut self) -> bool {
+        self.child.try_wait().ok().flatten().is_none()
+    }
+    
+    /// Try to receive an IPC message from the subprocess (non-blocking)
+    pub fn try_recv_ipc(&mut self) -> Result<Option<IpcMessage>> {
+        if let Some(ref mut conn) = self.ipc_connection {
+            conn.try_recv()
+        } else {
+            Ok(None)
+        }
+    }
+    
+    /// Kill the subprocess
+    pub fn kill(&mut self) -> Result<()> {
+        log::info!("Killing CLI subprocess for port {}", self.config.port_name);
+        self.child.kill()?;
+        Ok(())
+    }
+}
+
+impl Drop for ManagedSubprocess {
+    fn drop(&mut self) {
+        let _ = self.kill();
+    }
+}
+
+/// Manager for all CLI subprocesses
+pub struct SubprocessManager {
+    processes: HashMap<String, ManagedSubprocess>,
+}
+
+impl SubprocessManager {
+    /// Create a new subprocess manager
+    pub fn new() -> Self {
+        Self {
+            processes: HashMap::new(),
+        }
+    }
+    
+    /// Start a subprocess for the given port with the given configuration
+    pub fn start_subprocess(&mut self, config: CliSubprocessConfig) -> Result<()> {
+        let port_name = config.port_name.clone();
+        
+        // If a subprocess already exists for this port, stop it first
+        if self.processes.contains_key(&port_name) {
+            log::info!("Stopping existing subprocess for port {}", port_name);
+            self.stop_subprocess(&port_name)?;
+        }
+        
+        // Spawn new subprocess
+        let subprocess = ManagedSubprocess::spawn(config)?;
+        self.processes.insert(port_name, subprocess);
+        
+        Ok(())
+    }
+    
+    /// Stop a subprocess for the given port
+    pub fn stop_subprocess(&mut self, port_name: &str) -> Result<()> {
+        if let Some(mut subprocess) = self.processes.remove(port_name) {
+            subprocess.kill()?;
+        }
+        Ok(())
+    }
+    
+    /// Check all subprocesses and remove any that have died
+    pub fn reap_dead_processes(&mut self) -> Vec<(String, Option<std::process::ExitStatus>)> {
+        let mut dead = Vec::new();
+        
+        let dead_ports: Vec<String> = self
+            .processes
+            .iter_mut()
+            .filter_map(|(port, subprocess)| {
+                if !subprocess.is_alive() {
+                    Some(port.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        for port in dead_ports {
+            if let Some(mut subprocess) = self.processes.remove(&port) {
+                let exit_status = subprocess.child.try_wait().ok().flatten();
+                dead.push((port, exit_status));
+            }
+        }
+        
+        dead
+    }
+    
+    /// Poll IPC messages from all subprocesses
+    pub fn poll_ipc_messages(&mut self) -> Vec<(String, IpcMessage)> {
+        let mut messages = Vec::new();
+        
+        for (port_name, subprocess) in self.processes.iter_mut() {
+            if let Ok(Some(msg)) = subprocess.try_recv_ipc() {
+                messages.push((port_name.clone(), msg));
+            }
+        }
+        
+        messages
+    }
+    
+    /// Get the list of active subprocess port names
+    pub fn active_ports(&self) -> Vec<String> {
+        self.processes.keys().cloned().collect()
+    }
+    
+    /// Shutdown all subprocesses
+    pub fn shutdown_all(&mut self) {
+        for (port_name, subprocess) in self.processes.drain() {
+            log::info!("Shutting down subprocess for port {}", port_name);
+            let _ = subprocess.child.kill();
+        }
+    }
+}
+
+impl Drop for SubprocessManager {
+    fn drop(&mut self) {
+        self.shutdown_all();
+    }
+}
