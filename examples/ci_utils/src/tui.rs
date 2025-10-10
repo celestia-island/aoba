@@ -1,13 +1,14 @@
 use anyhow::{anyhow, Result};
-use expectrl::Expect;
 use regex::Regex;
+
+use expectrl::Expect;
 
 /// Navigate to vcom1 port in TUI (shared helper).
 pub async fn navigate_to_vcom<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
-    let screen = cap.capture(session, "before_navigation")?;
+    let screen = cap.capture(session, "before_navigation").await?;
     let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
 
     if !screen.contains(&vcom_pattern) {
@@ -72,7 +73,7 @@ pub async fn enable_port_carefully<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
-    let screen = cap.capture(session, "before_enable")?;
+    let screen = cap.capture(session, "before_enable").await?;
     if !screen.contains("Enable Port") {
         return Err(anyhow!(
             "Not in port details page - 'Enable Port' not found"

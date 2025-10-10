@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use ci_utils::{run_binary_sync, should_run_vcom_tests, vcom_matchers};
 
-pub fn test_cli_list_ports() -> Result<()> {
+pub async fn test_cli_list_ports() -> Result<()> {
     let output = run_binary_sync(&["--list-ports"])?;
 
     log::info!(

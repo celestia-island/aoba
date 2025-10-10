@@ -2,17 +2,131 @@ use anyhow::{anyhow, Result};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
+    path::PathBuf,
     process::Stdio,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
-use ci_utils::generate_random_registers;
+use ci_utils::{create_modbus_command, generate_random_registers, sleep_a_while};
 
-use ci_utils::create_modbus_command;
+async fn read_child_output<R: std::io::Read + Send + 'static>(
+    reader: Box<R>,
+    flag: Arc<AtomicBool>,
+    prefix: String,
+    is_stderr: bool,
+) {
+    // Use a blocking task to read from the std::io::Read and log lines.
+    tokio::task::spawn_blocking(move || {
+        let buf_reader = BufReader::new(reader);
+        for line in buf_reader.lines() {
+            match line {
+                Ok(l) => {
+                    flag.store(true, Ordering::Relaxed);
+                    if is_stderr {
+                        log::warn!("{prefix} {l}");
+                    } else {
+                        log::info!("{prefix} {l}");
+                    }
+                }
+                Err(e) => {
+                    log::warn!("⚠️ Error reading child output: {e}");
+                    break;
+                }
+            }
+        }
+    })
+    .await
+    .ok();
+}
+
+async fn writer(data_pipe: PathBuf) -> Result<()> {
+    log::info!("🧪 Writing random data to server input pipe...");
+    let mut file = std::fs::OpenOptions::new().write(true).open(&data_pipe)?;
+
+    for i in 0..5 {
+        let values = generate_random_registers(5);
+        // Build JSON via serde_json instead of manual string formatting
+        let sent_at = chrono::Utc::now();
+        let json = serde_json::json!({"values": values, "sent_at": sent_at.to_rfc3339()});
+        writeln!(file, "{json}")?;
+        file.flush()?;
+        log::info!("🧪 Wrote data line {}: {:?}", i + 1, values);
+        // Ensure send frequency is 1 second per request
+        ci_utils::sleep_seconds(1).await;
+    }
+    Ok(())
+}
+
+async fn reader(output_pipe: PathBuf) -> Result<Vec<String>> {
+    log::info!("🧪 Reading from client output pipe...");
+
+    // Wait adaptively until client shows activity or short timeout, then open
+    let read_start = std::time::Instant::now();
+    while read_start.elapsed() < Duration::from_secs(6) {
+        if read_start.elapsed() > Duration::from_millis(300) {
+            break;
+        }
+        sleep_a_while().await;
+    }
+
+    let mut lines = Vec::new();
+    // Keep attempting to read from the pipe until we collect enough lines or timeout.
+    let overall_start = std::time::Instant::now();
+    let overall_timeout = Duration::from_secs(12);
+    // Expected number of lines: writer writes 5 lines; read until we get all or timeout.
+    let expected = 5usize;
+
+    while overall_start.elapsed() < overall_timeout {
+        // Try opening the pipe for reading. This will block until a writer opens the FIFO,
+        // which is fine — we want to capture lines as writers produce them.
+        let file = match std::fs::File::open(&output_pipe) {
+            Ok(f) => f,
+            Err(e) => {
+                log::warn!("⚠️ Failed to open output pipe (will retry): {e}");
+                ci_utils::sleep_seconds(1).await;
+                continue;
+            }
+        };
+
+        let reader = BufReader::new(file);
+
+        for line in reader.lines() {
+            match line {
+                Ok(l) => {
+                    let recv_at = chrono::Utc::now();
+                    log::info!("🧪 Read output line at {}: {l}", recv_at.to_rfc3339());
+                    lines.push(l);
+                }
+                Err(e) => {
+                    log::warn!("⚠️ Error reading from output pipe: {e}");
+                    break;
+                }
+            }
+
+            if lines.len() >= expected {
+                break;
+            }
+        }
+
+        // If we have enough lines, stop; otherwise wait and reopen the pipe to read more
+        if lines.len() >= expected {
+            break;
+        }
+
+        // Short pause before trying to reopen the pipe
+        ci_utils::sleep_seconds(1).await;
+    }
+
+    Ok(lines)
+}
 
 /// Generate pseudo-random modbus data using rand crate
 /// Test continuous connection with file-based data source and file output
-pub fn test_continuous_connection_with_files() -> Result<()> {
+pub async fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");
     let temp_dir = std::env::temp_dir();
 
@@ -24,13 +138,18 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         for _ in 0..5 {
             let values = generate_random_registers(5);
             writeln!(file, "{{\"values\": {values:?}}}")?;
+            // Ensure data is flushed to disk so server can read promptly
+            file.flush()?;
             expected_data_lines.push(values);
         }
     }
     log::info!(
-        "🧪 Created test data file with {} lines",
-        expected_data_lines.len()
+        "🧪 Created test data file with {count} lines",
+        count = expected_data_lines.len()
     );
+
+    // Debug: log the expected lines so we can diagnose mismatches during E2E runs
+    log::info!("🧪 Expected data lines: {expected_data_lines:?}");
 
     // Create output file for slave
     let slave_output_file = temp_dir.join("test_continuous_slave_output.json");
@@ -52,8 +171,54 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     .stderr(Stdio::piped())
     .spawn()?;
 
-    // Give server time to start
-    std::thread::sleep(Duration::from_secs(3));
+    // Start background readers and a readiness flag. Reader threads set the flag
+    // when they observe any output which we use as an adaptive readiness signal.
+    let mut child_readers = Vec::new();
+    let server_output_seen = Arc::new(AtomicBool::new(false));
+    if let Some(stdout) = server.stdout.take() {
+        let flag = server_output_seen.clone();
+        child_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stdout),
+                    flag,
+                    "🧪 [server stdout]".to_string(),
+                    false,
+                )
+                .await;
+            });
+        }));
+    }
+    if let Some(stderr) = server.stderr.take() {
+        let flag = server_output_seen.clone();
+        child_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stderr),
+                    flag,
+                    "🧪 [server stderr]".to_string(),
+                    true,
+                )
+                .await;
+            });
+        }));
+    }
+
+    // Wait adaptively for server output to appear, or timeout.
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(8);
+    while start.elapsed() < timeout {
+        if server_output_seen.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(status) = server.try_wait()? {
+            log::warn!("⚠️ Server exited while waiting: {status}");
+            break;
+        }
+        sleep_a_while().await;
+    }
 
     // Check if server is still running
     match server.try_wait()? {
@@ -103,25 +268,88 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Let them communicate for a bit - give enough time to cycle through all data
-    log::info!("🧪 Letting server and client communicate...");
-    std::thread::sleep(Duration::from_secs(5));
+    // Spawn background readers for client stdout/stderr and a readiness flag.
+    let mut client_readers = Vec::new();
+    let client_output_seen = Arc::new(AtomicBool::new(false));
+    if let Some(stdout) = client.stdout.take() {
+        let flag = client_output_seen.clone();
+        client_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stdout),
+                    flag,
+                    "🧪 [client stdout]".to_string(),
+                    false,
+                )
+                .await;
+            });
+        }));
+    }
+    if let Some(stderr) = client.stderr.take() {
+        let flag = client_output_seen.clone();
+        client_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stderr),
+                    flag,
+                    "🧪 [client stderr]".to_string(),
+                    true,
+                )
+                .await;
+            });
+        }));
+    }
 
-    // Kill both processes
-    client.kill()?;
-    server.kill()?;
-    client.wait()?;
-    server.wait()?;
+    // Adaptive wait: check slave output file until it contains the expected
+    // number of non-empty lines or until timeout.
+    log::info!("🧪 Waiting for client to produce output (adaptive)...");
+    let comm_start = std::time::Instant::now();
+    let comm_timeout = Duration::from_secs(20);
+    while comm_start.elapsed() < comm_timeout {
+        if slave_output_file.exists() {
+            if let Ok(content) = std::fs::read_to_string(&slave_output_file) {
+                let produced_lines = content.lines().filter(|l| !l.trim().is_empty()).count();
+                if produced_lines >= expected_data_lines.len() {
+                    log::info!(
+                        "🧪 Observed {} output lines (expected {}).",
+                        produced_lines,
+                        expected_data_lines.len()
+                    );
+                    break;
+                }
+            }
+        }
+        if let Some(status) = client.try_wait()? {
+            log::warn!("⚠️ Client exited while waiting for output: {status}");
+            break;
+        }
+        sleep_a_while().await;
+    }
 
-    // Give extra time for ports to be released
-    std::thread::sleep(Duration::from_secs(1));
+    // Do not kill the client/server immediately — wait until after verification so
+    // late-arriving output can still be captured. We'll terminate processes after
+    // verification (or if verification ultimately fails) below.
 
     // Verify that client output file has data
     if !slave_output_file.exists() {
         return Err(anyhow!("Client output file was not created"));
     }
 
-    let client_output_content = std::fs::read_to_string(&slave_output_file)?;
+    // Read output file; allow a short poll window in case writer flushed late
+    let mut client_output_content = String::new();
+    let mut attempts = 0;
+    while attempts < 5 {
+        if slave_output_file.exists() {
+            client_output_content = std::fs::read_to_string(&slave_output_file)?;
+            if !client_output_content.trim().is_empty() {
+                break;
+            }
+        }
+        attempts += 1;
+        sleep_a_while().await;
+    }
     log::info!(
         "🧪 Client output ({} bytes):\n{}",
         client_output_content.len(),
@@ -140,6 +368,15 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 
     // Parse all output lines and verify they are valid JSON
     let mut parsed_outputs = Vec::new();
+    // Collect timing info per record: (values, sent_at_opt, server_ts_opt, recv_at)
+    // Type alias to reduce complexity reported by clippy
+    type TimingRecord = (
+        Vec<u16>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+        chrono::DateTime<chrono::Utc>,
+    );
+    let mut timing_records: Vec<TimingRecord> = Vec::new();
     for (i, line) in lines.iter().enumerate() {
         match serde_json::from_str::<serde_json::Value>(line) {
             Ok(json) => {
@@ -148,12 +385,73 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
                         .iter()
                         .filter_map(|v| v.as_u64().map(|n| n as u16))
                         .collect();
-                    parsed_outputs.push(values_u16);
+                    // extract sent_at and server timestamp if present
+                    let sent_at = json
+                        .get("sent_at")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.with_timezone(&chrono::Utc));
+                    let server_ts = json
+                        .get("timestamp")
+                        .and_then(|v| v.as_str())
+                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                        .map(|dt| dt.with_timezone(&chrono::Utc));
+                    let recv_at = chrono::Utc::now();
+                    parsed_outputs.push(values_u16.clone());
+                    timing_records.push((values_u16, sent_at, server_ts, recv_at));
                 }
             }
             Err(e) => {
                 log::warn!("⚠️ Line {} is not valid JSON: {}", i + 1, e);
             }
+        }
+    }
+
+    // Debug: log parsed outputs for diagnosis
+    log::info!("🧪 Parsed outputs: {parsed_outputs:?}");
+
+    // Print timing report
+    if !timing_records.is_empty() {
+        log::info!(
+            "🧪 Timing report per record (sent_at, server_ts, recv_at, recv-server, recv-sent)"
+        );
+        let mut deltas_recv_server = Vec::new();
+        let mut deltas_recv_sent = Vec::new();
+        for (vals, sent_opt, server_opt, recv_at) in &timing_records {
+            let server_str = server_opt
+                .map(|t| t.to_rfc3339())
+                .unwrap_or_else(|| "-".to_string());
+            let sent_str = sent_opt
+                .map(|t| t.to_rfc3339())
+                .unwrap_or_else(|| "-".to_string());
+            let recv_str = recv_at.to_rfc3339();
+            let recv_server = server_opt.map(|s| *recv_at - s);
+            let recv_sent = sent_opt.map(|s| *recv_at - s);
+            if let Some(d) = recv_server {
+                deltas_recv_server.push(d);
+            }
+            if let Some(d) = recv_sent {
+                deltas_recv_sent.push(d);
+            }
+            log::info!("vals={vals:?} sent={sent_str} server={server_str} recv={recv_str} recv-server={recv_server:?} recv-sent={recv_sent:?}");
+        }
+        if !deltas_recv_server.is_empty() {
+            let max = deltas_recv_server.iter().max().unwrap();
+            let min = deltas_recv_server.iter().min().unwrap();
+            let avg = deltas_recv_server
+                .iter()
+                .fold(chrono::Duration::zero(), |acc, d| acc + *d)
+                / (deltas_recv_server.len() as i32);
+            log::info!("🧪 recv-server delta: min={min} max={max} avg={avg}");
+        }
+        if !deltas_recv_sent.is_empty() {
+            let max = deltas_recv_sent.iter().max().unwrap();
+            let min = deltas_recv_sent.iter().min().unwrap();
+            let avg = deltas_recv_sent
+                .iter()
+                .fold(chrono::Duration::zero(), |acc, d| acc + *d)
+                / (deltas_recv_sent.len() as i32);
+            log::info!("🧪 recv-sent delta: min={min} max={max} avg={avg}");
         }
     }
 
@@ -184,9 +482,72 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
     }
 
     if !all_found {
-        std::fs::remove_file(&data_file)?;
-        std::fs::remove_file(&slave_output_file)?;
-        return Err(anyhow!("Not all input lines were found in the output"));
+        log::warn!(
+            "⚠️ Not all input lines found; giving an extra short window to allow late arrival..."
+        );
+        // Allow a short extra window for late-arriving lines (e.g., writer flushes or slower reads)
+        let extra_start = std::time::Instant::now();
+        let extra_timeout = Duration::from_secs(10);
+        while extra_start.elapsed() < extra_timeout {
+            if slave_output_file.exists() {
+                let content = std::fs::read_to_string(&slave_output_file)?;
+                let mut new_parsed = Vec::new();
+                for line in content.lines() {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
+                        if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
+                            let values_u16: Vec<u16> = values
+                                .iter()
+                                .filter_map(|v| v.as_u64().map(|n| n as u16))
+                                .collect();
+                            new_parsed.push(values_u16);
+                        }
+                    }
+                }
+                // Merge newly parsed outputs into parsed_outputs if they're not already present
+                for p in new_parsed {
+                    if !parsed_outputs.iter().any(|e| e == &p) {
+                        parsed_outputs.push(p);
+                    }
+                }
+
+                // Re-evaluate
+                let mut all_found_retry = true;
+                for expected_values in &expected_data_lines {
+                    let found = parsed_outputs
+                        .iter()
+                        .any(|output| output == expected_values);
+                    if !found {
+                        all_found_retry = false;
+                        break;
+                    }
+                }
+                if all_found_retry {
+                    all_found = true;
+                    break;
+                }
+            }
+            sleep_a_while().await;
+        }
+
+        if !all_found {
+            // Clean up processes and threads before returning an error so any late
+            // output still has a chance to be flushed/captured by background readers.
+            let _ = client.kill();
+            let _ = server.kill();
+            let _ = client.wait();
+            let _ = server.wait();
+
+            for h in client_readers.drain(..) {
+                let _ = h.join();
+            }
+            for h in child_readers.drain(..) {
+                let _ = h.join();
+            }
+
+            std::fs::remove_file(&data_file)?;
+            std::fs::remove_file(&slave_output_file)?;
+            return Err(anyhow!("Not all input lines were found in the output"));
+        }
     }
 
     log::info!(
@@ -194,7 +555,20 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
         expected_data_lines.len()
     );
 
-    // Clean up
+    // Terminate processes and join background readers after successful verification
+    let _ = client.kill();
+    let _ = server.kill();
+    let _ = client.wait();
+    let _ = server.wait();
+
+    for h in client_readers.drain(..) {
+        let _ = h.join();
+    }
+    for h in child_readers.drain(..) {
+        let _ = h.join();
+    }
+
+    // Clean up temp files
     std::fs::remove_file(&data_file)?;
     std::fs::remove_file(&slave_output_file)?;
 
@@ -203,7 +577,7 @@ pub fn test_continuous_connection_with_files() -> Result<()> {
 }
 
 /// Test continuous connection with Unix pipe data source and pipe output
-pub fn test_continuous_connection_with_pipes() -> Result<()> {
+pub async fn test_continuous_connection_with_pipes() -> Result<()> {
     log::info!("🧪 Testing continuous connection with Unix pipe data source and pipe output...");
     let temp_dir = std::env::temp_dir();
 
@@ -237,8 +611,52 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     .stderr(Stdio::piped())
     .spawn()?;
 
-    // Give server time to start
-    std::thread::sleep(Duration::from_secs(2));
+    // Start background readers for server and use a flag for readiness detection.
+    let server_output_seen_pipe = Arc::new(AtomicBool::new(false));
+    let mut server_pipe_readers = Vec::new();
+    if let Some(stdout) = server.stdout.take() {
+        let flag = server_output_seen_pipe.clone();
+        server_pipe_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stdout),
+                    flag,
+                    "🧪 [server-pipe stdout]".to_string(),
+                    false,
+                )
+                .await
+            });
+        }));
+    }
+    if let Some(stderr) = server.stderr.take() {
+        let flag = server_output_seen_pipe.clone();
+        server_pipe_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stderr),
+                    flag,
+                    "🧪 [server-pipe stderr]".to_string(),
+                    true,
+                )
+                .await
+            });
+        }));
+    }
+
+    // Adaptive wait for server to show output or until timeout
+    let srv_start = std::time::Instant::now();
+    while srv_start.elapsed() < Duration::from_secs(6) {
+        if server_output_seen_pipe.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(status) = server.try_wait()? {
+            log::warn!("⚠️ Server (pipe) exited early: {status}");
+            break;
+        }
+        sleep_a_while().await;
+    }
 
     // Start client (slave-poll-persist) on /tmp/vcom2 with pipe output
     log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with pipe output...");
@@ -264,47 +682,66 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
-    // Give client time to start and open the pipe
-    std::thread::sleep(Duration::from_secs(2));
+
+    // Spawn client readers and flag for readiness
+    let client_output_seen_pipe = Arc::new(AtomicBool::new(false));
+    let mut client_pipe_readers = Vec::new();
+    if let Some(stdout) = client.stdout.take() {
+        let flag = client_output_seen_pipe.clone();
+        client_pipe_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stdout),
+                    flag,
+                    "🧪 [client-pipe stdout]".to_string(),
+                    false,
+                )
+                .await
+            });
+        }));
+    }
+    if let Some(stderr) = client.stderr.take() {
+        let flag = client_output_seen_pipe.clone();
+        client_pipe_readers.push(std::thread::spawn(move || {
+            let rt = tokio::runtime::Runtime::new().expect("create rt");
+            rt.block_on(async move {
+                read_child_output(
+                    Box::new(stderr),
+                    flag,
+                    "🧪 [client-pipe stderr]".to_string(),
+                    true,
+                )
+                .await;
+            });
+        }));
+    }
+
+    // Adaptive wait: ensure client shows output activity or timeout
+    let cli_start = std::time::Instant::now();
+    while cli_start.elapsed() < Duration::from_secs(6) {
+        if client_output_seen_pipe.load(Ordering::Relaxed) {
+            break;
+        }
+        if let Some(status) = client.try_wait()? {
+            log::warn!("⚠️ Client (pipe) exited early: {status}");
+            break;
+        }
+        sleep_a_while().await;
+    }
 
     // Start a thread to write random data to the input pipe (for server)
     let data_pipe_clone = data_pipe.clone();
-    let writer_thread = std::thread::spawn(move || -> Result<()> {
-        log::info!("🧪 Writing random data to server input pipe...");
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .open(&data_pipe_clone)?;
-
-        for i in 0..5 {
-            let values = generate_random_registers(5);
-            writeln!(file, "{{\"values\": {values:?}}}")?;
-            log::info!("🧪 Wrote data line {}: {:?}", i + 1, values);
-            std::thread::sleep(Duration::from_millis(500));
-        }
-        Ok(())
+    let writer_thread = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("create rt");
+        rt.block_on(async move { writer(data_pipe_clone).await })
     });
 
     // Start a thread to read from the client output pipe
     let output_pipe_clone = output_pipe.clone();
-    let reader_thread = std::thread::spawn(move || -> Result<Vec<String>> {
-        log::info!("🧪 Reading from client output pipe...");
-        std::thread::sleep(Duration::from_secs(1)); // Wait for client to start writing
-
-        let file = std::fs::File::open(&output_pipe_clone)?;
-        let reader = BufReader::new(file);
-        let mut lines = Vec::new();
-
-        for line in reader.lines() {
-            let line = line?;
-            log::info!("🧪 Read output line: {line}");
-            lines.push(line);
-
-            if lines.len() >= 3 {
-                break;
-            }
-        }
-
-        Ok(lines)
+    let reader_thread = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("create rt");
+        rt.block_on(async move { reader(output_pipe_clone).await })
     });
 
     // Wait for threads to complete with timeout
@@ -317,8 +754,15 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     client.wait()?;
     server.wait()?;
 
-    // Give extra time for ports to be released
-    std::thread::sleep(Duration::from_secs(1));
+    // Give extra time for pipes to be released by polling a short window.
+    let release_start2 = std::time::Instant::now();
+    while release_start2.elapsed() < Duration::from_secs(2) {
+        // If writer/reader threads already joined, break early
+        if writer_result.is_ok() && reader_result.is_ok() {
+            break;
+        }
+        sleep_a_while().await;
+    }
 
     // Clean up pipes
     let _ = std::fs::remove_file(&data_pipe);

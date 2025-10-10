@@ -132,5 +132,13 @@ pub fn parse_args() -> ArgMatches {
                 .default_value("9600")
                 .value_parser(clap::value_parser!(u32)),
         )
+        .arg(
+            Arg::new("debounce-seconds")
+                .long("debounce-seconds")
+                .help("Debounce window for duplicate JSON output in seconds. Default 1 second. Set to 0 to disable.")
+                .value_name("SECONDS")
+                .default_value("1.0")
+                .value_parser(clap::value_parser!(f32)),
+        )
         .get_matches()
 }

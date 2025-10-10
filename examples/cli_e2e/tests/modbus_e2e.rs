@@ -3,15 +3,14 @@ use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
     process::Stdio,
-    time::Duration,
 };
 
-use ci_utils::create_modbus_command;
+use ci_utils::{create_modbus_command, sleep_a_while};
 
 /// Test master-slave communication with virtual serial ports
 /// Server = Modbus Master (provides data, responds to requests) on vcom1
 /// Client = Modbus Slave polling (sends requests, receives data) on vcom2
-pub fn test_master_slave_communication() -> Result<()> {
+pub async fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
     let temp_dir = std::env::temp_dir();
 
@@ -38,7 +37,10 @@ pub fn test_master_slave_communication() -> Result<()> {
     .spawn()?;
 
     // Give server time to start and fully acquire the port
-    std::thread::sleep(Duration::from_secs(3));
+    // use multiple async short waits to emulate a few seconds
+    sleep_a_while().await;
+    sleep_a_while().await;
+    sleep_a_while().await;
 
     // Check if server is still running
     match server.try_wait()? {
@@ -96,7 +98,7 @@ pub fn test_master_slave_communication() -> Result<()> {
     server.wait()?;
 
     // Give extra time for ports to be fully released
-    std::thread::sleep(Duration::from_secs(1));
+    sleep_a_while().await;
 
     log::info!(
         "🧪 Client exit status: {status}",
@@ -135,7 +137,7 @@ pub fn test_master_slave_communication() -> Result<()> {
 }
 
 /// Test slave listen with temporary mode and virtual ports
-pub fn test_slave_listen_with_vcom() -> Result<()> {
+pub async fn test_slave_listen_with_vcom() -> Result<()> {
     log::info!("🧪 Testing slave listen temporary mode with virtual serial ports...");
 
     // Just verify the command works with virtual ports
@@ -147,14 +149,14 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Wait for a short time
-            std::thread::sleep(Duration::from_millis(1000));
+            sleep_a_while().await;
             child.kill()?;
             child.wait()?;
 
             log::info!("✅ Slave listen command accepted with virtual ports");
 
             // Give extra time for port to be fully released
-            std::thread::sleep(Duration::from_secs(1));
+            sleep_a_while().await;
 
             Ok(())
         }
@@ -166,7 +168,7 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
 }
 
 /// Test master provide with persistent mode and virtual ports
-pub fn test_master_provide_with_vcom() -> Result<()> {
+pub async fn test_master_provide_with_vcom() -> Result<()> {
     log::info!("🧪 Testing master provide persistent mode with virtual serial ports...");
 
     // Create a temporary file with test data
@@ -191,7 +193,7 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Let it run for a bit
-            std::thread::sleep(Duration::from_secs(1));
+            sleep_a_while().await;
             child.kill()?;
             child.wait()?;
 
@@ -201,7 +203,7 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
             std::fs::remove_file(&data_file)?;
 
             // Give extra time for port to be fully released
-            std::thread::sleep(Duration::from_secs(1));
+            sleep_a_while().await;
 
             Ok(())
         }

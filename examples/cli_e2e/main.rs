@@ -34,7 +34,8 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     }
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
@@ -56,16 +57,16 @@ fn main() -> Result<()> {
 
         log::info!("🧪 Starting CLI E2E Tests...");
 
-        tests::test_cli_help()?;
-        tests::test_cli_list_ports()?;
-        tests::test_cli_list_ports_json()?;
-        tests::test_cli_list_ports_json_with_status()?;
+        tests::test_cli_help().await?;
+        tests::test_cli_list_ports().await?;
+        tests::test_cli_list_ports_json().await?;
+        tests::test_cli_list_ports_json_with_status().await?;
 
         log::info!("🧪 Testing Modbus CLI features (basic)...");
-        tests::test_slave_listen_temp()?;
-        tests::test_slave_listen_persist()?;
-        tests::test_master_provide_temp()?;
-        tests::test_master_provide_persist()?;
+        tests::test_slave_listen_temp().await?;
+        tests::test_slave_listen_persist().await?;
+        tests::test_master_provide_temp().await?;
+        tests::test_master_provide_persist().await?;
 
         // Check if we can setup virtual serial ports for E2E tests
         if setup_virtual_serial_ports()? {
@@ -74,23 +75,23 @@ fn main() -> Result<()> {
             // Run each E2E test with fresh port initialization
             log::info!("🧪 Test 1/5: Slave listen with virtual ports");
             setup_virtual_serial_ports()?;
-            tests::test_slave_listen_with_vcom()?;
+            tests::test_slave_listen_with_vcom().await?;
 
             log::info!("🧪 Test 2/5: Master provide with virtual ports");
             setup_virtual_serial_ports()?;
-            tests::test_master_provide_with_vcom()?;
+            tests::test_master_provide_with_vcom().await?;
 
             log::info!("🧪 Test 3/5: Master-slave communication");
             setup_virtual_serial_ports()?;
-            tests::test_master_slave_communication()?;
+            tests::test_master_slave_communication().await?;
 
             log::info!("🧪 Test 4/5: Continuous connection with files");
             setup_virtual_serial_ports()?;
-            tests::test_continuous_connection_with_files()?;
+            tests::test_continuous_connection_with_files().await?;
 
             log::info!("🧪 Test 5/5: Continuous connection with pipes");
             setup_virtual_serial_ports()?;
-            tests::test_continuous_connection_with_pipes()?;
+            tests::test_continuous_connection_with_pipes().await?;
         } else {
             log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
         }

@@ -80,7 +80,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();
     if debug_mode {
         log::info!("🔴 DEBUG: After configuration, capturing screen state");
-        let screen = tui_cap.capture(&mut tui_session, "after_config")?;
+        let screen = tui_cap.capture(&mut tui_session, "after_config").await?;
         log::info!("📺 Screen after configuration:\n{screen}\n");
     }
 
@@ -114,7 +114,9 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();
     if debug_mode {
         log::info!("🔴 DEBUG: Port enabled, capturing screen state");
-        let screen = tui_cap.capture(&mut tui_session, "after_enable_port")?;
+        let screen = tui_cap
+            .capture(&mut tui_session, "after_enable_port")
+            .await?;
         log::info!("📺 Screen after enabling port:\n{screen}\n");
 
         // Check port status with lsof
@@ -290,7 +292,7 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();
     if debug_mode {
         log::info!("🔴 DEBUG: After creating station");
-        let screen = cap.capture(session, "after_create_station")?;
+        let screen = cap.capture(session, "after_create_station").await?;
         log::info!("📺 Screen after creating station:\n{screen}\n");
     }
 

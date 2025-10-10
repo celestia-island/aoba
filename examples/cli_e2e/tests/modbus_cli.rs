@@ -3,11 +3,12 @@ use std::{
     fs::File,
     io::Write,
     process::{Command, Stdio},
-    time::Duration,
 };
 
+use ci_utils::sleep_a_while;
+
 /// Test slave listen temporary mode (single response)
-pub fn test_slave_listen_temp() -> Result<()> {
+pub async fn test_slave_listen_temp() -> Result<()> {
     log::info!("🧪 Testing slave listen temporary mode...");
 
     // Get the binary path
@@ -36,7 +37,7 @@ pub fn test_slave_listen_temp() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Wait for a short time, then kill it (it will timeout anyway)
-            std::thread::sleep(Duration::from_millis(500));
+            sleep_a_while().await;
             child.kill()?;
 
             log::info!("🧪 Slave listen command accepted (port error expected)");
@@ -50,7 +51,7 @@ pub fn test_slave_listen_temp() -> Result<()> {
 }
 
 /// Test slave listen persistent mode (continuous output)
-pub fn test_slave_listen_persist() -> Result<()> {
+pub async fn test_slave_listen_persist() -> Result<()> {
     log::info!("🧪 Testing slave listen persistent mode...");
 
     let binary = ci_utils::build_debug_bin("aoba")?;
@@ -75,7 +76,7 @@ pub fn test_slave_listen_persist() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Give it a moment to start
-            std::thread::sleep(Duration::from_millis(500));
+            sleep_a_while().await;
 
             // Kill the process after timeout
             child.kill()?;
@@ -91,7 +92,7 @@ pub fn test_slave_listen_persist() -> Result<()> {
 }
 
 /// Test master provide temporary mode
-pub fn test_master_provide_temp() -> Result<()> {
+pub async fn test_master_provide_temp() -> Result<()> {
     log::info!("🧪 Testing master provide temporary mode...");
 
     let binary = ci_utils::build_debug_bin("aoba")?;
@@ -126,7 +127,7 @@ pub fn test_master_provide_temp() -> Result<()> {
 
     match output {
         Ok(mut child) => {
-            std::thread::sleep(Duration::from_millis(500));
+            sleep_a_while().await;
             child.kill()?;
 
             log::info!("🧪 Master provide command accepted (port error expected)");
@@ -144,7 +145,7 @@ pub fn test_master_provide_temp() -> Result<()> {
 }
 
 /// Test master provide persistent mode with file data source
-pub fn test_master_provide_persist() -> Result<()> {
+pub async fn test_master_provide_persist() -> Result<()> {
     log::info!("🧪 Testing master provide persistent mode...");
 
     let binary = ci_utils::build_debug_bin("aoba")?;
@@ -182,7 +183,7 @@ pub fn test_master_provide_persist() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Let it run for a bit
-            std::thread::sleep(Duration::from_secs(1));
+            sleep_a_while().await;
 
             // Kill the process
             child.kill()?;

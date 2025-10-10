@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
-use expectrl::Expect;
 use regex::Regex;
+
+use expectrl::Expect;
 
 use crate::{sleep_a_while, ArrowKey, ExpectKeyExt, TerminalCapture};
 
@@ -71,10 +72,12 @@ pub async fn execute_cursor_actions<T: Expect>(
 
                 for attempt in 1..=MAX_RETRIES {
                     // Capture current screen
-                    let screen = cap.capture(
-                        session,
-                        &format!("{session_name} - match {description} (attempt {attempt})"),
-                    )?;
+                    let screen = cap
+                        .capture(
+                            session,
+                            &format!("{session_name} - match {description} (attempt {attempt})"),
+                        )
+                        .await?;
                     last_screen = screen.clone();
 
                     // Extract region to search based on line and column ranges
@@ -189,8 +192,9 @@ pub async fn execute_cursor_actions<T: Expect>(
                     log::info!("🔴 DEBUG BREAKPOINT: {description}");
 
                     // Capture and print current screen
-                    let screen =
-                        cap.capture(session, &format!("debug_breakpoint_{description}"))?;
+                    let screen = cap
+                        .capture(session, &format!("debug_breakpoint_{description}"))
+                        .await?;
                     log::info!("📺 Current screen state:\n{screen}\n");
 
                     // Reset ports
