@@ -158,9 +158,9 @@ pub fn test_slave_listen_with_vcom() -> Result<()> {
 
             Ok(())
         }
-        Err(e) => {
-            log::error!("Failed to spawn slave listen: {e}");
-            Err(anyhow!("Failed to spawn: {e}"))
+        Err(err) => {
+            log::error!("Failed to spawn slave listen: {err}");
+            Err(anyhow!("Failed to spawn: {err}"))
         }
     }
 }
@@ -205,10 +205,10 @@ pub fn test_master_provide_with_vcom() -> Result<()> {
 
             Ok(())
         }
-        Err(e) => {
+        Err(err) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide persist: {e}");
-            Err(anyhow!("Failed to spawn: {e}"))
+            log::error!("Failed to spawn master provide persist: {err}");
+            Err(anyhow!("Failed to spawn: {err}"))
         }
     }
 }

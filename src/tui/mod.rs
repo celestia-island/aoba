@@ -177,7 +177,7 @@ fn run_core_thread(
                     // Notify UI to quit and then exit core thread
                     core_tx
                         .send(CoreToUi::Quit)
-                        .map_err(|e| anyhow!("Failed to send Quit to UI core: {e}"))?;
+                        .map_err(|err| anyhow!("Failed to send Quit to UI core: {err}"))?;
                     return Ok(());
                 }
                 UiToCore::Refresh => {
@@ -187,15 +187,15 @@ fn run_core_thread(
                 }
                 UiToCore::PausePolling => {
                     polling_enabled = false;
-                    if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
-                        log::warn!("ToggleRuntime: failed to send Refreshed: {e}");
+                    if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                        log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
                     }
                 }
                 UiToCore::ResumePolling => {
                     polling_enabled = true;
-                    core_tx
-                        .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("Failed to send Refreshed event to UI core: {e}"))?;
+                    core_tx.send(CoreToUi::Refreshed).map_err(|err| {
+                        anyhow!("Failed to send Refreshed event to UI core: {err}")
+                    })?;
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
@@ -243,11 +243,11 @@ fn run_core_thread(
                         // Try to request runtime stop. Sending may fail if the runtime
                         // already exited; treat that non-fatally to avoid bringing down
                         // the entire core thread when user double-presses Enter.
-                        if let Err(e) = rt
+                        if let Err(err) = rt
                             .cmd_tx
                             .send(crate::protocol::runtime::RuntimeCommand::Stop)
                         {
-                            let warn_msg = format!("ToggleRuntime: failed to send Stop: {e}");
+                            let warn_msg = format!("ToggleRuntime: failed to send Stop: {err}");
                             log::warn!("{warn_msg}");
 
                             // Also write to the port's logs so the UI shows the error
@@ -291,13 +291,13 @@ fn run_core_thread(
                             Err(flume::RecvTimeoutError::Timeout) => {
                                 log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
                             }
-                            Err(e) => {
-                                log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {e}");
+                            Err(err) => {
+                                log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {err}");
                             }
                         }
 
-                        if let Err(e) = core_tx.send(CoreToUi::Refreshed) {
-                            log::warn!("ToggleRuntime: failed to send Refreshed: {e}");
+                        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                            log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
                         }
                         continue;
                     }
@@ -358,11 +358,11 @@ fn run_core_thread(
                             }
                             Ok(())
                         })?;
-                    } else if let Some(e) = spawn_err {
+                    } else if let Some(err) = spawn_err {
                         // All attempts failed: set transient error for UI
                         write_status(|status| {
                             status.temporarily.error = Some(types::ErrorInfo {
-                                message: format!("Failed to start runtime: {e}"),
+                                message: format!("Failed to start runtime: {err}"),
                                 timestamp: chrono::Local::now(),
                             });
                             Ok(())
@@ -371,7 +371,7 @@ fn run_core_thread(
 
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                 }
             }
         }
@@ -400,7 +400,7 @@ fn run_core_thread(
 
         core_tx
             .send(CoreToUi::Tick)
-            .map_err(|e| anyhow!("failed to send Tick: {e}"))?;
+            .map_err(|err| anyhow!("failed to send Tick: {err}"))?;
         thread::sleep(Duration::from_millis(50));
     }
 }

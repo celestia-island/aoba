@@ -135,7 +135,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     for (name, rt) in to_stop.into_iter() {
         rt.cmd_tx
             .send(crate::protocol::runtime::RuntimeCommand::Stop)
-            .map_err(|e| anyhow!("failed to send Stop to runtime {name}: {e}"))?;
+            .map_err(|err| anyhow!("failed to send Stop to runtime {name}: {err}"))?;
         // Wait for the runtime to emit a Stopped event. Use blocking recv so
         // that if the channel is disconnected we surface an error to the
         // caller instead of silently retrying timeouts.
@@ -149,8 +149,8 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                     );
                 }
             }
-            Err(e) => {
-                return Err(anyhow!("failed to receive Stopped event for {name}: {e}"));
+            Err(err) => {
+                return Err(anyhow!("failed to receive Stopped event for {name}: {err}"));
             }
         }
     }
@@ -197,7 +197,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
 
     core_tx
         .send(CoreToUi::Refreshed)
-        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
     Ok(true)
 }
 

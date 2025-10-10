@@ -221,7 +221,7 @@ pub fn handle_slave_response_mode(
                 if let Ok(response) = generate_modbus_master_response(&frame, stations, global_mode)
                 {
                     // Send the response
-                    if let Err(e) =
+                    if let Err(err) =
                         runtime
                             .cmd_tx
                             .send(crate::protocol::runtime::RuntimeCommand::Write(
@@ -229,7 +229,7 @@ pub fn handle_slave_response_mode(
                             ))
                     {
                         let warn_msg = format!(
-                            "Failed to send Modbus master response for port {port_name}: {e}"
+                            "Failed to send Modbus master response for port {port_name}: {err}"
                         );
                         log::warn!("{warn_msg}");
 
@@ -432,9 +432,9 @@ pub fn handle_master_query_mode(
                                                             "✓ Set holding register at addr {addr} (0x{addr:04X}) = {value} (0x{value:04X})"
                                                         );
                                                     }
-                                                    Err(e) => {
+                                                    Err(err) => {
                                                         log::warn!(
-                                                            "Failed to set holding register at {addr}: {e}"
+                                                            "Failed to set holding register at {addr}: {err}"
                                                         );
                                                     }
                                                 }
@@ -481,9 +481,9 @@ pub fn handle_master_query_mode(
                                             for (offset, &value) in values.iter().enumerate() {
                                                 let addr =
                                                     start_address.wrapping_add(offset as u16);
-                                                if let Err(e) = context.set_input(addr, value) {
+                                                if let Err(err) = context.set_input(addr, value) {
                                                     log::warn!(
-                                                        "Failed to set input register at {addr}: {e}"
+                                                        "Failed to set input register at {addr}: {err}"
                                                     );
                                                 }
                                             }
@@ -506,8 +506,10 @@ pub fn handle_master_query_mode(
                                             for (offset, &value) in values.iter().enumerate() {
                                                 let addr =
                                                     start_address.wrapping_add(offset as u16);
-                                                if let Err(e) = context.set_coil(addr, value) {
-                                                    log::warn!("Failed to set coil at {addr}: {e}");
+                                                if let Err(err) = context.set_coil(addr, value) {
+                                                    log::warn!(
+                                                        "Failed to set coil at {addr}: {err}"
+                                                    );
                                                 }
                                             }
                                             log::info!(
@@ -529,9 +531,10 @@ pub fn handle_master_query_mode(
                                             for (offset, &value) in values.iter().enumerate() {
                                                 let addr =
                                                     start_address.wrapping_add(offset as u16);
-                                                if let Err(e) = context.set_discrete(addr, value) {
+                                                if let Err(err) = context.set_discrete(addr, value)
+                                                {
                                                     log::warn!(
-                                                        "Failed to set discrete input at {addr}: {e}"
+                                                        "Failed to set discrete input at {addr}: {err}"
                                                     );
                                                 }
                                             }
@@ -691,22 +694,22 @@ pub fn handle_master_query_mode(
                 // No pending write, generate regular read request
                 match generate_modbus_request_with_cache(station, port_arc) {
                     Ok(bytes) => bytes,
-                    Err(e) => {
-                        log::warn!("Failed to generate modbus request: {e}");
+                    Err(err) => {
+                        log::warn!("Failed to generate modbus request: {err}");
                         return Ok(());
                     }
                 }
             };
 
             // Try to send the request (write or read)
-            if let Err(e) = runtime
+            if let Err(err) = runtime
                 .cmd_tx
                 .send(crate::protocol::runtime::RuntimeCommand::Write(
                     request_bytes.clone(),
                 ))
             {
                 let warn_msg = format!(
-                    "Failed to send modbus slave request for {port_name} station {}: {e}",
+                    "Failed to send modbus slave request for {port_name} station {}: {err}",
                     station.station_id
                 );
                 log::warn!("{warn_msg}");
@@ -852,7 +855,7 @@ pub fn generate_modbus_master_response(
 
     let mut context = storage
         .lock()
-        .map_err(|e| anyhow!("Failed to lock storage: {e}"))?;
+        .map_err(|err| anyhow!("Failed to lock storage: {err}"))?;
 
     let mut response = Vec::new();
     let mut frame = ModbusFrame::new(slave_id, request, ModbusProto::Rtu, &mut response);

@@ -47,7 +47,9 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             })?;
 
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Esc => {
@@ -55,7 +57,9 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Char('h') => {
@@ -87,7 +91,9 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
@@ -122,7 +128,9 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
@@ -290,11 +298,11 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                 if let Ok(mut context) = storage.lock() {
                                                     match item.register_mode {
                                                         RegisterMode::Holding => {
-                                                            if let Err(e) = context.set_holding(
+                                                            if let Err(err) = context.set_holding(
                                                                 register_addr,
                                                                 register_value,
                                                             ) {
-                                                                log::warn!("Failed to set holding register at {register_addr}: {e}");
+                                                                log::warn!("Failed to set holding register at {register_addr}: {err}");
                                                             } else {
                                                                 log::info!(
                                                                     "✓ Master: Set holding register at 0x{register_addr:04X} = 0x{register_value:04X}"
@@ -303,10 +311,10 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                         }
                                                         RegisterMode::Coils => {
                                                             let coil_value = register_value != 0;
-                                                            if let Err(e) = context
+                                                            if let Err(err) = context
                                                                 .set_coil(register_addr, coil_value)
                                                             {
-                                                                log::warn!("Failed to set coil at {register_addr}: {e}");
+                                                                log::warn!("Failed to set coil at {register_addr}: {err}");
                                                             } else {
                                                                 log::info!(
                                                                     "✓ Master: Set coil at 0x{register_addr:04X} = {coil_value}"
