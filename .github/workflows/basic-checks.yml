@@ -67,28 +67,28 @@ jobs:
 
       # Auto-fix steps
       - name: Attempt auto-fix with cargo fix
-        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.check.outcome == 'failure'
+        if: matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/dev' && steps.check.outcome == 'failure'
         run: |
           echo "Attempting to fix compilation errors..."
           cargo fix --all-targets --allow-dirty --allow-staged || true
         continue-on-error: true
 
       - name: Attempt auto-fix with cargo clippy --fix
-        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.clippy_check.outcome == 'failure'
+        if: matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/dev' && steps.clippy_check.outcome == 'failure'
         run: |
           echo "Attempting to fix clippy warnings..."
           cargo clippy --fix --all-targets --all-features --allow-dirty --allow-staged || true
         continue-on-error: true
 
       - name: Run cargo fmt (auto-fix)
-        if: matrix.rust == 'stable' && github.event_name == 'push' && steps.fmt_check.outcome == 'failure'
+        if: matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/dev' && steps.fmt_check.outcome == 'failure'
         run: |
           echo "Running cargo fmt to fix formatting..."
           cargo fmt --all
         continue-on-error: true
 
       - name: Check for changes and commit
-        if: matrix.rust == 'stable' && github.event_name == 'push'
+        if: matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/dev'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
