@@ -2,22 +2,21 @@
 #![doc(hidden)]
 
 pub mod auto_cursor;
-pub mod key_input;
-pub mod log_utils;
-pub mod snapshot;
-pub mod terminal;
-// `utils` module removed; prefer specific helper modules (data, ports, tui, etc.).
 pub mod cli;
 pub mod data;
 pub mod helpers;
+pub mod key_input;
+pub mod log_utils;
 pub mod ports;
+pub mod snapshot;
+pub mod terminal;
 pub mod tui;
 pub mod verify;
 
 pub use auto_cursor::{execute_cursor_actions, CursorAction};
 pub use cli::{create_modbus_command, run_cli_slave_poll};
 pub use data::{generate_random_coils, generate_random_registers};
-pub use helpers::sleep_a_while;
+pub use helpers::{sleep_a_while, sleep_seconds};
 pub use key_input::{ArrowKey, ExpectKeyExt};
 pub use ports::{should_run_vcom_tests, vcom_matchers, VcomMatchers};
 pub use snapshot::TerminalCapture;

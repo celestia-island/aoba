@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use ci_utils::run_binary_sync;
 
-pub fn test_cli_help() -> Result<()> {
+pub async fn test_cli_help() -> Result<()> {
     let output = run_binary_sync(&["--help"])?;
 
     log::info!("help stdout: {}", String::from_utf8_lossy(&output.stdout));
