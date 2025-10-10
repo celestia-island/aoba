@@ -39,6 +39,7 @@ pub struct ManagedSubprocess {
     pub child: Child,
     pub ipc_socket_name: String,
     pub ipc_connection: Option<IpcConnection>,
+    ipc_accept_thread: Option<std::thread::JoinHandle<Result<IpcConnection>>>,
 }
 
 impl ManagedSubprocess {
@@ -110,20 +111,44 @@ impl ManagedSubprocess {
         
         log::info!("CLI subprocess spawned with PID: {:?}", child.id());
         
-        // Accept the IPC connection (with timeout)
-        let ipc_connection = std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_millis(500));
+        // Spawn thread to accept IPC connection
+        let accept_thread = std::thread::spawn(move || {
             ipc_client.accept()
-        })
-        .join()
-        .map_err(|_| anyhow!("Failed to join IPC accept thread"))??;
+        });
         
         Ok(Self {
             config,
             child,
             ipc_socket_name,
-            ipc_connection: Some(ipc_connection),
+            ipc_connection: None,
+            ipc_accept_thread: Some(accept_thread),
         })
+    }
+    
+    /// Try to complete IPC connection if still pending
+    fn try_complete_ipc_connection(&mut self) -> Result<()> {
+        if let Some(thread) = self.ipc_accept_thread.take() {
+            // Check if thread has finished
+            if thread.is_finished() {
+                match thread.join() {
+                    Ok(Ok(conn)) => {
+                        log::info!("Accepted IPC connection for port {}", self.config.port_name);
+                        self.ipc_connection = Some(conn);
+                    }
+                    Ok(Err(e)) => {
+                        log::error!("IPC accept failed for {}: {}", self.config.port_name, e);
+                        return Err(e);
+                    }
+                    Err(_) => {
+                        return Err(anyhow!("IPC accept thread panicked"));
+                    }
+                }
+            } else {
+                // Thread still running, put it back
+                self.ipc_accept_thread = Some(thread);
+            }
+        }
+        Ok(())
     }
     
     /// Check if the subprocess is still running
@@ -133,6 +158,9 @@ impl ManagedSubprocess {
     
     /// Try to receive an IPC message from the subprocess (non-blocking)
     pub fn try_recv_ipc(&mut self) -> Result<Option<IpcMessage>> {
+        // Try to complete connection first if still pending
+        self.try_complete_ipc_connection()?;
+        
         if let Some(ref mut conn) = self.ipc_connection {
             conn.try_recv()
         } else {
@@ -238,7 +266,7 @@ impl SubprocessManager {
     
     /// Shutdown all subprocesses
     pub fn shutdown_all(&mut self) {
-        for (port_name, subprocess) in self.processes.drain() {
+        for (port_name, mut subprocess) in self.processes.drain() {
             log::info!("Shutting down subprocess for port {}", port_name);
             let _ = subprocess.child.kill();
         }

@@ -56,7 +56,7 @@ impl IpcServer {
         log::debug!("IPC: Attempting to connect to socket: {}", socket_name);
         
         // Try to connect to the named socket (TUI is listening)
-        let name = socket_name.to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
+        let name = socket_name.clone().to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let stream = interprocess::local_socket::Stream::connect(name)?;
         
         log::info!("IPC: Successfully connected to socket: {}", socket_name);
@@ -109,7 +109,7 @@ impl IpcClient {
         
         log::debug!("IPC: Creating listener on socket: {}", socket_name);
         
-        let name = socket_name.to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
+        let name = socket_name.clone().to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
         let opts = interprocess::local_socket::ListenerOptions::new().name(name);
         
         let listener = opts.create_sync()?;
