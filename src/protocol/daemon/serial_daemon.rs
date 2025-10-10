@@ -85,8 +85,8 @@ pub fn boot_serial_loop(
                     }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::TimedOut => {}
-                Err(e) => {
-                    evt_tx.send(RuntimeEvent::Error(format!("Read error: {e}")))?;
+                Err(err) => {
+                    evt_tx.send(RuntimeEvent::Error(format!("Read error: {err}")))?;
                 }
             }
         }

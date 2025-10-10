@@ -28,7 +28,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             log::info!("🔵 AddLine action - calling create_new_modbus_entry");
             create_new_modbus_entry()?;
             log::info!("🔵 Station created successfully, sending refresh");
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             log::info!("🔵 Refresh sent");
         }
         types::cursor::ModbusDashboardCursor::ModbusMode => {
@@ -53,7 +55,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_mode);
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
             // Get the current register mode value from port config
@@ -80,7 +84,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_value);
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
@@ -92,7 +98,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::Register {
             slave_index,
@@ -166,10 +174,10 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                                 .get_coil(register_addr)
                                                                 .unwrap_or(false);
                                                             let new_value = !current;
-                                                            if let Err(e) = context
+                                                            if let Err(err) = context
                                                                 .set_coil(register_addr, new_value)
                                                             {
-                                                                log::warn!("Failed to toggle coil at {register_addr}: {e}");
+                                                                log::warn!("Failed to toggle coil at {register_addr}: {err}");
                                                             } else {
                                                                 log::info!(
                                                                     "✓ Master: Toggled coil at 0x{register_addr:04X} from {current} to {new_value}"
@@ -230,7 +238,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     });
                                 }
                             }
-                            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+                            bus.ui_tx
+                                .send(UiToCore::Refresh)
+                                .map_err(|err| anyhow!(err))?;
                         }
                         types::modbus::RegisterMode::Holding
                         | types::modbus::RegisterMode::Input => {
@@ -295,7 +305,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     };
                                 Ok(())
                             })?;
-                            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+                            bus.ui_tx
+                                .send(UiToCore::Refresh)
+                                .map_err(|err| anyhow!(err))?;
                         }
                     }
                 }
@@ -321,7 +333,9 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         };
         Ok(())
     })?;
-    bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+    bus.ui_tx
+        .send(UiToCore::Refresh)
+        .map_err(|err| anyhow!(err))?;
     Ok(())
 }
 

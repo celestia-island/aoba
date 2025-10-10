@@ -42,9 +42,9 @@ pub fn test_slave_listen_temp() -> Result<()> {
             log::info!("🧪 Slave listen command accepted (port error expected)");
             Ok(())
         }
-        Err(e) => {
-            log::error!("Failed to spawn slave listen: {e}");
-            Err(anyhow!("Failed to spawn: {e}"))
+        Err(err) => {
+            log::error!("Failed to spawn slave listen: {err}");
+            Err(anyhow!("Failed to spawn: {err}"))
         }
     }
 }
@@ -83,9 +83,9 @@ pub fn test_slave_listen_persist() -> Result<()> {
             log::info!("🧪 Slave listen persist command accepted (port error expected)");
             Ok(())
         }
-        Err(e) => {
-            log::error!("Failed to spawn slave listen persist: {e}");
-            Err(anyhow!("Failed to spawn: {e}"))
+        Err(err) => {
+            log::error!("Failed to spawn slave listen persist: {err}");
+            Err(anyhow!("Failed to spawn: {err}"))
         }
     }
 }
@@ -135,10 +135,10 @@ pub fn test_master_provide_temp() -> Result<()> {
             std::fs::remove_file(&data_file)?;
             Ok(())
         }
-        Err(e) => {
+        Err(err) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide: {e}");
-            Err(anyhow!("Failed to spawn: {e}"))
+            log::error!("Failed to spawn master provide: {err}");
+            Err(anyhow!("Failed to spawn: {err}"))
         }
     }
 }
@@ -193,10 +193,10 @@ pub fn test_master_provide_persist() -> Result<()> {
             std::fs::remove_file(&data_file)?;
             Ok(())
         }
-        Err(e) => {
+        Err(err) => {
             std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide persist: {e}");
-            Err(anyhow!("Failed to spawn: {e}"))
+            log::error!("Failed to spawn master provide persist: {err}");
+            Err(anyhow!("Failed to spawn: {err}"))
         }
     }
 }

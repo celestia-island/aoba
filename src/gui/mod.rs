@@ -83,30 +83,30 @@ fn run_demo_core(ui_rx: flume::Receiver<UiToCore>, core_tx: flume::Sender<CoreTo
                     log::info!("Received Refresh");
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                 }
                 UiToCore::Quit => {
                     log::info!("Received Quit, exiting demo core");
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                     break;
                 }
                 UiToCore::PausePolling => {
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                 }
                 UiToCore::ResumePolling => {
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                 }
                 UiToCore::ToggleRuntime(_) => {
                     // Demo GUI core ignores ToggleRuntime
                     core_tx
                         .send(CoreToUi::Refreshed)
-                        .map_err(|e| anyhow!("failed to send Refreshed: {e}"))?;
+                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                 }
             },
             Err(_) => {

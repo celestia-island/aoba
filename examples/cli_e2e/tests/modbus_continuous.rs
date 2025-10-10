@@ -327,7 +327,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
     // Check results
     match writer_result {
         Ok(Ok(())) => log::info!("✅ Writer thread completed successfully"),
-        Ok(Err(e)) => log::warn!("⚠️ Writer thread error: {e}"),
+        Ok(Err(err)) => log::warn!("⚠️ Writer thread error: {err}"),
         Err(_) => log::warn!("⚠️ Writer thread panicked"),
     }
 
@@ -340,7 +340,7 @@ pub fn test_continuous_connection_with_pipes() -> Result<()> {
                 }
             }
         }
-        Ok(Err(e)) => log::warn!("⚠️ Reader thread error: {e}"),
+        Ok(Err(err)) => log::warn!("⚠️ Reader thread error: {err}"),
         Err(_) => log::warn!("⚠️ Reader thread panicked"),
     }
 

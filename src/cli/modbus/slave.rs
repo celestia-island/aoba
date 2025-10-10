@@ -34,7 +34,7 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
         let port_handle = serialport::new(port, baud_rate)
             .timeout(Duration::from_secs(5))
             .open()
-            .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+            .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -93,7 +93,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(100))
         .open()
-        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -125,8 +125,8 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
                 let json = serde_json::to_string(&response)?;
                 output_sink.write(&json)?;
             }
-            Err(e) => {
-                log::warn!("Error processing request: {e}");
+            Err(err) => {
+                log::warn!("Error processing request: {err}");
                 std::thread::sleep(Duration::from_millis(100));
             }
         }
@@ -230,7 +230,7 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
         let port_handle = serialport::new(port, baud_rate)
             .timeout(Duration::from_secs(5))
             .open()
-            .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+            .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -410,7 +410,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(500))
         .open()
-        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -436,8 +436,8 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 let json = serde_json::to_string(&response)?;
                 output_sink.write(&json)?;
             }
-            Err(e) => {
-                log::warn!("Poll error: {e}");
+            Err(err) => {
+                log::warn!("Poll error: {err}");
             }
         }
 
