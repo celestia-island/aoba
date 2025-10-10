@@ -54,7 +54,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Right | KeyCode::Char('l') => {
@@ -128,7 +130,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Up | KeyCode::Char('k') => {
@@ -203,7 +207,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
@@ -290,7 +296,9 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx.send(UiToCore::Refresh).map_err(|e| anyhow!(e))?;
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Enter => {

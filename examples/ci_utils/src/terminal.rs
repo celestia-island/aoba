@@ -56,7 +56,7 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
-        .map_err(|e| anyhow!("Failed to execute cargo build: {e}"))?;
+        .map_err(|err| anyhow!("Failed to execute cargo build: {err}"))?;
 
     if !status.success() {
         return Err(anyhow!("cargo build failed with status: {status}"));
@@ -88,7 +88,7 @@ pub fn run_binary_sync(args: &[&str]) -> Result<Output> {
     let output = Command::new(&bin_path)
         .args(args)
         .output()
-        .map_err(|e| anyhow!("Failed to execute binary {}: {}", bin_path.display(), e))?;
+        .map_err(|err| anyhow!("Failed to execute binary {}: {}", bin_path.display(), err))?;
 
     Ok(output)
 }
@@ -117,7 +117,7 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
     };
 
     let session = expectrl::spawn(&cmd_with_env)
-        .map_err(|e| anyhow!("Failed to spawn process via expectrl: {e}"))?;
+        .map_err(|err| anyhow!("Failed to spawn process via expectrl: {err}"))?;
 
     Ok(session)
 }

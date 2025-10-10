@@ -100,8 +100,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen
     if let Some(port) = matches.get_one::<String>("slave-listen") {
-        if let Err(e) = super::modbus::slave::handle_slave_listen(matches, port) {
-            eprintln!("Error in slave-listen: {e}");
+        if let Err(err) = super::modbus::slave::handle_slave_listen(matches, port) {
+            eprintln!("Error in slave-listen: {err}");
             std::process::exit(1);
         }
         return true;
@@ -109,8 +109,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave listen persist
     if let Some(port) = matches.get_one::<String>("slave-listen-persist") {
-        if let Err(e) = super::modbus::slave::handle_slave_listen_persist(matches, port) {
-            eprintln!("Error in slave-listen-persist: {e}");
+        if let Err(err) = super::modbus::slave::handle_slave_listen_persist(matches, port) {
+            eprintln!("Error in slave-listen-persist: {err}");
             std::process::exit(1);
         }
         return true;
@@ -118,8 +118,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll (client mode - sends request)
     if let Some(port) = matches.get_one::<String>("slave-poll") {
-        if let Err(e) = super::modbus::slave::handle_slave_poll(matches, port) {
-            eprintln!("Error in slave-poll: {e}");
+        if let Err(err) = super::modbus::slave::handle_slave_poll(matches, port) {
+            eprintln!("Error in slave-poll: {err}");
             std::process::exit(1);
         }
         return true;
@@ -127,8 +127,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus slave poll persist (client mode - continuous polling)
     if let Some(port) = matches.get_one::<String>("slave-poll-persist") {
-        if let Err(e) = super::modbus::slave::handle_slave_poll_persist(matches, port) {
-            eprintln!("Error in slave-poll-persist: {e}");
+        if let Err(err) = super::modbus::slave::handle_slave_poll_persist(matches, port) {
+            eprintln!("Error in slave-poll-persist: {err}");
             std::process::exit(1);
         }
         return true;
@@ -136,8 +136,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus master provide
     if let Some(port) = matches.get_one::<String>("master-provide") {
-        if let Err(e) = super::modbus::master::handle_master_provide(matches, port) {
-            eprintln!("Error in master-provide: {e}");
+        if let Err(err) = super::modbus::master::handle_master_provide(matches, port) {
+            eprintln!("Error in master-provide: {err}");
             std::process::exit(1);
         }
         return true;
@@ -145,8 +145,8 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
 
     // Handle modbus master provide persist
     if let Some(port) = matches.get_one::<String>("master-provide-persist") {
-        if let Err(e) = super::modbus::master::handle_master_provide_persist(matches, port) {
-            eprintln!("Error in master-provide-persist: {e}");
+        if let Err(err) = super::modbus::master::handle_master_provide_persist(matches, port) {
+            eprintln!("Error in master-provide-persist: {err}");
             std::process::exit(1);
         }
         return true;

@@ -61,7 +61,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_secs(5))
         .open()
-        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -122,8 +122,8 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                     return Ok(());
                 }
             }
-            Err(e) => {
-                return Err(anyhow!("Error reading from port: {e}"));
+            Err(err) => {
+                return Err(anyhow!("Error reading from port: {err}"));
             }
         }
     }
@@ -153,7 +153,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(50))
         .open()
-        .map_err(|e| anyhow!("Failed to open port {port}: {e}"))?;
+        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -253,8 +253,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     let json = serde_json::to_string(&response)?;
                                     println!("{json}");
                                 }
-                                Err(e) => {
-                                    log::warn!("Error responding to request: {e}");
+                                Err(err) => {
+                                    log::warn!("Error responding to request: {err}");
                                 }
                             }
 
@@ -286,8 +286,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     let json = serde_json::to_string(&response)?;
                                     println!("{json}");
                                 }
-                                Err(e) => {
-                                    log::warn!("Error responding to request: {e}");
+                                Err(err) => {
+                                    log::warn!("Error responding to request: {err}");
                                 }
                             }
 
@@ -296,8 +296,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                     }
                 }
             }
-            Err(e) => {
-                log::warn!("Error reading from port: {e}");
+            Err(err) => {
+                log::warn!("Error reading from port: {err}");
                 std::thread::sleep(Duration::from_millis(10));
             }
         }
@@ -420,8 +420,8 @@ fn update_storage_loop(
                             // Wait a bit before next update to avoid overwhelming
                             std::thread::sleep(Duration::from_millis(100));
                         }
-                        Err(e) => {
-                            log::warn!("Error parsing data line: {e}");
+                        Err(err) => {
+                            log::warn!("Error parsing data line: {err}");
                         }
                     }
                 }
@@ -462,8 +462,8 @@ fn update_storage_loop(
                             // Wait a bit before next update
                             std::thread::sleep(Duration::from_millis(100));
                         }
-                        Err(e) => {
-                            log::warn!("Error parsing data line: {e}");
+                        Err(err) => {
+                            log::warn!("Error parsing data line: {err}");
                         }
                     }
                 }
