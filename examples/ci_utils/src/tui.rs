@@ -3,25 +3,26 @@ use regex::Regex;
 
 use expectrl::Expect;
 
-/// Navigate to vcom1 port in TUI (shared helper).
+/// Navigate to port1 in TUI (shared helper).
 pub async fn navigate_to_vcom<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
     let screen = cap.capture(session, "before_navigation").await?;
-    let vcom_pattern = std::env::var("AOBATEST_PORT1").unwrap_or_else(|_| "/tmp/vcom1".to_string());
+    let ports = crate::ports::vcom_matchers();
+    let port_name = &ports.port1_name;
 
-    if !screen.contains(&vcom_pattern) {
-        return Err(anyhow!("vcom1 ({vcom_pattern}) not found in port list"));
+    if !screen.contains(port_name) {
+        return Err(anyhow!("Port ({port_name}) not found in port list"));
     }
 
     let lines: Vec<&str> = screen.lines().collect();
-    let mut vcom1_line = None;
+    let mut port_line = None;
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains(&vcom_pattern) {
-            vcom1_line = Some(idx);
+        if line.contains(port_name) {
+            port_line = Some(idx);
         }
         if line.contains("> ") {
             let trimmed = line.trim();
@@ -31,12 +32,12 @@ pub async fn navigate_to_vcom<T: Expect>(
         }
     }
 
-    let vcom1_idx = vcom1_line.ok_or_else(|| anyhow!("Could not find vcom1 line index"))?;
+    let port_idx = port_line.ok_or_else(|| anyhow!("Could not find {port_name} line index"))?;
     let curr_idx = cursor_line.unwrap_or(3);
 
-    if vcom1_idx != curr_idx {
-        let delta = vcom1_idx.abs_diff(curr_idx);
-        let direction = if vcom1_idx > curr_idx {
+    if port_idx != curr_idx {
+        let delta = port_idx.abs_diff(curr_idx);
+        let direction = if port_idx > curr_idx {
             crate::key_input::ArrowKey::Down
         } else {
             crate::key_input::ArrowKey::Up
@@ -49,21 +50,21 @@ pub async fn navigate_to_vcom<T: Expect>(
             },
             crate::auto_cursor::CursorAction::Sleep { ms: 500 },
         ];
-        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_vcom1").await?;
+        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_port").await?;
     }
 
-    // Press Enter to enter vcom1 details
-    let vcom_pattern_regex = Regex::new(&regex::escape(&vcom_pattern))?;
+    // Press Enter to enter port details
+    let port_pattern_regex = Regex::new(&regex::escape(port_name))?;
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
         crate::auto_cursor::CursorAction::MatchPattern {
-            pattern: vcom_pattern_regex,
-            description: "In vcom1 port details".to_string(),
+            pattern: port_pattern_regex,
+            description: format!("In {port_name} port details"),
             line_range: Some((0, 3)),
             col_range: None,
         },
     ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_vcom1").await?;
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_port").await?;
 
     Ok(())
 }
@@ -73,7 +74,9 @@ pub async fn enable_port_carefully<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
+    log::info!("=== enable_port_carefully: START ===");
     let screen = cap.capture(session, "before_enable").await?;
+
     if !screen.contains("Enable Port") {
         return Err(anyhow!(
             "Not in port details page - 'Enable Port' not found"
@@ -90,27 +93,18 @@ pub async fn enable_port_carefully<T: Expect>(
         return Ok(());
     }
 
-    // Check if cursor is on "Enable Port" line
-    let lines: Vec<&str> = screen.lines().collect();
-    let mut on_enable_port = false;
-    for line in lines {
-        let trimmed = line.trim();
-        if (trimmed.starts_with("\u{2502} > ") || trimmed.starts_with("> "))
-            && line.contains("Enable Port")
-        {
-            on_enable_port = true;
-            break;
-        }
-    }
-
-    if !on_enable_port {
-        let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+    // Instead of trying to detect cursor position, always press Up a lot to ensure
+    // we're at the top, then Down to "Enable Port" (which should be first item)
+    log::info!("Moving cursor to Enable Port by pressing Up many times, then pressing Enter");
+    let actions = vec![
+        // Press Up many times to ensure we're at the top
+        crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
-            count: 3,
-        }];
-        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_enable_port")
-            .await?;
-    }
+            count: 10,
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
 
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,

@@ -190,12 +190,20 @@ fn run_core_thread(
                     if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
                         log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
                     }
+                    // Log state after refresh
+                    if let Err(err) = log_state_snapshot() {
+                        log::warn!("Failed to log state snapshot: {err}");
+                    }
                 }
                 UiToCore::ResumePolling => {
                     polling_enabled = true;
                     core_tx.send(CoreToUi::Refreshed).map_err(|err| {
                         anyhow!("Failed to send Refreshed event to UI core: {err}")
                     })?;
+                    // Log state after refresh
+                    if let Err(err) = log_state_snapshot() {
+                        log::warn!("Failed to log state snapshot: {err}");
+                    }
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
@@ -299,6 +307,10 @@ fn run_core_thread(
                         if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
                             log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
                         }
+                        // Log state after refresh
+                        if let Err(err) = log_state_snapshot() {
+                            log::warn!("Failed to log state snapshot: {err}");
+                        }
                         continue;
                     }
 
@@ -372,6 +384,10 @@ fn run_core_thread(
                     core_tx
                         .send(CoreToUi::Refreshed)
                         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
+                    // Log state after refresh
+                    if let Err(err) = log_state_snapshot() {
+                        log::warn!("Failed to log state snapshot: {err}");
+                    }
                 }
             }
         }
@@ -438,4 +454,82 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
     crate::tui::ui::bottom::render_bottom(frame, main_chunks[2])?;
 
     Ok(())
+}
+
+/// Log a snapshot of the current TUI state for testing purposes.
+/// This function is called after each Refreshed event to allow log-based
+/// verification of state transitions.
+pub fn log_state_snapshot() -> Result<()> {
+    use crate::protocol::status::{read_status, types::port::PortState};
+    use serde_json::json;
+
+    read_status(|status| {
+        // Extract page info
+        let page_name = match &status.page {
+            crate::protocol::status::types::Page::Entry { .. } => "Entry",
+            crate::protocol::status::types::Page::ConfigPanel { .. } => "ConfigPanel",
+            crate::protocol::status::types::Page::ModbusDashboard { .. } => "ModbusDashboard",
+            crate::protocol::status::types::Page::LogPanel { .. } => "LogPanel",
+            crate::protocol::status::types::Page::About { .. } => "About",
+        };
+
+        let cursor_info = match &status.page {
+            crate::protocol::status::types::Page::Entry { cursor, .. } => {
+                if let Some(c) = cursor {
+                    format!("{:?}", c)
+                } else {
+                    "None".to_string()
+                }
+            }
+            crate::protocol::status::types::Page::ConfigPanel { cursor, .. } => {
+                format!("{:?}", cursor)
+            }
+            crate::protocol::status::types::Page::ModbusDashboard { cursor, .. } => {
+                format!("{:?}", cursor)
+            }
+            _ => "N/A".to_string(),
+        };
+
+        // Extract port states
+        let mut port_states = vec![];
+        for port_name in &status.ports.order {
+            if let Some(port_arc) = status.ports.map.get(port_name) {
+                if let Ok(port) = port_arc.read() {
+                    let state_str = match &port.state {
+                        PortState::Free => "Free",
+                        PortState::OccupiedByThis { .. } => "OccupiedByThis",
+                        PortState::OccupiedByOther => "OccupiedByOther",
+                    };
+                    port_states.push(json!({
+                        "name": port_name,
+                        "state": state_str,
+                        "type": &port.port_type,
+                    }));
+                }
+            }
+        }
+
+        // Extract config edit state
+        let config_edit = json!({
+            "active": status.temporarily.config_edit.active,
+            "port": status.temporarily.config_edit.port,
+            "field_index": status.temporarily.config_edit.field_index,
+            "field_key": status.temporarily.config_edit.field_key,
+            "buffer": status.temporarily.config_edit.buffer,
+            "cursor_pos": status.temporarily.config_edit.cursor_pos,
+        });
+
+        // Build complete state snapshot
+        let snapshot = json!({
+            "page": page_name,
+            "cursor": cursor_info,
+            "ports": port_states,
+            "config_edit": config_edit,
+            "error": status.temporarily.error.as_ref().map(|e| &e.message),
+        });
+
+        // Log with STATE_DUMP prefix for easy parsing in tests
+        log::info!("STATE_DUMP: {}", snapshot);
+        Ok(())
+    })
 }

@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 
-use ci_utils::{create_modbus_command, generate_random_registers, sleep_a_while};
+use ci_utils::{create_modbus_command, generate_random_registers, sleep_a_while, vcom_matchers};
 
 async fn read_child_output<R: std::io::Read + Send + 'static>(
     reader: Box<R>,
@@ -129,6 +129,7 @@ async fn reader(output_pipe: PathBuf) -> Result<Vec<String>> {
 pub async fn test_continuous_connection_with_files() -> Result<()> {
     log::info!("🧪 Testing continuous connection with file data source and file output...");
     let temp_dir = std::env::temp_dir();
+    let ports = vcom_matchers();
 
     // Create random data file for master with known test data
     let data_file = temp_dir.join("test_continuous_data.json");
@@ -159,11 +160,14 @@ pub async fn test_continuous_connection_with_files() -> Result<()> {
         std::fs::remove_file(&slave_output_file)?;
     }
 
-    // Start server (master-provide) on /tmp/vcom1 in persistent mode with data source
-    log::info!("🧪 Starting Modbus server (master-provide) on /tmp/vcom1 with data source...");
+    // Start server (master-provide) on port1 in persistent mode with data source
+    log::info!(
+        "🧪 Starting Modbus server (master-provide) on {} with data source...",
+        ports.port1_name
+    );
     let mut server = create_modbus_command(
         false, // master-provide
-        "/tmp/vcom1",
+        &ports.port1_name,
         true,
         Some(&format!("file:{}", data_file.display())),
     )?
@@ -243,14 +247,17 @@ pub async fn test_continuous_connection_with_files() -> Result<()> {
         }
     }
 
-    // Start client (slave-poll-persist) on /tmp/vcom2 in persistent mode with file output
-    log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with file output...");
+    // Start client (slave-poll-persist) on port2 in persistent mode with file output
+    log::info!(
+        "🧪 Starting Modbus client (slave-poll-persist) on {} with file output...",
+        ports.port2_name
+    );
 
     let binary = ci_utils::build_debug_bin("aoba")?;
     let mut client = std::process::Command::new(&binary)
         .args([
             "--slave-poll-persist",
-            "/tmp/vcom2",
+            &ports.port2_name,
             "--station-id",
             "1",
             "--register-address",
@@ -580,6 +587,7 @@ pub async fn test_continuous_connection_with_files() -> Result<()> {
 pub async fn test_continuous_connection_with_pipes() -> Result<()> {
     log::info!("🧪 Testing continuous connection with Unix pipe data source and pipe output...");
     let temp_dir = std::env::temp_dir();
+    let ports = vcom_matchers();
 
     // Create named pipes
     let data_pipe = temp_dir.join("test_continuous_data.pipe");
@@ -599,11 +607,14 @@ pub async fn test_continuous_connection_with_pipes() -> Result<()> {
 
     log::info!("✅ Created named pipes");
 
-    // Start server (master-provide) on /tmp/vcom1 with pipe data source
-    log::info!("🧪 Starting Modbus server (master-provide) on /tmp/vcom1 with pipe data source...");
+    // Start server (master-provide) on port1 with pipe data source
+    log::info!(
+        "🧪 Starting Modbus server (master-provide) on {} with pipe data source...",
+        ports.port1_name
+    );
     let mut server = create_modbus_command(
         false, // master-provide
-        "/tmp/vcom1",
+        &ports.port1_name,
         true,
         Some(&format!("pipe:{}", data_pipe.display())),
     )?
@@ -658,14 +669,17 @@ pub async fn test_continuous_connection_with_pipes() -> Result<()> {
         sleep_a_while().await;
     }
 
-    // Start client (slave-poll-persist) on /tmp/vcom2 with pipe output
-    log::info!("🧪 Starting Modbus client (slave-poll-persist) on /tmp/vcom2 with pipe output...");
+    // Start client (slave-poll-persist) on port2 with pipe output
+    log::info!(
+        "🧪 Starting Modbus client (slave-poll-persist) on {} with pipe output...",
+        ports.port2_name
+    );
 
     let binary = ci_utils::build_debug_bin("aoba")?;
     let mut client = std::process::Command::new(&binary)
         .args([
             "--slave-poll-persist",
-            "/tmp/vcom2",
+            &ports.port2_name,
             "--station-id",
             "1",
             "--register-address",

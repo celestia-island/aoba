@@ -93,26 +93,30 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let mut ipc = crate::cli::actions::setup_ipc(matches);
 
     // Open serial port
-    let port_handle = serialport::new(port, baud_rate)
+    let port_handle = match serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(100))
         .open()
-        .map_err(|err| {
-            if let Some(ref mut ipc) = ipc {
-                let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortError {
-                    port_name: port.to_string(),
-                    error: format!("Failed to open port: {err}"),
-                });
-            }
-            anyhow!("Failed to open port {port}: {err}")
-        })?;
-
+    {
+        Ok(handle) => handle,
+        Err(err) => {
+            ipc.as_mut()
+                .ok_or(anyhow!("Cannot write to ipc."))?
+                .send(&crate::protocol::ipc::IpcMessage::port_error(
+                    port.to_string(),
+                    format!("Failed to open port: {err}"),
+                ))
+                .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+            return Err(anyhow!("Failed to open port {port}: {err}"));
+        }
+    };
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc) = ipc {
-        let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortOpened {
-            port_name: port.to_string(),
-        });
+        ipc.send(&crate::protocol::ipc::IpcMessage::port_opened(
+            port.to_string(),
+        ))?;
+        log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit

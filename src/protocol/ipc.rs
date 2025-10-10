@@ -7,25 +7,71 @@ use std::io::{BufRead, BufReader, Write};
 
 /// Message types exchanged between TUI (parent) and CLI (child) processes
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum IpcMessage {
     /// CLI subprocess reports it has successfully opened a serial port
-    PortOpened { port_name: String },
+    PortOpened {
+        port_name: String,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
 
     /// CLI subprocess reports an error opening or using a serial port
-    PortError { port_name: String, error: String },
+    PortError {
+        port_name: String,
+        error: String,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
 
     /// CLI subprocess is shutting down gracefully
-    Shutdown,
+    Shutdown {
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
 
     /// Modbus data received/sent (for monitoring)
     ModbusData {
         port_name: String,
         direction: String, // "tx" or "rx"
         data: String,
+        #[serde(default)]
+        timestamp: Option<i64>,
     },
 
     /// Heartbeat to verify subprocess is alive
-    Heartbeat,
+    Heartbeat {
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
+
+    /// Modbus register data update (for master/server providing data)
+    RegisterUpdate {
+        port_name: String,
+        station_id: u8,
+        register_type: String, // "holding", "input", "coil", "discrete_input"
+        start_address: u16,
+        values: Vec<u16>, // For holding/input registers (also used for coil/discrete input as 0/1)
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
+
+    /// Status report from CLI subprocess
+    Status {
+        port_name: String,
+        status: String, // "running", "idle", "error", etc.
+        details: Option<String>,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
+
+    /// Log message from subprocess (for debugging)
+    Log {
+        level: String, // "debug", "info", "warn", "error"
+        message: String,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
 }
 
 impl IpcMessage {
@@ -37,6 +83,64 @@ impl IpcMessage {
     /// Deserialize from JSON string
     pub fn from_json(s: &str) -> Result<Self> {
         Ok(serde_json::from_str(s)?)
+    }
+
+    /// Get current Unix timestamp in seconds
+    fn timestamp() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64
+    }
+
+    /// Create a PortOpened message with current timestamp
+    pub fn port_opened(port_name: String) -> Self {
+        Self::PortOpened {
+            port_name,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a PortError message with current timestamp
+    pub fn port_error(port_name: String, error: String) -> Self {
+        Self::PortError {
+            port_name,
+            error,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a Shutdown message with current timestamp
+    pub fn shutdown() -> Self {
+        Self::Shutdown {
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a Heartbeat message with current timestamp
+    pub fn heartbeat() -> Self {
+        Self::Heartbeat {
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a Status message with current timestamp
+    pub fn status(port_name: String, status: String, details: Option<String>) -> Self {
+        Self::Status {
+            port_name,
+            status,
+            details,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a Log message with current timestamp
+    pub fn log(level: String, message: String) -> Self {
+        Self::Log {
+            level,
+            message,
+            timestamp: Some(Self::timestamp()),
+        }
     }
 }
 
@@ -85,7 +189,7 @@ impl IpcServer {
         if self.stream.is_some() {
             let socket_name = self.socket_name.clone();
             log::debug!("IPC: Closing connection to {socket_name}");
-            let _ = self.send(&IpcMessage::Shutdown);
+            let _ = self.send(&IpcMessage::shutdown());
             self.stream = None;
         }
     }

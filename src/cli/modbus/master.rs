@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
-use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
-use std::hash::Hasher;
 use std::{
+    cell::RefCell,
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::Hasher,
     io::{BufRead, BufReader},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -162,10 +161,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         .open()
         .map_err(|err| {
             if let Some(ref mut ipc) = ipc {
-                let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortError {
-                    port_name: port.to_string(),
-                    error: format!("Failed to open port: {err}"),
-                });
+                let _ = ipc.send(&crate::protocol::ipc::IpcMessage::port_error(
+                    port.to_string(),
+                    format!("Failed to open port: {err}"),
+                ));
             }
             anyhow!("Failed to open port {port}: {err}")
         })?;
@@ -174,9 +173,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc) = ipc {
-        let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortOpened {
-            port_name: port.to_string(),
-        });
+        let _ = ipc.send(&crate::protocol::ipc::IpcMessage::port_opened(
+            port.to_string(),
+        ));
+        log::info!("IPC: Sent PortOpened message for {port}");
     }
 
     // Register cleanup to ensure port is released on program exit

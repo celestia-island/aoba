@@ -13,12 +13,14 @@ use crate::{
 
 /// Spawn the input handling thread that processes keyboard and mouse events
 pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
+    log::info!("🎹 Input thread started");
     loop {
         // Poll for input. Keep this loop tight and avoid toggling mouse
         // capture here — constantly enabling/disabling mouse capture
         // interferes with terminal selection and adds latency.
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
             if let Ok(event) = crossterm::event::read() {
+                log::info!("⌨️ Received event: {:?}", event);
                 // handle_event now returns Result<()> and performs any quit
                 // signaling itself. Propagate errors, otherwise continue.
                 handle_event(event, &bus)?;
@@ -116,6 +118,16 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     // Route input to appropriate page handler based on current Status.page.
     if let Ok(page) = read_status(|status| Ok(status.page.clone())) {
+        log::info!(
+            "input.rs: Routing input to page handler, page type: {}",
+            match &page {
+                types::Page::Entry { .. } => "Entry",
+                types::Page::About { .. } => "About",
+                types::Page::ConfigPanel { .. } => "ConfigPanel",
+                types::Page::ModbusDashboard { .. } => "ModbusDashboard",
+                types::Page::LogPanel { .. } => "LogPanel",
+            }
+        );
         // Route by exact page variant and construct the page snapshot inline.
         match &page {
             types::Page::Entry { .. } => {
@@ -125,7 +137,12 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 pages::about::handle_input(key, bus)?;
             }
             types::Page::ConfigPanel { .. } => {
+                log::info!(
+                    "input.rs: Calling ConfigPanel::handle_input for key={:?}",
+                    key.code
+                );
                 pages::config_panel::handle_input(key, bus)?;
+                log::info!("input.rs: ConfigPanel::handle_input completed");
             }
             types::Page::ModbusDashboard { .. } => {
                 pages::modbus_panel::input::handle_input(key, bus)?;

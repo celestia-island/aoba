@@ -9,9 +9,9 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::generate_random_registers,
-    helpers::sleep_a_while,
+    helpers::{sleep_a_while, sleep_seconds},
     key_input::{ArrowKey, ExpectKeyExt},
-    ports::{should_run_vcom_tests, vcom_matchers},
+    ports::{port_exists, should_run_vcom_tests, vcom_matchers},
     snapshot::TerminalCapture,
     terminal::{build_debug_bin, spawn_expect_process},
     tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers},
@@ -33,12 +33,18 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
 
     let ports = vcom_matchers();
 
-    // Verify vcom ports exist
-    if !std::path::Path::new(&ports.port1_name).exists() {
-        return Err(anyhow!("{} was not created by socat", ports.port1_name));
+    // Verify vcom ports exist (platform-aware check)
+    if !port_exists(&ports.port1_name) {
+        return Err(anyhow!(
+            "{} does not exist or is not available",
+            ports.port1_name
+        ));
     }
-    if !std::path::Path::new(&ports.port2_name).exists() {
-        return Err(anyhow!("{} was not created by socat", ports.port2_name));
+    if !port_exists(&ports.port2_name) {
+        return Err(anyhow!(
+            "{} does not exist or is not available",
+            ports.port2_name
+        ));
     }
     log::info!("✅ Virtual COM ports verified");
 
@@ -48,7 +54,9 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
     let mut tui_cap = TerminalCapture::new(24, 80);
 
-    sleep_a_while().await;
+    // Wait longer for TUI to fully initialize and display port list
+    log::info!("⏳ Waiting for TUI to initialize...");
+    sleep_seconds(2).await;
 
     // Navigate to vcom1 and configure as slave
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
@@ -100,6 +108,35 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     )
     .await?;
 
+    // After enabling port, we're now in Modbus panel. Press ESC to go back to port details
+    log::info!("🧪 Step 4.5: Returning to port details page to verify status...");
+    use ci_utils::key_input::ExpectKeyExt;
+    tui_session.send_escape()?;
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Verify port is actually enabled by checking the screen
+    let screen = tui_cap
+        .capture(&mut tui_session, "verify_port_enabled")
+        .await?;
+    if !screen.contains("Enabled") {
+        return Err(anyhow!(
+            "Port failed to enable - 'Enabled' status not found in UI"
+        ));
+    }
+    log::info!("✅ Port is fully enabled and ready");
+
+    // Debug: Verify port status before entering Modbus panel
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_enter_modbus_panel".to_string(),
+    }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_before_panel",
+    )
+    .await?;
+
     // CRUCIAL: Enter Modbus panel to access registers for updates
     log::info!("🧪 Step 5: Enter Modbus configuration panel");
     enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
@@ -119,16 +156,19 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
             .await?;
         log::info!("📺 Screen after enabling port:\n{screen}\n");
 
-        // Check port status with lsof
-        log::info!("🔍 Checking which processes are using the vcom ports");
-        let lsof_output = std::process::Command::new("sudo")
-            .args(["lsof", "/tmp/vcom1", "/tmp/vcom2"])
-            .output();
-        if let Ok(output) = lsof_output {
-            log::info!(
-                "📊 lsof output:\n{}",
-                String::from_utf8_lossy(&output.stdout)
-            );
+        // Check port status with lsof (Unix only)
+        #[cfg(unix)]
+        {
+            log::info!("🔍 Checking which processes are using the vcom ports");
+            let lsof_output = std::process::Command::new("sudo")
+                .args(["lsof", &ports.port1_name, &ports.port2_name])
+                .output();
+            if let Ok(output) = lsof_output {
+                log::info!(
+                    "📊 lsof output:\n{}",
+                    String::from_utf8_lossy(&output.stdout)
+                );
+            }
         }
 
         return Err(anyhow!("Debug breakpoint - exiting for inspection"));
@@ -389,9 +429,22 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
     }];
     execute_cursor_actions(session, cap, &actions, "debug_reg_length_set").await?;
 
-    // Press Escape to exit Modbus settings
+    // Press Escape once to exit Modbus settings and return to port details page
+    log::info!("Exiting Modbus settings (pressing ESC once)");
     session.send_escape()?;
     sleep_a_while().await;
+
+    // Verify we're back on port details page
+    let actions = vec![
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"Enable Port")?,
+            description: "Back on port details page".to_string(),
+            line_range: None,
+            col_range: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "verify_back_to_port_details").await?;
 
     Ok(())
 }

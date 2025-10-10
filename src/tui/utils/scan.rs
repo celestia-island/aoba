@@ -198,6 +198,10 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     core_tx
         .send(CoreToUi::Refreshed)
         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
+    // Log state after scan completes
+    if let Err(err) = crate::tui::log_state_snapshot() {
+        log::warn!("Failed to log state snapshot after scan: {err}");
+    }
     Ok(true)
 }
 

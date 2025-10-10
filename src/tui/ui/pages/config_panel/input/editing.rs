@@ -26,11 +26,17 @@ use super::{
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    log::info!("ConfigPanel::handle_input: key={:?}", key.code);
     let selected_cursor = super::super::components::derive_selection()?;
 
     sanitize_configpanel_cursor()?;
 
     let in_edit = read_status(|status| Ok(!status.temporarily.input_raw_buffer.is_empty()))?;
+    log::info!(
+        "ConfigPanel::handle_input: in_edit={}, cursor={:?}",
+        in_edit,
+        selected_cursor
+    );
 
     if in_edit {
         // Handle editing mode with proper input span handler
@@ -148,6 +154,11 @@ fn handle_navigation_input(
     bus: &Bus,
     selected_cursor: types::cursor::ConfigPanelCursor,
 ) -> Result<()> {
+    log::info!(
+        "handle_navigation_input: key={:?}, cursor={:?}",
+        key.code,
+        selected_cursor
+    );
     match key.code {
         KeyCode::PageUp => {
             handle_scroll_up(5)?;
@@ -194,7 +205,9 @@ fn handle_navigation_input(
         }
         KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => Ok(()),
         KeyCode::Enter => {
+            log::info!("handle_navigation_input: Enter pressed, calling handle_enter_action");
             handle_enter_action(selected_cursor, bus)?;
+            log::info!("handle_navigation_input: handle_enter_action completed");
             Ok(())
         }
         KeyCode::Esc => {
@@ -237,8 +250,11 @@ fn handle_navigation_input(
 }
 
 fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &Bus) -> Result<()> {
+    log::info!("handle_enter_action called, cursor={:?}", selected_cursor);
     match selected_cursor {
         types::cursor::ConfigPanelCursor::EnablePort => {
+            log::info!("EnablePort case matched");
+            log::info!("🔘 User pressed Enter on EnablePort in ConfigPanel");
             if let Some(port_name) = read_status(|status| {
                 if let types::Page::ConfigPanel { selected_port, .. } = status.page {
                     Ok(status.ports.order.get(selected_port).cloned())
@@ -246,9 +262,17 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                     Ok(None)
                 }
             })? {
+                log::info!("Sending ToggleRuntime for port: {}", port_name);
+                log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::ToggleRuntime(port_name))
+                    .send(crate::tui::utils::bus::UiToCore::ToggleRuntime(
+                        port_name.clone(),
+                    ))
                     .map_err(|err| anyhow!(err))?;
+                log::info!("✅ ToggleRuntime({port_name}) message sent successfully");
+            } else {
+                log::warn!("port_name is None");
+                log::warn!("⚠️  EnablePort action failed: port_name is None");
             }
             Ok(())
         }

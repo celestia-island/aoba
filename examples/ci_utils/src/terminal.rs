@@ -99,24 +99,39 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
     // Build the debug binary for aoba if needed and spawn it with args.
     let bin_path = build_debug_bin("aoba")?;
 
-    let mut cmd = bin_path.display().to_string();
-    for a in args {
-        cmd.push(' ');
-        cmd.push_str(a);
-    }
+    log::info!(
+        "🟢 Spawning expectrl process: {} {}",
+        bin_path.display(),
+        args.join(" ")
+    );
 
-    log::info!("🟢 Spawning expectrl process: {cmd}");
+    // If spawning TUI, set AOBA_LOG_FILE environment variable
+    let tui_log_path = if args.contains(&"--tui") {
+        #[cfg(windows)]
+        let log_path = std::env::temp_dir().join("tui_e2e.log");
+        #[cfg(not(windows))]
+        let log_path = std::path::PathBuf::from("/tmp/tui_e2e.log");
 
-    // If spawning TUI, prepend AOBA_LOG_FILE environment variable to command
-    let cmd_with_env = if args.contains(&"--tui") {
-        let tui_log = "/tmp/tui_e2e.log";
-        log::info!("   TUI logs will be written to {tui_log}");
-        format!("env AOBA_LOG_FILE={tui_log} {cmd}")
+        log::info!("   TUI logs will be written to {}", log_path.display());
+        Some(log_path)
     } else {
-        cmd
+        None
     };
 
-    let session = expectrl::spawn(&cmd_with_env)
+    // Spawn using WrapperProcess which allows setting environment variables
+    let mut cmd_args = vec![bin_path.to_str().unwrap().to_string()];
+    cmd_args.extend(args.iter().map(|s| s.to_string()));
+
+    let mut cmd = std::process::Command::new(&cmd_args[0]);
+    cmd.args(&cmd_args[1..]);
+
+    // Set environment variable if needed
+    if let Some(log_path) = tui_log_path {
+        cmd.env("AOBA_LOG_FILE", log_path.to_str().unwrap());
+    }
+
+    // Use expectrl's spawn with Command
+    let session = expectrl::session::Session::spawn(cmd)
         .map_err(|err| anyhow!("Failed to spawn process via expectrl: {err}"))?;
 
     Ok(session)
