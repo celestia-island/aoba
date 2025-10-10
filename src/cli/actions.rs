@@ -4,14 +4,14 @@ use serde::Serialize;
 /// Helper to establish IPC connection if requested
 pub fn setup_ipc(matches: &ArgMatches) -> Option<crate::protocol::ipc::IpcServer> {
     if let Some(channel_id) = matches.get_one::<String>("ipc-channel") {
-        log::info!("IPC: Attempting to connect to channel: {}", channel_id);
+        log::info!("IPC: Attempting to connect to channel: {channel_id}");
         match crate::protocol::ipc::IpcServer::connect(channel_id.clone()) {
             Ok(ipc) => {
                 log::info!("IPC: Successfully connected");
                 Some(ipc)
             }
             Err(err) => {
-                log::warn!("IPC: Failed to connect: {}", err);
+                log::warn!("IPC: Failed to connect: {err}");
                 None
             }
         }

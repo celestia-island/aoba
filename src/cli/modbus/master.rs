@@ -152,7 +152,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         "Starting persistent master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
     log::info!("Master mode: acting as Modbus Slave/Server - listening for requests and responding with data");
-    
+
     // Setup IPC if requested
     let mut ipc = crate::cli::actions::setup_ipc(matches);
 
@@ -164,14 +164,14 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             if let Some(ref mut ipc) = ipc {
                 let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortError {
                     port_name: port.to_string(),
-                    error: format!("Failed to open port: {}", err),
+                    error: format!("Failed to open port: {err}"),
                 });
             }
             anyhow!("Failed to open port {port}: {err}")
         })?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
-    
+
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc) = ipc {
         let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortOpened {

@@ -139,23 +139,26 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         // Poll CLI slave with retry logic - wait for data to propagate
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave with retry logic");
         let binary = build_debug_bin("aoba")?;
-        
+
         const MAX_RETRIES: usize = 5;
         const RETRY_DELAY_MS: u64 = 1000;
-        
+
         let mut last_received: Option<Vec<u16>> = None;
         let mut unchanged_count = 0;
         let mut poll_success = false;
-        
+
         for retry_attempt in 1..=MAX_RETRIES {
             log::info!("🧪 Round {round}/{ROUNDS}: Polling attempt {retry_attempt}/{MAX_RETRIES}");
-            
+
             // Take a screenshot before polling to see TUI state
             let screen = tui_cap
-                .capture(&mut tui_session, &format!("poll_attempt_{round}_{retry_attempt}"))
+                .capture(
+                    &mut tui_session,
+                    &format!("poll_attempt_{round}_{retry_attempt}"),
+                )
                 .await?;
-            log::info!("📺 TUI screen before polling (round {round}, attempt {retry_attempt}):\n{}\n", screen);
-            
+            log::info!("📺 TUI screen before polling (round {round}, attempt {retry_attempt}):\n{screen}\n");
+
             let cli_output = Command::new(&binary)
                 .args([
                     "--slave-poll",
@@ -178,14 +181,18 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
             if !cli_output.status.success() {
                 let stderr = String::from_utf8_lossy(&cli_output.stderr);
-                log::warn!("⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: CLI poll failed: {stderr}");
-                
+                log::warn!(
+                    "⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: CLI poll failed: {stderr}"
+                );
+
                 // If not last attempt, wait and retry
                 if retry_attempt < MAX_RETRIES {
                     tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
                     continue;
                 } else {
-                    return Err(anyhow!("CLI poll failed on round {round} after {MAX_RETRIES} attempts"));
+                    return Err(anyhow!(
+                        "CLI poll failed on round {round} after {MAX_RETRIES} attempts"
+                    ));
                 }
             }
 
@@ -209,7 +216,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
                     poll_success = true;
                     break;
                 }
-                
+
                 // Check if data has changed since last attempt
                 if let Some(ref prev) = last_received {
                     if prev == &received {
@@ -217,7 +224,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
                         log::warn!(
                             "⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: Data unchanged ({unchanged_count}/{MAX_RETRIES}) - still {received:?}, expected {data:?}"
                         );
-                        
+
                         // If data hasn't changed for MAX_RETRIES consecutive times, give up
                         if unchanged_count >= MAX_RETRIES {
                             log::error!(
@@ -239,9 +246,9 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
                         "🔄 Round {round}/{ROUNDS}, attempt {retry_attempt}: First data received: {received:?}, expected {data:?}"
                     );
                 }
-                
+
                 last_received = Some(received.clone());
-                
+
                 // If not last attempt, wait and retry
                 if retry_attempt < MAX_RETRIES {
                     tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
@@ -255,7 +262,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
                 }
             }
         }
-        
+
         if !poll_success {
             return Err(anyhow!(
                 "Data verification failed on round {round} after {MAX_RETRIES} attempts"
