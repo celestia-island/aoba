@@ -668,7 +668,114 @@ fn run_core_thread(
                                     }
                                 }
                             }
-                            _ => {}
+                            types::modbus::ModbusConnectionMode::Master { storage, .. } => {
+                                log::info!(
+                                    "ToggleRuntime: attempting to spawn CLI subprocess (SlaveListen) for {port_name}"
+                                );
+
+                                let data_source_path = initialize_cli_data_source(
+                                    &port_name,
+                                    &storage,
+                                    station.register_address,
+                                    station.register_length,
+                                    station.register_mode,
+                                )?;
+
+                                let cli_config = CliSubprocessConfig {
+                                    port_name: port_name.clone(),
+                                    mode: CliMode::SlaveListen,
+                                    station_id: station.station_id,
+                                    register_address: station.register_address,
+                                    register_length: station.register_length,
+                                    register_mode: register_mode_to_cli_arg(station.register_mode)
+                                        .to_string(),
+                                    baud_rate,
+                                    data_source: Some(format!(
+                                        "file:{}",
+                                        data_source_path.to_string_lossy()
+                                    )),
+                                };
+
+                                match subprocess_manager.start_subprocess(cli_config) {
+                                    Ok(()) => {
+                                        if let Some(snapshot) =
+                                            subprocess_manager.snapshot(&port_name)
+                                        {
+                                            log::info!(
+                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
+                                                snapshot.mode,
+                                                snapshot.pid,
+                                                data_source_path.display()
+                                            );
+                                            let owner =
+                                                PortOwner::CliSubprocess(PortSubprocessInfo {
+                                                    mode: cli_mode_to_port_mode(&snapshot.mode),
+                                                    ipc_socket_name: snapshot
+                                                        .ipc_socket_name
+                                                        .clone(),
+                                                    pid: snapshot.pid,
+                                                    data_source_path: Some(
+                                                        data_source_path
+                                                            .to_string_lossy()
+                                                            .to_string(),
+                                                    ),
+                                                });
+
+                                            write_status(|status| {
+                                                if let Some(port) = status.ports.map.get(&port_name)
+                                                {
+                                                    if with_port_write(port, |port| {
+                                                        port.state = PortState::OccupiedByThis {
+                                                            owner: owner.clone(),
+                                                        };
+                                                    })
+                                                    .is_none()
+                                                    {
+                                                        log::warn!(
+                                                            "ToggleRuntime: failed to acquire write lock for {port_name} when marking CLI owner"
+                                                        );
+                                                    }
+                                                }
+                                                Ok(())
+                                            })?;
+
+                                            append_port_log(
+                                                &port_name,
+                                                format!(
+                                                    "Spawned CLI subprocess (mode: {:?}, pid: {:?})",
+                                                    snapshot.mode, snapshot.pid
+                                                ),
+                                            );
+                                            cli_started = true;
+                                        } else {
+                                            log::warn!(
+                                                "ToggleRuntime: subprocess snapshot missing for {port_name}"
+                                            );
+                                        }
+                                    }
+                                    Err(err) => {
+                                        let msg = format!(
+                                            "Failed to start CLI subprocess for {port_name}: {err}"
+                                        );
+                                        append_port_log(&port_name, msg.clone());
+                                        write_status(|status| {
+                                            status.temporarily.error = Some(types::ErrorInfo {
+                                                message: msg.clone(),
+                                                timestamp: chrono::Local::now(),
+                                            });
+                                            Ok(())
+                                        })?;
+
+                                        if let Err(remove_err) = fs::remove_file(&data_source_path)
+                                        {
+                                            log::debug!(
+                                                "Cleanup of data source {} failed: {remove_err}",
+                                                data_source_path.to_string_lossy()
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
