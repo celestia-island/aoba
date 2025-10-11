@@ -70,24 +70,8 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_nav_vcom1").await?;
 
-    // Enable the port BEFORE configuration (as per new flow)
-    log::info!("🧪 Step 3: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Debug: Verify port is enabled
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enable_port".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_enable_port",
-    )
-    .await?;
-
-    // Configure as slave so the TUI-owned CLI subprocess can talk to external master
-    log::info!("🧪 Step 4: Configure TUI as Slave (client/poll mode)");
+    // Configure as slave BEFORE enabling port (station must exist before port enable)
+    log::info!("🧪 Step 3: Configure TUI as Slave (client/poll mode)");
     configure_tui_slave(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify we're back on port details page after configuration
@@ -102,13 +86,9 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     )
     .await?;
 
-    // Check if debug mode is enabled for smoke testing
-    let debug_mode = std::env::var("DEBUG_MODE").is_ok();
-    if debug_mode {
-        log::info!("🔴 DEBUG: After configuration, capturing screen state");
-        let screen = tui_cap.capture(&mut tui_session, "after_config").await?;
-        log::info!("📺 Screen after configuration:\n{screen}\n");
-    }
+    // Enable the port AFTER configuration (so it can spawn CLI subprocess)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify port is enabled
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -121,16 +101,6 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         "debug_enable_port",
     )
     .await?;
-
-    // CRUCIAL: Enter Modbus panel to access registers for updates
-    log::info!("🧪 Step 5: Enter Modbus configuration panel");
-    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-
-    // Debug: Verify we're in the Modbus panel
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enter_modbus_panel".to_string(),
-    }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_in_panel").await?;
 
     // Check if debug mode is enabled for smoke testing
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();
