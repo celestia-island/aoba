@@ -872,6 +872,30 @@ fn run_core_thread(
                         log::warn!("Failed to log state snapshot: {err}");
                     }
                 }
+                UiToCore::SendRegisterUpdate {
+                    port_name,
+                    station_id,
+                    register_type,
+                    start_address,
+                    values,
+                } => {
+                    log::debug!(
+                        "SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
+                    );
+                    
+                    // Send register update to CLI subprocess via IPC
+                    if let Err(err) = subprocess_manager.send_register_update(
+                        &port_name,
+                        station_id,
+                        register_type,
+                        start_address,
+                        values,
+                    ) {
+                        log::warn!("Failed to send register update to CLI subprocess for {port_name}: {err}");
+                    } else {
+                        log::info!("✓ Sent register update to CLI subprocess for {port_name}");
+                    }
+                }
             }
         }
 

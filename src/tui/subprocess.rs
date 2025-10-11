@@ -531,6 +531,23 @@ impl SubprocessManager {
         self.processes.keys().cloned().collect()
     }
 
+    /// Send register update to CLI subprocess via IPC
+    pub fn send_register_update(
+        &mut self,
+        port_name: &str,
+        station_id: u8,
+        register_type: String,
+        start_address: u16,
+        values: Vec<u16>,
+    ) -> Result<()> {
+        if let Some(subprocess) = self.processes.get_mut(port_name) {
+            subprocess.send_register_update(station_id, register_type, start_address, values)?;
+            Ok(())
+        } else {
+            Err(anyhow!("No subprocess found for port {port_name}"))
+        }
+    }
+
     /// Shutdown all subprocesses
     pub fn shutdown_all(&mut self) {
         for (port_name, mut subprocess) in self.processes.drain() {

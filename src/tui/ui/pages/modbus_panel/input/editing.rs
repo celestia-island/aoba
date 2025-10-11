@@ -42,7 +42,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 types::ui::InputRawBuffer::String { bytes, .. } => {
                     let value = String::from_utf8_lossy(bytes).to_string();
-                    commit_text_edit(current_cursor, value)?;
+                    commit_text_edit(current_cursor, value, bus)?;
                 }
                 _ => {}
             }
@@ -226,7 +226,7 @@ fn commit_selector_edit(
     Ok(None)
 }
 
-fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String) -> Result<()> {
+fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String, bus: &Bus) -> Result<()> {
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -344,6 +344,20 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                                 log::info!(
                                                                     "✓ Master: Set holding register at 0x{register_addr:04X} = 0x{register_value:04X}"
                                                                 );
+                                                                
+                                                                // Send IPC update if using CLI subprocess
+                                                                if let Some(PortOwner::CliSubprocess(_)) = owner_info.as_ref() {
+                                                                    // Send register update via IPC for real-time synchronization
+                                                                    if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                                                                        port_name: port_name.clone(),
+                                                                        station_id: item.station_id,
+                                                                        register_type: "holding".to_string(),
+                                                                        start_address: register_addr,
+                                                                        values: vec![register_value],
+                                                                    }) {
+                                                                        log::warn!("Failed to send IPC register update message: {err}");
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                         RegisterMode::Coils => {
@@ -358,6 +372,21 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                                 log::info!(
                                                                     "✓ Master: Set coil at 0x{register_addr:04X} = {coil_value}"
                                                                 );
+                                                                
+                                                                // Send IPC update if using CLI subprocess
+                                                                if let Some(PortOwner::CliSubprocess(_)) = owner_info.as_ref() {
+                                                                    // Send register update via IPC for real-time synchronization
+                                                                    // For coils, send as 0/1 values
+                                                                    if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                                                                        port_name: port_name.clone(),
+                                                                        station_id: item.station_id,
+                                                                        register_type: "coil".to_string(),
+                                                                        start_address: register_addr,
+                                                                        values: vec![if coil_value { 1 } else { 0 }],
+                                                                    }) {
+                                                                        log::warn!("Failed to send IPC register update message: {err}");
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                         _ => {
