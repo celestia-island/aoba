@@ -370,9 +370,11 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                 }
                                                 
                                                 // If using CLI subprocess, also update the data source file
+                                                log::debug!("Master mode: owner_info = {:?}", owner_info);
                                                 if let Some(PortOwner::CliSubprocess(info)) =
                                                     owner_info.clone()
                                                 {
+                                                    log::debug!("Master mode: Checking if subprocess mode is MasterProvide: {:?}", info.mode);
                                                     if info.mode == PortSubprocessMode::MasterProvide {
                                                         if let Some(path) = info.data_source_path.clone() {
                                                             cli_data_update = Some((
