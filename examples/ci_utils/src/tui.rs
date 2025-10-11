@@ -8,12 +8,34 @@ pub async fn navigate_to_vcom<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
-    let screen = cap.capture(session, "before_navigation").await?;
     let ports = crate::ports::vcom_matchers();
     let port_name = &ports.port1_name;
 
-    if !screen.contains(port_name) {
-        return Err(anyhow!("Port ({port_name}) not found in port list"));
+    // Capture screen until the target port shows up. TUI scans ports lazily on start,
+    // so the very first frame might not include `/tmp/vcom1` yet. Allow a few refresh
+    // cycles before giving up to make the helper more resilient on slower environments.
+    let mut screen = String::new();
+    const MAX_ATTEMPTS: usize = 6;
+    for attempt in 1..=MAX_ATTEMPTS {
+        let desc = format!("before_navigation_attempt_{attempt}");
+        screen = cap.capture(session, &desc).await?;
+
+        if screen.contains(port_name) {
+            if attempt > 1 {
+                log::info!("navigate_to_vcom: port {port_name} detected after {attempt} attempts");
+            }
+            break;
+        }
+
+        if attempt == MAX_ATTEMPTS {
+            return Err(anyhow!(
+                "Port ({port_name}) not found in port list after {MAX_ATTEMPTS} attempts"
+            ));
+        }
+
+        log::info!(
+            "navigate_to_vcom: port {port_name} not visible yet (attempt {attempt}/{MAX_ATTEMPTS}); waiting for next frame"
+        );
     }
 
     let lines: Vec<&str> = screen.lines().collect();
@@ -95,16 +117,66 @@ pub async fn enable_port_carefully<T: Expect>(
 
     // Instead of trying to detect cursor position, always press Up a lot to ensure
     // we're at the top, then Down to "Enable Port" (which should be first item)
-    log::info!("Moving cursor to Enable Port by pressing Up many times, then pressing Enter");
-    let actions = vec![
-        // Press Up many times to ensure we're at the top
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 10,
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
+    log::info!("Aligning cursor to Enable Port using captured screen context");
+    let lines: Vec<&str> = screen.lines().collect();
+    let enable_idx = lines
+        .iter()
+        .enumerate()
+        .find_map(|(idx, line)| line.contains("Enable Port").then_some(idx))
+        .ok_or_else(|| anyhow!("Unexpected: unable to locate 'Enable Port' line"))?;
+
+    let cursor_idx = lines
+        .iter()
+        .enumerate()
+        .find_map(|(idx, line)| {
+            if let Some(pos) = line.find("> ") {
+                if pos <= 4 {
+                    return Some(idx);
+                }
+            }
+            None
+        })
+        .unwrap_or(enable_idx);
+
+    if enable_idx != cursor_idx {
+        let delta = enable_idx.abs_diff(cursor_idx);
+        let direction = if enable_idx > cursor_idx {
+            crate::key_input::ArrowKey::Down
+        } else {
+            crate::key_input::ArrowKey::Up
+        };
+        log::info!(
+            "Moving cursor from line {cursor_idx} to {enable_idx} using {direction:?} x{delta}"
+        );
+        let actions = vec![
+            crate::auto_cursor::CursorAction::PressArrow {
+                direction,
+                count: delta,
+            },
+            crate::auto_cursor::CursorAction::Sleep { ms: 200 },
+        ];
+        crate::auto_cursor::execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            "align_enable_port_move",
+        )
+        .await?;
+    } else {
+        log::info!("Cursor already on Enable Port");
+    }
+
+    let enable_port_selected_regex = Regex::new(r">\s*Enable Port")?;
+    let line_start = enable_idx.saturating_sub(1);
+    let line_end = (enable_idx + 1).min(lines.len().saturating_sub(1));
+    let actions = vec![crate::auto_cursor::CursorAction::MatchPattern {
+        pattern: enable_port_selected_regex,
+        description: "Enable Port option focused".to_string(),
+        line_range: Some((line_start, line_end)),
+        col_range: None,
+    }];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "align_enable_port_verify")
+        .await?;
 
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
@@ -112,6 +184,17 @@ pub async fn enable_port_carefully<T: Expect>(
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "toggle_enable_port")
         .await?;
+
+    // Verify that the UI now shows the port as enabled to catch navigation drift early.
+    let screen = cap
+        .capture(session, "verify_port_toggle")
+        .await
+        .map_err(|err| anyhow!("Failed to capture screen after enabling port: {err}"))?;
+    if !screen.contains("Enable Port") || !screen.contains("Enabled") {
+        return Err(anyhow!(
+            "Port toggle did not reflect as enabled; latest screen:\n{screen}"
+        ));
+    }
 
     Ok(())
 }
@@ -121,6 +204,14 @@ pub async fn enter_modbus_panel<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
+    // If we're already inside the Modbus panel, skip navigation to avoid bouncing back to the
+    // port overview and keep the register table in view for monitoring.
+    let screen = cap.capture(session, "check_modbus_panel").await?;
+    if screen.contains("ModBus Master/Slave Settings") {
+        log::info!("Already in Modbus settings panel; skipping navigation");
+        return Ok(());
+    }
+
     // From port details page, navigate down to "Business Configuration" and enter
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {

@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use std::sync::{Arc, Mutex};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use rmodbus::server::context::ModbusContext;
@@ -9,10 +10,12 @@ use crate::{
         types::{
             self,
             modbus::{ModbusConnectionMode, RegisterMode},
+            port::{PortOwner, PortState, PortSubprocessMode},
         },
         with_port_write, write_status,
     },
     tui::{
+        append_cli_data_snapshot,
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{Bus, UiToCore},
     },
@@ -31,9 +34,11 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
 
+            let mut maybe_restart: Option<String> = None;
+
             match &input_raw_buffer {
                 types::ui::InputRawBuffer::Index(selected_index) => {
-                    commit_selector_edit(current_cursor, *selected_index)?;
+                    maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                 }
                 types::ui::InputRawBuffer::String { bytes, .. } => {
                     let value = String::from_utf8_lossy(bytes).to_string();
@@ -50,6 +55,12 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus.ui_tx
                 .send(UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
+
+            if let Some(port_name) = maybe_restart {
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name))
+                    .map_err(|err| anyhow!(err))?;
+            }
             Ok(())
         }
         KeyCode::Esc => {
@@ -146,7 +157,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 fn commit_selector_edit(
     cursor: types::cursor::ModbusDashboardCursor,
     selected_index: usize,
-) -> Result<()> {
+) -> Result<Option<String>> {
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -168,8 +179,20 @@ fn commit_selector_edit(
                         ModbusConnectionMode::default_slave()
                     };
 
+                    let mut should_restart = false;
                     with_port_write(&port, |port| {
+                        // evaluate occupancy before taking a mutable borrow of port.config
+                        let was_occupied_by_this =
+                            matches!(port.state, PortState::OccupiedByThis { .. });
+
                         let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                        let old_was_master = mode.is_master();
+                        let new_is_master = new_mode.is_master();
+
+                        if old_was_master != new_is_master && was_occupied_by_this {
+                            should_restart = true;
+                        }
+
                         *mode = new_mode.clone();
                         // Update all existing stations to match the new global mode
                         for station in stations.iter_mut() {
@@ -177,6 +200,10 @@ fn commit_selector_edit(
                         }
                         log::info!("Updated global connection mode to {:?}", mode.is_master());
                     });
+
+                    if should_restart {
+                        return Ok(Some(port_name.clone()));
+                    }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                     // Apply register mode changes
@@ -196,7 +223,7 @@ fn commit_selector_edit(
             }
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String) -> Result<()> {
@@ -284,17 +311,25 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                             if let Some(port) =
                                 read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
                             {
+                                let mut cli_data_update: Option<(
+                                    String,
+                                    Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+                                    u16,
+                                    u16,
+                                    RegisterMode,
+                                )> = None;
+
                                 with_port_write(&port, |port| {
+                                    let owner_info = port.state.owner().cloned();
                                     let types::port::PortConfig::Modbus { mode, stations } =
                                         &mut port.config;
-                                    let mut all_items: Vec<_> = stations.iter_mut().collect();
-                                    if let Some(item) = all_items.get_mut(slave_index) {
+
+                                    if let Some(item) = stations.get_mut(slave_index) {
                                         let register_addr =
                                             item.register_address + register_index as u16;
 
                                         match mode {
                                             ModbusConnectionMode::Master { storage } => {
-                                                // Master mode: Write directly to local storage
                                                 if let Ok(mut context) = storage.lock() {
                                                     match item.register_mode {
                                                         RegisterMode::Holding => {
@@ -302,7 +337,9 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                                 register_addr,
                                                                 register_value,
                                                             ) {
-                                                                log::warn!("Failed to set holding register at {register_addr}: {err}");
+                                                                log::warn!(
+                                                                    "Failed to set holding register at {register_addr}: {err}"
+                                                                );
                                                             } else {
                                                                 log::info!(
                                                                     "✓ Master: Set holding register at 0x{register_addr:04X} = 0x{register_value:04X}"
@@ -314,7 +351,9 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                             if let Err(err) = context
                                                                 .set_coil(register_addr, coil_value)
                                                             {
-                                                                log::warn!("Failed to set coil at {register_addr}: {err}");
+                                                                log::warn!(
+                                                                    "Failed to set coil at {register_addr}: {err}"
+                                                                );
                                                             } else {
                                                                 log::info!(
                                                                     "✓ Master: Set coil at 0x{register_addr:04X} = {coil_value}"
@@ -322,56 +361,105 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                             }
                                                         }
                                                         _ => {
-                                                            log::warn!("Cannot write to read-only register type: {:?}", item.register_mode);
+                                                            log::warn!(
+                                                                "Cannot write to read-only register type: {:?}",
+                                                                item.register_mode
+                                                            );
                                                         }
                                                     }
                                                 }
                                             }
-                                            ModbusConnectionMode::Slave { storage: _, .. } => {
-                                                // Slave mode: Queue a write request to be sent to the master
-                                                // The pending request will be sent in the next poll cycle
-                                                use crate::protocol::modbus::generate_pull_set_holding_request;
-
-                                                match item.register_mode {
-                                                    RegisterMode::Holding => {
-                                                        // Generate a Modbus write request frame
-                                                        if let Ok((_request, raw_frame)) =
-                                                            generate_pull_set_holding_request(
-                                                                item.station_id,
-                                                                register_addr,
-                                                                register_value,
-                                                            )
+                                            ModbusConnectionMode::Slave { storage, .. } => {
+                                                if let Some(PortOwner::CliSubprocess(info)) =
+                                                    owner_info.clone()
+                                                {
+                                                    if info.mode
+                                                        == PortSubprocessMode::MasterProvide
+                                                    {
+                                                        if let Some(path) =
+                                                            info.data_source_path.clone()
                                                         {
-                                                            // Add the frame to pending requests
-                                                            item.pending_requests
-                                                                .extend_from_slice(&raw_frame);
-                                                            log::info!(
-                                                                "📤 Slave: Queued write request for holding register 0x{:04X} = 0x{:04X} ({} bytes)",
-                                                                register_addr,
-                                                                register_value,
-                                                                raw_frame.len()
-                                                            );
+                                                            if let Ok(mut context) = storage.lock()
+                                                            {
+                                                                match item.register_mode {
+                                                                    RegisterMode::Holding => {
+                                                                        if let Err(err) = context
+                                                                            .set_holding(
+                                                                                register_addr,
+                                                                                register_value,
+                                                                            )
+                                                                        {
+                                                                            log::warn!(
+                                                                                "Failed to set holding register at {register_addr}: {err}"
+                                                                            );
+                                                                        }
+                                                                    }
+                                                                    RegisterMode::Coils => {
+                                                                        let coil_value =
+                                                                            register_value != 0;
+                                                                        if let Err(err) = context
+                                                                            .set_coil(
+                                                                                register_addr,
+                                                                                coil_value,
+                                                                            )
+                                                                        {
+                                                                            log::warn!(
+                                                                                "Failed to set coil at {register_addr}: {err}"
+                                                                            );
+                                                                        }
+                                                                    }
+                                                                    _ => {
+                                                                        log::warn!(
+                                                                            "Cannot write to read-only register type: {:?}",
+                                                                            item.register_mode
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            cli_data_update = Some((
+                                                                path,
+                                                                Arc::clone(storage),
+                                                                item.register_address,
+                                                                item.register_length,
+                                                                item.register_mode,
+                                                            ));
                                                         } else {
-                                                            log::warn!("Failed to generate write request for holding register");
+                                                            log::warn!(
+                                                                "CLI subprocess missing data source path for {port_name}"
+                                                            );
                                                         }
-                                                    }
-                                                    RegisterMode::Coils => {
-                                                        // For coils, we need to use the coil write function
-                                                        // For now, log that this needs implementation
-                                                        log::info!(
-                                                            "📤 Slave: Coil write request for 0x{:04X} = {} (coil writes need set_coils_bulk implementation)",
+                                                    } else {
+                                                        enqueue_slave_write(
+                                                            item,
                                                             register_addr,
-                                                            register_value != 0
+                                                            register_value,
                                                         );
                                                     }
-                                                    _ => {
-                                                        log::warn!("Cannot write to read-only register type: {:?}", item.register_mode);
-                                                    }
+                                                } else {
+                                                    enqueue_slave_write(
+                                                        item,
+                                                        register_addr,
+                                                        register_value,
+                                                    );
                                                 }
                                             }
                                         }
                                     }
                                 });
+
+                                if let Some((path, storage, base_addr, length, reg_mode)) =
+                                    cli_data_update
+                                {
+                                    let path_buf = std::path::PathBuf::from(path);
+                                    if let Err(err) = append_cli_data_snapshot(
+                                        &path_buf, &storage, base_addr, length, reg_mode,
+                                    ) {
+                                        log::warn!(
+                                            "Failed to append CLI data snapshot for {port_name}: {err}"
+                                        );
+                                    }
+                                }
                             }
                         }
                     }
@@ -381,4 +469,43 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
         }
     }
     Ok(())
+}
+
+fn enqueue_slave_write(
+    item: &mut types::modbus::ModbusRegisterItem,
+    register_addr: u16,
+    register_value: u16,
+) {
+    use crate::protocol::modbus::generate_pull_set_holding_request;
+
+    match item.register_mode {
+        RegisterMode::Holding => {
+            if let Ok((_request, raw_frame)) =
+                generate_pull_set_holding_request(item.station_id, register_addr, register_value)
+            {
+                item.pending_requests.extend_from_slice(&raw_frame);
+                log::info!(
+                    "📤 Slave: Queued write request for holding register 0x{:04X} = 0x{:04X} ({} bytes)",
+                    register_addr,
+                    register_value,
+                    raw_frame.len()
+                );
+            } else {
+                log::warn!("Failed to generate write request for holding register");
+            }
+        }
+        RegisterMode::Coils => {
+            log::info!(
+                "📤 Slave: Coil write request for 0x{:04X} = {} (coil writes need set_coils_bulk implementation)",
+                register_addr,
+                register_value != 0
+            );
+        }
+        _ => {
+            log::warn!(
+                "Cannot write to read-only register type: {:?}",
+                item.register_mode
+            );
+        }
+    }
 }

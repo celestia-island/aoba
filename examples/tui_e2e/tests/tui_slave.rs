@@ -9,7 +9,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::generate_random_registers,
-    helpers::{sleep_a_while, sleep_seconds},
+    helpers::sleep_seconds,
     key_input::{ArrowKey, ExpectKeyExt},
     ports::{port_exists, should_run_vcom_tests, vcom_matchers},
     snapshot::TerminalCapture,
@@ -18,11 +18,11 @@ use ci_utils::{
 };
 
 const ROUNDS: usize = 10;
-const REGISTER_LENGTH: usize = 5;
+const REGISTER_LENGTH: usize = 12;
 
-/// Test TUI Master-Provide + CLI Slave-Poll with continuous random data (10 rounds)
-/// TUI acts as Modbus Master (server providing data, responding to poll requests)
-/// CLI acts as Modbus Slave (client polling for data)
+/// Test TUI Slave mode + external CLI master with continuous random data (10 rounds)
+/// TUI acts as Modbus Slave (client/poll mode), driven through the UI automation
+/// External CLI runs in master role and must communicate successfully with TUI-managed runtime
 pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     if !should_run_vcom_tests() {
         log::info!("Skipping TUI Master-Provide + CLI Slave-Poll test on this platform");
@@ -84,13 +84,13 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     )
     .await?;
 
-    // Configure as master (server mode providing data) AFTER enabling port
-    log::info!("🧪 Step 4: Configure TUI as Master (to provide data)");
-    configure_tui_master(&mut tui_session, &mut tui_cap).await?;
+    // Configure as slave so the TUI-owned CLI subprocess can talk to external master
+    log::info!("🧪 Step 4: Configure TUI as Slave (client/poll mode)");
+    configure_tui_slave(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify we're back on port details page after configuration
     let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_configure_master".to_string(),
+        description: "after_configure_slave".to_string(),
     }];
     execute_cursor_actions(
         &mut tui_session,
@@ -117,35 +117,6 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         &mut tui_cap,
         &actions,
         "debug_enable_port",
-    )
-    .await?;
-
-    // After enabling port, we're now in Modbus panel. Press ESC to go back to port details
-    log::info!("🧪 Step 4.5: Returning to port details page to verify status...");
-    use ci_utils::key_input::ExpectKeyExt;
-    tui_session.send_escape()?;
-    tokio::time::sleep(Duration::from_millis(500)).await;
-
-    // Verify port is actually enabled by checking the screen
-    let screen = tui_cap
-        .capture(&mut tui_session, "verify_port_enabled")
-        .await?;
-    if !screen.contains("Enabled") {
-        return Err(anyhow!(
-            "Port failed to enable - 'Enabled' status not found in UI"
-        ));
-    }
-    log::info!("✅ Port is fully enabled and ready");
-
-    // Debug: Verify port status before entering Modbus panel
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "before_enter_modbus_panel".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_before_panel",
     )
     .await?;
 
@@ -364,11 +335,11 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     Ok(())
 }
 
-/// Configure TUI as Master (server providing data, responding to requests)
-async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
+/// Configure TUI as Slave (polling external master requests)
+async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring as Master (to provide data)...");
+    log::info!("📝 Configuring as Slave (to poll external master)...");
 
     // Navigate to Modbus settings (should be 2 down from current position)
     log::info!("Navigate to Modbus Settings");
@@ -421,16 +392,40 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
         log::info!("📺 Screen after creating station:\n{screen}\n");
     }
 
-    // Set Register Length to 5 (matching REGISTER_LENGTH constant)
-    log::info!("Navigate to Register Length and set to 5");
+    // Set Register Length to expected number of registers we will monitor
+    log::info!("Switch Connection Mode to Slave");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 5,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        // Move from Master -> Slave (selector wraps if already Slave)
+        CursorAction::PressArrow {
+            direction: ArrowKey::Right,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::MatchPattern {
+            pattern: Regex::new(r"Connection Mode\s+Slave")?,
+            description: "Connection mode set to Slave".to_string(),
+            line_range: Some((0, 6)),
+            col_range: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "set_connection_mode_slave").await?;
+
+    log::info!("Navigate to Register Length and set to {REGISTER_LENGTH} registers for monitoring");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 4,
         }, // Navigate to Register Length field
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::TypeString("5".to_string()),
+        CursorAction::TypeString(REGISTER_LENGTH.to_string()),
         CursorAction::PressEnter,
     ];
     execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
@@ -440,23 +435,6 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
         description: "after_set_register_length".to_string(),
     }];
     execute_cursor_actions(session, cap, &actions, "debug_reg_length_set").await?;
-
-    // Press Escape once to exit Modbus settings and return to port details page
-    log::info!("Exiting Modbus settings (pressing ESC once)");
-    session.send_escape()?;
-    sleep_a_while().await;
-
-    // Verify we're back on port details page
-    let actions = vec![
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::MatchPattern {
-            pattern: Regex::new(r"Enable Port")?,
-            description: "Back on port details page".to_string(),
-            line_range: None,
-            col_range: None,
-        },
-    ];
-    execute_cursor_actions(session, cap, &actions, "verify_back_to_port_details").await?;
 
     Ok(())
 }

@@ -1,11 +1,16 @@
 pub mod input;
+pub mod subprocess;
 pub mod ui;
 pub mod utils;
 
 use anyhow::{anyhow, Result};
+use chrono::Local;
 use std::{
-    io,
-    sync::{Arc, RwLock},
+    collections::HashMap,
+    fs,
+    io::{self, Write},
+    path::PathBuf,
+    sync::{Arc, Mutex, RwLock},
     thread,
     time::Duration,
 };
@@ -13,16 +18,228 @@ use std::{
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
 use crate::{
-    protocol::status::{
-        init_status, read_status,
-        types::{self, port::PortState, Status},
-        with_port_read, with_port_write, write_status,
+    protocol::{
+        ipc::IpcMessage,
+        status::{
+            init_status, read_status,
+            types::{
+                self,
+                port::{
+                    PortLogEntry, PortOwner, PortState, PortSubprocessInfo, PortSubprocessMode,
+                },
+                Status,
+            },
+            with_port_read, with_port_write, write_status,
+        },
     },
     tui::{
+        subprocess::{CliMode, CliSubprocessConfig, SubprocessManager},
         ui::components::error_msg::ui_error_set,
         utils::bus::{Bus, CoreToUi, UiToCore},
     },
 };
+
+fn create_cli_data_source_path(port_name: &str) -> PathBuf {
+    let sanitized: String = port_name
+        .chars()
+        .map(|c| match c {
+            'a'..='z' | 'A'..='Z' | '0'..='9' => c,
+            _ => '_',
+        })
+        .collect();
+    let fallback = if sanitized.is_empty() {
+        "port".to_string()
+    } else {
+        sanitized
+    };
+
+    let timestamp = Local::now().format("%Y%m%d%H%M%S");
+    let mut path = std::env::temp_dir();
+    path.push(format!("aoba_cli_{}_{}.jsonl", fallback, timestamp));
+    path
+}
+
+fn append_port_log(port_name: &str, raw: String) {
+    let entry = PortLogEntry {
+        when: Local::now(),
+        raw,
+        parsed: None,
+    };
+
+    if let Err(err) = write_status(|status| {
+        if let Some(port) = status.ports.map.get(port_name) {
+            if with_port_write(port, |port| {
+                port.logs.push(entry.clone());
+                if port.logs.len() > 1000 {
+                    let excess = port.logs.len() - 1000;
+                    port.logs.drain(0..excess);
+                }
+            })
+            .is_none()
+            {
+                log::warn!(
+                    "append_port_log: failed to acquire write lock for port {}",
+                    port_name
+                );
+            }
+        }
+        Ok(())
+    }) {
+        log::warn!(
+            "append_port_log: failed to persist log entry for {}: {}",
+            port_name,
+            err
+        );
+    }
+}
+
+fn register_mode_to_cli_arg(mode: types::modbus::RegisterMode) -> &'static str {
+    use types::modbus::RegisterMode;
+
+    match mode {
+        RegisterMode::Coils => "coils",
+        RegisterMode::DiscreteInputs => "discrete",
+        RegisterMode::Holding => "holding",
+        RegisterMode::Input => "input",
+    }
+}
+
+fn cli_mode_to_port_mode(mode: &CliMode) -> PortSubprocessMode {
+    match mode {
+        CliMode::SlaveListen => PortSubprocessMode::SlaveListen,
+        CliMode::MasterProvide => PortSubprocessMode::MasterProvide,
+    }
+}
+
+fn initialize_cli_data_source(
+    port_name: &str,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    register_address: u16,
+    register_length: u16,
+    register_mode: types::modbus::RegisterMode,
+) -> Result<PathBuf> {
+    let path = create_cli_data_source_path(port_name);
+    if let Err(err) = write_cli_data_snapshot(
+        &path,
+        storage,
+        register_address,
+        register_length,
+        register_mode,
+        true,
+    ) {
+        log::error!(
+            "initialize_cli_data_source: failed to write initial snapshot for {port_name}: {err}"
+        );
+        return Err(err);
+    }
+    log::info!(
+        "initialize_cli_data_source: created data source for {port_name} at {}",
+        path.display()
+    );
+    Ok(path)
+}
+
+fn write_cli_data_snapshot(
+    path: &PathBuf,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    register_address: u16,
+    register_length: u16,
+    register_mode: types::modbus::RegisterMode,
+    truncate: bool,
+) -> Result<()> {
+    let values = crate::cli::modbus::extract_values_from_storage(
+        storage,
+        register_address,
+        register_length,
+        register_mode,
+    )?;
+
+    let payload = serde_json::json!({ "values": values });
+    let serialized = serde_json::to_string(&payload)?;
+
+    let mut options = fs::OpenOptions::new();
+    options.create(true).write(true);
+    if truncate {
+        options.truncate(true);
+    } else {
+        options.append(true);
+    }
+
+    let mut file = options.open(path)?;
+    writeln!(file, "{}", serialized)?;
+    Ok(())
+}
+
+pub(crate) fn append_cli_data_snapshot(
+    path: &PathBuf,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    register_address: u16,
+    register_length: u16,
+    register_mode: types::modbus::RegisterMode,
+) -> Result<()> {
+    write_cli_data_snapshot(
+        path,
+        storage,
+        register_address,
+        register_length,
+        register_mode,
+        false,
+    )
+}
+
+fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
+    match message {
+        IpcMessage::PortOpened { .. } => {
+            log::info!("CLI[{port_name}]: PortOpened received");
+            append_port_log(port_name, "CLI subprocess reported port opened".to_string());
+        }
+        IpcMessage::PortError { error, .. } => {
+            let msg = format!("CLI subprocess error: {error}");
+            log::warn!("CLI[{port_name}]: {msg}");
+            append_port_log(port_name, msg.clone());
+            write_status(|status| {
+                status.temporarily.error = Some(types::ErrorInfo {
+                    message: msg.clone(),
+                    timestamp: chrono::Local::now(),
+                });
+                Ok(())
+            })?;
+        }
+        IpcMessage::Shutdown { .. } => {
+            log::info!("CLI[{port_name}]: Shutdown received");
+            append_port_log(port_name, "CLI subprocess shutting down".to_string());
+        }
+        IpcMessage::ModbusData {
+            direction, data, ..
+        } => {
+            log::debug!("CLI[{port_name}]: ModbusData {direction} {data}");
+            append_port_log(port_name, format!("CLI modbus {direction}: {data}"));
+        }
+        IpcMessage::Heartbeat { .. } => {
+            // Heartbeat can be ignored for now or used for future monitoring
+        }
+        IpcMessage::RegisterUpdate { values, .. } => {
+            log::info!("CLI[{port_name}]: RegisterUpdate {values:?}");
+            append_port_log(port_name, format!("CLI register update: {:?}", values));
+        }
+        IpcMessage::Status {
+            status, details, ..
+        } => {
+            let msg = if let Some(details) = details {
+                format!("CLI status: {status} ({details})")
+            } else {
+                format!("CLI status: {status}")
+            };
+            log::info!("CLI[{port_name}]: {msg}");
+            append_port_log(port_name, msg);
+        }
+        IpcMessage::Log { level, message, .. } => {
+            log::info!("CLI[{port_name}]: log[{level}] {message}");
+            append_port_log(port_name, format!("CLI log[{level}]: {message}"));
+        }
+    }
+    Ok(())
+}
 
 pub fn start() -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
@@ -168,6 +385,7 @@ fn run_core_thread(
     // do_scan extracted to module-level function below
 
     let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
+    let mut subprocess_manager = SubprocessManager::new();
     loop {
         // Drain UI -> core messages
         while let Ok(msg) = ui_rx.try_recv() {
@@ -207,188 +425,385 @@ fn run_core_thread(
                 }
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
-                    // Step 1: extract any existing runtime handle (clone) so we can stop it
-                    let existing_rt = read_status(|status| {
+
+                    let existing_owner = read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
-                            // use helper to avoid panics on poisoned locks
-                            if let Some(opt_rt) = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
-                                    &port.state
-                                {
-                                    Some(runtime.clone())
-                                } else {
-                                    None
-                                }
-                            }) {
-                                Ok(opt_rt)
-                            } else {
-                                Ok(None)
+                            if let Some(owner) =
+                                with_port_read(port, |port| port.state.owner().cloned())
+                            {
+                                return Ok(owner);
                             }
-                        } else {
-                            Ok(None)
                         }
-                    })
-                    .unwrap_or(None);
+                        Ok(None)
+                    })?;
 
-                    if let Some(rt) = existing_rt {
-                        // Clear runtime reference in Status under write lock quickly
-                        write_status(|status| {
-                            if let Some(port) = status.ports.map.get(&port_name) {
-                                if with_port_write(port, |port| {
-                                    port.state = PortState::Free;
-                                })
-                                .is_some()
+                    if let Some(owner) = existing_owner {
+                        match owner {
+                            PortOwner::Runtime(rt) => {
+                                write_status(|status| {
+                                    if let Some(port) = status.ports.map.get(&port_name) {
+                                        if with_port_write(port, |port| {
+                                            port.state = PortState::Free;
+                                        })
+                                        .is_none()
+                                        {
+                                            log::warn!(
+                                                "ToggleRuntime: failed to acquire write lock for {port_name} when clearing runtime"
+                                            );
+                                        }
+                                    }
+                                    Ok(())
+                                })?;
+
+                                if let Err(err) = rt
+                                    .cmd_tx
+                                    .send(crate::protocol::runtime::RuntimeCommand::Stop)
                                 {
-                                    // updated
-                                } else {
-                                    log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (Free)");
+                                    let warn_msg =
+                                        format!("ToggleRuntime: failed to send Stop: {err}");
+                                    log::warn!("{warn_msg}");
+                                    append_port_log(&port_name, warn_msg);
+                                }
+
+                                match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
+                                    Ok(evt) => {
+                                        if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
+                                            log::warn!(
+                                                "ToggleRuntime: received unexpected event while stopping {port_name}: {evt:?}"
+                                            );
+                                        }
+                                    }
+                                    Err(flume::RecvTimeoutError::Timeout) => {
+                                        log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
+                                    }
+                                    Err(err) => {
+                                        log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {err}");
+                                    }
+                                }
+
+                                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                                    log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
+                                }
+                                if let Err(err) = log_state_snapshot() {
+                                    log::warn!("Failed to log state snapshot: {err}");
+                                }
+                                continue;
+                            }
+                            PortOwner::CliSubprocess(info) => {
+                                if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
+                                    log::warn!(
+                                        "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
+                                    );
+                                }
+
+                                if let Some(path) = info.data_source_path.clone() {
+                                    if let Err(err) = fs::remove_file(&path) {
+                                        log::debug!(
+                                            "ToggleRuntime: failed to remove data source {path}: {err}"
+                                        );
+                                    }
+                                }
+
+                                write_status(|status| {
+                                    if let Some(port) = status.ports.map.get(&port_name) {
+                                        if with_port_write(port, |port| {
+                                            port.state = PortState::Free;
+                                        })
+                                        .is_none()
+                                        {
+                                            log::warn!(
+                                                "ToggleRuntime: failed to acquire write lock for {port_name} when clearing CLI owner"
+                                            );
+                                        }
+                                    }
+                                    Ok(())
+                                })?;
+
+                                append_port_log(
+                                    &port_name,
+                                    "Stopped CLI subprocess managed by TUI".to_string(),
+                                );
+
+                                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                                    log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
+                                }
+                                if let Err(err) = log_state_snapshot() {
+                                    log::warn!("Failed to log state snapshot: {err}");
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
+                    let cli_inputs = read_status(|status| {
+                        if let Some(port) = status.ports.map.get(&port_name) {
+                            if let Some(result) = with_port_read(port, |port| {
+                                let types::port::PortConfig::Modbus { mode, stations } =
+                                    &port.config;
+                                if let Some(station) = stations.first() {
+                                    let baud = port
+                                        .state
+                                        .runtime_handle()
+                                        .map(|rt| rt.current_cfg.baud)
+                                        .unwrap_or(9600);
+                                    return Some((mode.clone(), station.clone(), baud));
+                                }
+                                None
+                            }) {
+                                return Ok(result);
+                            }
+                        }
+                        Ok(None)
+                    })?;
+
+                    let mut cli_started = false;
+
+                    if let Some((mode, station, baud_rate)) = cli_inputs {
+                        match mode {
+                            types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
+                                log::info!(
+                                    "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
+                                );
+
+                                let data_source_path = initialize_cli_data_source(
+                                    &port_name,
+                                    &storage,
+                                    station.register_address,
+                                    station.register_length,
+                                    station.register_mode,
+                                )?;
+
+                                let cli_config = CliSubprocessConfig {
+                                    port_name: port_name.clone(),
+                                    mode: CliMode::MasterProvide,
+                                    station_id: station.station_id,
+                                    register_address: station.register_address,
+                                    register_length: station.register_length,
+                                    register_mode: register_mode_to_cli_arg(station.register_mode)
+                                        .to_string(),
+                                    baud_rate,
+                                    data_source: Some(format!(
+                                        "file:{}",
+                                        data_source_path.to_string_lossy()
+                                    )),
+                                };
+
+                                match subprocess_manager.start_subprocess(cli_config) {
+                                    Ok(()) => {
+                                        if let Some(snapshot) =
+                                            subprocess_manager.snapshot(&port_name)
+                                        {
+                                            log::info!(
+                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
+                                                snapshot.mode,
+                                                snapshot.pid,
+                                                data_source_path.display()
+                                            );
+                                            let owner =
+                                                PortOwner::CliSubprocess(PortSubprocessInfo {
+                                                    mode: cli_mode_to_port_mode(&snapshot.mode),
+                                                    ipc_socket_name: snapshot
+                                                        .ipc_socket_name
+                                                        .clone(),
+                                                    pid: snapshot.pid,
+                                                    data_source_path: Some(
+                                                        data_source_path
+                                                            .to_string_lossy()
+                                                            .to_string(),
+                                                    ),
+                                                });
+
+                                            write_status(|status| {
+                                                if let Some(port) = status.ports.map.get(&port_name)
+                                                {
+                                                    if with_port_write(port, |port| {
+                                                        port.state = PortState::OccupiedByThis {
+                                                            owner: owner.clone(),
+                                                        };
+                                                    })
+                                                    .is_none()
+                                                    {
+                                                        log::warn!(
+                                                            "ToggleRuntime: failed to acquire write lock for {port_name} when marking CLI owner"
+                                                        );
+                                                    }
+                                                }
+                                                Ok(())
+                                            })?;
+
+                                            append_port_log(
+                                                &port_name,
+                                                format!(
+                                                    "Spawned CLI subprocess (mode: {:?}, pid: {:?})",
+                                                    snapshot.mode, snapshot.pid
+                                                ),
+                                            );
+                                            cli_started = true;
+                                        } else {
+                                            log::warn!(
+                                                "ToggleRuntime: subprocess snapshot missing for {port_name}"
+                                            );
+                                        }
+                                    }
+                                    Err(err) => {
+                                        let msg = format!(
+                                            "Failed to start CLI subprocess for {port_name}: {err}"
+                                        );
+                                        append_port_log(&port_name, msg.clone());
+                                        write_status(|status| {
+                                            status.temporarily.error = Some(types::ErrorInfo {
+                                                message: msg.clone(),
+                                                timestamp: chrono::Local::now(),
+                                            });
+                                            Ok(())
+                                        })?;
+
+                                        if let Err(remove_err) = fs::remove_file(&data_source_path)
+                                        {
+                                            log::debug!(
+                                                "Cleanup of data source {} failed: {remove_err}",
+                                                data_source_path.to_string_lossy()
+                                            );
+                                        }
+                                    }
                                 }
                             }
-                            Ok(())
-                        })?;
+                            _ => {}
+                        }
+                    }
 
-                        // Send stop outside of the write lock and wait briefly for the runtime to acknowledge
-                        // Try to request runtime stop. Sending may fail if the runtime
-                        // already exited; treat that non-fatally to avoid bringing down
-                        // the entire core thread when user double-presses Enter.
-                        if let Err(err) = rt
-                            .cmd_tx
-                            .send(crate::protocol::runtime::RuntimeCommand::Stop)
-                        {
-                            let warn_msg = format!("ToggleRuntime: failed to send Stop: {err}");
-                            log::warn!("{warn_msg}");
+                    if !cli_started {
+                        log::info!(
+                            "ToggleRuntime: falling back to native runtime spawn for {port_name}"
+                        );
+                        let cfg = crate::protocol::runtime::SerialConfig::default();
+                        let mut spawn_err: Option<anyhow::Error> = None;
+                        let mut handle_opt: Option<crate::protocol::runtime::PortRuntimeHandle> =
+                            None;
+                        const MAX_RETRIES: usize = 8;
+                        for attempt in 0..MAX_RETRIES {
+                            match crate::protocol::runtime::PortRuntimeHandle::spawn(
+                                port_name.clone(),
+                                cfg.clone(),
+                            ) {
+                                Ok(h) => {
+                                    handle_opt = Some(h);
+                                    log::info!(
+                                        "ToggleRuntime: Successfully spawned runtime for {port_name} on attempt {}",
+                                        attempt + 1
+                                    );
+                                    break;
+                                }
+                                Err(err) => {
+                                    spawn_err = Some(err);
+                                    log::warn!(
+                                        "ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {}: {}",
+                                        attempt + 1,
+                                        spawn_err.as_ref().unwrap()
+                                    );
+                                    if attempt + 1 < MAX_RETRIES {
+                                        let wait_ms = if attempt < 2 { 200 } else { 100 };
+                                        std::thread::sleep(std::time::Duration::from_millis(
+                                            wait_ms,
+                                        ));
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
 
-                            // Also write to the port's logs so the UI shows the error
+                        if let Some(handle) = handle_opt {
+                            let handle_for_write = handle.clone();
                             write_status(|status| {
                                 if let Some(port) = status.ports.map.get(&port_name) {
                                     if with_port_write(port, |port| {
-                                        port.logs.push(
-                                            crate::protocol::status::types::port::PortLogEntry {
-                                                when: chrono::Local::now(),
-                                                raw: warn_msg.clone(),
-                                                parsed: None,
-                                            },
-                                        );
-                                        if port.logs.len() > 1000 {
-                                            let excess = port.logs.len() - 1000;
-                                            port.logs.drain(0..excess);
-                                        }
-                                        true
+                                        port.state = PortState::OccupiedByThis {
+                                            owner: PortOwner::Runtime(handle_for_write.clone()),
+                                        };
                                     })
                                     .is_none()
                                     {
-                                        // If we couldn't acquire the port write lock, log a warning
-                                        log::warn!("ToggleRuntime: failed to acquire write lock to append stop-warn for {port_name}");
+                                        log::warn!(
+                                            "ToggleRuntime: failed to acquire write lock for {port_name} when storing runtime handle"
+                                        );
                                     }
                                 }
                                 Ok(())
                             })?;
+                            append_port_log(
+                                &port_name,
+                                "Spawned native runtime for port".to_string(),
+                            );
+                        } else if let Some(err) = spawn_err {
+                            write_status(|status| {
+                                status.temporarily.error = Some(types::ErrorInfo {
+                                    message: format!("Failed to start runtime: {err}"),
+                                    timestamp: chrono::Local::now(),
+                                });
+                                Ok(())
+                            })?;
                         }
-                        // Wait up to 1s for the runtime thread to emit Stopped. Use a single
-                        // recv_timeout so we avoid short-interval polling while keeping the
-                        // operation bounded. Treat failure non-fatally (log) to match
-                        // surrounding code which tolerates stop failures.
-                        match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
-                            Ok(evt) => {
-                                if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
-                                    log::warn!(
-                                                "ToggleRuntime: received unexpected event while stopping {port_name}: {evt:?}",
-                                            );
-                                }
-                            }
-                            Err(flume::RecvTimeoutError::Timeout) => {
-                                log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
-                            }
-                            Err(err) => {
-                                log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {err}");
-                            }
-                        }
-
-                        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
-                            log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
-                        }
-                        // Log state after refresh
-                        if let Err(err) = log_state_snapshot() {
-                            log::warn!("Failed to log state snapshot: {err}");
-                        }
-                        continue;
-                    }
-
-                    // No runtime currently: attempt to spawn with a retry loop outside of any write lock
-                    let cfg = crate::protocol::runtime::SerialConfig::default();
-                    let mut spawn_err: Option<anyhow::Error> = None;
-                    let mut handle_opt: Option<crate::protocol::runtime::PortRuntimeHandle> = None;
-                    const MAX_RETRIES: usize = 8;
-                    for attempt in 0..MAX_RETRIES {
-                        match crate::protocol::runtime::PortRuntimeHandle::spawn(
-                            port_name.clone(),
-                            cfg.clone(),
-                        ) {
-                            Ok(h) => {
-                                handle_opt = Some(h);
-                                log::info!("ToggleRuntime: Successfully spawned runtime for {port_name} on attempt {}", attempt + 1);
-                                break;
-                            }
-                            Err(err) => {
-                                spawn_err = Some(err);
-                                log::warn!("ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {}: {}", attempt + 1, spawn_err.as_ref().unwrap());
-                                // If not last attempt, wait a bit and retry; this allows the OS to release the port
-                                if attempt + 1 < MAX_RETRIES {
-                                    // Slightly longer backoff on first attempts
-                                    let wait_ms = if attempt < 2 { 200 } else { 100 };
-                                    std::thread::sleep(std::time::Duration::from_millis(wait_ms));
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-
-                    if let Some(handle) = handle_opt {
-                        // Clone handle for insertion under write lock to avoid moving
-                        let handle_for_write = handle.clone();
-                        log::info!(
-                            "ToggleRuntime: Writing runtime handle to port status for {port_name}"
-                        );
-                        // Write handle into status under write lock
-                        write_status(|status| {
-                            if let Some(port) = status.ports.map.get(&port_name) {
-                                if with_port_write(port, |port| {
-                                    port.state = PortState::OccupiedByThis {
-                                        handle: Some(types::port::SerialPortWrapper::new(
-                                            handle_for_write.shared_serial.clone(),
-                                        )),
-                                        runtime: handle_for_write.clone(),
-                                    };
-                                })
-                                .is_some()
-                                {
-                                    log::info!("ToggleRuntime: Successfully set port {port_name} to OccupiedByThis with runtime");
-                                    // updated
-                                } else {
-                                    log::warn!("ToggleRuntime: failed to acquire write lock for {port_name} (OccupiedByThis)");
-                                }
-                            }
-                            Ok(())
-                        })?;
-                    } else if let Some(err) = spawn_err {
-                        // All attempts failed: set transient error for UI
-                        write_status(|status| {
-                            status.temporarily.error = Some(types::ErrorInfo {
-                                message: format!("Failed to start runtime: {err}"),
-                                timestamp: chrono::Local::now(),
-                            });
-                            Ok(())
-                        })?;
                     }
 
                     core_tx
                         .send(CoreToUi::Refreshed)
                         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
-                    // Log state after refresh
                     if let Err(err) = log_state_snapshot() {
                         log::warn!("Failed to log state snapshot: {err}");
                     }
                 }
+            }
+        }
+
+        let dead_processes = subprocess_manager.reap_dead_processes();
+        if !dead_processes.is_empty() {
+            let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
+            write_status(|status| {
+                for (port_name, _) in &dead_processes {
+                    if let Some(port) = status.ports.map.get(port_name) {
+                        if with_port_write(port, |port| {
+                            if let PortState::OccupiedByThis { owner } = &mut port.state {
+                                if let PortOwner::CliSubprocess(info) = owner {
+                                    cleanup_paths
+                                        .insert(port_name.clone(), info.data_source_path.clone());
+                                    port.state = PortState::Free;
+                                }
+                            }
+                        })
+                        .is_none()
+                        {
+                            log::warn!(
+                                "Subprocess cleanup: failed to acquire write lock for {port_name}"
+                            );
+                        }
+                    }
+                }
+                Ok(())
+            })?;
+
+            for (port_name, exit_status) in dead_processes {
+                if let Some(path_opt) = cleanup_paths.remove(&port_name) {
+                    if let Some(path) = path_opt {
+                        if let Err(err) = fs::remove_file(&path) {
+                            log::debug!("cleanup: failed to remove data source {path}: {err}");
+                        }
+                    }
+                }
+
+                append_port_log(
+                    &port_name,
+                    format!("CLI subprocess exited: {:?}", exit_status),
+                );
+
+                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                    log::warn!("Failed to send Refreshed after CLI exit for {port_name}: {err}");
+                }
+            }
+        }
+
+        for (port_name, message) in subprocess_manager.poll_ipc_messages() {
+            if let Err(err) = handle_cli_ipc_message(&port_name, message) {
+                log::warn!("Failed to handle IPC message for {port_name}: {err}");
             }
         }
 
@@ -497,7 +912,7 @@ pub fn log_state_snapshot() -> Result<()> {
                 if let Ok(port) = port_arc.read() {
                     let state_str = match &port.state {
                         PortState::Free => "Free",
-                        PortState::OccupiedByThis { .. } => "OccupiedByThis",
+                        PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
                         PortState::OccupiedByOther => "OccupiedByOther",
                     };
                     port_states.push(json!({

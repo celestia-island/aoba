@@ -60,7 +60,9 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
                     if let Ok(port_data) = port_arc.read() {
                         if matches!(
                             &port_data.state,
-                            crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                            crate::protocol::status::types::port::PortState::OccupiedByThis {
+                                owner: _
+                            }
                         ) {
                             ports.insert(port_name.clone());
                         }

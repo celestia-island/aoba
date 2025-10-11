@@ -3,13 +3,8 @@ use chrono::Local;
 
 use crate::{
     protocol::{
-        runtime::RuntimeEvent,
         status::{
-            read_status,
-            types::{
-                self,
-                port::{PortData, PortLogEntry, PortState},
-            },
+            types::port::{PortData, PortState},
             with_port_read, with_port_write, write_status,
         },
         tty::available_ports_enriched,
@@ -101,13 +96,9 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
 
         for key in to_remove.iter() {
             if let Some(port) = status.ports.map.get(key) {
-                if let Some(opt_rt) = with_port_read(port, |port| {
-                    if let PortState::OccupiedByThis { runtime, .. } = &port.state {
-                        Some(runtime.clone())
-                    } else {
-                        None
-                    }
-                }) {
+                if let Some(opt_rt) =
+                    with_port_read(port, |port| port.state.runtime_handle().cloned())
+                {
                     if let Some(rt) = opt_rt {
                         // Clone runtime handle for stopping later outside the write lock
                         to_stop.push((key.clone(), rt));
@@ -171,30 +162,6 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     *scan_in_progress = false;
 
     // After adding ports to status, spawn per-port runtime listeners.
-    let ports_order = read_status(|status| Ok(status.ports.order.clone()))?;
-    for port_name in ports_order.iter() {
-        if let Some(pd_arc) = read_status(|status| Ok(status.ports.map.get(port_name).cloned()))? {
-            if let Some(opt_rt) = with_port_read(&pd_arc, |pd| match &pd.state {
-                types::port::PortState::OccupiedByThis { runtime, .. } => Some(runtime.clone()),
-                _ => None,
-            }) {
-                if let Some(runtime) = opt_rt {
-                    let evt_rx = runtime.evt_rx.clone();
-                    let pn = port_name.clone();
-                    std::thread::spawn(move || {
-                        if let Err(err) = spawn_runtime_listener(evt_rx, pn.clone()) {
-                            log::warn!(
-                                "spawn_runtime_listener for {pn} exited with error: {err:?}",
-                            );
-                        }
-                    });
-                }
-            } else {
-                log::warn!("scan_ports: failed to acquire read lock for port {port_name}");
-            }
-        }
-    }
-
     core_tx
         .send(CoreToUi::Refreshed)
         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
@@ -203,47 +170,4 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
         log::warn!("Failed to log state snapshot after scan: {err}");
     }
     Ok(true)
-}
-
-/// Spawn a detached thread that listens on a runtime's evt_rx and writes port logs into status.
-fn spawn_runtime_listener(evt_rx: flume::Receiver<RuntimeEvent>, port_name: String) -> Result<()> {
-    const MAX_LOGS: usize = 2000;
-    while let Ok(evt) = evt_rx.recv() {
-        match evt {
-            RuntimeEvent::FrameReceived(b) | RuntimeEvent::FrameSent(b) => {
-                let now = Local::now();
-                let raw = b
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let parsed = Some(format!("{} bytes", b.len()));
-                let entry = PortLogEntry {
-                    when: now,
-                    raw,
-                    parsed,
-                };
-                write_status(|status| {
-                    if let Some(port) = status.ports.map.get(&port_name) {
-                        if with_port_write(port, |port| {
-                            port.logs.push(entry.clone());
-                            if port.logs.len() > MAX_LOGS {
-                                let drop = port.logs.len() - MAX_LOGS;
-                                port.logs.drain(0..drop);
-                            }
-                        })
-                        .is_some()
-                        {
-                            // written
-                        } else {
-                            log::warn!("spawn_runtime_listener: failed to acquire write lock for {port_name}");
-                        }
-                    }
-                    Ok(())
-                })?;
-            }
-            _ => {}
-        }
-    }
-    Ok(())
 }

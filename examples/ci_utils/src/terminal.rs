@@ -130,6 +130,11 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
         cmd.env("AOBA_LOG_FILE", log_path.to_str().unwrap());
     }
 
+    // Force deterministic locale so text assertions remain stable across CI machines
+    cmd.env("LANGUAGE", "en_US:en");
+    cmd.env("LC_ALL", "en_US.UTF-8");
+    cmd.env("LANG", "en_US.UTF-8");
+
     // Use expectrl's spawn with Command
     let session = expectrl::session::Session::spawn(cmd)
         .map_err(|err| anyhow!("Failed to spawn process via expectrl: {err}"))?;

@@ -89,6 +89,13 @@ async fn main() -> Result<()> {
         log::info!("🧪 Test 0/2: CLI port release verification");
         tests::test_cli_port_release().await?;
 
+        // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Resetting virtual serial ports after Test 0...");
+            setup_virtual_serial_ports()?;
+        }
+
         // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
         log::info!(
             "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
