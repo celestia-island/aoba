@@ -27,8 +27,10 @@ pub struct CliSubprocessConfig {
 /// CLI mode (master or slave)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CliMode {
-    /// Slave mode (listens and responds to requests)
+    /// Slave mode - listen (acts as server, responds to requests)
     SlaveListen,
+    /// Slave mode - poll (acts as client, polls external master for data)
+    SlavePoll,
     /// Master mode (provides data and responds to poll requests)
     MasterProvide,
 }
@@ -77,6 +79,10 @@ impl ManagedSubprocess {
         match config.mode {
             CliMode::SlaveListen => {
                 args.push("--slave-listen-persist".to_string());
+                args.push(config.port_name.clone());
+            }
+            CliMode::SlavePoll => {
+                args.push("--slave-poll-persist".to_string());
                 args.push(config.port_name.clone());
             }
             CliMode::MasterProvide => {

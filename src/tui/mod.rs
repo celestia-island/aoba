@@ -107,6 +107,7 @@ fn register_mode_to_cli_arg(mode: types::modbus::RegisterMode) -> &'static str {
 fn cli_mode_to_port_mode(mode: &CliMode) -> PortSubprocessMode {
     match mode {
         CliMode::SlaveListen => PortSubprocessMode::SlaveListen,
+        CliMode::SlavePoll => PortSubprocessMode::SlavePoll,
         CliMode::MasterProvide => PortSubprocessMode::MasterProvide,
     }
 }
@@ -573,30 +574,20 @@ fn run_core_thread(
                         match mode {
                             types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
                                 log::info!(
-                                    "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
+                                    "ToggleRuntime: attempting to spawn CLI subprocess (SlavePoll) for {port_name}"
                                 );
 
-                                let data_source_path = initialize_cli_data_source(
-                                    &port_name,
-                                    &storage,
-                                    station.register_address,
-                                    station.register_length,
-                                    station.register_mode,
-                                )?;
-
+                                // Note: Slave mode polls external master, so no data source needed
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),
-                                    mode: CliMode::MasterProvide,
+                                    mode: CliMode::SlavePoll,
                                     station_id: station.station_id,
                                     register_address: station.register_address,
                                     register_length: station.register_length,
                                     register_mode: register_mode_to_cli_arg(station.register_mode)
                                         .to_string(),
                                     baud_rate,
-                                    data_source: Some(format!(
-                                        "file:{}",
-                                        data_source_path.to_string_lossy()
-                                    )),
+                                    data_source: None,
                                 };
 
                                 match subprocess_manager.start_subprocess(cli_config) {
@@ -605,10 +596,9 @@ fn run_core_thread(
                                             subprocess_manager.snapshot(&port_name)
                                         {
                                             log::info!(
-                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
+                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?})",
                                                 snapshot.mode,
-                                                snapshot.pid,
-                                                data_source_path.display()
+                                                snapshot.pid
                                             );
                                             let owner =
                                                 PortOwner::CliSubprocess(PortSubprocessInfo {
@@ -617,11 +607,7 @@ fn run_core_thread(
                                                         .ipc_socket_name
                                                         .clone(),
                                                     pid: snapshot.pid,
-                                                    data_source_path: Some(
-                                                        data_source_path
-                                                            .to_string_lossy()
-                                                            .to_string(),
-                                                    ),
+                                                    data_source_path: None, // SlavePoll doesn't use data source
                                                 });
 
                                             write_status(|status| {
@@ -668,20 +654,13 @@ fn run_core_thread(
                                             });
                                             Ok(())
                                         })?;
-
-                                        if let Err(remove_err) = fs::remove_file(&data_source_path)
-                                        {
-                                            log::debug!(
-                                                "Cleanup of data source {} failed: {remove_err}",
-                                                data_source_path.to_string_lossy()
-                                            );
-                                        }
+                                        // Note: No data source file to clean up for SlavePoll mode
                                     }
                                 }
                             }
                             types::modbus::ModbusConnectionMode::Master { storage, .. } => {
                                 log::info!(
-                                    "ToggleRuntime: attempting to spawn CLI subprocess (SlaveListen) for {port_name}"
+                                    "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
                                 );
 
                                 let data_source_path = initialize_cli_data_source(
@@ -694,7 +673,7 @@ fn run_core_thread(
 
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),
-                                    mode: CliMode::SlaveListen,
+                                    mode: CliMode::MasterProvide,
                                     station_id: station.station_id,
                                     register_address: station.register_address,
                                     register_length: station.register_length,
