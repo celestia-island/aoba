@@ -257,6 +257,10 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             log::info!("CLI[{port_name}]: log[{level}] {message}");
             append_port_log(port_name, format!("CLI log[{level}]: {message}"));
         }
+        IpcMessage::ConfigUpdate { .. } => {
+            // ConfigUpdate is sent FROM TUI TO CLI, so we don't expect to receive it here
+            log::warn!("CLI[{port_name}]: Unexpected ConfigUpdate message received");
+        }
     }
     Ok(())
 }

@@ -100,8 +100,8 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         Ok(handle) => handle,
         Err(err) => {
             // Try to send error via IPC if available
-            if let Some(ref mut ipc) = ipc {
-                let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortError {
+            if let Some(ref mut ipc_conns) = ipc {
+                let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortError {
                     port_name: port.to_string(),
                     error: format!("Failed to open port: {err}"),
                     timestamp: None,
@@ -113,8 +113,8 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Notify IPC that port was opened successfully
-    if let Some(ref mut ipc) = ipc {
-        let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortOpened {
+    if let Some(ref mut ipc_conns) = ipc {
+        let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortOpened {
             port_name: port.to_string(),
             timestamp: None,
         });

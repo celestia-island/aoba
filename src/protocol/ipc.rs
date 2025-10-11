@@ -72,6 +72,18 @@ pub enum IpcMessage {
         #[serde(default)]
         timestamp: Option<i64>,
     },
+
+    /// Configuration update from TUI to CLI subprocess
+    /// Used to synchronize station configuration changes
+    ConfigUpdate {
+        port_name: String,
+        station_id: u8,
+        register_type: String, // "holding", "input", "coil", "discrete_input"
+        start_address: u16,
+        register_length: u16,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
 }
 
 impl IpcMessage {
@@ -157,6 +169,24 @@ impl IpcMessage {
             register_type,
             start_address,
             values,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a ConfigUpdate message with current timestamp
+    pub fn config_update(
+        port_name: String,
+        station_id: u8,
+        register_type: String,
+        start_address: u16,
+        register_length: u16,
+    ) -> Self {
+        Self::ConfigUpdate {
+            port_name,
+            station_id,
+            register_type,
+            start_address,
+            register_length,
             timestamp: Some(Self::timestamp()),
         }
     }
@@ -350,9 +380,151 @@ impl IpcConnection {
     }
 }
 
+/// IPC Command Client (runs in TUI to send commands to CLI subprocess)
+/// This is the reverse channel: TUI → CLI
+pub struct IpcCommandClient {
+    socket_name: String,
+    stream: Option<interprocess::local_socket::Stream>,
+}
+
+impl IpcCommandClient {
+    /// Connect to a CLI subprocess's command channel
+    pub fn connect(command_channel_name: String) -> Result<Self> {
+        use interprocess::local_socket::prelude::*;
+
+        log::debug!("IPC CMD: Attempting to connect to command channel: {command_channel_name}");
+
+        let name = command_channel_name
+            .clone()
+            .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
+        let stream = interprocess::local_socket::Stream::connect(name)?;
+
+        log::info!("IPC CMD: Successfully connected to command channel: {command_channel_name}");
+
+        Ok(Self {
+            socket_name: command_channel_name,
+            stream: Some(stream),
+        })
+    }
+
+    /// Send a command message to the CLI subprocess
+    pub fn send(&mut self, msg: &IpcMessage) -> Result<()> {
+        if let Some(ref mut stream) = self.stream {
+            let json = msg.to_json()?;
+            writeln!(stream, "{json}")?;
+            stream.flush()?;
+            log::info!("IPC CMD: Sent command to CLI: {msg:?}");
+            Ok(())
+        } else {
+            Err(anyhow!("IPC command stream not connected"))
+        }
+    }
+
+    /// Close the command connection
+    pub fn close(&mut self) {
+        if self.stream.is_some() {
+            log::debug!("IPC CMD: Closing command connection");
+            self.stream = None;
+        }
+    }
+}
+
+impl Drop for IpcCommandClient {
+    fn drop(&mut self) {
+        self.close();
+    }
+}
+
+/// IPC Command Listener (runs in CLI subprocess to receive commands from TUI)
+/// This listens on the reverse channel: TUI → CLI
+pub struct IpcCommandListener {
+    socket_name: String,
+    listener: Option<interprocess::local_socket::Listener>,
+    connection: Option<IpcCommandConnection>,
+}
+
+impl IpcCommandListener {
+    /// Create a command listener for the CLI subprocess
+    pub fn listen(command_channel_name: String) -> Result<Self> {
+        use interprocess::local_socket::prelude::*;
+
+        log::debug!("IPC CMD: Creating command listener on: {command_channel_name}");
+
+        let name = command_channel_name
+            .clone()
+            .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
+        let opts = interprocess::local_socket::ListenerOptions::new().name(name);
+
+        let listener = opts.create_sync()?;
+
+        log::info!("IPC CMD: Listening for commands on: {command_channel_name}");
+
+        Ok(Self {
+            socket_name: command_channel_name,
+            listener: Some(listener),
+            connection: None,
+        })
+    }
+
+    /// Accept a connection from TUI (blocking, call once)
+    pub fn accept(&mut self) -> Result<()> {
+        if let Some(ref listener) = self.listener {
+            log::debug!("IPC CMD: Waiting for TUI connection");
+            use interprocess::local_socket::traits::Listener;
+            let stream = listener.accept()?;
+            log::info!("IPC CMD: Accepted TUI connection");
+
+            self.connection = Some(IpcCommandConnection {
+                reader: BufReader::new(stream),
+            });
+            Ok(())
+        } else {
+            Err(anyhow!("Command listener not initialized"))
+        }
+    }
+
+    /// Try to receive a command message (non-blocking if connection exists)
+    pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
+        if let Some(ref mut conn) = self.connection {
+            conn.try_recv()
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+/// Connection for receiving commands from TUI
+pub struct IpcCommandConnection {
+    reader: BufReader<interprocess::local_socket::Stream>,
+}
+
+impl IpcCommandConnection {
+    /// Try to receive a command (non-blocking)
+    pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
+        let mut line = String::new();
+
+        match self.reader.read_line(&mut line) {
+            Ok(0) => Ok(None), // EOF
+            Ok(_) => {
+                let msg = IpcMessage::from_json(line.trim())?;
+                log::info!("IPC CMD: CLI received command from TUI: {msg:?}");
+                Ok(Some(msg))
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+            Err(e) => Err(anyhow!("IPC command read error: {e}")),
+        }
+    }
+}
+
 /// Generate a unique IPC socket name using UUID
 pub fn generate_socket_name() -> String {
     let uuid = uuid::Uuid::new_v4();
     // Use a simple name that works on both Unix and Windows
     format!("aoba-ipc-{uuid}")
+}
+
+/// Generate the command channel name from the status channel name
+/// Command channel is used for TUI → CLI communication (reverse direction)
+pub fn get_command_channel_name(status_channel: &str) -> String {
+    format!("{status_channel}-cmd")
 }
