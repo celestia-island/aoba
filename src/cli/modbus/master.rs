@@ -674,7 +674,7 @@ fn update_storage_loop(
                 }
 
                 // Wait before re-reading the file
-                std::thread::sleep(Duration::from_millis(100));
+                std::thread::sleep(Duration::from_millis(10));
 
                 // Loop back to start of file
                 log::debug!("Re-reading data file for updates");
