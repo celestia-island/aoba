@@ -4,7 +4,7 @@ use rmodbus::server::context::ModbusContext;
 use crate::{
     protocol::status::{
         read_status,
-        types::{self},
+        types::{self, port::PortState},
         with_port_write, write_status,
     },
     tui::utils::bus::{Bus, UiToCore},
@@ -26,7 +26,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     match current_cursor {
         types::cursor::ModbusDashboardCursor::AddLine => {
             log::info!("🔵 AddLine action - calling create_new_modbus_entry");
-            create_new_modbus_entry()?;
+            create_new_modbus_entry(bus)?;
             log::info!("🔵 Station created successfully, sending refresh");
             bus.ui_tx
                 .send(UiToCore::Refresh)
@@ -339,7 +339,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-fn create_new_modbus_entry() -> Result<()> {
+fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
     log::info!("🟢 create_new_modbus_entry called");
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -359,6 +359,7 @@ fn create_new_modbus_entry() -> Result<()> {
 
     if let Some(port_name) = port_name_opt {
         log::info!("🟢 Found port name: {port_name}");
+        let mut should_restart = false;
         if let Some(port) = read_status(|status| {
             let port = status.ports.map.get(&port_name).cloned();
             if port.is_some() {
@@ -371,6 +372,12 @@ fn create_new_modbus_entry() -> Result<()> {
             log::info!("🟢 Calling with_port_write for: {port_name}");
             with_port_write(&port, |port| {
                 log::info!("🟢 Inside with_port_write closure");
+                // Check if port is currently occupied before adding station
+                if matches!(port.state, PortState::OccupiedByThis { .. }) {
+                    log::info!("🟢 Port {port_name} is occupied - will trigger restart after adding station");
+                    should_restart = true;
+                }
+                
                 let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
                 log::info!(
                     "🟢 Current mode: {:?}, current stations count: {}",
@@ -400,6 +407,14 @@ fn create_new_modbus_entry() -> Result<()> {
                 );
             });
             log::info!("🟢 with_port_write completed");
+            
+            // If port was occupied, restart it to apply new station configuration
+            if should_restart {
+                log::info!("🔄 Restarting port {port_name} to apply new station configuration");
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;
+            }
         } else {
             log::error!("🟢 Port entry is None for: {port_name}");
         }

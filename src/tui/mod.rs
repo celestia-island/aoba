@@ -540,14 +540,25 @@ fn run_core_thread(
                             if let Some(result) = with_port_read(port, |port| {
                                 let types::port::PortConfig::Modbus { mode, stations } =
                                     &port.config;
+                                log::info!(
+                                    "ToggleRuntime({port_name}): checking CLI inputs - mode={}, station_count={}",
+                                    if mode.is_master() { "Master" } else { "Slave" },
+                                    stations.len()
+                                );
                                 if let Some(station) = stations.first() {
                                     let baud = port
                                         .state
                                         .runtime_handle()
                                         .map(|rt| rt.current_cfg.baud)
                                         .unwrap_or(9600);
+                                    log::info!(
+                                        "ToggleRuntime({port_name}): found station config - will attempt CLI subprocess"
+                                    );
                                     return Some((mode.clone(), station.clone(), baud));
                                 }
+                                log::info!(
+                                    "ToggleRuntime({port_name}): no station configured - will use native runtime"
+                                );
                                 None
                             }) {
                                 return Ok(result);
