@@ -368,6 +368,27 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                                         }
                                                     }
                                                 }
+                                                
+                                                // If using CLI subprocess, also update the data source file
+                                                if let Some(PortOwner::CliSubprocess(info)) =
+                                                    owner_info.clone()
+                                                {
+                                                    if info.mode == PortSubprocessMode::MasterProvide {
+                                                        if let Some(path) = info.data_source_path.clone() {
+                                                            cli_data_update = Some((
+                                                                path,
+                                                                Arc::clone(storage),
+                                                                item.register_address,
+                                                                item.register_length,
+                                                                item.register_mode,
+                                                            ));
+                                                        } else {
+                                                            log::warn!(
+                                                                "CLI subprocess missing data source path for {port_name}"
+                                                            );
+                                                        }
+                                                    }
+                                                }
                                             }
                                             ModbusConnectionMode::Slave { storage, .. } => {
                                                 if let Some(PortOwner::CliSubprocess(info)) =
