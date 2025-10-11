@@ -16,6 +16,12 @@ use crate::{
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
+        KeyCode::Char('q') => {
+            // Quit the application
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Quit)
+                .map_err(|err| anyhow!(err))?;
+        }
         KeyCode::Up | KeyCode::Char('k') => {
             handle_move_prev(read_status(|status| {
                 if let types::Page::Entry { cursor, .. } = &status.page {

@@ -70,29 +70,54 @@ async fn main() -> Result<()> {
 
         log::info!("🧪 Starting TUI E2E Tests...");
 
-        // Check if we can setup virtual serial ports for E2E tests
-        if setup_virtual_serial_ports()? {
-            log::info!("🧪 Virtual serial ports available, running E2E tests...");
+        // On Unix-like systems, try to setup virtual serial ports
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Setting up virtual serial ports...");
+            setup_virtual_serial_ports()?;
+        }
 
-            // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
-            log::info!(
-                "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
-            );
-            tests::test_tui_slave_with_cli_master_continuous().await?;
+        // Check if we should run virtual serial port tests
+        if !ci_utils::should_run_vcom_tests() {
+            log::warn!("⚠️ Virtual serial ports not available, skipping E2E tests");
+            break;
+        }
 
-            // Reset ports after test completes
+        log::info!("🧪 Virtual serial ports available, running E2E tests...");
+
+        // Test 0: CLI port release test - verify CLI properly releases ports on exit
+        log::info!("🧪 Test 0/2: CLI port release verification");
+        tests::test_cli_port_release().await?;
+
+        // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Resetting virtual serial ports after Test 0...");
+            setup_virtual_serial_ports()?;
+        }
+
+        // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
+        log::info!(
+            "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
+        );
+        tests::test_tui_slave_with_cli_master_continuous().await?;
+
+        // Reset ports after test completes (Unix only)
+        #[cfg(not(windows))]
+        {
             log::info!("🧪 Resetting virtual serial ports after Test 1...");
             setup_virtual_serial_ports()?;
+        }
 
-            // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
-            log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
-            tests::test_tui_master_with_cli_slave_continuous().await?;
+        // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
+        log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
+        tests::test_tui_master_with_cli_slave_continuous().await?;
 
-            // Reset ports after test completes
+        // Reset ports after test completes (Unix only)
+        #[cfg(not(windows))]
+        {
             log::info!("🧪 Resetting virtual serial ports after Test 2...");
             setup_virtual_serial_ports()?;
-        } else {
-            log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
         }
 
         if loop_count > 1 {

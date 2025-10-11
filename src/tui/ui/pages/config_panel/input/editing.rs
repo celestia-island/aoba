@@ -26,11 +26,13 @@ use super::{
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    log::info!("ConfigPanel::handle_input: key={:?}", key.code);
     let selected_cursor = super::super::components::derive_selection()?;
 
     sanitize_configpanel_cursor()?;
 
     let in_edit = read_status(|status| Ok(!status.temporarily.input_raw_buffer.is_empty()))?;
+    log::info!("ConfigPanel::handle_input: in_edit={in_edit}, cursor={selected_cursor:?}");
 
     if in_edit {
         // Handle editing mode with proper input span handler
@@ -91,11 +93,7 @@ fn handle_editing_input(
                                 if (1000..=2_000_000).contains(&parsed) {
                                     // Prepare command inside lock and send outside to avoid holding write lock during send
                                     let maybe_cmd = with_port_write(&port, |port| {
-                                        if let types::port::PortState::OccupiedByThis {
-                                            runtime,
-                                            ..
-                                        } = &mut port.state
-                                        {
+                                        if let Some(runtime) = port.state.runtime_handle_mut() {
                                             runtime.current_cfg.baud = parsed;
                                             return Some((
                                                 runtime.cmd_tx.clone(),
@@ -148,6 +146,11 @@ fn handle_navigation_input(
     bus: &Bus,
     selected_cursor: types::cursor::ConfigPanelCursor,
 ) -> Result<()> {
+    log::info!(
+        "handle_navigation_input: key={:?}, cursor={:?}",
+        key.code,
+        selected_cursor
+    );
     match key.code {
         KeyCode::PageUp => {
             handle_scroll_up(5)?;
@@ -194,7 +197,9 @@ fn handle_navigation_input(
         }
         KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => Ok(()),
         KeyCode::Enter => {
+            log::info!("handle_navigation_input: Enter pressed, calling handle_enter_action");
             handle_enter_action(selected_cursor, bus)?;
+            log::info!("handle_navigation_input: handle_enter_action completed");
             Ok(())
         }
         KeyCode::Esc => {
@@ -237,8 +242,11 @@ fn handle_navigation_input(
 }
 
 fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &Bus) -> Result<()> {
+    log::info!("handle_enter_action called, cursor={selected_cursor:?}");
     match selected_cursor {
         types::cursor::ConfigPanelCursor::EnablePort => {
+            log::info!("EnablePort case matched");
+            log::info!("🔘 User pressed Enter on EnablePort in ConfigPanel");
             if let Some(port_name) = read_status(|status| {
                 if let types::Page::ConfigPanel { selected_port, .. } = status.page {
                     Ok(status.ports.order.get(selected_port).cloned())
@@ -246,9 +254,17 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                     Ok(None)
                 }
             })? {
+                log::info!("Sending ToggleRuntime for port: {port_name}");
+                log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::ToggleRuntime(port_name))
+                    .send(crate::tui::utils::bus::UiToCore::ToggleRuntime(
+                        port_name.clone(),
+                    ))
                     .map_err(|err| anyhow!(err))?;
+                log::info!("✅ ToggleRuntime({port_name}) message sent successfully");
+            } else {
+                log::warn!("port_name is None");
+                log::warn!("⚠️  EnablePort action failed: port_name is None");
             }
             Ok(())
         }
@@ -313,9 +329,7 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                     match cursor {
                         types::cursor::ConfigPanelCursor::BaudRate => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
-                                    &port.state
-                                {
+                                if let Some(runtime) = port.state.runtime_handle() {
                                     types::modbus::BaudRateSelector::from_u32(
                                         runtime.current_cfg.baud,
                                     )
@@ -331,9 +345,7 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                         }
                         types::cursor::ConfigPanelCursor::DataBits { .. } => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
-                                    &port.state
-                                {
+                                if let Some(runtime) = port.state.runtime_handle() {
                                     match runtime.current_cfg.data_bits {
                                         5 => 0usize,
                                         6 => 1usize,
@@ -351,9 +363,7 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                         }
                         types::cursor::ConfigPanelCursor::StopBits => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
-                                    &port.state
-                                {
+                                if let Some(runtime) = port.state.runtime_handle() {
                                     match runtime.current_cfg.stop_bits {
                                         1 => 0usize,
                                         _ => 1usize,
@@ -369,9 +379,7 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                         }
                         types::cursor::ConfigPanelCursor::Parity => {
                             let index = with_port_read(port, |port| {
-                                if let types::port::PortState::OccupiedByThis { runtime, .. } =
-                                    &port.state
-                                {
+                                if let Some(runtime) = port.state.runtime_handle() {
                                     match runtime.current_cfg.parity {
                                         serialport::Parity::None => 0usize,
                                         serialport::Parity::Odd => 1usize,
@@ -414,8 +422,7 @@ fn handle_selector_commit(
                 if matches!(sel, types::modbus::BaudRateSelector::Custom { .. }) {
                     // Switch to string input mode for custom baud rate
                     let current_baud = with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
-                        {
+                        if let Some(runtime) = port.state.runtime_handle() {
                             runtime.current_cfg.baud
                         } else {
                             9600
@@ -433,9 +440,7 @@ fn handle_selector_commit(
                     return Ok(()); // Don't commit yet, wait for string input
                 } else {
                     let maybe_cmd = with_port_write(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } =
-                            &mut port.state
-                        {
+                        if let Some(runtime) = port.state.runtime_handle_mut() {
                             runtime.current_cfg.baud = sel.as_u32();
                             return Some((
                                 runtime.cmd_tx.clone(),
@@ -461,8 +466,7 @@ fn handle_selector_commit(
                     _ => 8,
                 };
                 let maybe_cmd = with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
-                    {
+                    if let Some(runtime) = port.state.runtime_handle_mut() {
                         runtime.current_cfg.data_bits = data_bits;
                         return Some((
                             runtime.cmd_tx.clone(),
@@ -485,8 +489,7 @@ fn handle_selector_commit(
                     _ => 2u8,
                 };
                 let maybe_cmd = with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
-                    {
+                    if let Some(runtime) = port.state.runtime_handle_mut() {
                         runtime.current_cfg.stop_bits = stop_bits;
                         return Some((
                             runtime.cmd_tx.clone(),
@@ -510,8 +513,7 @@ fn handle_selector_commit(
                     _ => serialport::Parity::Even,
                 };
                 let maybe_cmd = with_port_write(port, |port| {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &mut port.state
-                    {
+                    if let Some(runtime) = port.state.runtime_handle_mut() {
                         runtime.current_cfg.parity = parity;
                         return Some((
                             runtime.cmd_tx.clone(),
