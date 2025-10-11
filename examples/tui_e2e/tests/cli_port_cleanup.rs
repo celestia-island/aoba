@@ -17,10 +17,25 @@ use ci_utils::{ports::vcom_matchers, terminal::build_debug_bin};
 /// 1. CLI can open a port
 /// 2. CLI properly runs cleanup on SIGTERM
 /// 3. Port is released (verified by checking that only socat holds it)
+/// 
+/// **Platform Support**: This test only runs on Unix-like systems (Linux, macOS) as it uses
+/// Unix-specific tools like `lsof` and signals. On Windows, the test is skipped as the
+/// platform has different port handling mechanisms.
 pub async fn test_cli_port_release() -> Result<()> {
-    log::info!("🧪 Starting CLI port release test");
-    log::info!("ℹ️  Note: This test verifies cleanup runs, not immediate reopen capability");
-    log::info!("ℹ️  Virtual serial ports (pts) may need socat restart for reuse");
+    // Skip this test on Windows as it uses Unix-specific commands (lsof, kill)
+    #[cfg(not(unix))]
+    {
+        log::info!("🧪 CLI port release test - SKIPPED on Windows");
+        log::info!("ℹ️  This test uses Unix-specific commands (lsof, SIGTERM)");
+        log::info!("ℹ️  Port cleanup on Windows is handled by the OS automatically");
+        return Ok(());
+    }
+    
+    #[cfg(unix)]
+    {
+        log::info!("🧪 Starting CLI port release test");
+        log::info!("ℹ️  Note: This test verifies cleanup runs, not immediate reopen capability");
+        log::info!("ℹ️  Virtual serial ports (pts) may need socat restart for reuse");
 
     let ports = vcom_matchers();
     let binary = build_debug_bin("aoba")?;
@@ -139,6 +154,8 @@ pub async fn test_cli_port_release() -> Result<()> {
     log::info!("✅ CLI port release test passed");
     log::info!("✅ Cleanup handlers executed successfully");
     log::info!("ℹ️  Note: socat_init.sh should still be run between tests to reset virtual ports");
+    
+    } // End of #[cfg(unix)] block
     
     Ok(())
 }
