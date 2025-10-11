@@ -240,10 +240,11 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
+    // Navigate to top of page first to ensure consistent starting position
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
-            count: 10,
+            count: 20,  // Go way up to ensure we hit the top
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
         crate::auto_cursor::CursorAction::PressArrow {
