@@ -169,6 +169,10 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         )
         .await?;
 
+        // Wait for data to propagate to subprocess and file
+        log::info!("🧪 Round {round}/{ROUNDS}: Waiting for data to propagate to subprocess...");
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
         // Poll CLI slave with retry logic - wait for data to propagate
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave with retry logic");
         let binary = build_debug_bin("aoba")?;
