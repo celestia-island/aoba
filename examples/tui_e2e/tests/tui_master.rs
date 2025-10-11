@@ -18,7 +18,7 @@ use ci_utils::{
 };
 
 const ROUNDS: usize = 10;
-const REGISTER_LENGTH: usize = 5;
+const REGISTER_LENGTH: usize = 12;
 
 /// Test TUI Master-Provide + CLI Slave-Poll with continuous random data (10 rounds) - Repeat test
 /// TUI acts as Modbus Master (server providing data, responding to poll requests)
@@ -375,8 +375,8 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
     }];
     execute_cursor_actions(session, cap, &actions, "debug_station_created").await?;
 
-    // Set Register Length to 5 (matching REGISTER_LENGTH constant)
-    log::info!("Navigate to Register Length and set to 5");
+    // Set Register Length to 12 (matching REGISTER_LENGTH constant)
+    log::info!("Navigate to Register Length and set to 12");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
@@ -384,7 +384,7 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
         }, // Navigate to Register Length field
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::TypeString("5".to_string()),
+        CursorAction::TypeString("12".to_string()),
         CursorAction::PressEnter,
     ];
     execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
