@@ -32,11 +32,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     sanitize_configpanel_cursor()?;
 
     let in_edit = read_status(|status| Ok(!status.temporarily.input_raw_buffer.is_empty()))?;
-    log::info!(
-        "ConfigPanel::handle_input: in_edit={}, cursor={:?}",
-        in_edit,
-        selected_cursor
-    );
+    log::info!("ConfigPanel::handle_input: in_edit={in_edit}, cursor={selected_cursor:?}");
 
     if in_edit {
         // Handle editing mode with proper input span handler
@@ -250,7 +246,7 @@ fn handle_navigation_input(
 }
 
 fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &Bus) -> Result<()> {
-    log::info!("handle_enter_action called, cursor={:?}", selected_cursor);
+    log::info!("handle_enter_action called, cursor={selected_cursor:?}");
     match selected_cursor {
         types::cursor::ConfigPanelCursor::EnablePort => {
             log::info!("EnablePort case matched");
@@ -262,7 +258,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                     Ok(None)
                 }
             })? {
-                log::info!("Sending ToggleRuntime for port: {}", port_name);
+                log::info!("Sending ToggleRuntime for port: {port_name}");
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
                     .send(crate::tui::utils::bus::UiToCore::ToggleRuntime(

@@ -46,7 +46,7 @@ pub fn run_cleanups() {
     let reg = global_registry();
     let mut guard = reg.lock().expect("cleanup registry lock");
     let count = guard.items.len();
-    log::debug!("Running {} cleanup handlers", count);
+    log::debug!("Running {count} cleanup handlers");
     guard.run_all();
     log::debug!("Cleanup handlers completed");
 }

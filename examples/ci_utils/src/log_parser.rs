@@ -166,9 +166,7 @@ pub async fn wait_for_page<P: AsRef<Path>>(
     loop {
         if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for page '{}' (waited {}s)",
-                expected_page,
-                timeout_secs
+                "Timeout waiting for page '{expected_page}' (waited {timeout_secs}s)"
             ));
         }
 
@@ -197,10 +195,7 @@ pub async fn wait_for_port_state<P: AsRef<Path>>(
     loop {
         if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for port '{}' to reach state '{}' (waited {}s)",
-                port_name,
-                expected_state,
-                timeout_secs
+                "Timeout waiting for port '{port_name}' to reach state '{expected_state}' (waited {timeout_secs}s)"
             ));
         }
 
@@ -224,7 +219,7 @@ pub fn verify_port_exists<P: AsRef<Path>>(log_path: P, port_name: &str) -> Resul
             return Ok(());
         }
     }
-    Err(anyhow!("Port '{}' not found in state dump", port_name))
+    Err(anyhow!("Port '{port_name}' not found in state dump"))
 }
 
 /// Get the state of a specific port from the latest state dump
@@ -235,8 +230,5 @@ pub fn get_port_state<P: AsRef<Path>>(log_path: P, port_name: &str) -> Result<St
             return Ok(port.state.clone());
         }
     }
-    Err(anyhow!(
-        "Port '{}' not found in latest state dump",
-        port_name
-    ))
+    Err(anyhow!("Port '{port_name}' not found in latest state dump"))
 }

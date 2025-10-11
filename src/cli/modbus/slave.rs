@@ -103,7 +103,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             if let Some(ref mut ipc) = ipc {
                 let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortError {
                     port_name: port.to_string(),
-                    error: format!("Failed to open port: {}", err),
+                    error: format!("Failed to open port: {err}"),
                     timestamp: None,
                 });
             }
@@ -126,19 +126,19 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         let pa = port_arc.clone();
         let port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
-            log::debug!("Cleanup handler: Releasing port {}", port_name_clone);
+            log::debug!("Cleanup handler: Releasing port {port_name_clone}");
             // Explicitly drop the port and wait for OS to release it
             if let Ok(mut port) = pa.lock() {
                 // Try to flush any pending data
                 let _ = std::io::Write::flush(&mut **port);
-                log::debug!("Cleanup handler: Flushed port {}", port_name_clone);
+                log::debug!("Cleanup handler: Flushed port {port_name_clone}");
             }
             drop(pa);
             // Give the OS time to fully release the file descriptor
             std::thread::sleep(Duration::from_millis(200));
-            log::debug!("Cleanup handler: Port {} released", port_name_clone);
+            log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
-        log::debug!("Registered cleanup handler for port {}", port);
+        log::debug!("Registered cleanup handler for port {port}");
     }
 
     // Initialize modbus storage

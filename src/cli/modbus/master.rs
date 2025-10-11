@@ -163,7 +163,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             if let Some(ref mut ipc) = ipc {
                 let _ = ipc.send(&crate::protocol::ipc::IpcMessage::PortError {
                     port_name: port.to_string(),
-                    error: format!("Failed to open port: {}", err),
+                    error: format!("Failed to open port: {err}"),
                     timestamp: None,
                 });
             }

@@ -476,16 +476,16 @@ pub fn log_state_snapshot() -> Result<()> {
         let cursor_info = match &status.page {
             crate::protocol::status::types::Page::Entry { cursor, .. } => {
                 if let Some(c) = cursor {
-                    format!("{:?}", c)
+                    format!("{c:?}")
                 } else {
                     "None".to_string()
                 }
             }
             crate::protocol::status::types::Page::ConfigPanel { cursor, .. } => {
-                format!("{:?}", cursor)
+                format!("{cursor:?}")
             }
             crate::protocol::status::types::Page::ModbusDashboard { cursor, .. } => {
-                format!("{:?}", cursor)
+                format!("{cursor:?}")
             }
             _ => "N/A".to_string(),
         };
@@ -529,7 +529,7 @@ pub fn log_state_snapshot() -> Result<()> {
         });
 
         // Log with STATE_DUMP prefix for easy parsing in tests
-        log::info!("STATE_DUMP: {}", snapshot);
+        log::info!("STATE_DUMP: {snapshot}");
         Ok(())
     })
 }

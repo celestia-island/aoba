@@ -69,10 +69,7 @@ pub fn port_exists(port_name: &str) -> bool {
                 .any(|p| p.port_name.eq_ignore_ascii_case(port_name));
         }
         // If we can't list ports, assume the port exists (fail later if it doesn't work)
-        log::warn!(
-            "Could not list serial ports on Windows, assuming {} exists",
-            port_name
-        );
+        log::warn!("Could not list serial ports on Windows, assuming {port_name} exists");
         true
     }
 

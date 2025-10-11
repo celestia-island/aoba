@@ -20,7 +20,7 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
         // interferes with terminal selection and adds latency.
         if let Ok(true) = crossterm::event::poll(Duration::from_millis(100)) {
             if let Ok(event) = crossterm::event::read() {
-                log::info!("⌨️ Received event: {:?}", event);
+                log::info!("⌨️ Received event: {event:?}");
                 // handle_event now returns Result<()> and performs any quit
                 // signaling itself. Propagate errors, otherwise continue.
                 handle_event(event, &bus)?;
@@ -138,8 +138,8 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
             }
             types::Page::ConfigPanel { .. } => {
                 log::info!(
-                    "input.rs: Calling ConfigPanel::handle_input for key={:?}",
-                    key.code
+                    "input.rs: Calling ConfigPanel::handle_input for key={key:?}",
+                    key = key.code
                 );
                 pages::config_panel::handle_input(key, bus)?;
                 log::info!("input.rs: ConfigPanel::handle_input completed");
