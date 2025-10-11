@@ -142,12 +142,31 @@ impl IpcMessage {
             timestamp: Some(Self::timestamp()),
         }
     }
+
+    /// Create a RegisterUpdate message with current timestamp
+    pub fn register_update(
+        port_name: String,
+        station_id: u8,
+        register_type: String,
+        start_address: u16,
+        values: Vec<u16>,
+    ) -> Self {
+        Self::RegisterUpdate {
+            port_name,
+            station_id,
+            register_type,
+            start_address,
+            values,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
 }
 
 /// IPC Server (runs in CLI subprocess)
 pub struct IpcServer {
     socket_name: String,
-    stream: Option<interprocess::local_socket::Stream>,
+    writer: Option<interprocess::local_socket::Stream>,
+    reader: Option<BufReader<interprocess::local_socket::Stream>>,
 }
 
 impl IpcServer {
@@ -165,15 +184,18 @@ impl IpcServer {
 
         log::info!("IPC: Successfully connected to socket: {socket_name}");
 
+        // We'll use the same stream for both reading and writing
+        // by wrapping it appropriately
         Ok(Self {
             socket_name,
-            stream: Some(stream),
+            writer: Some(stream),
+            reader: None,
         })
     }
 
     /// Send a message to the parent TUI process
     pub fn send(&mut self, msg: &IpcMessage) -> Result<()> {
-        if let Some(ref mut stream) = self.stream {
+        if let Some(ref mut stream) = self.writer {
             let json = msg.to_json()?;
             writeln!(stream, "{json}")?;
             stream.flush()?;
@@ -188,13 +210,26 @@ impl IpcServer {
         }
     }
 
+    /// Try to receive a message from the parent TUI process (non-blocking)
+    /// Note: This is a simplified implementation that doesn't actually support non-blocking reads
+    /// The CLI subprocess should poll this periodically
+    pub fn try_recv(&mut self) -> Result<Option<IpcMessage>> {
+        // For now, return None to indicate no message available
+        // In a real implementation, we'd need to set the stream to non-blocking mode
+        // or use a timeout-based approach
+        // Since we can't easily do non-blocking with interprocess streams,
+        // we'll skip this for now and handle messages in the main loop differently
+        Ok(None)
+    }
+
     /// Close the IPC connection
     pub fn close(&mut self) {
-        if self.stream.is_some() {
+        if self.writer.is_some() {
             let socket_name = self.socket_name.clone();
             log::debug!("IPC: Closing connection to {socket_name}");
             let _ = self.send(&IpcMessage::shutdown());
-            self.stream = None;
+            self.writer = None;
+            self.reader = None;
         }
     }
 }
@@ -244,6 +279,7 @@ impl IpcClient {
 
         Ok(IpcConnection {
             reader: BufReader::new(stream),
+            writer: None,
         })
     }
 
@@ -256,6 +292,7 @@ impl IpcClient {
 /// An active IPC connection from a CLI subprocess
 pub struct IpcConnection {
     reader: BufReader<interprocess::local_socket::Stream>,
+    writer: Option<interprocess::local_socket::Stream>,
 }
 
 impl IpcConnection {
@@ -302,6 +339,14 @@ impl IpcConnection {
             log::info!("IPC: Received message: {msg:?}");
         }
         Ok(msg)
+    }
+
+    /// Send a message to the CLI subprocess
+    /// Note: Bidirectional communication with interprocess streams is complex
+    /// For now, this is not implemented. Consider using a separate connection
+    /// from TUI to CLI for sending messages.
+    pub fn send(&mut self, _msg: &IpcMessage) -> Result<()> {
+        Err(anyhow!("IPC Connection send not implemented - use separate channel"))
     }
 }
 
