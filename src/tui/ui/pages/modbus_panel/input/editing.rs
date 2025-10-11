@@ -475,15 +475,17 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                     cli_data_update
                                 {
                                     let path_buf = std::path::PathBuf::from(path);
-                                    if let Err(err) = append_cli_data_snapshot(
+                                    // For TUI register updates, replace the file to keep only latest state
+                                    // This prevents file from accumulating history across multiple update cycles
+                                    if let Err(err) = crate::tui::replace_cli_data_snapshot(
                                         &path_buf, &storage, base_addr, length, reg_mode,
                                     ) {
                                         log::warn!(
-                                            "Failed to append CLI data snapshot for {port_name}: {err}"
+                                            "Failed to replace CLI data snapshot for {port_name}: {err}"
                                         );
                                     } else {
                                         log::info!(
-                                            "CLI[{port_name}]: appended data snapshot addr=0x{base_addr:04X} len={length} mode={reg_mode:?}"
+                                            "CLI[{port_name}]: replaced data snapshot addr=0x{base_addr:04X} len={length} mode={reg_mode:?}"
                                         );
                                     }
                                 }

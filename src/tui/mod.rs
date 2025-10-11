@@ -188,6 +188,25 @@ pub(crate) fn append_cli_data_snapshot(
     )
 }
 
+/// Replace (truncate) the CLI data snapshot file with current state
+/// Used for TUI register updates where we want only the latest state, not accumulated history
+pub(crate) fn replace_cli_data_snapshot(
+    path: &PathBuf,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    register_address: u16,
+    register_length: u16,
+    register_mode: types::modbus::RegisterMode,
+) -> Result<()> {
+    write_cli_data_snapshot(
+        path,
+        storage,
+        register_address,
+        register_length,
+        register_mode,
+        true, // truncate = true
+    )
+}
+
 fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     match message {
         IpcMessage::PortOpened { .. } => {

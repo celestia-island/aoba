@@ -626,20 +626,15 @@ fn update_storage_loop(
                 let file = std::fs::File::open(path)?;
                 let reader = BufReader::new(file);
 
-                // Collect all lines and use only the last non-empty one
-                // This ensures we get the latest data even if file has multiple entries
-                let mut last_valid_line = None;
                 for line in reader.lines() {
                     let line = line?;
-                    if !line.trim().is_empty() {
-                        last_valid_line = Some(line);
+                    if line.trim().is_empty() {
+                        continue;
                     }
-                }
 
-                if let Some(line) = last_valid_line {
                     match parse_data_line(&line) {
                         Ok(values) => {
-                            log::debug!("Updating storage with latest values: {values:?}");
+                            log::info!("Updating storage with values: {values:?}");
                             let mut context = storage.lock().unwrap();
                             match reg_mode {
                                 crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -666,6 +661,9 @@ fn update_storage_loop(
                                     cr.remove(0);
                                 }
                             }
+
+                            // Wait a bit before next update to avoid overwhelming
+                            std::thread::sleep(Duration::from_millis(100));
                         }
                         Err(err) => {
                             log::warn!("Error parsing data line: {err}");
@@ -673,11 +671,8 @@ fn update_storage_loop(
                     }
                 }
 
-                // Wait before re-reading the file
-                std::thread::sleep(Duration::from_millis(10));
-
-                // Loop back to start of file
-                log::debug!("Re-reading data file for updates");
+                // After reading all lines, loop back to start of file
+                log::debug!("Reached end of data file, looping back to start");
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
