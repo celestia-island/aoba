@@ -34,7 +34,7 @@ pub async fn test_cli_port_release() -> Result<()> {
         log::info!("🧪 CLI port release test - SKIPPED on Windows");
         log::info!("ℹ️  This test uses Unix-specific commands (lsof, SIGTERM)");
         log::info!("ℹ️  Port cleanup on Windows is handled by the OS automatically");
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(unix)]
@@ -165,7 +165,7 @@ pub async fn test_cli_port_release() -> Result<()> {
         log::info!(
             "ℹ️  Note: socat_init.sh should still be run between tests to reset virtual ports"
         );
-        
+
         Ok(())
     } // End of #[cfg(unix)] block
 }
