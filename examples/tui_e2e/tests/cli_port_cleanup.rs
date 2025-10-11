@@ -34,7 +34,7 @@ pub async fn test_cli_port_release() -> Result<()> {
         log::info!("🧪 CLI port release test - SKIPPED on Windows");
         log::info!("ℹ️  This test uses Unix-specific commands (lsof, SIGTERM)");
         log::info!("ℹ️  Port cleanup on Windows is handled by the OS automatically");
-        Ok(())
+        return Ok(());
     }
 
     #[cfg(unix)]
@@ -42,6 +42,9 @@ pub async fn test_cli_port_release() -> Result<()> {
         log::info!("🧪 Starting CLI port release test");
         log::info!("ℹ️  Note: This test verifies cleanup runs, not immediate reopen capability");
         log::info!("ℹ️  Virtual serial ports (pts) may need socat restart for reuse");
+
+        let ports = vcom_matchers();
+        let binary = build_debug_bin("aoba")?;
 
         // Verify ports exist
         if !std::path::Path::new(&ports.port1_name).exists() {
@@ -162,5 +165,7 @@ pub async fn test_cli_port_release() -> Result<()> {
         log::info!(
             "ℹ️  Note: socat_init.sh should still be run between tests to reset virtual ports"
         );
+        
+        Ok(())
     } // End of #[cfg(unix)] block
 }

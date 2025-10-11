@@ -57,7 +57,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
     sleep_a_while().await;
 
-    // Navigate to vcom1 and configure as master
+    // Navigate to vcom1
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
@@ -67,8 +67,24 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_nav_vcom1").await?;
 
-    // Configure as master (server mode providing data)
-    log::info!("🧪 Step 3: Configure TUI as Master");
+    // Enable the port BEFORE configuration (as per new flow)
+    log::info!("🧪 Step 3: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
+
+    // Debug: Verify port is enabled
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_enable_port".to_string(),
+    }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_enable_port",
+    )
+    .await?;
+
+    // Configure as master AFTER enabling port
+    log::info!("🧪 Step 4: Configure TUI as Master");
     configure_tui_master(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify we're back on port details page after configuration
@@ -82,10 +98,6 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         "debug_after_config",
     )
     .await?;
-
-    // Enable the port
-    log::info!("🧪 Step 4: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify port is enabled
     let actions = vec![CursorAction::DebugBreakpoint {
