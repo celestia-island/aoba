@@ -177,7 +177,11 @@ impl IpcServer {
             let json = msg.to_json()?;
             writeln!(stream, "{json}")?;
             stream.flush()?;
-            log::debug!("IPC: Sent message: {msg:?}");
+            if matches!(msg, IpcMessage::Heartbeat { .. }) {
+                log::debug!("IPC: Sent heartbeat");
+            } else {
+                log::info!("IPC: Sent message: {msg:?}");
+            }
             Ok(())
         } else {
             Err(anyhow!("IPC stream not connected"))
@@ -270,7 +274,11 @@ impl IpcConnection {
             }
             Ok(_) => {
                 let msg = IpcMessage::from_json(line.trim())?;
-                log::debug!("IPC: Received message: {msg:?}");
+                if matches!(&msg, IpcMessage::Heartbeat { .. }) {
+                    log::debug!("IPC: Received heartbeat");
+                } else {
+                    log::info!("IPC: Received message: {msg:?}");
+                }
                 Ok(Some(msg))
             }
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
@@ -288,7 +296,11 @@ impl IpcConnection {
         }
 
         let msg = IpcMessage::from_json(line.trim())?;
-        log::debug!("IPC: Received message: {msg:?}");
+        if matches!(&msg, IpcMessage::Heartbeat { .. }) {
+            log::debug!("IPC: Received heartbeat");
+        } else {
+            log::info!("IPC: Received message: {msg:?}");
+        }
         Ok(msg)
     }
 }

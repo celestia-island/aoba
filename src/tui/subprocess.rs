@@ -5,6 +5,7 @@
 use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
+    io::{BufRead, BufReader},
     process::{Child, Command, Stdio},
 };
 
@@ -39,6 +40,8 @@ pub struct ManagedSubprocess {
     pub ipc_socket_name: String,
     pub ipc_connection: Option<IpcConnection>,
     ipc_accept_thread: Option<std::thread::JoinHandle<Result<IpcConnection>>>,
+    stdout_thread: Option<std::thread::JoinHandle<()>>,
+    stderr_thread: Option<std::thread::JoinHandle<()>>,
 }
 
 /// Lightweight snapshot of a managed subprocess for reporting to Status
@@ -109,7 +112,7 @@ impl ManagedSubprocess {
         log::debug!("CLI subprocess command: {:?} {:?}", exe_path, args);
 
         // Spawn the subprocess
-        let child = Command::new(exe_path)
+        let mut child = Command::new(exe_path)
             .args(&args)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -117,6 +120,60 @@ impl ManagedSubprocess {
             .spawn()?;
 
         log::info!("CLI subprocess spawned with PID: {:?}", child.id());
+
+        let stdout_thread = child.stdout.take().map(|stdout| {
+            let port_label = config.port_name.clone();
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => {
+                            log::debug!("CLI[{port_label}] stdout closed");
+                            break;
+                        }
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(['\r', '\n']);
+                            if !trimmed.is_empty() {
+                                log::info!("CLI[{port_label}] stdout: {trimmed}");
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("CLI[{port_label}] stdout reader error: {err}");
+                            break;
+                        }
+                    }
+                }
+            })
+        });
+
+        let stderr_thread = child.stderr.take().map(|stderr| {
+            let port_label = config.port_name.clone();
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stderr);
+                let mut line = String::new();
+                loop {
+                    line.clear();
+                    match reader.read_line(&mut line) {
+                        Ok(0) => {
+                            log::debug!("CLI[{port_label}] stderr closed");
+                            break;
+                        }
+                        Ok(_) => {
+                            let trimmed = line.trim_end_matches(['\r', '\n']);
+                            if !trimmed.is_empty() {
+                                log::warn!("CLI[{port_label}] stderr: {trimmed}");
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("CLI[{port_label}] stderr reader error: {err}");
+                            break;
+                        }
+                    }
+                }
+            })
+        });
 
         // Spawn thread to accept IPC connection
         let accept_thread = std::thread::spawn(move || ipc_client.accept());
@@ -127,6 +184,8 @@ impl ManagedSubprocess {
             ipc_socket_name,
             ipc_connection: None,
             ipc_accept_thread: Some(accept_thread),
+            stdout_thread,
+            stderr_thread,
         })
     }
 
@@ -207,7 +266,26 @@ impl ManagedSubprocess {
     /// Kill the subprocess
     pub fn kill(&mut self) -> Result<()> {
         log::info!("Killing CLI subprocess for port {}", self.config.port_name);
-        self.child.kill()?;
+        let already_exited = matches!(self.child.try_wait(), Ok(Some(_)));
+        if !already_exited {
+            use std::io::ErrorKind;
+            if let Err(err) = self.child.kill() {
+                if err.kind() != ErrorKind::InvalidInput {
+                    return Err(anyhow!(
+                        "Failed to kill CLI subprocess {}: {err}",
+                        self.config.port_name
+                    ));
+                }
+            }
+            if let Err(err) = self.child.wait() {
+                if err.kind() != ErrorKind::InvalidInput {
+                    log::warn!(
+                        "Waiting for CLI subprocess {} after kill failed: {err}",
+                        self.config.port_name
+                    );
+                }
+            }
+        }
         if let Some(mut conn) = self.ipc_connection.take() {
             // Drain any remaining message to ensure socket closes cleanly
             if let Err(err) = conn.try_recv() {
@@ -217,7 +295,27 @@ impl ManagedSubprocess {
                 );
             }
         }
+        self.join_log_threads();
         Ok(())
+    }
+
+    fn join_log_threads(&mut self) {
+        if let Some(handle) = self.stdout_thread.take() {
+            if let Err(err) = handle.join() {
+                log::debug!(
+                    "CLI[{}] stdout thread join error: {err:?}",
+                    self.config.port_name
+                );
+            }
+        }
+        if let Some(handle) = self.stderr_thread.take() {
+            if let Err(err) = handle.join() {
+                log::debug!(
+                    "CLI[{}] stderr thread join error: {err:?}",
+                    self.config.port_name
+                );
+            }
+        }
     }
 
     /// Snapshot current subprocess state for status updates

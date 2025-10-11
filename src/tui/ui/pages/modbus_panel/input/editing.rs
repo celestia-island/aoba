@@ -458,6 +458,10 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String)
                                         log::warn!(
                                             "Failed to append CLI data snapshot for {port_name}: {err}"
                                         );
+                                    } else {
+                                        log::info!(
+                                            "CLI[{port_name}]: appended data snapshot addr=0x{base_addr:04X} len={length} mode={reg_mode:?}"
+                                        );
                                     }
                                 }
                             }
