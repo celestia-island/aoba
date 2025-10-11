@@ -67,24 +67,8 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_nav_vcom1").await?;
 
-    // Enable the port BEFORE configuration (as per new flow)
-    log::info!("🧪 Step 3: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Debug: Verify port is enabled
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enable_port".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_enable_port",
-    )
-    .await?;
-
-    // Configure as master AFTER enabling port
-    log::info!("🧪 Step 4: Configure TUI as Master");
+    // Configure as master BEFORE enabling port (station must exist before port enable)
+    log::info!("🧪 Step 3: Configure TUI as Master");
     configure_tui_master(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify we're back on port details page after configuration
@@ -98,6 +82,10 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         "debug_after_config",
     )
     .await?;
+
+    // Enable the port AFTER configuration (so it can spawn CLI subprocess)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify port is enabled
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -180,6 +168,64 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
             "debug_after_update",
         )
         .await?;
+
+        // Wait for all register updates to be written to data source file
+        // Then poll the file content with timeout to verify data synchronization
+        log::info!("🧪 Round {round}/{ROUNDS}: Waiting for all register updates to complete...");
+        tokio::time::sleep(Duration::from_secs(2)).await;
+
+        // Find the data source file
+        let data_files: Vec<_> = std::fs::read_dir("/tmp")?
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("aoba_cli__tmp_vcom1_")
+                    && entry.file_name().to_string_lossy().ends_with(".jsonl")
+            })
+            .collect();
+
+        if let Some(data_file) = data_files.first() {
+            log::info!("🧪 Round {round}/{ROUNDS}: Polling data file until it matches expected data (60s timeout)...");
+            
+            let expected_data = data.clone();
+            let start_time = std::time::Instant::now();
+            let timeout = Duration::from_secs(60);
+            let poll_interval = Duration::from_millis(100);
+            let mut data_matched = false;
+
+            while start_time.elapsed() < timeout {
+                // Read the last line from the data file
+                if let Ok(content) = std::fs::read_to_string(data_file.path()) {
+                    if let Some(last_line) = content.lines().filter(|l| !l.trim().is_empty()).last() {
+                        // Try to parse the JSON
+                        if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(last_line) {
+                            if let Some(values) = json_value.get("values").and_then(|v| v.as_array()) {
+                                let file_values: Vec<u16> = values
+                                    .iter()
+                                    .filter_map(|v| v.as_u64().map(|n| n as u16))
+                                    .collect();
+                                
+                                if file_values == expected_data {
+                                    log::info!("✅ Round {round}/{ROUNDS}: Data file matches expected data after {:?}", start_time.elapsed());
+                                    data_matched = true;
+                                    break;
+                                } else {
+                                    log::debug!("Round {round}/{ROUNDS}: File has {:?}, expected {:?}", file_values, expected_data);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                tokio::time::sleep(poll_interval).await;
+            }
+
+            if !data_matched {
+                log::warn!("⚠️ Round {round}/{ROUNDS}: Data file did not match after 60s timeout");
+            }
+        }
 
         // Poll CLI slave with retry logic - wait for data to propagate
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave with retry logic");

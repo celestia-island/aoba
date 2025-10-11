@@ -107,6 +107,7 @@ fn register_mode_to_cli_arg(mode: types::modbus::RegisterMode) -> &'static str {
 fn cli_mode_to_port_mode(mode: &CliMode) -> PortSubprocessMode {
     match mode {
         CliMode::SlaveListen => PortSubprocessMode::SlaveListen,
+        CliMode::SlavePoll => PortSubprocessMode::SlavePoll,
         CliMode::MasterProvide => PortSubprocessMode::MasterProvide,
     }
 }
@@ -187,6 +188,25 @@ pub(crate) fn append_cli_data_snapshot(
     )
 }
 
+/// Replace (truncate) the CLI data snapshot file with current state
+/// Used for TUI register updates where we want only the latest state, not accumulated history
+pub(crate) fn replace_cli_data_snapshot(
+    path: &PathBuf,
+    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    register_address: u16,
+    register_length: u16,
+    register_mode: types::modbus::RegisterMode,
+) -> Result<()> {
+    write_cli_data_snapshot(
+        path,
+        storage,
+        register_address,
+        register_length,
+        register_mode,
+        true, // truncate = true
+    )
+}
+
 fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     match message {
         IpcMessage::PortOpened { .. } => {
@@ -236,6 +256,10 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Log { level, message, .. } => {
             log::info!("CLI[{port_name}]: log[{level}] {message}");
             append_port_log(port_name, format!("CLI log[{level}]: {message}"));
+        }
+        IpcMessage::ConfigUpdate { .. } => {
+            // ConfigUpdate is sent FROM TUI TO CLI, so we don't expect to receive it here
+            log::warn!("CLI[{port_name}]: Unexpected ConfigUpdate message received");
         }
     }
     Ok(())
@@ -573,30 +597,20 @@ fn run_core_thread(
                         match mode {
                             types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
                                 log::info!(
-                                    "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
+                                    "ToggleRuntime: attempting to spawn CLI subprocess (SlavePoll) for {port_name}"
                                 );
 
-                                let data_source_path = initialize_cli_data_source(
-                                    &port_name,
-                                    &storage,
-                                    station.register_address,
-                                    station.register_length,
-                                    station.register_mode,
-                                )?;
-
+                                // Note: Slave mode polls external master, so no data source needed
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),
-                                    mode: CliMode::MasterProvide,
+                                    mode: CliMode::SlavePoll,
                                     station_id: station.station_id,
                                     register_address: station.register_address,
                                     register_length: station.register_length,
                                     register_mode: register_mode_to_cli_arg(station.register_mode)
                                         .to_string(),
                                     baud_rate,
-                                    data_source: Some(format!(
-                                        "file:{}",
-                                        data_source_path.to_string_lossy()
-                                    )),
+                                    data_source: None,
                                 };
 
                                 match subprocess_manager.start_subprocess(cli_config) {
@@ -605,10 +619,9 @@ fn run_core_thread(
                                             subprocess_manager.snapshot(&port_name)
                                         {
                                             log::info!(
-                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
+                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?})",
                                                 snapshot.mode,
-                                                snapshot.pid,
-                                                data_source_path.display()
+                                                snapshot.pid
                                             );
                                             let owner =
                                                 PortOwner::CliSubprocess(PortSubprocessInfo {
@@ -617,11 +630,7 @@ fn run_core_thread(
                                                         .ipc_socket_name
                                                         .clone(),
                                                     pid: snapshot.pid,
-                                                    data_source_path: Some(
-                                                        data_source_path
-                                                            .to_string_lossy()
-                                                            .to_string(),
-                                                    ),
+                                                    data_source_path: None, // SlavePoll doesn't use data source
                                                 });
 
                                             write_status(|status| {
@@ -668,20 +677,13 @@ fn run_core_thread(
                                             });
                                             Ok(())
                                         })?;
-
-                                        if let Err(remove_err) = fs::remove_file(&data_source_path)
-                                        {
-                                            log::debug!(
-                                                "Cleanup of data source {} failed: {remove_err}",
-                                                data_source_path.to_string_lossy()
-                                            );
-                                        }
+                                        // Note: No data source file to clean up for SlavePoll mode
                                     }
                                 }
                             }
                             types::modbus::ModbusConnectionMode::Master { storage, .. } => {
                                 log::info!(
-                                    "ToggleRuntime: attempting to spawn CLI subprocess (SlaveListen) for {port_name}"
+                                    "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
                                 );
 
                                 let data_source_path = initialize_cli_data_source(
@@ -694,7 +696,7 @@ fn run_core_thread(
 
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),
-                                    mode: CliMode::SlaveListen,
+                                    mode: CliMode::MasterProvide,
                                     station_id: station.station_id,
                                     register_address: station.register_address,
                                     register_length: station.register_length,
@@ -868,6 +870,30 @@ fn run_core_thread(
                         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                     if let Err(err) = log_state_snapshot() {
                         log::warn!("Failed to log state snapshot: {err}");
+                    }
+                }
+                UiToCore::SendRegisterUpdate {
+                    port_name,
+                    station_id,
+                    register_type,
+                    start_address,
+                    values,
+                } => {
+                    log::debug!(
+                        "SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
+                    );
+                    
+                    // Send register update to CLI subprocess via IPC
+                    if let Err(err) = subprocess_manager.send_register_update(
+                        &port_name,
+                        station_id,
+                        register_type,
+                        start_address,
+                        values,
+                    ) {
+                        log::warn!("Failed to send register update to CLI subprocess for {port_name}: {err}");
+                    } else {
+                        log::info!("✓ Sent register update to CLI subprocess for {port_name}");
                     }
                 }
             }

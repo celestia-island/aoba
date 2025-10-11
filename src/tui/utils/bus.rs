@@ -13,6 +13,14 @@ pub enum UiToCore {
     ResumePolling,
     /// Toggle (start/stop) per-port runtime. Contains port name.
     ToggleRuntime(String),
+    /// Send register update to CLI subprocess via IPC
+    SendRegisterUpdate {
+        port_name: String,
+        station_id: u8,
+        register_type: String,
+        start_address: u16,
+        values: Vec<u16>,
+    },
 }
 
 /// Messages sent from core worker thread back to UI thread.

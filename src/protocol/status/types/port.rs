@@ -28,6 +28,7 @@ pub struct PortSubprocessInfo {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PortSubprocessMode {
     SlaveListen,
+    SlavePoll,
     MasterProvide,
 }
 

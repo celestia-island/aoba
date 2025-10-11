@@ -1,17 +1,39 @@
 use clap::ArgMatches;
 use serde::Serialize;
 
-/// Helper to establish IPC connection if requested
-pub fn setup_ipc(matches: &ArgMatches) -> Option<crate::protocol::ipc::IpcServer> {
+/// IPC connections for CLI subprocess (bidirectional)
+pub struct IpcConnections {
+    pub status: crate::protocol::ipc::IpcServer,
+    pub command_listener: crate::protocol::ipc::IpcCommandListener,
+}
+
+/// Helper to establish IPC connections if requested (bidirectional)
+pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
     if let Some(channel_id) = matches.get_one::<String>("ipc-channel") {
-        log::info!("IPC: Attempting to connect to channel: {channel_id}");
+        log::info!("IPC: Attempting to connect to status channel: {channel_id}");
         match crate::protocol::ipc::IpcServer::connect(channel_id.clone()) {
-            Ok(ipc) => {
-                log::info!("IPC: Successfully connected");
-                Some(ipc)
+            Ok(status) => {
+                log::info!("IPC: Successfully connected to status channel");
+                
+                // Create command listener on the reverse channel
+                let command_channel = crate::protocol::ipc::get_command_channel_name(channel_id);
+                log::info!("IPC: Creating command listener on: {command_channel}");
+                match crate::protocol::ipc::IpcCommandListener::listen(command_channel) {
+                    Ok(command_listener) => {
+                        log::info!("IPC: Command listener created successfully");
+                        Some(IpcConnections {
+                            status,
+                            command_listener,
+                        })
+                    }
+                    Err(err) => {
+                        log::warn!("IPC: Failed to create command listener: {err}");
+                        None
+                    }
+                }
             }
             Err(err) => {
-                log::warn!("IPC: Failed to connect: {err}");
+                log::warn!("IPC: Failed to connect to status channel: {err}");
                 None
             }
         }
