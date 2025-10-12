@@ -376,7 +376,9 @@ impl IpcConnection {
     /// For now, this is not implemented. Consider using a separate connection
     /// from TUI to CLI for sending messages.
     pub fn send(&mut self, _msg: &IpcMessage) -> Result<()> {
-        Err(anyhow!("IPC Connection send not implemented - use separate channel"))
+        Err(anyhow!(
+            "IPC Connection send not implemented - use separate channel"
+        ))
     }
 }
 
@@ -456,7 +458,7 @@ impl IpcCommandListener {
         let opts = interprocess::local_socket::ListenerOptions::new().name(name);
 
         let listener = opts.create_sync()?;
-        
+
         // Set listener to non-blocking mode to prevent blocking the main loop
         listener.set_nonblocking(interprocess::local_socket::ListenerNonblockingMode::Both)?;
 

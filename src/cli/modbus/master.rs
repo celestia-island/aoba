@@ -161,11 +161,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         .open()
         .map_err(|err| {
             if let Some(ref mut ipc_conns) = ipc_connections {
-                let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortError {
-                    port_name: port.to_string(),
-                    error: format!("Failed to open port: {err}"),
-                    timestamp: None,
-                });
+                let _ = ipc_conns
+                    .status
+                    .send(&crate::protocol::ipc::IpcMessage::PortError {
+                        port_name: port.to_string(),
+                        error: format!("Failed to open port: {err}"),
+                        timestamp: None,
+                    });
             }
             anyhow!("Failed to open port {port}: {err}")
         })?;
@@ -174,10 +176,12 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc_connections {
-        let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortOpened {
-            port_name: port.to_string(),
-            timestamp: None,
-        });
+        let _ = ipc_conns
+            .status
+            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+                port_name: port.to_string(),
+                timestamp: None,
+            });
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
@@ -340,7 +344,8 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         if let Some(ref mut ipc_conns) = ipc_connections {
             // Try to accept command connection (non-blocking after first attempt)
             // This is a one-time operation
-            static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
+                std::sync::atomic::AtomicBool::new(false);
             if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Err(e) = ipc_conns.command_listener.accept() {
                     log::debug!("Command channel accept not ready: {e}");
@@ -376,7 +381,9 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         let mut context = storage.lock().unwrap();
                         if register_type == "holding" {
                             for (i, &val) in values.iter().enumerate() {
-                                if let Err(e) = context.set_holding(update_start_addr + i as u16, val) {
+                                if let Err(e) =
+                                    context.set_holding(update_start_addr + i as u16, val)
+                                {
                                     log::warn!("Failed to set holding register: {e}");
                                 }
                             }

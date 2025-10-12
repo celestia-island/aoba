@@ -15,7 +15,6 @@ use crate::{
         with_port_write, write_status,
     },
     tui::{
-        append_cli_data_snapshot,
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{Bus, UiToCore},
     },
@@ -37,8 +36,12 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 types::ui::InputRawBuffer::None => "None".to_string(),
                 types::ui::InputRawBuffer::Index(i) => format!("Index({})", i),
                 types::ui::InputRawBuffer::String { bytes, .. } => {
-                    format!("String(len={}, val='{}')", bytes.len(), String::from_utf8_lossy(bytes))
-                },
+                    format!(
+                        "String(len={}, val='{}')",
+                        bytes.len(),
+                        String::from_utf8_lossy(bytes)
+                    )
+                }
             };
             log::info!("🟡 handle_editing_input: buffer type = {}", buffer_type);
 
@@ -238,7 +241,11 @@ fn commit_selector_edit(
     Ok(None)
 }
 
-fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String, bus: &Bus) -> Result<()> {
+fn commit_text_edit(
+    cursor: types::cursor::ModbusDashboardCursor,
+    value: String,
+    bus: &Bus,
+) -> Result<()> {
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -333,7 +340,10 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
 
                                 with_port_write(&port, |port| {
                                     let owner_info = port.state.owner().cloned();
-                                    log::info!("🔍 commit_text_edit: owner_info = {:?}", owner_info);
+                                    log::info!(
+                                        "🔍 commit_text_edit: owner_info = {:?}",
+                                        owner_info
+                                    );
                                     let types::port::PortConfig::Modbus { mode, stations } =
                                         &mut port.config;
 
@@ -357,13 +367,16 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                                 log::info!(
                                                                     "✓ Master: Set holding register at 0x{register_addr:04X} = 0x{register_value:04X}"
                                                                 );
-                                                                
+
                                                                 // Send IPC update if using CLI subprocess
                                                                 log::info!("🔍 Checking if we should send IPC update, owner_info: {:?}", owner_info.as_ref().map(|o| match o {
                                                                     PortOwner::Runtime(_) => "Runtime",
                                                                     PortOwner::CliSubprocess(_) => "CliSubprocess"
                                                                 }));
-                                                                if let Some(PortOwner::CliSubprocess(_)) = owner_info.as_ref() {
+                                                                if let Some(
+                                                                    PortOwner::CliSubprocess(_),
+                                                                ) = owner_info.as_ref()
+                                                                {
                                                                     log::info!("🔍 Sending IPC RegisterUpdate message");
                                                                     // Send register update via IPC for real-time synchronization
                                                                     if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
@@ -394,9 +407,12 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                                 log::info!(
                                                                     "✓ Master: Set coil at 0x{register_addr:04X} = {coil_value}"
                                                                 );
-                                                                
+
                                                                 // Send IPC update if using CLI subprocess
-                                                                if let Some(PortOwner::CliSubprocess(_)) = owner_info.as_ref() {
+                                                                if let Some(
+                                                                    PortOwner::CliSubprocess(_),
+                                                                ) = owner_info.as_ref()
+                                                                {
                                                                     // Send register update via IPC for real-time synchronization
                                                                     // For coils, send as 0/1 values
                                                                     if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
@@ -419,15 +435,22 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                         }
                                                     }
                                                 }
-                                                
+
                                                 // If using CLI subprocess, also update the data source file
-                                                log::info!("🔍 Master mode: owner_info = {:?}", owner_info);
+                                                log::info!(
+                                                    "🔍 Master mode: owner_info = {:?}",
+                                                    owner_info
+                                                );
                                                 if let Some(PortOwner::CliSubprocess(info)) =
                                                     owner_info.clone()
                                                 {
                                                     log::info!("🔍 Master mode: Checking if subprocess mode is MasterProvide: {:?}", info.mode);
-                                                    if info.mode == PortSubprocessMode::MasterProvide {
-                                                        if let Some(path) = info.data_source_path.clone() {
+                                                    if info.mode
+                                                        == PortSubprocessMode::MasterProvide
+                                                    {
+                                                        if let Some(path) =
+                                                            info.data_source_path.clone()
+                                                        {
                                                             log::info!("🔍 Master mode: Setting cli_data_update for path: {}", path);
                                                             cli_data_update = Some((
                                                                 path,

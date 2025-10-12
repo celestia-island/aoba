@@ -16,7 +16,7 @@ use ci_utils::{
     ports::{port_exists, should_run_vcom_tests, vcom_matchers},
     snapshot::TerminalCapture,
     terminal::{build_debug_bin, spawn_expect_process},
-    tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom},
+    tui::{enable_port_carefully, navigate_to_vcom},
 };
 
 const ROUNDS: usize = 10;
@@ -138,17 +138,17 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         // Create a temporary file with the data for this round
         let temp_dir = std::env::temp_dir();
         let data_file = temp_dir.join(format!("test_tui_slave_data_round_{round}.json"));
-        
+
         {
             let mut file = File::create(&data_file)?;
             // Write the data as JSON for the CLI master to provide
             let json_data = serde_json::json!({"values": data});
             writeln!(file, "{}", json_data)?;
         }
-        
+
         log::info!("🧪 Round {round}/{ROUNDS}: Starting CLI master-provide-persist on port2");
         let binary = build_debug_bin("aoba")?;
-        
+
         // Start CLI in master-provide-persist mode to send data to TUI slave
         let mut cli_master = Command::new(&binary)
             .args([
@@ -171,9 +171,12 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
-        
-        log::info!("✅ CLI master-provide-persist started (PID: {:?})", cli_master.id());
-        
+
+        log::info!(
+            "✅ CLI master-provide-persist started (PID: {:?})",
+            cli_master.id()
+        );
+
         // Wait for CLI master to start providing data and TUI to receive it
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -183,7 +186,9 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         let mut verification_success = false;
 
         for retry_attempt in 1..=MAX_RETRIES {
-            log::info!("🧪 Round {round}/{ROUNDS}: Verification attempt {retry_attempt}/{MAX_RETRIES}");
+            log::info!(
+                "🧪 Round {round}/{ROUNDS}: Verification attempt {retry_attempt}/{MAX_RETRIES}"
+            );
 
             // Take a screenshot to see if TUI received the data
             let screen = tui_cap
@@ -204,7 +209,9 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
                 verification_success = true;
                 break;
             } else {
-                log::warn!("⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: Port not enabled yet");
+                log::warn!(
+                    "⚠️ Round {round}/{ROUNDS}, attempt {retry_attempt}: Port not enabled yet"
+                );
             }
 
             // If not last attempt, wait and retry
@@ -218,7 +225,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         cli_master.kill()?;
         let status = cli_master.wait()?;
         log::info!("🧪 CLI master exited with status: {status:?}");
-        
+
         // Clean up data file
         std::fs::remove_file(&data_file)?;
 
@@ -229,7 +236,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         }
 
         log::info!("✅ Round {round}/{ROUNDS} completed successfully");
-        
+
         // Small delay between rounds
         tokio::time::sleep(Duration::from_millis(500)).await;
     }

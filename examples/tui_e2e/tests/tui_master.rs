@@ -77,7 +77,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "after_enable_port".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_enable_port").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_enable_port",
+    )
+    .await?;
 
     // Verify port is actually enabled by checking the screen
     let screen = tui_cap

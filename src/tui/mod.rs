@@ -595,7 +595,7 @@ fn run_core_thread(
 
                     if let Some((mode, station, baud_rate)) = cli_inputs {
                         match mode {
-                            types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
+                            types::modbus::ModbusConnectionMode::Slave { .. } => {
                                 log::info!(
                                     "ToggleRuntime: attempting to spawn CLI subprocess (SlavePoll) for {port_name}"
                                 );
@@ -882,7 +882,7 @@ fn run_core_thread(
                     log::debug!(
                         "SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                     );
-                    
+
                     // Send register update to CLI subprocess via IPC
                     if let Err(err) = subprocess_manager.send_register_update(
                         &port_name,
