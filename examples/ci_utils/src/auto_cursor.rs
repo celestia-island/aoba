@@ -196,27 +196,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                         .capture(session, &format!("debug_breakpoint_{description}"))
                         .await?;
                     log::info!("📺 Current screen state:\n{screen}\n");
-
-                    // Reset ports
-                    log::info!("🔄 Resetting virtual serial ports...");
-                    let script_path = std::path::Path::new("scripts/socat_init.sh");
-                    if script_path.exists() {
-                        let output = std::process::Command::new("sudo")
-                            .arg("bash")
-                            .arg(script_path)
-                            .arg("--mode")
-                            .arg("tui")
-                            .output()?;
-                        if output.status.success() {
-                            log::info!("✅ Ports reset successfully");
-                        } else {
-                            log::warn!("⚠️ Port reset failed");
-                        }
-                    }
-
-                    // Exit immediately
-                    log::info!("🛑 Exiting at debug breakpoint");
-                    std::process::exit(0);
+                    log::info!("⏸️ Debug breakpoint reached (execution continues)");
                 } else {
                     log::debug!("Debug breakpoint '{description}' skipped (DEBUG_MODE not set)");
                 }

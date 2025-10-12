@@ -72,6 +72,8 @@ async fn main() -> Result<()> {
         let _ = ctrlc::set_handler(|| {
             // Best-effort cleanup
             aoba::cli::cleanup::run_cleanups();
+            // Give time for cleanup to complete (port release, etc.)
+            std::thread::sleep(std::time::Duration::from_millis(300));
             // After cleanup, exit
             std::process::exit(130);
         });

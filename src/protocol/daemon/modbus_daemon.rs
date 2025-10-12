@@ -38,13 +38,12 @@ pub fn handle_modbus_communication() -> Result<()> {
                     port_name,
                     match &port_data.state {
                         types::port::PortState::Free => "Free",
-                        types::port::PortState::OccupiedByThis { .. } => "OccupiedByThis",
+                        types::port::PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
                         types::port::PortState::OccupiedByOther => "OccupiedByOther",
                     }
                 );
 
-                if let types::port::PortState::OccupiedByThis { runtime: _, .. } = &port_data.state
-                {
+                if port_data.state.runtime_handle().is_some() {
                     let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
                     log::info!(
                         "    Config: Modbus with {} stations in {:?} mode",
@@ -129,63 +128,68 @@ pub fn handle_slave_response_mode(
     );
 
     // Get runtime handle for receiving requests and sending responses
-    let runtime_handle = with_port_read(port_arc, |port| {
-        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
-            Some(runtime.clone())
-        } else {
-            None
-        }
-    });
+    let runtime_handle = with_port_read(port_arc, |port| port.state.runtime_handle().cloned());
 
-    let Some(Some(runtime)) = runtime_handle else {
+    let Some(runtime_opt) = runtime_handle else {
+        log::info!("Master mode {port_name}: runtime handle unavailable (read lock failed)");
         return Ok(());
     };
 
+    let Some(runtime) = runtime_opt else {
+        log::warn!("Master mode {port_name}: runtime handle missing despite OccupiedByThis state");
+        return Ok(());
+    };
+
+    log::info!("Master mode {port_name}: checking for runtime events");
+
     // Process incoming requests from external slaves and generate responses
     let mut event_count = 0;
-    while let Ok(event) = runtime.evt_rx.try_recv() {
-        event_count += 1;
-        match event {
-            crate::protocol::runtime::RuntimeEvent::FrameReceived(frame) => {
-                let hex_frame = frame
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
+    loop {
+        match runtime.evt_rx.try_recv() {
+            Ok(event) => {
+                event_count += 1;
+                log::info!("Master mode {port_name}: processing event #{event_count}: {event:?}");
+                match event {
+                    crate::protocol::runtime::RuntimeEvent::FrameReceived(frame) => {
+                        let hex_frame = frame
+                            .iter()
+                            .map(|b| format!("{b:02x}"))
+                            .collect::<Vec<_>>()
+                            .join(" ");
 
-                // Log the received request
-                let log_entry = PortLogEntry {
-                    when: chrono::Local::now(),
-                    raw: format!("Slave RX (request): {hex_frame}"),
-                    parsed: None,
-                };
+                        // Log the received request
+                        let log_entry = PortLogEntry {
+                            when: chrono::Local::now(),
+                            raw: format!("Slave RX (request): {hex_frame}"),
+                            parsed: None,
+                        };
 
-                with_port_write(port_arc, |port| {
-                    port.logs.push(log_entry);
-                    if port.logs.len() > 1000 {
-                        let excess = port.logs.len() - 1000;
-                        port.logs.drain(0..excess);
-                    }
-                });
+                        with_port_write(port_arc, |port| {
+                            port.logs.push(log_entry);
+                            if port.logs.len() > 1000 {
+                                let excess = port.logs.len() - 1000;
+                                port.logs.drain(0..excess);
+                            }
+                        });
 
-                // Parse the incoming frame to identify station ID and register address for throttling
-                if frame.len() < 2 {
-                    log::debug!("Frame too short to parse for throttling check");
-                    continue;
-                }
+                        // Parse the incoming frame to identify station ID and register address for throttling
+                        if frame.len() < 2 {
+                            log::debug!("Frame too short to parse for throttling check");
+                            continue;
+                        }
 
-                let station_id = frame[0];
-                let _function_code = frame[1];
+                        let station_id = frame[0];
+                        let _function_code = frame[1];
 
-                // Extract register address from frame (bytes 2-3 for most function codes)
-                let register_address = if frame.len() >= 4 {
-                    u16::from_be_bytes([frame[2], frame[3]])
-                } else {
-                    0
-                };
+                        // Extract register address from frame (bytes 2-3 for most function codes)
+                        let register_address = if frame.len() >= 4 {
+                            u16::from_be_bytes([frame[2], frame[3]])
+                        } else {
+                            0
+                        };
 
-                // Check throttling: has enough time passed since last response to this station/register?
-                let should_throttle = with_port_read(port_arc, |port| {
+                        // Check throttling: has enough time passed since last response to this station/register?
+                        let should_throttle = with_port_read(port_arc, |port| {
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
 
                     // Find matching station by station_id and register_address
@@ -211,93 +215,105 @@ pub fn handle_slave_response_mode(
                 })
                 .unwrap_or(false);
 
-                if should_throttle {
-                    // Skip sending response due to throttling
-                    log::debug!("Skipped response due to 1-second throttling");
-                    continue;
-                }
+                        if should_throttle {
+                            // Skip sending response due to throttling
+                            log::debug!("Skipped response due to 1-second throttling");
+                            continue;
+                        }
 
-                // Try to parse and respond to the request
-                if let Ok(response) = generate_modbus_master_response(&frame, stations, global_mode)
-                {
-                    // Send the response
-                    if let Err(err) =
-                        runtime
-                            .cmd_tx
-                            .send(crate::protocol::runtime::RuntimeCommand::Write(
-                                response.clone(),
-                            ))
-                    {
-                        let warn_msg = format!(
+                        // Try to parse and respond to the request
+                        if let Ok(response) =
+                            generate_modbus_master_response(&frame, stations, global_mode)
+                        {
+                            // Send the response
+                            if let Err(err) = runtime.cmd_tx.send(
+                                crate::protocol::runtime::RuntimeCommand::Write(response.clone()),
+                            ) {
+                                let warn_msg = format!(
                             "Failed to send Modbus master response for port {port_name}: {err}"
                         );
-                        log::warn!("{warn_msg}");
+                                log::warn!("{warn_msg}");
 
-                        // Also write to port logs
-                        let log_entry = PortLogEntry {
-                            when: chrono::Local::now(),
-                            raw: warn_msg.clone(),
-                            parsed: None,
-                        };
-                        with_port_write(port_arc, |port| {
-                            port.logs.push(log_entry);
-                            if port.logs.len() > 1000 {
-                                let excess = port.logs.len() - 1000;
-                                port.logs.drain(0..excess);
+                                // Also write to port logs
+                                let log_entry = PortLogEntry {
+                                    when: chrono::Local::now(),
+                                    raw: warn_msg.clone(),
+                                    parsed: None,
+                                };
+                                with_port_write(port_arc, |port| {
+                                    port.logs.push(log_entry);
+                                    if port.logs.len() > 1000 {
+                                        let excess = port.logs.len() - 1000;
+                                        port.logs.drain(0..excess);
+                                    }
+                                });
+
+                                continue;
                             }
-                        });
 
-                        continue;
-                    }
+                            // Update last_response_time for this station/register combination
+                            with_port_write(port_arc, |port| {
+                                let types::port::PortConfig::Modbus { stations, .. } =
+                                    &mut port.config;
 
-                    // Update last_response_time for this station/register combination
-                    with_port_write(port_arc, |port| {
-                        let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
+                                for station in stations.iter_mut() {
+                                    if station.station_id == station_id
+                                        && station.register_address == register_address
+                                    {
+                                        station.last_response_time = Some(now);
+                                        break;
+                                    }
+                                }
+                            });
 
-                        for station in stations.iter_mut() {
-                            if station.station_id == station_id
-                                && station.register_address == register_address
-                            {
-                                station.last_response_time = Some(now);
-                                break;
-                            }
-                        }
-                    });
+                            // Log the sent response
+                            let hex_response = response
+                                .iter()
+                                .map(|b| format!("{b:02x}"))
+                                .collect::<Vec<_>>()
+                                .join(" ");
 
-                    // Log the sent response
-                    let hex_response = response
-                        .iter()
-                        .map(|b| format!("{b:02x}"))
-                        .collect::<Vec<_>>()
-                        .join(" ");
+                            let log_entry = PortLogEntry {
+                                when: chrono::Local::now(),
+                                raw: format!("Slave TX (response): {hex_response}"),
+                                parsed: None,
+                            };
 
-                    let log_entry = PortLogEntry {
-                        when: chrono::Local::now(),
-                        raw: format!("Slave TX (response): {hex_response}"),
-                        parsed: None,
-                    };
+                            with_port_write(port_arc, |port| {
+                                port.logs.push(log_entry);
+                                if port.logs.len() > 1000 {
+                                    let excess = port.logs.len() - 1000;
+                                    port.logs.drain(0..excess);
+                                }
+                            });
 
-                    with_port_write(port_arc, |port| {
-                        port.logs.push(log_entry);
-                        if port.logs.len() > 1000 {
-                            let excess = port.logs.len() - 1000;
-                            port.logs.drain(0..excess);
-                        }
-                    });
-
-                    log::info!("Sent modbus master response for {port_name}: {hex_response}");
-                } else {
-                    log::warn!(
+                            log::info!(
+                                "Sent modbus master response for {port_name}: {hex_response}"
+                            );
+                        } else {
+                            log::warn!(
                         "Failed to generate modbus response for port {port_name} (station_id={}, stations configured: {})",
                         station_id,
                         stations.len()
                     );
+                        }
+                    }
+                    crate::protocol::runtime::RuntimeEvent::Error(error) => {
+                        log::warn!("Modbus runtime error for {port_name}: {error}");
+                    }
+                    _ => {}
                 }
             }
-            crate::protocol::runtime::RuntimeEvent::Error(error) => {
-                log::warn!("Modbus runtime error for {port_name}: {error}");
+            Err(flume::TryRecvError::Empty) => {
+                log::info!(
+                    "Master mode {port_name}: runtime event queue empty after {event_count} events"
+                );
+                break;
             }
-            _ => {}
+            Err(flume::TryRecvError::Disconnected) => {
+                log::warn!("Master mode {port_name}: runtime event channel disconnected");
+                break;
+            }
         }
     }
 
@@ -333,13 +349,7 @@ pub fn handle_master_query_mode(
     );
 
     // Get runtime handle for sending requests
-    let runtime_handle = with_port_read(port_arc, |port| {
-        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
-            Some(runtime.clone())
-        } else {
-            None
-        }
-    });
+    let runtime_handle = with_port_read(port_arc, |port| port.state.runtime_handle().cloned());
 
     let Some(Some(runtime)) = runtime_handle else {
         log::warn!("⚠️  handle_master_query_mode: No runtime handle for {port_name}");

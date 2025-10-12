@@ -166,9 +166,7 @@ fn create_line(
             types::cursor::ConfigPanelCursor::BaudRate => {
                 if let Some(port) = port_data {
                     let current_baud = with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { ref runtime, .. } =
-                            &port.state
-                        {
+                        if let Some(runtime) = port.state.runtime_handle() {
                             runtime.current_cfg.baud
                         } else {
                             9600
@@ -240,8 +238,7 @@ fn create_line(
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
-                        {
+                        if let Some(runtime) = port.state.runtime_handle() {
                             match runtime.current_cfg.data_bits {
                                 5 => 0usize,
                                 6 => 1usize,
@@ -275,8 +272,7 @@ fn create_line(
             types::cursor::ConfigPanelCursor::StopBits => {
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
-                        {
+                        if let Some(runtime) = port.state.runtime_handle() {
                             match runtime.current_cfg.stop_bits {
                                 1 => 0usize,
                                 _ => 1usize,
@@ -308,8 +304,7 @@ fn create_line(
             types::cursor::ConfigPanelCursor::Parity => {
                 let current_index = if let Some(port) = port_data {
                     with_port_read(port, |port| {
-                        if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state
-                        {
+                        if let Some(runtime) = port.state.runtime_handle() {
                             match runtime.current_cfg.parity {
                                 serialport::Parity::None => 0usize,
                                 serialport::Parity::Odd => 1usize,
