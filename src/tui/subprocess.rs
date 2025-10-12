@@ -192,14 +192,14 @@ impl ManagedSubprocess {
             // Wait a bit for CLI to set up its command listener
             std::thread::sleep(std::time::Duration::from_millis(500));
             
-            // Try to connect with retries
-            for attempt in 1..=10 {
+            // Try to connect with retries (increased timeout for slow subprocess startup)
+            for attempt in 1..=30 {
                 match crate::protocol::ipc::IpcCommandClient::connect(command_channel_name.clone()) {
                     Ok(client) => {
                         log::info!("Connected to CLI command channel on attempt {attempt}");
                         return Ok(client);
                     }
-                    Err(e) if attempt < 10 => {
+                    Err(e) if attempt < 30 => {
                         log::debug!("Command channel connect attempt {attempt} failed: {e}");
                         std::thread::sleep(std::time::Duration::from_millis(200));
                     }
@@ -250,10 +250,11 @@ impl ManagedSubprocess {
 
         // Also try to complete command client connection
         if let Some(thread) = self.command_connect_thread.take() {
+            log::debug!("🔍 Checking command_connect_thread, is_finished: {}", thread.is_finished());
             if thread.is_finished() {
                 match thread.join() {
                     Ok(Ok(client)) => {
-                        log::info!("Connected to command channel for port {}", self.config.port_name);
+                        log::info!("✅ Connected to command channel for port {}", self.config.port_name);
                         self.command_client = Some(client);
                     }
                     Ok(Err(e)) => {
@@ -266,8 +267,11 @@ impl ManagedSubprocess {
                 }
             } else {
                 // Thread still running, put it back
+                log::debug!("🔍 Command connect thread still running, putting it back");
                 self.command_connect_thread = Some(thread);
             }
+        } else {
+            log::debug!("🔍 No command_connect_thread to check");
         }
         Ok(())
     }
@@ -357,6 +361,7 @@ impl ManagedSubprocess {
     ) -> Result<()> {
         self.try_complete_ipc_connection()?;
 
+        log::info!("🔍 send_register_update: command_client is_some: {}", self.command_client.is_some());
         if let Some(ref mut client) = self.command_client {
             let msg = IpcMessage::register_update(
                 self.config.port_name.clone(),
@@ -366,9 +371,10 @@ impl ManagedSubprocess {
                 values,
             );
             client.send(&msg)?;
-            log::debug!("Sent register update to CLI subprocess for port {}", self.config.port_name);
+            log::info!("✅ Sent register update to CLI subprocess for port {}", self.config.port_name);
             Ok(())
         } else {
+            log::warn!("❌ Command channel not yet connected for port {}", self.config.port_name);
             Err(anyhow!("Command channel not yet connected"))
         }
     }

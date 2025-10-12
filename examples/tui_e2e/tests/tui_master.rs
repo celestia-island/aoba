@@ -73,6 +73,12 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     log::info!("🧪 Step 4.5: Waiting for port to fully initialize...");
     tokio::time::sleep(Duration::from_secs(3)).await;
 
+    // Debug: Verify port enable state
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_enable_port".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_enable_port").await?;
+
     // Verify port is actually enabled by checking the screen
     let screen = tui_cap
         .capture(&mut tui_session, "verify_port_enabled")
@@ -300,10 +306,19 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
         }, // Navigate to Register Length field
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 }, // Wait for edit mode to activate
         CursorAction::TypeString("12".to_string()),
+        CursorAction::Sleep { ms: 300 }, // Wait before confirming with Enter
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 }, // Wait for value to be committed
     ];
     execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
+
+    // Debug: Verify register length was set
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_set_register_length".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_reg_length_set").await?;
 
     // Press Escape once to exit Modbus settings and return to port details page
     log::info!("Exiting Modbus settings (pressing ESC once)");

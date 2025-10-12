@@ -456,8 +456,11 @@ impl IpcCommandListener {
         let opts = interprocess::local_socket::ListenerOptions::new().name(name);
 
         let listener = opts.create_sync()?;
+        
+        // Set listener to non-blocking mode to prevent blocking the main loop
+        listener.set_nonblocking(interprocess::local_socket::ListenerNonblockingMode::Both)?;
 
-        log::info!("IPC CMD: Listening for commands on: {command_channel_name}");
+        log::info!("IPC CMD: Listening for commands on: {command_channel_name} (non-blocking)");
 
         Ok(Self {
             socket_name: command_channel_name,
