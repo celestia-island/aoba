@@ -5,14 +5,15 @@ use std::{
     process::Stdio,
 };
 
-use ci_utils::{create_modbus_command, sleep_a_while};
+use ci_utils::{create_modbus_command, sleep_a_while, vcom_matchers};
 
 /// Test master-slave communication with virtual serial ports
-/// Server = Modbus Master (provides data, responds to requests) on vcom1
-/// Client = Modbus Slave polling (sends requests, receives data) on vcom2
+/// Server = Modbus Master (provides data, responds to requests) on port1
+/// Client = Modbus Slave polling (sends requests, receives data) on port2
 pub async fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
     let temp_dir = std::env::temp_dir();
+    let ports = vcom_matchers();
 
     // Create a data file for the server to provide
     let data_file = temp_dir.join("test_modbus_e2e_data.json");
@@ -21,14 +22,17 @@ pub async fn test_master_slave_communication() -> Result<()> {
         writeln!(file, r#"{{"values": [10, 20, 30, 40, 50]}}"#)?;
     }
 
-    // Start server (Modbus master-provide) on /tmp/vcom1 in persistent mode
-    log::info!("🧪 Starting Modbus server (master-provide) on /tmp/vcom1...");
+    // Start server (Modbus master-provide) on port1 in persistent mode
+    log::info!(
+        "🧪 Starting Modbus server (master-provide) on {}...",
+        ports.port1_name
+    );
     let server_output = temp_dir.join("server_output.log");
     let server_output_file = File::create(&server_output)?;
 
     let mut server = create_modbus_command(
         false, // master-provide
-        "/tmp/vcom1",
+        &ports.port1_name,
         true, // persistent
         Some(&format!("file:{}", data_file.display())),
     )?
@@ -66,14 +70,17 @@ pub async fn test_master_slave_communication() -> Result<()> {
         }
     }
 
-    // Now start client (slave-poll) on /tmp/vcom2 in temporary mode
-    log::info!("🧪 Starting Modbus client (slave-poll) on /tmp/vcom2...");
+    // Now start client (slave-poll) on port2 in temporary mode
+    log::info!(
+        "🧪 Starting Modbus client (slave-poll) on {}...",
+        ports.port2_name
+    );
 
     let binary = ci_utils::build_debug_bin("aoba")?;
     let client_output = std::process::Command::new(&binary)
         .args([
             "--slave-poll",
-            "/tmp/vcom2",
+            &ports.port2_name,
             "--station-id",
             "1",
             "--register-address",

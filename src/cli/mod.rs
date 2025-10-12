@@ -140,5 +140,14 @@ pub fn parse_args() -> ArgMatches {
                 .default_value("1.0")
                 .value_parser(clap::value_parser!(f32)),
         )
+        .arg(
+            Arg::new("ipc-channel")
+                .long("ipc-channel")
+                .help("IPC channel UUID for TUI communication (internal use - not recommended for manual invocation)\n\
+                       This parameter is used by TUI mode to establish an IPC connection with CLI subprocesses.\n\
+                       Manual use is discouraged as it requires a running IPC server.")
+                .value_name("UUID")
+                .hide(false), // Show in help but with warning
+        )
         .get_matches()
 }

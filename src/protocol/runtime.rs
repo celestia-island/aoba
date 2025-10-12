@@ -66,39 +66,9 @@ pub enum RuntimeEvent {
 #[derive(Clone)]
 pub struct PortRuntimeHandle {
     pub cmd_tx: Sender<RuntimeCommand>,
-    pub evt_rx: Receiver<RuntimeEvent>,
+    pub evt_rx: Arc<Receiver<RuntimeEvent>>,
     pub current_cfg: SerialConfig,
-    pub shared_serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>>,
     pub thread_handle: Arc<Mutex<Option<std::thread::JoinHandle<Result<()>>>>>,
-    // Track if this is the "owning" handle that should cleanup on drop
-    // Using Arc to share ownership - only cleanup when Arc count reaches 0
-    _cleanup: Arc<CleanupMarker>,
-}
-
-// Marker struct to trigger cleanup only when all handles are dropped
-struct CleanupMarker {
-    cmd_tx: Sender<RuntimeCommand>,
-    thread_handle: Arc<Mutex<Option<std::thread::JoinHandle<Result<()>>>>>,
-}
-
-impl Drop for CleanupMarker {
-    fn drop(&mut self) {
-        // Only send stop and join when the LAST handle is dropped
-        log::info!("🔴 CleanupMarker dropping - sending Stop command");
-        if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
-            log::warn!("CleanupMarker stop command send error: {err:?}");
-        }
-
-        if let Ok(mut thread) = self.thread_handle.lock() {
-            if let Some(thread) = thread.take() {
-                if let Err(err) = thread.join() {
-                    log::warn!("CleanupMarker thread join error: {err:?}");
-                }
-            }
-        } else {
-            log::warn!("CleanupMarker failed to lock thread_handle for join");
-        }
-    }
 }
 
 impl std::fmt::Debug for PortRuntimeHandle {
@@ -120,12 +90,12 @@ impl PortRuntimeHandle {
         log::info!("Serial port {port_name} opened successfully");
         let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> = Arc::new(Mutex::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
-        let (evt_tx, evt_rx) = flume::unbounded();
+        let (evt_tx, evt_rx_raw) = flume::unbounded();
+        let evt_rx = Arc::new(evt_rx_raw);
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
 
         let thread_handle_arc = Arc::new(Mutex::new(None));
-        let thread_handle_clone = Arc::clone(&thread_handle_arc);
 
         let handle = std::thread::spawn(move || {
             boot_serial_loop(serial_clone, port_name, initial_cfg, cmd_rx, evt_tx)
@@ -134,19 +104,11 @@ impl PortRuntimeHandle {
         // Store the thread handle
         *thread_handle_arc.lock().unwrap() = Some(handle);
 
-        // Create cleanup marker that will be shared via Arc
-        let cleanup = Arc::new(CleanupMarker {
-            cmd_tx: cmd_tx.clone(),
-            thread_handle: thread_handle_clone,
-        });
-
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
-            shared_serial: serial,
             thread_handle: thread_handle_arc,
-            _cleanup: cleanup,
         })
     }
 
@@ -156,12 +118,12 @@ impl PortRuntimeHandle {
     ) -> Result<Self> {
         let serial: Arc<Mutex<Box<dyn SerialPort + Send + 'static>>> = Arc::new(Mutex::new(handle));
         let (cmd_tx, cmd_rx) = flume::unbounded();
-        let (evt_tx, evt_rx) = flume::unbounded();
+        let (evt_tx, evt_rx_raw) = flume::unbounded();
+        let evt_rx = Arc::new(evt_rx_raw);
         let serial_clone = Arc::clone(&serial);
         let initial_cfg = initial.clone();
 
         let thread_handle_arc = Arc::new(Mutex::new(None));
-        let thread_handle_clone = Arc::clone(&thread_handle_arc);
 
         let handle = std::thread::spawn(move || {
             crate::protocol::daemon::boot_serial_loop(
@@ -176,20 +138,39 @@ impl PortRuntimeHandle {
         // Store the thread handle
         *thread_handle_arc.lock().unwrap() = Some(handle);
 
-        // Create cleanup marker that will be shared via Arc
-        let cleanup = Arc::new(CleanupMarker {
-            cmd_tx: cmd_tx.clone(),
-            thread_handle: thread_handle_clone,
-        });
-
         Ok(Self {
             cmd_tx,
             evt_rx,
             current_cfg: initial,
-            shared_serial: serial,
             thread_handle: thread_handle_arc,
-            _cleanup: cleanup,
         })
+    }
+}
+
+impl Drop for PortRuntimeHandle {
+    fn drop(&mut self) {
+        // Only stop the runtime when the last handle goes away
+        if Arc::strong_count(&self.thread_handle) > 1 {
+            return;
+        }
+
+        log::info!("🔴 PortRuntimeHandle dropping last clone - sending Stop command");
+        if let Err(err) = self.cmd_tx.send(RuntimeCommand::Stop) {
+            log::warn!("PortRuntimeHandle stop command send error: {err:?}");
+        }
+
+        match self.thread_handle.lock() {
+            Ok(mut thread) => {
+                if let Some(thread) = thread.take() {
+                    if let Err(err) = thread.join() {
+                        log::warn!("PortRuntimeHandle thread join error: {err:?}");
+                    }
+                }
+            }
+            Err(err) => {
+                log::warn!("PortRuntimeHandle failed to lock thread_handle for join: {err}");
+            }
+        }
     }
 }
 
@@ -414,7 +395,7 @@ fn finalize_residual(res: &mut Vec<u8>, out: &mut Vec<bytes::Bytes>) {
                         consumed += s;
                     }
                     out.push(bytes::Bytes::from(cur[s..s + l].to_vec()));
-                    consumed += l - s;
+                    consumed += l;
                     cur = &cur[s + l..];
                     salv = true;
                     continue;
@@ -444,6 +425,14 @@ fn finalize_buffer(buf: &mut Vec<u8>, evt: &Sender<RuntimeEvent>) -> Result<()> 
         }
     } else {
         for frame in frames {
+            if log::log_enabled!(log::Level::Info) {
+                let hex = frame
+                    .iter()
+                    .map(|b| format!("{b:02X}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                log::info!("📨 Runtime: assembled frame {hex}");
+            }
             evt.send(RuntimeEvent::FrameReceived(frame))?;
         }
     }

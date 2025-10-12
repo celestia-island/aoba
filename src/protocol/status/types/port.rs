@@ -12,28 +12,64 @@ pub struct PortLogEntry {
 }
 
 #[derive(Debug, Clone)]
+pub enum PortOwner {
+    Runtime(PortRuntimeHandle),
+    CliSubprocess(PortSubprocessInfo),
+}
+
+#[derive(Debug, Clone)]
+pub struct PortSubprocessInfo {
+    pub mode: PortSubprocessMode,
+    pub ipc_socket_name: String,
+    pub pid: Option<u32>,
+    pub data_source_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortSubprocessMode {
+    SlaveListen,
+    SlavePoll,
+    MasterProvide,
+}
+
+#[derive(Debug, Clone)]
 pub enum PortState {
     Free,
-    OccupiedByThis {
-        handle: Option<SerialPortWrapper>,
-        runtime: PortRuntimeHandle,
-    },
+    OccupiedByThis { owner: PortOwner },
     OccupiedByOther,
 }
 
-#[derive(Clone)]
-#[allow(dead_code)]
-pub struct SerialPortWrapper(Arc<Mutex<Box<dyn serialport::SerialPort + Send>>>);
-
-impl std::fmt::Debug for SerialPortWrapper {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("SerialPortWrapper").finish()
+impl PortState {
+    pub fn owner(&self) -> Option<&PortOwner> {
+        match self {
+            PortState::OccupiedByThis { owner } => Some(owner),
+            _ => None,
+        }
     }
-}
 
-impl SerialPortWrapper {
-    pub fn new(inner: Arc<Mutex<Box<dyn serialport::SerialPort + Send>>>) -> Self {
-        SerialPortWrapper(inner)
+    pub fn owner_mut(&mut self) -> Option<&mut PortOwner> {
+        match self {
+            PortState::OccupiedByThis { owner } => Some(owner),
+            _ => None,
+        }
+    }
+
+    pub fn runtime_handle(&self) -> Option<&PortRuntimeHandle> {
+        match self {
+            PortState::OccupiedByThis {
+                owner: PortOwner::Runtime(handle),
+            } => Some(handle),
+            _ => None,
+        }
+    }
+
+    pub fn runtime_handle_mut(&mut self) -> Option<&mut PortRuntimeHandle> {
+        match self {
+            PortState::OccupiedByThis {
+                owner: PortOwner::Runtime(handle),
+            } => Some(handle),
+            _ => None,
+        }
     }
 }
 

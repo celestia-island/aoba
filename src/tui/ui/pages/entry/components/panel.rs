@@ -150,19 +150,16 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
             let pn = port.port_name.clone();
             let st = port.state.clone();
             let cfg = match &port.config {
-                types::port::PortConfig::Modbus { .. } => {
-                    if let types::port::PortState::OccupiedByThis { runtime, .. } = &port.state {
-                        Some(runtime.current_cfg.clone())
-                    } else {
-                        None
-                    }
-                }
+                types::port::PortConfig::Modbus { .. } => port
+                    .state
+                    .runtime_handle()
+                    .map(|runtime| runtime.current_cfg.clone()),
             };
             (pn, st, cfg)
         }) {
             let mut lines: Vec<Line<'static>> = Vec::new();
 
-            let enabled = matches!(state, types::port::PortState::OccupiedByThis { .. });
+            let enabled = matches!(state, types::port::PortState::OccupiedByThis { owner: _ });
             let val_enabled = lang().protocol.common.port_enabled.clone();
             let val_disabled = lang().protocol.common.port_disabled.clone();
             let enable_text = if enabled { val_enabled } else { val_disabled };

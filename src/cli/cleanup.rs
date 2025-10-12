@@ -42,7 +42,11 @@ pub fn register_cleanup(f: impl FnOnce() + Send + 'static) {
 
 /// Run all registered cleanup closures. Safe to call multiple times.
 pub fn run_cleanups() {
+    log::debug!("Running cleanup handlers...");
     let reg = global_registry();
     let mut guard = reg.lock().expect("cleanup registry lock");
+    let count = guard.items.len();
+    log::debug!("Running {count} cleanup handlers");
     guard.run_all();
+    log::debug!("Cleanup handlers completed");
 }
