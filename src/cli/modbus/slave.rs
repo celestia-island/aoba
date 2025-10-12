@@ -101,11 +101,13 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         Err(err) => {
             // Try to send error via IPC if available
             if let Some(ref mut ipc_conns) = ipc {
-                let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortError {
-                    port_name: port.to_string(),
-                    error: format!("Failed to open port: {err}"),
-                    timestamp: None,
-                });
+                let _ = ipc_conns
+                    .status
+                    .send(&crate::protocol::ipc::IpcMessage::PortError {
+                        port_name: port.to_string(),
+                        error: format!("Failed to open port: {err}"),
+                        timestamp: None,
+                    });
             }
             return Err(anyhow!("Failed to open port {port}: {err}"));
         }
@@ -114,10 +116,12 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
 
     // Notify IPC that port was opened successfully
     if let Some(ref mut ipc_conns) = ipc {
-        let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortOpened {
-            port_name: port.to_string(),
-            timestamp: None,
-        });
+        let _ = ipc_conns
+            .status
+            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+                port_name: port.to_string(),
+                timestamp: None,
+            });
         log::info!("IPC: Sent PortOpened message for {port}");
     }
 
