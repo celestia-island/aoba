@@ -108,6 +108,10 @@ fn run_demo_core(ui_rx: flume::Receiver<UiToCore>, core_tx: flume::Sender<CoreTo
                         .send(CoreToUi::Refreshed)
                         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
                 }
+                UiToCore::SendRegisterUpdate { .. } => {
+                    // Demo GUI core ignores SendRegisterUpdate (no subprocess support)
+                    log::debug!("Received SendRegisterUpdate (ignored in demo GUI)");
+                }
             },
             Err(_) => {
                 // Channel closed; exit gracefully

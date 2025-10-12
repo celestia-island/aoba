@@ -61,55 +61,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
-    // Debug: Verify we're on vcom1 port details page
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_navigate_to_vcom1".to_string(),
-    }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_nav_vcom1").await?;
-
-    // Enable the port BEFORE configuration (as per new flow)
-    log::info!("🧪 Step 3: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Debug: Verify port is enabled
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enable_port".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_enable_port",
-    )
-    .await?;
-
-    // Configure as master AFTER enabling port
-    log::info!("🧪 Step 4: Configure TUI as Master");
+    // Configure as master BEFORE enabling port (station must exist before port enable)
+    log::info!("🧪 Step 3: Configure TUI as Master");
     configure_tui_master(&mut tui_session, &mut tui_cap).await?;
 
-    // Debug: Verify we're back on port details page after configuration
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_configure_master".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_after_config",
-    )
-    .await?;
-
-    // Debug: Verify port is enabled
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enable_port".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_enable_port",
-    )
-    .await?;
+    // Enable the port AFTER configuration (so it can spawn CLI subprocess)
+    log::info!("🧪 Step 4: Enable the port");
+    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Wait for port to fully initialize - critical for stability
     log::info!("🧪 Step 4.5: Waiting for port to fully initialize...");
@@ -126,27 +84,9 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     }
     log::info!("✅ Port is fully enabled and ready");
 
-    // Debug: Verify port status before entering Modbus panel
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "before_enter_modbus_panel".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_before_panel",
-    )
-    .await?;
-
     // CRUCIAL: Enter Modbus panel to access registers for updates
     log::info!("🧪 Step 5: Enter Modbus configuration panel");
     enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-
-    // Debug: Verify we're in the Modbus panel
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enter_modbus_panel".to_string(),
-    }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_in_panel").await?;
 
     // Run 10 rounds of continuous random data testing
     // Validate after each round and exit immediately on failure
@@ -154,39 +94,21 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         let data = generate_random_registers(REGISTER_LENGTH);
         log::info!("🧪 Round {round}/{ROUNDS}: Generated data {data:?}");
 
-        // Debug: Verify we're ready to update registers
-        let actions = vec![CursorAction::DebugBreakpoint {
-            description: format!("before_update_registers_round_{round}"),
-        }];
-        execute_cursor_actions(
-            &mut tui_session,
-            &mut tui_cap,
-            &actions,
-            "debug_before_update",
-        )
-        .await?;
-
         // Update TUI registers with new data
+        log::info!("🧪 Round {round}/{ROUNDS}: Updating registers...");
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
-        // Debug: Verify registers were updated
-        let actions = vec![CursorAction::DebugBreakpoint {
-            description: format!("after_update_registers_round_{round}"),
-        }];
-        execute_cursor_actions(
-            &mut tui_session,
-            &mut tui_cap,
-            &actions,
-            "debug_after_update",
-        )
-        .await?;
+        // Wait briefly for IPC updates to propagate to CLI subprocess
+        // With bidirectional IPC, updates should be instant
+        log::info!("🧪 Round {round}/{ROUNDS}: Waiting for IPC updates to propagate...");
+        tokio::time::sleep(Duration::from_millis(300)).await;
 
-        // Poll CLI slave with retry logic - wait for data to propagate
-        log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave with retry logic");
+        // Poll CLI slave to verify data is accessible
+        log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave for verification");
         let binary = build_debug_bin("aoba")?;
 
-        const MAX_RETRIES: usize = 5;
-        const RETRY_DELAY_MS: u64 = 1000;
+        const MAX_RETRIES: usize = 3;
+        const RETRY_DELAY_MS: u64 = 500;
 
         let mut last_received: Option<Vec<u16>> = None;
         let mut unchanged_count = 0;
@@ -369,12 +291,6 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
-    // Debug: Verify station was created
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_create_station".to_string(),
-    }];
-    execute_cursor_actions(session, cap, &actions, "debug_station_created").await?;
-
     // Set Register Length to 12 (matching REGISTER_LENGTH constant)
     log::info!("Navigate to Register Length and set to 12");
     let actions = vec![
@@ -388,12 +304,6 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
         CursorAction::PressEnter,
     ];
     execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
-
-    // Debug: Verify register length was set
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_set_register_length".to_string(),
-    }];
-    execute_cursor_actions(session, cap, &actions, "debug_reg_length_set").await?;
 
     // Press Escape once to exit Modbus settings and return to port details page
     log::info!("Exiting Modbus settings (pressing ESC once)");
