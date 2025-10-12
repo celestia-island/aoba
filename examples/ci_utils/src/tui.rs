@@ -263,7 +263,7 @@ pub async fn update_tui_registers<T: Expect>(
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::TypeString(hex_val),
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 100 },
+            crate::auto_cursor::CursorAction::Sleep { ms: 50 },
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,

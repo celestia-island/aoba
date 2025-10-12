@@ -172,7 +172,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         // Wait for all register updates to be written to data source file
         // Then poll the file content with timeout to verify data synchronization
         log::info!("🧪 Round {round}/{ROUNDS}: Waiting for all register updates to complete...");
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         // Find the data source file
         let data_files: Vec<_> = std::fs::read_dir("/tmp")?
@@ -191,7 +191,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
             
             let expected_data = data.clone();
             let start_time = std::time::Instant::now();
-            let timeout = Duration::from_secs(60);
+            let timeout = Duration::from_secs(10);
             let poll_interval = Duration::from_millis(100);
             let mut data_matched = false;
 
