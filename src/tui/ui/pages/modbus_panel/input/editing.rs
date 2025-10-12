@@ -321,6 +321,7 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
 
                                 with_port_write(&port, |port| {
                                     let owner_info = port.state.owner().cloned();
+                                    log::info!("🔍 commit_text_edit: owner_info = {:?}", owner_info);
                                     let types::port::PortConfig::Modbus { mode, stations } =
                                         &mut port.config;
 
@@ -346,7 +347,12 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                                 );
                                                                 
                                                                 // Send IPC update if using CLI subprocess
+                                                                log::info!("🔍 Checking if we should send IPC update, owner_info: {:?}", owner_info.as_ref().map(|o| match o {
+                                                                    PortOwner::Runtime(_) => "Runtime",
+                                                                    PortOwner::CliSubprocess(_) => "CliSubprocess"
+                                                                }));
                                                                 if let Some(PortOwner::CliSubprocess(_)) = owner_info.as_ref() {
+                                                                    log::info!("🔍 Sending IPC RegisterUpdate message");
                                                                     // Send register update via IPC for real-time synchronization
                                                                     if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
                                                                         port_name: port_name.clone(),
@@ -356,7 +362,11 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                                         values: vec![register_value],
                                                                     }) {
                                                                         log::warn!("Failed to send IPC register update message: {err}");
+                                                                    } else {
+                                                                        log::info!("✅ IPC RegisterUpdate message sent successfully");
                                                                     }
+                                                                } else {
+                                                                    log::warn!("🔍 NOT sending IPC because owner is not CliSubprocess");
                                                                 }
                                                             }
                                                         }
@@ -399,13 +409,14 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                 }
                                                 
                                                 // If using CLI subprocess, also update the data source file
-                                                log::debug!("Master mode: owner_info = {:?}", owner_info);
+                                                log::info!("🔍 Master mode: owner_info = {:?}", owner_info);
                                                 if let Some(PortOwner::CliSubprocess(info)) =
                                                     owner_info.clone()
                                                 {
-                                                    log::debug!("Master mode: Checking if subprocess mode is MasterProvide: {:?}", info.mode);
+                                                    log::info!("🔍 Master mode: Checking if subprocess mode is MasterProvide: {:?}", info.mode);
                                                     if info.mode == PortSubprocessMode::MasterProvide {
                                                         if let Some(path) = info.data_source_path.clone() {
+                                                            log::info!("🔍 Master mode: Setting cli_data_update for path: {}", path);
                                                             cli_data_update = Some((
                                                                 path,
                                                                 Arc::clone(storage),
@@ -418,7 +429,11 @@ fn commit_text_edit(cursor: types::cursor::ModbusDashboardCursor, value: String,
                                                                 "CLI subprocess missing data source path for {port_name}"
                                                             );
                                                         }
+                                                    } else {
+                                                        log::warn!("🔍 Master mode: subprocess mode is NOT MasterProvide: {:?}", info.mode);
                                                     }
+                                                } else {
+                                                    log::warn!("🔍 Master mode: owner_info is NOT CliSubprocess");
                                                 }
                                             }
                                             ModbusConnectionMode::Slave { storage, .. } => {
