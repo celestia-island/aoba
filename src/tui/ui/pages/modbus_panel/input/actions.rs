@@ -244,64 +244,13 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         }
                         types::modbus::RegisterMode::Holding
                         | types::modbus::RegisterMode::Input => {
-                            // Enter edit mode for numeric registers
-                            let current_value = read_status(|status| {
-                                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                    if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode, stations } =
-                                            &port_guard.config;
-                                        let all_items: Vec<_> = stations.iter().collect();
-                                        if let Some(item) = all_items.get(slave_index) {
-                                            let register_addr =
-                                                item.register_address + register_index as u16;
-
-                                            // Read current value from storage
-                                            let storage_opt = match mode {
-                                                types::modbus::ModbusConnectionMode::Master {
-                                                    storage,
-                                                } => Some(storage.clone()),
-                                                types::modbus::ModbusConnectionMode::Slave {
-                                                    storage,
-                                                    ..
-                                                } => Some(storage.clone()),
-                                            };
-
-                                            if let Some(storage) = storage_opt {
-                                                if let Ok(context) = storage.lock() {
-                                                    let value = match item.register_mode {
-                                                        types::modbus::RegisterMode::Holding => {
-                                                            context
-                                                                .get_holding(register_addr)
-                                                                .unwrap_or(0)
-                                                        }
-                                                        types::modbus::RegisterMode::Input => {
-                                                            context
-                                                                .get_input(register_addr)
-                                                                .unwrap_or(0)
-                                                        }
-                                                        _ => 0,
-                                                    };
-                                                    return Ok(value);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Ok(0)
-                            })?;
-
-                            // Format hex string and strip leading zeros
-                            let hex_str = if current_value == 0 {
-                                "0".to_string()
-                            } else {
-                                format!("{current_value:X}") // No leading zeros, uppercase hex
-                            };
-
+                            // Enter edit mode for numeric registers with empty buffer
+                            // (User will type the new value from scratch)
                             write_status(|status| {
                                 status.temporarily.input_raw_buffer =
                                     types::ui::InputRawBuffer::String {
-                                        bytes: hex_str.clone().into_bytes(),
-                                        offset: hex_str.len() as isize,
+                                        bytes: Vec::new(),
+                                        offset: 0,
                                     };
                                 Ok(())
                             })?;
