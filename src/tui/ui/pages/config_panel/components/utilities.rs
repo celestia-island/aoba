@@ -14,9 +14,7 @@ pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
 /// Helper: whether a port is occupied by this instance
 pub fn is_port_occupied_by_this(port_data: Option<&Arc<RwLock<types::port::PortData>>>) -> bool {
     if let Some(port) = port_data {
-        if let Some(v) = with_port_read(port, |port| {
-            matches!(&port.state, types::port::PortState::OccupiedByThis { .. })
-        }) {
+        if let Some(v) = with_port_read(port, |port| port.state.owner().is_some()) {
             return v;
         }
     }
@@ -30,7 +28,7 @@ pub fn get_serial_param_value_by_cursor(
 ) -> String {
     if let Some(port) = port_data {
         if let Some(s) = with_port_read(port, |port| {
-            if let types::port::PortState::OccupiedByThis { ref runtime, .. } = &port.state {
+            if let Some(runtime) = port.state.runtime_handle() {
                 match cursor_type {
                     types::cursor::ConfigPanelCursor::BaudRate => {
                         return runtime.current_cfg.baud.to_string()

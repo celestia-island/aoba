@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
-use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
-use std::hash::Hasher;
 use std::{
+    cell::RefCell,
+    collections::{hash_map::DefaultHasher, HashMap},
+    hash::Hasher,
     io::{BufRead, BufReader},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -153,13 +152,34 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     );
     log::info!("Master mode: acting as Modbus Slave/Server - listening for requests and responding with data");
 
+    // Setup IPC if requested
+    let mut ipc_connections = crate::cli::actions::setup_ipc(matches);
+
     // Open serial port with longer timeout for reading requests
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(50))
         .open()
-        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+        .map_err(|err| {
+            if let Some(ref mut ipc_conns) = ipc_connections {
+                let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortError {
+                    port_name: port.to_string(),
+                    error: format!("Failed to open port: {err}"),
+                    timestamp: None,
+                });
+            }
+            anyhow!("Failed to open port {port}: {err}")
+        })?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Notify IPC that port was opened successfully
+    if let Some(ref mut ipc_conns) = ipc_connections {
+        let _ = ipc_conns.status.send(&crate::protocol::ipc::IpcMessage::PortOpened {
+            port_name: port.to_string(),
+            timestamp: None,
+        });
+        log::info!("IPC: Sent PortOpened message for {port}");
+    }
 
     // Register cleanup to ensure port is released on program exit
     {
@@ -314,6 +334,60 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         // Check if update thread has panicked
         if update_thread.is_finished() {
             return Err(anyhow!("Data update thread terminated unexpectedly"));
+        }
+
+        // Accept command connection if not yet connected
+        if let Some(ref mut ipc_conns) = ipc_connections {
+            // Try to accept command connection (non-blocking after first attempt)
+            // This is a one-time operation
+            static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+            if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Err(e) = ipc_conns.command_listener.accept() {
+                    log::debug!("Command channel accept not ready: {e}");
+                } else {
+                    log::info!("Command channel accepted");
+                    COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+
+            // Check for incoming commands
+            if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
+                match msg {
+                    crate::protocol::ipc::IpcMessage::ConfigUpdate {
+                        station_id: new_station_id,
+                        register_type,
+                        start_address: new_start_address,
+                        register_length: new_length,
+                        ..
+                    } => {
+                        log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
+                        // TODO: Apply configuration updates to runtime
+                        // For now, just log them
+                    }
+                    crate::protocol::ipc::IpcMessage::RegisterUpdate {
+                        station_id: _,
+                        register_type,
+                        start_address: update_start_addr,
+                        values,
+                        ..
+                    } => {
+                        log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
+                        // Apply register updates directly to storage
+                        let mut context = storage.lock().unwrap();
+                        if register_type == "holding" {
+                            for (i, &val) in values.iter().enumerate() {
+                                if let Err(e) = context.set_holding(update_start_addr + i as u16, val) {
+                                    log::warn!("Failed to set holding register: {e}");
+                                }
+                            }
+                            log::info!("Applied register update to storage");
+                        }
+                    }
+                    _ => {
+                        log::debug!("Ignoring non-command IPC message");
+                    }
+                }
+            }
         }
 
         // Cleanup stale entries from the print caches on each loop iteration

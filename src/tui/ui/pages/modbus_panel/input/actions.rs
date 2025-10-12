@@ -4,7 +4,7 @@ use rmodbus::server::context::ModbusContext;
 use crate::{
     protocol::status::{
         read_status,
-        types::{self},
+        types::{self, port::PortState},
         with_port_write, write_status,
     },
     tui::utils::bus::{Bus, UiToCore},
@@ -26,7 +26,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     match current_cursor {
         types::cursor::ModbusDashboardCursor::AddLine => {
             log::info!("🔵 AddLine action - calling create_new_modbus_entry");
-            create_new_modbus_entry()?;
+            create_new_modbus_entry(bus)?;
             log::info!("🔵 Station created successfully, sending refresh");
             bus.ui_tx
                 .send(UiToCore::Refresh)
@@ -244,64 +244,13 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         }
                         types::modbus::RegisterMode::Holding
                         | types::modbus::RegisterMode::Input => {
-                            // Enter edit mode for numeric registers
-                            let current_value = read_status(|status| {
-                                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                    if let Ok(port_guard) = port_entry.read() {
-                                        let types::port::PortConfig::Modbus { mode, stations } =
-                                            &port_guard.config;
-                                        let all_items: Vec<_> = stations.iter().collect();
-                                        if let Some(item) = all_items.get(slave_index) {
-                                            let register_addr =
-                                                item.register_address + register_index as u16;
-
-                                            // Read current value from storage
-                                            let storage_opt = match mode {
-                                                types::modbus::ModbusConnectionMode::Master {
-                                                    storage,
-                                                } => Some(storage.clone()),
-                                                types::modbus::ModbusConnectionMode::Slave {
-                                                    storage,
-                                                    ..
-                                                } => Some(storage.clone()),
-                                            };
-
-                                            if let Some(storage) = storage_opt {
-                                                if let Ok(context) = storage.lock() {
-                                                    let value = match item.register_mode {
-                                                        types::modbus::RegisterMode::Holding => {
-                                                            context
-                                                                .get_holding(register_addr)
-                                                                .unwrap_or(0)
-                                                        }
-                                                        types::modbus::RegisterMode::Input => {
-                                                            context
-                                                                .get_input(register_addr)
-                                                                .unwrap_or(0)
-                                                        }
-                                                        _ => 0,
-                                                    };
-                                                    return Ok(value);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                Ok(0)
-                            })?;
-
-                            // Format hex string and strip leading zeros
-                            let hex_str = if current_value == 0 {
-                                "0".to_string()
-                            } else {
-                                format!("{current_value:X}") // No leading zeros, uppercase hex
-                            };
-
+                            // Enter edit mode for numeric registers with empty buffer
+                            // (User will type the new value from scratch)
                             write_status(|status| {
                                 status.temporarily.input_raw_buffer =
                                     types::ui::InputRawBuffer::String {
-                                        bytes: hex_str.clone().into_bytes(),
-                                        offset: hex_str.len() as isize,
+                                        bytes: Vec::new(),
+                                        offset: 0,
                                     };
                                 Ok(())
                             })?;
@@ -339,7 +288,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-fn create_new_modbus_entry() -> Result<()> {
+fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
     log::info!("🟢 create_new_modbus_entry called");
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -359,6 +308,7 @@ fn create_new_modbus_entry() -> Result<()> {
 
     if let Some(port_name) = port_name_opt {
         log::info!("🟢 Found port name: {port_name}");
+        let mut should_restart = false;
         if let Some(port) = read_status(|status| {
             let port = status.ports.map.get(&port_name).cloned();
             if port.is_some() {
@@ -371,6 +321,12 @@ fn create_new_modbus_entry() -> Result<()> {
             log::info!("🟢 Calling with_port_write for: {port_name}");
             with_port_write(&port, |port| {
                 log::info!("🟢 Inside with_port_write closure");
+                // Check if port is currently occupied before adding station
+                if matches!(port.state, PortState::OccupiedByThis { .. }) {
+                    log::info!("🟢 Port {port_name} is occupied - will trigger restart after adding station");
+                    should_restart = true;
+                }
+                
                 let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
                 log::info!(
                     "🟢 Current mode: {:?}, current stations count: {}",
@@ -400,6 +356,14 @@ fn create_new_modbus_entry() -> Result<()> {
                 );
             });
             log::info!("🟢 with_port_write completed");
+            
+            // If port was occupied, restart it to apply new station configuration
+            if should_restart {
+                log::info!("🔄 Restarting port {port_name} to apply new station configuration");
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;
+            }
         } else {
             log::error!("🟢 Port entry is None for: {port_name}");
         }
