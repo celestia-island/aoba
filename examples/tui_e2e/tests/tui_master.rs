@@ -73,6 +73,12 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     log::info!("🧪 Step 4.5: Waiting for port to fully initialize...");
     tokio::time::sleep(Duration::from_secs(3)).await;
 
+    // Debug: Verify port enable state
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_enable_port".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_enable_port").await?;
+
     // Verify port is actually enabled by checking the screen
     let screen = tui_cap
         .capture(&mut tui_session, "verify_port_enabled")
