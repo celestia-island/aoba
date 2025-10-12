@@ -14,7 +14,7 @@ pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
         match crate::protocol::ipc::IpcServer::connect(channel_id.clone()) {
             Ok(status) => {
                 log::info!("IPC: Successfully connected to status channel");
-                
+
                 // Create command listener on the reverse channel
                 let command_channel = crate::protocol::ipc::get_command_channel_name(channel_id);
                 log::info!("IPC: Creating command listener on: {command_channel}");

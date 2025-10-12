@@ -244,7 +244,7 @@ pub async fn update_tui_registers<T: Expect>(
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
-            count: 20,  // Go way up to ensure we hit the top
+            count: 20, // Go way up to ensure we hit the top
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
         crate::auto_cursor::CursorAction::PressArrow {

@@ -326,7 +326,7 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
                     log::info!("🟢 Port {port_name} is occupied - will trigger restart after adding station");
                     should_restart = true;
                 }
-                
+
                 let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
                 log::info!(
                     "🟢 Current mode: {:?}, current stations count: {}",
@@ -356,7 +356,7 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
                 );
             });
             log::info!("🟢 with_port_write completed");
-            
+
             // If port was occupied, restart it to apply new station configuration
             if should_restart {
                 log::info!("🔄 Restarting port {port_name} to apply new station configuration");
