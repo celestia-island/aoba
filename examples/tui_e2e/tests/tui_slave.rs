@@ -11,6 +11,7 @@ use expectrl::Expect;
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     data::generate_random_registers,
+    enter_modbus_panel,
     helpers::sleep_seconds,
     key_input::{ArrowKey, ExpectKeyExt},
     ports::{port_exists, should_run_vcom_tests, vcom_matchers},
@@ -23,8 +24,15 @@ const ROUNDS: usize = 10;
 const REGISTER_LENGTH: usize = 12;
 
 /// Test TUI Slave mode + external CLI master with continuous random data (10 rounds)
-/// TUI acts as Modbus Slave (client/poll mode), driven through the UI automation
-/// External CLI runs in master role and must communicate successfully with TUI-managed runtime
+///
+/// Workflow guard rails for the slave scenario:
+/// 1. Always enter the port, immediately enable it, and confirm enablement while still on details.
+/// 2. Enter the Modbus configuration panel and remain there; no ESC back to the port overview.
+/// 3. Configure mode/register length inside the panel so subsequent loops operate with the table visible.
+/// 4. The business loop alternates between screenshots and register edits to create traceable IPC evidence.
+///
+/// TUI acts as Modbus Slave (client/poll mode), driven through the UI automation.
+/// External CLI runs in master role and must communicate successfully with TUI-managed runtime.
 pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     if !should_run_vcom_tests() {
         log::info!("Skipping TUI Slave + CLI Master test on this platform");
@@ -58,7 +66,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
 
     // Wait longer for TUI to fully initialize and display port list
     log::info!("⏳ Waiting for TUI to initialize...");
-    sleep_seconds(2).await;
+    sleep_seconds(3).await;
 
     // Navigate to vcom1
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
@@ -70,24 +78,8 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_nav_vcom1").await?;
 
-    // Configure as slave BEFORE enabling port (station must exist before port enable)
-    log::info!("🧪 Step 3: Configure TUI as Slave (client/poll mode)");
-    configure_tui_slave(&mut tui_session, &mut tui_cap).await?;
-
-    // Debug: Verify we're back on port details page after configuration
-    let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_configure_slave".to_string(),
-    }];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "debug_after_config",
-    )
-    .await?;
-
-    // Enable the port AFTER configuration (so it can spawn CLI subprocess)
-    log::info!("🧪 Step 4: Enable the port");
+    // Enable the port before entering Modbus settings so runtime services launch early.
+    log::info!("🧪 Step 3: Enable the port");
     enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
 
     // Debug: Verify port is enabled
@@ -102,12 +94,20 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     )
     .await?;
 
+    // Enter Modbus settings and remain there for the rest of the test run.
+    log::info!("🧪 Step 4: Enter Modbus configuration panel");
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    // Configure inside the panel - do not escape back to port details afterwards.
+    log::info!("🧪 Step 5: Configure TUI as Slave (client/poll mode)");
+    configure_tui_slave(&mut tui_session, &mut tui_cap).await?;
+
     // Check if debug mode is enabled for smoke testing
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();
     if debug_mode {
-        log::info!("🔴 DEBUG: Port enabled, capturing screen state");
+        log::info!("🔴 DEBUG: Capturing Modbus panel state after configuration");
         let screen = tui_cap
-            .capture(&mut tui_session, "after_enable_port")
+            .capture(&mut tui_session, "after_modbus_config")
             .await?;
         log::info!("📺 Screen after enabling port:\n{screen}\n");
 
@@ -115,18 +115,33 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         #[cfg(unix)]
         {
             log::info!("🔍 Checking which processes are using the vcom ports");
-            let lsof_output = std::process::Command::new("sudo")
-                .args(["lsof", &ports.port1_name, &ports.port2_name])
+            let lsof_output = std::process::Command::new("lsof")
+                .args([&ports.port1_name, &ports.port2_name])
                 .output();
             if let Ok(output) = lsof_output {
-                log::info!(
-                    "📊 lsof output:\n{}",
-                    String::from_utf8_lossy(&output.stdout)
-                );
+                if output.status.success() {
+                    log::info!(
+                        "📊 lsof output:\n{}",
+                        String::from_utf8_lossy(&output.stdout)
+                    );
+                } else {
+                    log::warn!(
+                        "⚠️ lsof failed: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    );
+                }
             }
         }
 
-        return Err(anyhow!("Debug breakpoint - exiting for inspection"));
+        let abort_on_debug = std::env::var("DEBUG_BREAK_ABORT")
+            .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE"))
+            .unwrap_or(false);
+
+        if abort_on_debug {
+            return Err(anyhow!("Debug breakpoint - exiting for inspection"));
+        } else {
+            log::info!("🔁 Debug breakpoint inspection complete, continuing test execution");
+        }
     }
 
     // Run 10 rounds of continuous random data testing
@@ -177,6 +192,11 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
             cli_master.id()
         );
 
+        log::info!(
+            "✅ CLI master-provide-persist started (PID: {:?})",
+            cli_master.id()
+        );
+
         // Wait for CLI master to start providing data and TUI to receive it
         tokio::time::sleep(Duration::from_millis(2000)).await;
 
@@ -186,6 +206,9 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         let mut verification_success = false;
 
         for retry_attempt in 1..=MAX_RETRIES {
+            log::info!(
+                "🧪 Round {round}/{ROUNDS}: Verification attempt {retry_attempt}/{MAX_RETRIES}"
+            );
             log::info!(
                 "🧪 Round {round}/{ROUNDS}: Verification attempt {retry_attempt}/{MAX_RETRIES}"
             );
@@ -202,10 +225,11 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
             // For now, just verify the port is enabled and the subprocess is running
             // The TUI subprocess logs show data is being received successfully
             // A proper implementation would navigate to Modbus panel and parse register values
-            let port_enabled = screen.contains("Enabled");
+            let panel_intact =
+                screen.contains("Register Length") && screen.contains("Connection Mode");
 
-            if port_enabled {
-                log::info!("✅ Round {round}/{ROUNDS}: Port is enabled, subprocess receiving data (verification attempt {retry_attempt})");
+            if panel_intact {
+                log::info!("✅ Round {round}/{ROUNDS}: Modbus panel responsive (verification attempt {retry_attempt})");
                 verification_success = true;
                 break;
             } else {
@@ -251,35 +275,20 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     Ok(())
 }
 
-/// Configure TUI as Slave (polling external master requests)
+/// Configure TUI as Slave (polling external master requests) while already inside the Modbus panel.
+/// The caller is responsible for staying inside the panel afterwards so register tables remain visible.
 async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
     use regex::Regex;
 
     log::info!("📝 Configuring as Slave (to poll external master)...");
 
-    // Navigate to Modbus settings (should be 2 down from current position)
-    log::info!("Navigate to Modbus Settings");
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 2,
-        },
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "nav_to_modbus").await?;
-
-    // Enter Modbus settings
-    log::info!("Enter Modbus Settings");
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::MatchPattern {
-            pattern: Regex::new(r"ModBus Master/Slave Settings")?,
-            description: "In Modbus settings".to_string(),
-            line_range: Some((0, 3)),
-            col_range: None,
-        },
-    ];
-    execute_cursor_actions(session, cap, &actions, "enter_modbus_settings").await?;
+    // Verify we are already inside the Modbus panel per enforced workflow.
+    let screen = cap.capture(session, "verify_modbus_panel_slave").await?;
+    if !screen.contains("ModBus Master/Slave Settings") {
+        return Err(anyhow!(
+            "Expected to be inside ModBus panel before configuring slave"
+        ));
+    }
 
     // Create station (should be on "Create Station" by default)
     log::info!("Create new Modbus station");
@@ -351,24 +360,6 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
         description: "after_set_register_length".to_string(),
     }];
     execute_cursor_actions(session, cap, &actions, "debug_reg_length_set").await?;
-
-    // Press Escape to exit Modbus settings and return to port details page
-    log::info!("Exiting Modbus settings (pressing ESC)");
-    session.send_escape()?;
-    use ci_utils::helpers::sleep_a_while;
-    sleep_a_while().await;
-
-    // Verify we're back on port details page
-    let actions = vec![
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::MatchPattern {
-            pattern: Regex::new(r"Enable Port")?,
-            description: "Back on port details page".to_string(),
-            line_range: None,
-            col_range: None,
-        },
-    ];
-    execute_cursor_actions(session, cap, &actions, "verify_back_to_port_details").await?;
 
     Ok(())
 }

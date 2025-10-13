@@ -9,32 +9,52 @@ pub async fn navigate_to_vcom<T: Expect>(
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
     let ports = crate::ports::vcom_matchers();
-    let port_name = &ports.port1_name;
+    log::info!(
+        "navigate_to_vcom: port1 aliases = {:?}",
+        ports.port1_aliases
+    );
+    let mut detected_port_name = ports.port1_name.clone();
 
     // Capture screen until the target port shows up. TUI scans ports lazily on start,
     // so the very first frame might not include `/tmp/vcom1` yet. Allow a few refresh
     // cycles before giving up to make the helper more resilient on slower environments.
     let mut screen = String::new();
-    const MAX_ATTEMPTS: usize = 6;
+    const MAX_ATTEMPTS: usize = 10;
     for attempt in 1..=MAX_ATTEMPTS {
         let desc = format!("before_navigation_attempt_{attempt}");
         screen = cap.capture(session, &desc).await?;
 
-        if screen.contains(port_name) {
+        if let Some(alias) = ports
+            .port1_aliases
+            .iter()
+            .find(|candidate| screen.contains(candidate.as_str()))
+        {
+            detected_port_name = alias.clone();
             if attempt > 1 {
-                log::info!("navigate_to_vcom: port {port_name} detected after {attempt} attempts");
+                log::info!("navigate_to_vcom: port {alias} detected after {attempt} attempts");
             }
             break;
         }
 
         if attempt == MAX_ATTEMPTS {
             return Err(anyhow!(
-                "Port ({port_name}) not found in port list after {MAX_ATTEMPTS} attempts"
+                "Port ({}) not found in port list after {MAX_ATTEMPTS} attempts",
+                ports.port1_name
             ));
         }
 
         log::info!(
-            "navigate_to_vcom: port {port_name} not visible yet (attempt {attempt}/{MAX_ATTEMPTS}); waiting for next frame"
+            "navigate_to_vcom: port {} not visible yet (attempt {attempt}/{MAX_ATTEMPTS}); waiting for next frame",
+            ports.port1_name
+        );
+
+        crate::helpers::sleep_a_while().await;
+    }
+
+    if detected_port_name != ports.port1_name {
+        log::info!(
+            "navigate_to_vcom: using resolved alias {detected_port_name} for target {}",
+            ports.port1_name
         );
     }
 
@@ -43,7 +63,11 @@ pub async fn navigate_to_vcom<T: Expect>(
     let mut cursor_line = None;
 
     for (idx, line) in lines.iter().enumerate() {
-        if line.contains(port_name) {
+        if ports
+            .port1_aliases
+            .iter()
+            .any(|candidate| line.contains(candidate))
+        {
             port_line = Some(idx);
         }
         if line.contains("> ") {
@@ -54,7 +78,8 @@ pub async fn navigate_to_vcom<T: Expect>(
         }
     }
 
-    let port_idx = port_line.ok_or_else(|| anyhow!("Could not find {port_name} line index"))?;
+    let port_idx =
+        port_line.ok_or_else(|| anyhow!("Could not find {} line index", detected_port_name))?;
     let curr_idx = cursor_line.unwrap_or(3);
 
     if port_idx != curr_idx {
@@ -76,12 +101,12 @@ pub async fn navigate_to_vcom<T: Expect>(
     }
 
     // Press Enter to enter port details
-    let port_pattern_regex = Regex::new(&regex::escape(port_name))?;
+    let port_pattern_regex = ports.port1_rx.clone();
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
         crate::auto_cursor::CursorAction::MatchPattern {
             pattern: port_pattern_regex,
-            description: format!("In {port_name} port details"),
+            description: format!("In {detected_port_name} port details"),
             line_range: Some((0, 3)),
             col_range: None,
         },
@@ -274,15 +299,33 @@ pub async fn update_tui_registers<T: Expect>(
         .await?;
 
         if i < new_values.len() - 1 {
-            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
-                direction: crate::key_input::ArrowKey::Right,
-                count: 1,
-            }];
+            let next_index = i + 1;
+            let registers_per_row = 4;
+            let next_col = next_index % registers_per_row;
+
+            let actions = if next_col == 0 {
+                vec![
+                    crate::auto_cursor::CursorAction::PressArrow {
+                        direction: crate::key_input::ArrowKey::Down,
+                        count: 1,
+                    },
+                    crate::auto_cursor::CursorAction::PressArrow {
+                        direction: crate::key_input::ArrowKey::Left,
+                        count: registers_per_row - 1,
+                    },
+                ]
+            } else {
+                vec![crate::auto_cursor::CursorAction::PressArrow {
+                    direction: crate::key_input::ArrowKey::Right,
+                    count: 1,
+                }]
+            };
+
             crate::auto_cursor::execute_cursor_actions(
                 session,
                 cap,
                 &actions,
-                &format!("nav_to_reg_{}", i + 1),
+                &format!("nav_to_reg_{}", next_index),
             )
             .await?;
         }

@@ -72,6 +72,11 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 .map_err(|err| anyhow!(err))?;
 
             if let Some(port_name) = maybe_restart {
+                // Toggle twice: first message stops the live runtime, the second message restarts it with the
+                // freshly committed configuration while keeping the user anchored in the Modbus panel.
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!(err))?;
                 bus.ui_tx
                     .send(UiToCore::ToggleRuntime(port_name))
                     .map_err(|err| anyhow!(err))?;

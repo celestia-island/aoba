@@ -363,6 +363,11 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
                 bus.ui_tx
                     .send(UiToCore::ToggleRuntime(port_name.clone()))
                     .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| {
+                        anyhow!("Failed to send ToggleRuntime for restart (start phase): {err}")
+                    })?;
             }
         } else {
             log::error!("🟢 Port entry is None for: {port_name}");

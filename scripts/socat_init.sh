@@ -42,27 +42,59 @@ done
 
 V1=/tmp/vcom1
 V2=/tmp/vcom2
-PIDFILE=/tmp/socat_vcom${MODE:+_${MODE}}.pid
-LOG=/tmp/socat_vcom${MODE:+_${MODE}}.log
+PIDFILE="/tmp/aoba_socat_${MODE}.pid"
+LOG="/tmp/aoba_socat_${MODE}.log"
+KILL_PATTERNS=("$V1" "$V2" "$(basename "$V1")")
+
+echo "[socat_init] operating entirely without sudo; using static ports $V1 and $V2"
+
+PORT1="$V1"
+PORT2="$V2"
 
 echo "[socat_init] mode=$MODE stopping existing socat (pidfile if present)"
 if [ -f "$PIDFILE" ]; then
-  sudo bash -lc "kill \$(cat $PIDFILE) 2>/dev/null || true; rm -f $PIDFILE || true"
+  if OLD_PID=$(cat "$PIDFILE" 2>/dev/null); then
+    if [ -n "$OLD_PID" ] && kill "$OLD_PID" 2>/dev/null; then
+      echo "[socat_init] stopped previous socat pid $OLD_PID"
+    elif [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+      echo "[socat_init] unable to stop socat pid $OLD_PID (insufficient permissions?)" >&2
+      echo "[socat_init] please terminate the existing socat process manually" >&2
+      exit 1
+    fi
+  fi
+  rm -f "$PIDFILE" || true
 fi
 
 echo "[socat_init] killing lingering socat processes that reference vcom links (if any)"
-sudo pkill -f "/tmp/vcom" || true
+for pattern in "${KILL_PATTERNS[@]}"; do
+  pkill -f "$pattern" 2>/dev/null || true
+done
+if pgrep -f "socat.*${V1}" >/dev/null 2>&1 || pgrep -f "socat.*${V2}" >/dev/null 2>&1; then
+  echo "[socat_init] detected existing socat processes that could not be terminated automatically." >&2
+  echo "[socat_init] please run 'sudo pkill socat' (or manually stop them) and retry." >&2
+  exit 1
+fi
 sleep 0.5
 
 echo "[socat_init] removing existing links: $V1 $V2"
-sudo rm -f "$V1" "$V2" || true
+rm -f "$V1" "$V2" /tmp/aoba_vcom1.* /tmp/aoba_vcom2.* || true
+if [ -e "$V1" ] || [ -e "$V2" ]; then
+  echo "[socat_init] unable to remove existing port links (permission denied?)." >&2
+  echo "[socat_init] please remove $V1 and $V2 manually, then rerun." >&2
+  exit 1
+fi
 
 echo "[socat_init] starting socat with link and mode=0666"
-sudo rm -f "$LOG" || true
-sudo bash -lc "setsid socat -d -d PTY,link=$V1,raw,echo=0,mode=0666 PTY,link=$V2,raw,echo=0,mode=0666 2> $LOG >/dev/null & echo \$! > $PIDFILE" || {
+rm -f "$LOG" || true
+setsid socat -d -d PTY,link="$V1",raw,echo=0,mode=0666 PTY,link="$V2",raw,echo=0,mode=0666 2>"$LOG" >/dev/null &
+SOCAT_PID=$!
+echo "$SOCAT_PID" >"$PIDFILE"
+disown "$SOCAT_PID" 2>/dev/null || true
+if ! kill -0 "$SOCAT_PID" 2>/dev/null; then
   echo "[socat_init] failed to start socat"
+  echo "[socat_init] socat log ($LOG):"; tail -n 200 "$LOG" || true
   exit 1
-}
+fi
 
 SOCAT_PID=$(cat "$PIDFILE" 2>/dev/null || echo "")
 echo "[socat_init] socat pid: ${SOCAT_PID:-unknown}, waiting for $V1 and $V2"
@@ -75,22 +107,20 @@ while [ $count -lt $timeout ] && ( [ ! -e "$V1" ] || [ ! -e "$V2" ] ); do
 done
 
 if [ -e "$V1" ] && [ -e "$V2" ]; then
-  echo "[socat_init] created links:" 
+  echo "[socat_init] created links:"
   ls -la "$V1" "$V2" || true
-  # ensure underlying pts are also 666
   P1=$(readlink -f "$V1" || true)
   P2=$(readlink -f "$V2" || true)
-  if [ -n "$P1" ]; then sudo chmod 666 "$P1" || true; fi
-  if [ -n "$P2" ]; then sudo chmod 666 "$P2" || true; fi
+  if [ -n "$P1" ]; then chmod 666 "$P1" || true; fi
+  if [ -n "$P2" ]; then chmod 666 "$P2" || true; fi
   echo "[socat_init] underlying pts:"; ls -la "$P1" "$P2" || true
 else
-  echo "[socat_init] Failed to create /tmp/vcom1 and /tmp/vcom2 within ${timeout}s"
-  echo "[socat_init] socat log ($LOG):"; sudo tail -n 200 "$LOG" || true
+  echo "[socat_init] Failed to create $V1 and $V2 within ${timeout}s"
+  echo "[socat_init] socat log ($LOG):"; tail -n 200 "$LOG" || true
   echo "[socat_init] socat processes:"; ps aux | grep socat | grep -v grep || true
   exit 1
 fi
 
-# Connectivity test
 echo "[socat_init] performing connectivity test: write to $V2, read from $V1"
 TMP_OUT=$(mktemp /tmp/socat_test.XXXXXX) || TMP_OUT="/tmp/socat_test.$$"
 TEST_STR="socat-test-$$-$(date +%s)"
@@ -106,13 +136,15 @@ wait $READER_PID 2>/dev/null || true
 if grep -q "$TEST_STR" "$TMP_OUT" 2>/dev/null; then
   echo "[socat_init] connectivity test passed: data written to $V2 was received on $V1"
   rm -f "$TMP_OUT" || true
+  echo "PORT1=$PORT1"
+  echo "PORT2=$PORT2"
   echo "[socat_init] finished successfully"
   exit 0
 else
   echo "[socat_init] connectivity test FAILED"
   echo "[socat_init] contents of $TMP_OUT (if any):"
   sed -n '1,200p' "$TMP_OUT" || true
-  echo "[socat_init] socat log ($LOG):"; sudo tail -n 200 "$LOG" || true
+  echo "[socat_init] socat log ($LOG):"; tail -n 200 "$LOG" || true
   echo "[socat_init] socat processes:"; ps aux | grep socat | grep -v grep || true
   rm -f "$TMP_OUT" || true
   exit 2

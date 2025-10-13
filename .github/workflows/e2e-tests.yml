@@ -45,7 +45,7 @@ jobs:
       - name: Setup virtual serial ports
         run: |
           chmod +x scripts/socat_init.sh
-          sudo scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run E2E tests
         run: |
@@ -55,7 +55,7 @@ jobs:
         if: always()
         run: |
           # Kill socat processes if they exist
-          sudo pkill socat || true
+          pkill socat || true
 
           # Remove virtual port links if they exist
-          sudo rm -f /dev/vcom1 /dev/vcom2 || true
+          rm -f /tmp/vcom1 /tmp/vcom2 /tmp/aoba_vcom* || true

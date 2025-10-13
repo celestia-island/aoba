@@ -4,7 +4,7 @@ mod utils;
 use anyhow::Result;
 use std::process::Command;
 
-/// Setup virtual serial ports by running socat_init script with sudo
+/// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
 pub fn setup_virtual_serial_ports() -> Result<bool> {
     log::info!("🧪 Setting up virtual serial ports...");
@@ -20,15 +20,15 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         return Ok(false);
     }
 
-    // Run the script with sudo to reset/reinitialize virtual serial ports
-    let output = Command::new("sudo")
-        .arg("bash")
+    // Run the script directly; it operates entirely in user-mode
+    let output = Command::new("bash")
         .arg(script_path)
         .arg("--mode")
         .arg("tui")
         .output()?;
 
     if output.status.success() {
+        apply_port_env_overrides(&output.stdout);
         log::info!("✅ Virtual serial ports reset successfully");
         Ok(true)
     } else {
@@ -36,6 +36,28 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         Ok(false)
+    }
+}
+
+fn apply_port_env_overrides(stdout: &[u8]) {
+    let mut port1: Option<String> = None;
+    let mut port2: Option<String> = None;
+
+    for line in String::from_utf8_lossy(stdout).lines() {
+        if let Some(value) = line.strip_prefix("PORT1=") {
+            port1 = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("PORT2=") {
+            port2 = Some(value.trim().to_string());
+        }
+    }
+
+    if let Some(p1) = port1 {
+        std::env::set_var("AOBATEST_PORT1", &p1);
+        log::info!("🔗 Using virtual port override: AOBATEST_PORT1={p1}");
+    }
+    if let Some(p2) = port2 {
+        std::env::set_var("AOBATEST_PORT2", &p2);
+        log::info!("🔗 Using virtual port override: AOBATEST_PORT2={p2}");
     }
 }
 
