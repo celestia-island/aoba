@@ -640,6 +640,7 @@ fn run_core_thread(
                         }
                     }
 
+                    // Extract CLI inputs WITHOUT holding any locks during subprocess operations
                     let cli_inputs = read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
                             if let Some(result) = with_port_read(port, |port| {
@@ -671,6 +672,7 @@ fn run_core_thread(
                         }
                         Ok(None)
                     })?;
+                    // Lock released here - safe to do long operations
 
                     let mut cli_started = false;
 
@@ -694,6 +696,7 @@ fn run_core_thread(
                                     data_source: None,
                                 };
 
+                                // Spawn subprocess WITHOUT holding any status locks
                                 match subprocess_manager.start_subprocess(cli_config) {
                                     Ok(()) => {
                                         if let Some(snapshot) =
@@ -714,6 +717,7 @@ fn run_core_thread(
                                                     data_source_path: None, // SlavePoll doesn't use data source
                                                 });
 
+                                            // Now update status with the result (short lock hold)
                                             write_status(|status| {
                                                 if let Some(port) = status.ports.map.get(&port_name)
                                                 {
@@ -767,6 +771,7 @@ fn run_core_thread(
                                     "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
                                 );
 
+                                // Initialize data source WITHOUT holding status lock
                                 let data_source_path =
                                     initialize_cli_data_source(&port_name, &station)?;
 
@@ -785,6 +790,7 @@ fn run_core_thread(
                                     )),
                                 };
 
+                                // Spawn subprocess WITHOUT holding any status locks
                                 match subprocess_manager.start_subprocess(cli_config) {
                                     Ok(()) => {
                                         if let Some(snapshot) =
@@ -810,6 +816,7 @@ fn run_core_thread(
                                                     ),
                                                 });
 
+                                            // Now update status with the result (short lock hold)
                                             write_status(|status| {
                                                 if let Some(port) = status.ports.map.get(&port_name)
                                                 {
