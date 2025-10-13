@@ -1,8 +1,6 @@
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, Mutex};
 
 use crossterm::event::{KeyCode, KeyEvent};
-use rmodbus::server::context::ModbusContext;
 
 use crate::{
     protocol::status::{
@@ -205,7 +203,8 @@ fn commit_selector_edit(
                         let was_occupied_by_this =
                             matches!(port.state, PortState::OccupiedByThis { .. });
 
-                        let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                        let types::port::PortConfig::Modbus { mode, stations: _ } =
+                            &mut port.config;
                         let old_was_master = mode.is_master();
                         let new_is_master = new_mode.is_master();
 
@@ -214,10 +213,6 @@ fn commit_selector_edit(
                         }
 
                         *mode = new_mode.clone();
-                        // Update all existing stations to match the new global mode
-                        for station in stations.iter_mut() {
-                            station.connection_mode = new_mode.clone();
-                        }
                         log::info!("Updated global connection mode to {:?}", mode.is_master());
                     });
 
@@ -298,6 +293,7 @@ fn commit_text_edit(
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
                             if let Some(item) = all_items.get_mut(index) {
                                 item.register_length = length;
+                                item.last_values.resize(length as usize, 0);
                                 log::info!("Updated register length for index {index} to {length}");
                             }
                         });
@@ -316,263 +312,79 @@ fn commit_text_edit(
                         u16::from_str_radix(&value, 16)
                     };
 
-                    if let Ok(register_value) = parsed_value {
-                        // Get selected port and port name
-                        let selected_port = read_status(|status| {
-                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
-                            {
-                                Ok(*selected_port)
-                            } else {
-                                Ok(0)
-                            }
-                        })?;
+                    if let Ok(mut register_value) = parsed_value {
+                        let mut owner_snapshot: Option<PortOwner> = None;
+                        let mut payload: Option<(String, u8, u16, Vec<u16>)> = None;
 
-                        let port_name_opt = read_status(|status| {
-                            Ok(status.ports.order.get(selected_port).cloned())
-                        })?;
+                        with_port_write(&port, |port| {
+                            let owner_info = port.state.owner().cloned();
 
-                        if let Some(port_name) = port_name_opt {
-                            if let Some(port) =
-                                read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
-                            {
-                                let mut cli_data_update: Option<(
-                                    String,
-                                    Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-                                    u16,
-                                    u16,
-                                    RegisterMode,
-                                )> = None;
+                            let types::port::PortConfig::Modbus { mode, stations } =
+                                &mut port.config;
+                            if let Some(item) = stations.get_mut(slave_index) {
+                                if item.register_length as usize != item.last_values.len() {
+                                    item.last_values.resize(item.register_length as usize, 0);
+                                }
 
-                                with_port_write(&port, |port| {
-                                    let owner_info = port.state.owner().cloned();
-                                    log::info!(
-                                        "🔍 commit_text_edit: owner_info = {:?}",
-                                        owner_info
-                                    );
-                                    let types::port::PortConfig::Modbus { mode, stations } =
-                                        &mut port.config;
+                                let idx = register_index as usize;
+                                if idx >= item.last_values.len() {
+                                    item.last_values.resize(idx + 1, 0);
+                                }
 
-                                    if let Some(item) = stations.get_mut(slave_index) {
-                                        let register_addr =
-                                            item.register_address + register_index as u16;
-
-                                        match mode {
-                                            ModbusConnectionMode::Master { storage } => {
-                                                if let Ok(mut context) = storage.lock() {
-                                                    match item.register_mode {
-                                                        RegisterMode::Holding => {
-                                                            if let Err(err) = context.set_holding(
-                                                                register_addr,
-                                                                register_value,
-                                                            ) {
-                                                                log::warn!(
-                                                                    "Failed to set holding register at {register_addr}: {err}"
-                                                                );
-                                                            } else {
-                                                                log::info!(
-                                                                    "✓ Master: Set holding register at 0x{register_addr:04X} = 0x{register_value:04X}"
-                                                                );
-
-                                                                // Send IPC update if using CLI subprocess
-                                                                log::info!("🔍 Checking if we should send IPC update, owner_info: {:?}", owner_info.as_ref().map(|o| match o {
-                                                                    PortOwner::Runtime(_) => "Runtime",
-                                                                    PortOwner::CliSubprocess(_) => "CliSubprocess"
-                                                                }));
-                                                                if let Some(
-                                                                    PortOwner::CliSubprocess(_),
-                                                                ) = owner_info.as_ref()
-                                                                {
-                                                                    log::info!("🔍 Sending IPC RegisterUpdate message");
-                                                                    // Send register update via IPC for real-time synchronization
-                                                                    if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                                                        port_name: port_name.clone(),
-                                                                        station_id: item.station_id,
-                                                                        register_type: "holding".to_string(),
-                                                                        start_address: register_addr,
-                                                                        values: vec![register_value],
-                                                                    }) {
-                                                                        log::warn!("Failed to send IPC register update message: {err}");
-                                                                    } else {
-                                                                        log::info!("✅ IPC RegisterUpdate message sent successfully");
-                                                                    }
-                                                                } else {
-                                                                    log::warn!("🔍 NOT sending IPC because owner is not CliSubprocess");
-                                                                }
-                                                            }
-                                                        }
-                                                        RegisterMode::Coils => {
-                                                            let coil_value = register_value != 0;
-                                                            if let Err(err) = context
-                                                                .set_coil(register_addr, coil_value)
-                                                            {
-                                                                log::warn!(
-                                                                    "Failed to set coil at {register_addr}: {err}"
-                                                                );
-                                                            } else {
-                                                                log::info!(
-                                                                    "✓ Master: Set coil at 0x{register_addr:04X} = {coil_value}"
-                                                                );
-
-                                                                // Send IPC update if using CLI subprocess
-                                                                if let Some(
-                                                                    PortOwner::CliSubprocess(_),
-                                                                ) = owner_info.as_ref()
-                                                                {
-                                                                    // Send register update via IPC for real-time synchronization
-                                                                    // For coils, send as 0/1 values
-                                                                    if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                                                        port_name: port_name.clone(),
-                                                                        station_id: item.station_id,
-                                                                        register_type: "coil".to_string(),
-                                                                        start_address: register_addr,
-                                                                        values: vec![if coil_value { 1 } else { 0 }],
-                                                                    }) {
-                                                                        log::warn!("Failed to send IPC register update message: {err}");
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                        _ => {
-                                                            log::warn!(
-                                                                "Cannot write to read-only register type: {:?}",
-                                                                item.register_mode
-                                                            );
-                                                        }
-                                                    }
-                                                }
-
-                                                // If using CLI subprocess, also update the data source file
-                                                log::info!(
-                                                    "🔍 Master mode: owner_info = {:?}",
-                                                    owner_info
-                                                );
-                                                if let Some(PortOwner::CliSubprocess(info)) =
-                                                    owner_info.clone()
-                                                {
-                                                    log::info!("🔍 Master mode: Checking if subprocess mode is MasterProvide: {:?}", info.mode);
-                                                    if info.mode
-                                                        == PortSubprocessMode::MasterProvide
-                                                    {
-                                                        if let Some(path) =
-                                                            info.data_source_path.clone()
-                                                        {
-                                                            log::info!("🔍 Master mode: Setting cli_data_update for path: {}", path);
-                                                            cli_data_update = Some((
-                                                                path,
-                                                                Arc::clone(storage),
-                                                                item.register_address,
-                                                                item.register_length,
-                                                                item.register_mode,
-                                                            ));
-                                                        } else {
-                                                            log::warn!(
-                                                                "CLI subprocess missing data source path for {port_name}"
-                                                            );
-                                                        }
-                                                    } else {
-                                                        log::warn!("🔍 Master mode: subprocess mode is NOT MasterProvide: {:?}", info.mode);
-                                                    }
-                                                } else {
-                                                    log::warn!("🔍 Master mode: owner_info is NOT CliSubprocess");
-                                                }
-                                            }
-                                            ModbusConnectionMode::Slave { storage, .. } => {
-                                                if let Some(PortOwner::CliSubprocess(info)) =
-                                                    owner_info.clone()
-                                                {
-                                                    if info.mode
-                                                        == PortSubprocessMode::MasterProvide
-                                                    {
-                                                        if let Some(path) =
-                                                            info.data_source_path.clone()
-                                                        {
-                                                            if let Ok(mut context) = storage.lock()
-                                                            {
-                                                                match item.register_mode {
-                                                                    RegisterMode::Holding => {
-                                                                        if let Err(err) = context
-                                                                            .set_holding(
-                                                                                register_addr,
-                                                                                register_value,
-                                                                            )
-                                                                        {
-                                                                            log::warn!(
-                                                                                "Failed to set holding register at {register_addr}: {err}"
-                                                                            );
-                                                                        }
-                                                                    }
-                                                                    RegisterMode::Coils => {
-                                                                        let coil_value =
-                                                                            register_value != 0;
-                                                                        if let Err(err) = context
-                                                                            .set_coil(
-                                                                                register_addr,
-                                                                                coil_value,
-                                                                            )
-                                                                        {
-                                                                            log::warn!(
-                                                                                "Failed to set coil at {register_addr}: {err}"
-                                                                            );
-                                                                        }
-                                                                    }
-                                                                    _ => {
-                                                                        log::warn!(
-                                                                            "Cannot write to read-only register type: {:?}",
-                                                                            item.register_mode
-                                                                        );
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            cli_data_update = Some((
-                                                                path,
-                                                                Arc::clone(storage),
-                                                                item.register_address,
-                                                                item.register_length,
-                                                                item.register_mode,
-                                                            ));
-                                                        } else {
-                                                            log::warn!(
-                                                                "CLI subprocess missing data source path for {port_name}"
-                                                            );
-                                                        }
-                                                    } else {
-                                                        enqueue_slave_write(
-                                                            item,
-                                                            register_addr,
-                                                            register_value,
-                                                        );
-                                                    }
-                                                } else {
-                                                    enqueue_slave_write(
-                                                        item,
-                                                        register_addr,
-                                                        register_value,
-                                                    );
-                                                }
-                                            }
-                                        }
+                                let (sanitized_value, register_type) = match item.register_mode {
+                                    RegisterMode::Holding => (register_value, "holding"),
+                                    RegisterMode::Input => (register_value, "input"),
+                                    RegisterMode::Coils => {
+                                        (if register_value == 0 { 0 } else { 1 }, "coil")
                                     }
-                                });
+                                    RegisterMode::DiscreteInputs => {
+                                        (if register_value == 0 { 0 } else { 1 }, "discrete")
+                                    }
+                                };
 
-                                if let Some((path, storage, base_addr, length, reg_mode)) =
-                                    cli_data_update
-                                {
-                                    let path_buf = std::path::PathBuf::from(path);
-                                    // For TUI register updates, replace the file to keep only latest state
-                                    // This prevents file from accumulating history across multiple update cycles
-                                    if let Err(err) = crate::tui::replace_cli_data_snapshot(
-                                        &path_buf, &storage, base_addr, length, reg_mode,
-                                    ) {
-                                        log::warn!(
-                                            "Failed to replace CLI data snapshot for {port_name}: {err}"
-                                        );
-                                    } else {
-                                        log::info!(
-                                            "CLI[{port_name}]: replaced data snapshot addr=0x{base_addr:04X} len={length} mode={reg_mode:?}"
-                                        );
+                                register_value = sanitized_value;
+                                item.last_values[idx] = sanitized_value;
+
+                                let register_addr = item.register_address + register_index as u16;
+                                payload = Some((
+                                    register_type.to_string(),
+                                    item.station_id,
+                                    register_addr,
+                                    vec![sanitized_value],
+                                ));
+
+                                if matches!(mode, ModbusConnectionMode::Slave { .. }) {
+                                    let needs_enqueue = match owner_info.as_ref() {
+                                        Some(PortOwner::CliSubprocess(info))
+                                            if info.mode == PortSubprocessMode::MasterProvide =>
+                                        {
+                                            false
+                                        }
+                                        _ => true,
+                                    };
+
+                                    if needs_enqueue {
+                                        enqueue_slave_write(item, register_addr, sanitized_value);
                                     }
                                 }
+                            }
+
+                            owner_snapshot = owner_info;
+                        });
+
+                        if let (
+                            Some(PortOwner::CliSubprocess(_)),
+                            Some((register_type, station_id, start_address, values)),
+                        ) = (owner_snapshot, payload)
+                        {
+                            if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                                port_name: port_name.clone(),
+                                station_id,
+                                register_type,
+                                start_address,
+                                values,
+                            }) {
+                                log::warn!("Failed to send IPC register update message: {err}");
                             }
                         }
                     }
