@@ -39,8 +39,15 @@ pub fn vcom_matchers() -> VcomMatchers {
     fn collect_aliases(original: &str) -> Vec<String> {
         let mut aliases: Vec<String> = Vec::new();
         let mut push_unique = |candidate: String| {
-            if !aliases.iter().any(|existing| existing == &candidate) {
-                aliases.push(candidate);
+            // Filter out overly short aliases (single character) that could match too broadly
+            // Exception: keep the original path even if it ends with a single character
+            let is_original = candidate == original;
+            let is_too_short = candidate.len() == 1 && !candidate.chars().all(|c| c.is_ascii_alphabetic());
+            
+            if !is_too_short || is_original {
+                if !aliases.iter().any(|existing| existing == &candidate) {
+                    aliases.push(candidate);
+                }
             }
         };
 
