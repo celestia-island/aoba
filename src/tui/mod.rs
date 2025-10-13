@@ -11,13 +11,12 @@ use std::{
     fs,
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, RwLock},
     thread,
     time::Duration,
 };
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
-use rmodbus::server::context::ModbusContext;
 
 use crate::{
     protocol::{
@@ -115,22 +114,24 @@ fn cli_mode_to_port_mode(mode: &CliMode) -> PortSubprocessMode {
     }
 }
 
+fn station_values_for_cli(station: &types::modbus::ModbusRegisterItem) -> Vec<u16> {
+    let target_len = station.register_length as usize;
+    if target_len == 0 {
+        return Vec::new();
+    }
+
+    let mut values = station.last_values.clone();
+    values.resize(target_len, 0);
+    values
+}
+
 fn initialize_cli_data_source(
     port_name: &str,
-    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    register_address: u16,
-    register_length: u16,
-    register_mode: types::modbus::RegisterMode,
+    station: &types::modbus::ModbusRegisterItem,
 ) -> Result<PathBuf> {
     let path = create_cli_data_source_path(port_name);
-    if let Err(err) = write_cli_data_snapshot(
-        &path,
-        storage,
-        register_address,
-        register_length,
-        register_mode,
-        true,
-    ) {
+    let values = station_values_for_cli(station);
+    if let Err(err) = write_cli_data_snapshot(&path, &values, true) {
         log::error!(
             "initialize_cli_data_source: failed to write initial snapshot for {port_name}: {err}"
         );
@@ -143,21 +144,7 @@ fn initialize_cli_data_source(
     Ok(path)
 }
 
-fn write_cli_data_snapshot(
-    path: &PathBuf,
-    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    register_address: u16,
-    register_length: u16,
-    register_mode: types::modbus::RegisterMode,
-    truncate: bool,
-) -> Result<()> {
-    let values = crate::cli::modbus::extract_values_from_storage(
-        storage,
-        register_address,
-        register_length,
-        register_mode,
-    )?;
-
+fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Result<()> {
     let payload = serde_json::json!({ "values": values });
     let serialized = serde_json::to_string(&payload)?;
 
@@ -174,42 +161,6 @@ fn write_cli_data_snapshot(
     Ok(())
 }
 
-pub(crate) fn append_cli_data_snapshot(
-    path: &PathBuf,
-    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    register_address: u16,
-    register_length: u16,
-    register_mode: types::modbus::RegisterMode,
-) -> Result<()> {
-    write_cli_data_snapshot(
-        path,
-        storage,
-        register_address,
-        register_length,
-        register_mode,
-        false,
-    )
-}
-
-/// Replace (truncate) the CLI data snapshot file with current state
-/// Used for TUI register updates where we want only the latest state, not accumulated history
-pub(crate) fn replace_cli_data_snapshot(
-    path: &PathBuf,
-    storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    register_address: u16,
-    register_length: u16,
-    register_mode: types::modbus::RegisterMode,
-) -> Result<()> {
-    write_cli_data_snapshot(
-        path,
-        storage,
-        register_address,
-        register_length,
-        register_mode,
-        true, // truncate = true
-    )
-}
-
 fn apply_register_update_from_ipc(
     port_name: &str,
     station_id: u8,
@@ -217,35 +168,66 @@ fn apply_register_update_from_ipc(
     start_address: u16,
     values: &[u16],
 ) -> Result<()> {
-    let mut storage_handle: Option<Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>> = None;
-    let mut effective_length: Option<u16> = None;
+    let mut handled = false;
 
     write_status(|status| {
         if let Some(port_entry) = status.ports.map.get(port_name) {
             if with_port_write(port_entry, |port| {
-                if let types::port::PortConfig::Modbus { mode, stations } = &mut port.config {
-                    storage_handle = Some(match mode {
-                        types::modbus::ModbusConnectionMode::Master { storage } => {
-                            storage.clone()
-                        }
-                        types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
-                            storage.clone()
-                        }
-                    });
-
-                    if let Some(item) = stations.iter_mut().find(|item| {
-                        item.station_id == station_id && item.register_mode == register_mode
-                    }) {
+                let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
+                if let Some(item) = stations.iter_mut().find(|item| {
+                    item.station_id == station_id && item.register_mode == register_mode
+                }) {
                         item.req_total = item.req_total.saturating_add(1);
                         item.req_success = item.req_success.saturating_add(1);
                         item.last_response_time = Some(std::time::Instant::now());
-                        effective_length = Some(item.register_length);
-                    } else {
-                        log::debug!(
-                            "Register update for {port_name}: station {station_id} in mode {:?} not found",
-                            register_mode
-                        );
-                    }
+
+                        let configured_len = item.register_length as usize;
+                        if configured_len == 0 {
+                            return;
+                        }
+
+                        if item.last_values.len() != configured_len {
+                            item.last_values.resize(configured_len, 0);
+                        }
+
+                        if start_address < item.register_address {
+                            log::warn!(
+                                "Register update for {port_name}: start address 0x{start_address:04X} is before configured base 0x{:04X}",
+                                item.register_address
+                            );
+                            return;
+                        }
+
+                        let base_index = (start_address - item.register_address) as usize;
+                        if base_index >= configured_len {
+                            log::warn!(
+                                "Register update for {port_name}: start address 0x{start_address:04X} outside configured range base=0x{:04X} len=0x{:04X}",
+                                item.register_address,
+                                item.register_length
+                            );
+                            return;
+                        }
+
+                        let capacity = configured_len - base_index;
+                        let limit = std::cmp::min(values.len(), capacity);
+                        if values.len() > capacity {
+                            log::debug!(
+                                "Register update for {port_name}: truncating values from {} to configured capacity {}",
+                                values.len(),
+                                capacity
+                            );
+                        }
+
+                        for (offset, value) in values.iter().take(limit).enumerate() {
+                            item.last_values[base_index + offset] = *value;
+                        }
+
+                        handled = true;
+                } else {
+                    log::debug!(
+                        "Register update for {port_name}: station {station_id} in mode {:?} not found",
+                        register_mode
+                    );
                 }
             })
             .is_none()
@@ -260,62 +242,11 @@ fn apply_register_update_from_ipc(
         Ok(())
     })?;
 
-    let Some(storage) = storage_handle else {
-        return Ok(());
-    };
-
-    let Some(configured_length) = effective_length else {
-        return Ok(());
-    };
-
-    let limit = std::cmp::min(configured_length as usize, values.len());
-    if limit == 0 {
-        return Ok(());
-    }
-
-    if values.len() > limit {
+    if !handled {
         log::debug!(
-            "Register update for {port_name}: truncating values from {} to configured length {}",
-            values.len(),
-            configured_length
+            "Register update for {port_name}: no station handled for mode {:?}",
+            register_mode
         );
-    }
-    let mut context = storage
-        .lock()
-        .map_err(|err| anyhow!("Failed to lock Modbus storage for {port_name}: {err}"))?;
-
-    for (offset, value) in values.iter().take(limit).enumerate() {
-        let address = start_address + offset as u16;
-        match register_mode {
-            RegisterMode::Holding => {
-                if let Err(err) = context.set_holding(address, *value) {
-                    log::warn!(
-                        "Register update for {port_name}: failed to set holding 0x{address:04X}: {err}"
-                    );
-                }
-            }
-            RegisterMode::Input => {
-                if let Err(err) = context.set_input(address, *value) {
-                    log::warn!(
-                        "Register update for {port_name}: failed to set input 0x{address:04X}: {err}"
-                    );
-                }
-            }
-            RegisterMode::Coils => {
-                if let Err(err) = context.set_coil(address, *value != 0) {
-                    log::warn!(
-                        "Register update for {port_name}: failed to set coil 0x{address:04X}: {err}"
-                    );
-                }
-            }
-            RegisterMode::DiscreteInputs => {
-                if let Err(err) = context.set_discrete(address, *value != 0) {
-                    log::warn!(
-                        "Register update for {port_name}: failed to set discrete input 0x{address:04X}: {err}"
-                    );
-                }
-            }
-        }
     }
 
     Ok(())
@@ -826,18 +757,13 @@ fn run_core_thread(
                                     }
                                 }
                             }
-                            types::modbus::ModbusConnectionMode::Master { storage, .. } => {
+                            types::modbus::ModbusConnectionMode::Master => {
                                 log::info!(
                                     "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
                                 );
 
-                                let data_source_path = initialize_cli_data_source(
-                                    &port_name,
-                                    &storage,
-                                    station.register_address,
-                                    station.register_length,
-                                    station.register_mode,
-                                )?;
+                                let data_source_path =
+                                    initialize_cli_data_source(&port_name, &station)?;
 
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),

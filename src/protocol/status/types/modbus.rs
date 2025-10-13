@@ -1,7 +1,4 @@
-use std::{
-    convert::TryFrom,
-    sync::{Arc, Mutex},
-};
+use std::convert::TryFrom;
 use strum::{EnumIter, FromRepr};
 
 use crate::i18n::lang;
@@ -9,18 +6,15 @@ use crate::i18n::lang;
 #[repr(u8)]
 #[derive(Debug, Clone)]
 pub enum ModbusConnectionMode {
-    Master {
-        storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-    },
+    Master,
     Slave {
         current_request_at_station_index: usize,
-        storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     },
 }
 
 impl ModbusConnectionMode {
     pub fn is_master(&self) -> bool {
-        matches!(self, ModbusConnectionMode::Master { .. })
+        matches!(self, ModbusConnectionMode::Master)
     }
 
     pub fn is_slave(&self) -> bool {
@@ -28,21 +22,12 @@ impl ModbusConnectionMode {
     }
 
     pub fn default_master() -> Self {
-        let storage = Arc::new(Mutex::new(
-            rmodbus::server::storage::ModbusStorageSmall::new(),
-        ));
-
-        ModbusConnectionMode::Master { storage }
+        ModbusConnectionMode::Master
     }
 
     pub fn default_slave() -> Self {
-        let storage = Arc::new(Mutex::new(
-            rmodbus::server::storage::ModbusStorageSmall::new(),
-        ));
-
         ModbusConnectionMode::Slave {
             current_request_at_station_index: 0,
-            storage,
         }
     }
 
@@ -61,7 +46,7 @@ impl ModbusConnectionMode {
 
     pub fn to_index(&self) -> usize {
         match self {
-            ModbusConnectionMode::Master { .. } => 0,
+            ModbusConnectionMode::Master => 0,
             ModbusConnectionMode::Slave { .. } => 1,
         }
     }
@@ -70,7 +55,7 @@ impl ModbusConnectionMode {
 impl std::fmt::Display for ModbusConnectionMode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ModbusConnectionMode::Master { .. } => {
+            ModbusConnectionMode::Master => {
                 write!(f, "{}", lang().protocol.modbus.role_master)
             }
             ModbusConnectionMode::Slave { .. } => {
@@ -149,11 +134,11 @@ impl std::fmt::Display for RegisterMode {
 
 #[derive(Debug, Clone)]
 pub struct ModbusRegisterItem {
-    pub connection_mode: ModbusConnectionMode,
     pub station_id: u8,
     pub register_mode: RegisterMode,
     pub register_address: u16,
     pub register_length: u16,
+    pub last_values: Vec<u16>,
 
     pub req_success: u32,
     pub req_total: u32,
