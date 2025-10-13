@@ -342,56 +342,61 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
         // Accept command connection if not yet connected
         if let Some(ref mut ipc_conns) = ipc_connections {
-            // Try to accept command connection (non-blocking after first attempt)
-            // This is a one-time operation
+            // Try to accept command connection - retry on each loop iteration until successful
             static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
             if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
-                if let Err(e) = ipc_conns.command_listener.accept() {
-                    log::debug!("Command channel accept not ready: {e}");
-                } else {
-                    log::info!("Command channel accepted");
-                    COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                match ipc_conns.command_listener.accept() {
+                    Ok(()) => {
+                        log::info!("Command channel accepted");
+                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        // Don't log every attempt to avoid spam, just keep trying
+                        log::trace!("Command channel accept not ready yet: {e}");
+                    }
                 }
             }
 
             // Check for incoming commands
-            if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
-                match msg {
-                    crate::protocol::ipc::IpcMessage::ConfigUpdate {
-                        station_id: new_station_id,
-                        register_type,
-                        start_address: new_start_address,
-                        register_length: new_length,
-                        ..
-                    } => {
-                        log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
-                        // TODO: Apply configuration updates to runtime
-                        // For now, just log them
-                    }
-                    crate::protocol::ipc::IpcMessage::RegisterUpdate {
-                        station_id: _,
-                        register_type,
-                        start_address: update_start_addr,
-                        values,
-                        ..
-                    } => {
-                        log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
-                        // Apply register updates directly to storage
-                        let mut context = storage.lock().unwrap();
-                        if register_type == "holding" {
-                            for (i, &val) in values.iter().enumerate() {
-                                if let Err(e) =
-                                    context.set_holding(update_start_addr + i as u16, val)
-                                {
-                                    log::warn!("Failed to set holding register: {e}");
-                                }
-                            }
-                            log::info!("Applied register update to storage");
+            if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
+                    match msg {
+                        crate::protocol::ipc::IpcMessage::ConfigUpdate {
+                            station_id: new_station_id,
+                            register_type,
+                            start_address: new_start_address,
+                            register_length: new_length,
+                            ..
+                        } => {
+                            log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
+                            // TODO: Apply configuration updates to runtime
+                            // For now, just log them
                         }
-                    }
-                    _ => {
-                        log::debug!("Ignoring non-command IPC message");
+                        crate::protocol::ipc::IpcMessage::RegisterUpdate {
+                            station_id: _,
+                            register_type,
+                            start_address: update_start_addr,
+                            values,
+                            ..
+                        } => {
+                            log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
+                            // Apply register updates directly to storage
+                            let mut context = storage.lock().unwrap();
+                            if register_type == "holding" {
+                                for (i, &val) in values.iter().enumerate() {
+                                    if let Err(e) =
+                                        context.set_holding(update_start_addr + i as u16, val)
+                                    {
+                                        log::warn!("Failed to set holding register: {e}");
+                                    }
+                                }
+                                log::info!("Applied register update to storage");
+                            }
+                        }
+                        _ => {
+                            log::debug!("Ignoring non-command IPC message");
+                        }
                     }
                 }
             }
