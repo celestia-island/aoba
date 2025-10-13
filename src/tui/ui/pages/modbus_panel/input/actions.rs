@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
-use rmodbus::server::context::ModbusContext;
 
 use crate::{
     protocol::status::{
         read_status,
-        types::{self, port::PortState},
+        types::{
+            self,
+            port::{PortOwner, PortState, PortSubprocessMode},
+        },
         with_port_write, write_status,
     },
     tui::utils::bus::{Bus, UiToCore},
@@ -152,58 +154,59 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 if let Some(port) = read_status(|status| {
                                     Ok(status.ports.map.get(&port_name).cloned())
                                 })? {
+                                    let mut owner_snapshot: Option<PortOwner> = None;
+                                    let mut register_update: Option<(String, u8, u16, Vec<u16>)> =
+                                        None;
+
                                     with_port_write(&port, |port| {
+                                        owner_snapshot = port.state.owner().cloned();
+
                                         let types::port::PortConfig::Modbus { mode, stations } =
                                             &mut port.config;
-                                        let mut all_items: Vec<_> = stations.iter_mut().collect();
-                                        if let Some(item) = all_items.get_mut(slave_index) {
+                                        if let Some(item) = stations.get_mut(slave_index) {
                                             let register_addr =
                                                 item.register_address + register_index as u16;
 
-                                            // Read current value, toggle it, and write back
+                                            let value_index =
+                                                (register_addr - item.register_address) as usize;
+                                            if item.last_values.len() <= value_index {
+                                                item.last_values.resize(value_index + 1, 0);
+                                            }
+
+                                            let current = item.last_values[value_index] != 0;
+                                            let new_value_flag = !current;
+                                            item.last_values[value_index] =
+                                                if new_value_flag { 1 } else { 0 };
+
                                             match mode {
-                                                types::modbus::ModbusConnectionMode::Master {
-                                                    storage,
-                                                } => {
-                                                    // Master mode: Toggle coil directly in storage
-                                                    if let Ok(mut context) = storage.lock() {
-                                                        if item.register_mode
-                                                            == types::modbus::RegisterMode::Coils
-                                                        {
-                                                            let current = context
-                                                                .get_coil(register_addr)
-                                                                .unwrap_or(false);
-                                                            let new_value = !current;
-                                                            if let Err(err) = context
-                                                                .set_coil(register_addr, new_value)
-                                                            {
-                                                                log::warn!("Failed to toggle coil at {register_addr}: {err}");
-                                                            } else {
-                                                                log::info!(
-                                                                    "✓ Master: Toggled coil at 0x{register_addr:04X} from {current} to {new_value}"
-                                                                );
-                                                            }
-                                                        }
-                                                    }
+                                                types::modbus::ModbusConnectionMode::Master => {
+                                                    register_update = Some((
+                                                        "coil".to_string(),
+                                                        item.station_id,
+                                                        register_addr,
+                                                        vec![item.last_values[value_index]],
+                                                    ));
                                                 }
                                                 types::modbus::ModbusConnectionMode::Slave {
-                                                    storage,
                                                     ..
                                                 } => {
-                                                    // Slave mode: Queue a write request for the coil
-                                                    if let Ok(context) = storage.lock() {
-                                                        let current = context
-                                                            .get_coil(register_addr)
-                                                            .unwrap_or(false);
-                                                        let new_value = !current;
+                                                    let should_queue = match owner_snapshot.as_ref() {
+                                                        Some(PortOwner::CliSubprocess(info))
+                                                            if info.mode == PortSubprocessMode::MasterProvide =>
+                                                        {
+                                                            false
+                                                        }
+                                                        _ => true,
+                                                    };
 
-                                                        // For single coil write, we use function 0x05 (Write Single Coil)
-                                                        // Generate the Modbus frame for single coil write
+                                                    if should_queue {
                                                         use crate::protocol::modbus::generate_pull_set_holding_request;
 
-                                                        // Single coil write uses value 0xFF00 for ON, 0x0000 for OFF
-                                                        let coil_value =
-                                                            if new_value { 0xFF00 } else { 0x0000 };
+                                                        let coil_value = if new_value_flag {
+                                                            0xFF00
+                                                        } else {
+                                                            0x0000
+                                                        };
 
                                                         if let Ok((_request, raw_frame)) =
                                                             generate_pull_set_holding_request(
@@ -212,30 +215,55 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                                 coil_value,
                                                             )
                                                         {
-                                                            // Modify the function code to 0x05 (Write Single Coil)
                                                             let mut frame = raw_frame;
                                                             if frame.len() > 1 {
                                                                 frame[1] = 0x05;
-                                                                // Change function code from 0x06 to 0x05
+                                                                // single coil write
                                                             }
-
                                                             item.pending_requests
                                                                 .extend_from_slice(&frame);
                                                             log::info!(
-                                                                "📤 Slave: Queued toggle coil 0x{:04X} from {} to {} ({} bytes)",
+                                                                "📤 Slave: Queued coil toggle 0x{:04X} -> {} ({} bytes)",
                                                                 register_addr,
-                                                                current,
-                                                                new_value,
+                                                                new_value_flag,
                                                                 frame.len()
                                                             );
                                                         } else {
-                                                            log::warn!("Failed to generate coil write request");
+                                                            log::warn!(
+                                                                "Failed to build single-coil write frame for station {}",
+                                                                item.station_id
+                                                            );
                                                         }
                                                     }
+
+                                                    register_update = Some((
+                                                        "coil".to_string(),
+                                                        item.station_id,
+                                                        register_addr,
+                                                        vec![item.last_values[value_index]],
+                                                    ));
                                                 }
                                             }
                                         }
                                     });
+
+                                    if let (Some(PortOwner::CliSubprocess(_)), Some(update)) =
+                                        (owner_snapshot, register_update)
+                                    {
+                                        if let Err(err) =
+                                            bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                                                port_name: port_name.clone(),
+                                                station_id: update.1,
+                                                register_type: update.0,
+                                                start_address: update.2,
+                                                values: update.3,
+                                            })
+                                        {
+                                            log::warn!(
+                                                "Failed to send coil toggle IPC message: {err}"
+                                            );
+                                        }
+                                    }
                                 }
                             }
                             bus.ui_tx
@@ -308,7 +336,7 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
 
     if let Some(port_name) = port_name_opt {
         log::info!("🟢 Found port name: {port_name}");
-        let mut should_restart = false;
+        let mut should_restart_runtime = false;
         if let Some(port) = read_status(|status| {
             let port = status.ports.map.get(&port_name).cloned();
             if port.is_some() {
@@ -322,9 +350,16 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
             with_port_write(&port, |port| {
                 log::info!("🟢 Inside with_port_write closure");
                 // Check if port is currently occupied before adding station
-                if matches!(port.state, PortState::OccupiedByThis { .. }) {
-                    log::info!("🟢 Port {port_name} is occupied - will trigger restart after adding station");
-                    should_restart = true;
+                if matches!(
+                    port.state,
+                    PortState::OccupiedByThis {
+                        owner: PortOwner::Runtime(_)
+                    }
+                ) {
+                    log::info!(
+                        "🟢 Port {port_name} is occupied by native runtime - scheduling restart"
+                    );
+                    should_restart_runtime = true;
                 }
 
                 let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
@@ -335,11 +370,11 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
                 );
                 // Create a new entry with the global mode from the port config
                 let new_entry = types::modbus::ModbusRegisterItem {
-                    connection_mode: mode.clone(),
                     station_id: 1,
                     register_mode: types::modbus::RegisterMode::Holding,
                     register_address: 0,
                     register_length: 1,
+                    last_values: vec![0],
                     req_success: 0,
                     req_total: 0,
                     next_poll_at: std::time::Instant::now() - std::time::Duration::from_secs(1), // Start immediately
@@ -358,8 +393,10 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
             log::info!("🟢 with_port_write completed");
 
             // If port was occupied, restart it to apply new station configuration
-            if should_restart {
-                log::info!("🔄 Restarting port {port_name} to apply new station configuration");
+            if should_restart_runtime {
+                log::info!(
+                    "🔄 Restarting native runtime for {port_name} to apply new station configuration"
+                );
                 bus.ui_tx
                     .send(UiToCore::ToggleRuntime(port_name.clone()))
                     .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;

@@ -1,7 +1,6 @@
 use anyhow::Result;
 
 use ratatui::{prelude::*, text::Line};
-use rmodbus::server::context::ModbusContext;
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
@@ -113,90 +112,16 @@ pub fn render_register_row_line(
                     TextState::Normal
                 };
 
+                let relative_index = (addr - item.register_address) as usize;
+                let stored_value = item.last_values.get(relative_index).copied().unwrap_or(0);
+
                 let cell_spans = match item.register_mode {
                     RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                        // Read from global storage when available (both Master and Slave modes have storage)
-                        let is_on = read_status(|status| {
-                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
-                            {
-                                if let Some(port_name) = status.ports.order.get(*selected_port) {
-                                    if let Some(port_entry) = status.ports.map.get(port_name) {
-                                        if let Ok(port_guard) = port_entry.read() {
-                                            let types::port::PortConfig::Modbus { mode, .. } =
-                                                &port_guard.config;
-                                            let storage_opt = match mode {
-                                                types::modbus::ModbusConnectionMode::Master {
-                                                    storage,
-                                                } => Some(storage.clone()),
-                                                types::modbus::ModbusConnectionMode::Slave {
-                                                    storage,
-                                                    ..
-                                                } => Some(storage.clone()),
-                                            };
-
-                                            if let Some(storage) = storage_opt {
-                                                if let Ok(context) = storage.lock() {
-                                                    // Use the address as the register index
-                                                    let value = if item.register_mode
-                                                        == RegisterMode::Coils
-                                                    {
-                                                        context.get_coil(addr).unwrap_or(false)
-                                                    } else {
-                                                        context.get_discrete(addr).unwrap_or(false)
-                                                    };
-                                                    return Ok(value);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            // Default to false (OFF) when storage not available
-                            Ok(false)
-                        })?;
+                        let is_on = stored_value != 0;
                         switch_spans(is_on, "ON", "OFF", state)?
                     }
                     RegisterMode::Holding | RegisterMode::Input => {
-                        // Read from global storage when available (both Master and Slave modes have storage)
-                        let current_value = read_status(|status| {
-                            if let types::Page::ModbusDashboard { selected_port, .. } = &status.page
-                            {
-                                if let Some(port_name) = status.ports.order.get(*selected_port) {
-                                    if let Some(port_entry) = status.ports.map.get(port_name) {
-                                        if let Ok(port_guard) = port_entry.read() {
-                                            let types::port::PortConfig::Modbus { mode, .. } =
-                                                &port_guard.config;
-                                            let storage_opt = match mode {
-                                                types::modbus::ModbusConnectionMode::Master {
-                                                    storage,
-                                                } => Some(storage.clone()),
-                                                types::modbus::ModbusConnectionMode::Slave {
-                                                    storage,
-                                                    ..
-                                                } => Some(storage.clone()),
-                                            };
-
-                                            if let Some(storage) = storage_opt {
-                                                if let Ok(context) = storage.lock() {
-                                                    // Use the address as the register index
-                                                    let value = if item.register_mode
-                                                        == RegisterMode::Holding
-                                                    {
-                                                        context.get_holding(addr).unwrap_or(0)
-                                                    } else {
-                                                        context.get_input(addr).unwrap_or(0)
-                                                    };
-                                                    return Ok(value);
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            // Default to 0 when storage not available
-                            Ok(0)
-                        })?;
-                        let hex_str = format!("0x{current_value:04X}");
+                        let hex_str = format!("0x{stored_value:04X}");
                         input_spans(hex_str.clone(), state)?
                     }
                 };
