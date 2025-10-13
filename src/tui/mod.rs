@@ -480,6 +480,17 @@ fn run_core_thread(
     loop {
         // Drain UI -> core messages
         while let Ok(msg) = ui_rx.try_recv() {
+            let msg_name = match &msg {
+                UiToCore::Quit => "Quit".to_string(),
+                UiToCore::Refresh => "Refresh".to_string(),
+                UiToCore::PausePolling => "PausePolling".to_string(),
+                UiToCore::ResumePolling => "ResumePolling".to_string(),
+                UiToCore::ToggleRuntime(port) => format!("ToggleRuntime({})", port),
+                UiToCore::SendRegisterUpdate { port_name, station_id, start_address, values, .. } => {
+                    format!("SendRegisterUpdate(port={}, station={}, addr={}, values={:?})", port_name, station_id, start_address, values)
+                }
+            };
+            log::info!("🔵 Core thread received message: {}", msg_name);
             match msg {
                 UiToCore::Quit => {
                     log::info!("Received quit signal");

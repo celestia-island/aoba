@@ -382,16 +382,19 @@ fn commit_text_edit(
                                 start_address,
                                 values
                             );
-                            if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                            match bus.ui_tx.send(UiToCore::SendRegisterUpdate {
                                 port_name: port_name.clone(),
                                 station_id: *station_id,
                                 register_type: register_type.clone(),
                                 start_address: *start_address,
                                 values: values.clone(),
                             }) {
-                                log::warn!("Failed to send IPC register update message: {err}");
-                            } else {
-                                log::info!("✅ RegisterUpdate message queued successfully");
+                                Ok(()) => {
+                                    log::info!("✅ RegisterUpdate message SENT successfully to channel");
+                                }
+                                Err(err) => {
+                                    log::error!("❌ Failed to send RegisterUpdate to channel: {err}");
+                                }
                             }
                         } else {
                             log::debug!(
