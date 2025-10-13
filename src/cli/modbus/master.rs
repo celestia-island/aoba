@@ -612,20 +612,21 @@ fn respond_to_request(
     use rmodbus::server::ModbusFrame;
 
     if request.len() < 2 {
+        log::warn!("respond_to_request: Request too short (len={})", request.len());
         return Err(anyhow!("Request too short"));
     }
 
     let request_station_id = request[0];
     if request_station_id != station_id {
         log::debug!(
-            "Ignoring request for station {request_station_id} (we are station {station_id})",
+            "respond_to_request: Ignoring request for station {request_station_id} (we are station {station_id})",
         );
         return Err(anyhow!(
             "Request for different station ID: {request_station_id} (we are {station_id})",
         ));
     }
 
-    log::info!("Received request: {request:02X?}");
+    log::info!("respond_to_request: Received request from slave: {request:02X?}");
 
     // Parse and respond to request
     let mut context = storage.lock().unwrap();
@@ -633,20 +634,40 @@ fn respond_to_request(
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response_buf);
     frame.parse()?;
 
+    log::debug!(
+        "respond_to_request: Parsed frame - func={:?}, reg_addr=0x{:04X?}, count={}",
+        frame.func,
+        frame.reg,
+        frame.count
+    );
+
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
             match build_slave_holdings_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => return Err(anyhow!("Failed to build holdings response")),
+                Ok(Some(resp)) => {
+                    log::debug!("respond_to_request: Built holdings response ({} bytes)", resp.len());
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build holdings response");
+                    return Err(anyhow!("Failed to build holdings response"));
+                }
             }
         }
         rmodbus::consts::ModbusFunction::GetCoils => {
             match build_slave_coils_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => return Err(anyhow!("Failed to build coils response")),
+                Ok(Some(resp)) => {
+                    log::debug!("respond_to_request: Built coils response ({} bytes)", resp.len());
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build coils response");
+                    return Err(anyhow!("Failed to build coils response"));
+                }
             }
         }
         _ => {
+            log::error!("respond_to_request: Unsupported function code: {:?}", frame.func);
             return Err(anyhow!("Unsupported function code: {:?}", frame.func));
         }
     };
@@ -659,10 +680,11 @@ fn respond_to_request(
     port.flush()?;
     drop(port);
 
-    log::info!("Sent response: {response:02X?}");
+    log::info!("respond_to_request: Sent response to slave: {response:02X?}");
 
     // Extract values from response for JSON output
     let values = extract_values_from_response(&response)?;
+    log::debug!("respond_to_request: Extracted values for output: {:?}", values);
 
     Ok(ModbusResponse {
         station_id,
