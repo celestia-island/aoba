@@ -479,7 +479,10 @@ fn run_core_thread(
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         // Drain UI -> core messages
+        let msg_count_before = ui_rx.len();
+        let mut msg_count_processed = 0;
         while let Ok(msg) = ui_rx.try_recv() {
+            msg_count_processed += 1;
             let msg_name = match &msg {
                 UiToCore::Quit => "Quit".to_string(),
                 UiToCore::Refresh => "Refresh".to_string(),
@@ -984,6 +987,10 @@ fn run_core_thread(
                     }
                 }
             }
+        }
+        
+        if msg_count_before > 0 || msg_count_processed > 0 {
+            log::info!("📊 Core thread: queue had {} messages, processed {}", msg_count_before, msg_count_processed);
         }
 
         let dead_processes = subprocess_manager.reap_dead_processes();
