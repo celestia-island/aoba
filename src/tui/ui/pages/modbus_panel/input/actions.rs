@@ -190,14 +190,11 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                 types::modbus::ModbusConnectionMode::Slave {
                                                     ..
                                                 } => {
-                                                    let should_queue = match owner_snapshot.as_ref() {
+                                                    let should_queue = !matches!(
+                                                        owner_snapshot.as_ref(),
                                                         Some(PortOwner::CliSubprocess(info))
-                                                            if info.mode == PortSubprocessMode::MasterProvide =>
-                                                        {
-                                                            false
-                                                        }
-                                                        _ => true,
-                                                    };
+                                                            if info.mode == PortSubprocessMode::MasterProvide
+                                                    );
 
                                                     if should_queue {
                                                         use crate::protocol::modbus::generate_pull_set_holding_request;

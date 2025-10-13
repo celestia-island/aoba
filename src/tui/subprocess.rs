@@ -118,7 +118,7 @@ impl ManagedSubprocess {
         args.push("--ipc-channel".to_string());
         args.push(ipc_socket_name.clone());
 
-        log::debug!("CLI subprocess command: {:?} {:?}", exe_path, args);
+        log::debug!("CLI subprocess command: {exe_path:?} {args:?}");
 
         // Spawn the subprocess
         let mut child = Command::new(exe_path)
@@ -499,7 +499,7 @@ impl SubprocessManager {
 
         // If a subprocess already exists for this port, stop it first
         if self.processes.contains_key(&port_name) {
-            log::info!("Stopping existing subprocess for port {}", port_name);
+            log::info!("Stopping existing subprocess for port {port_name}");
             self.stop_subprocess(&port_name)?;
         }
 
@@ -587,9 +587,9 @@ impl SubprocessManager {
     /// Shutdown all subprocesses
     pub fn shutdown_all(&mut self) {
         for (port_name, mut subprocess) in self.processes.drain() {
-            log::info!("Shutting down subprocess for port {}", port_name);
+            log::info!("Shutting down subprocess for port {port_name}");
             if let Err(err) = subprocess.kill() {
-                log::warn!("Failed to kill subprocess for {}: {}", port_name, err);
+                log::warn!("Failed to kill subprocess for {port_name}: {err}");
             }
         }
     }

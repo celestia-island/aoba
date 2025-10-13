@@ -612,7 +612,10 @@ fn respond_to_request(
     use rmodbus::server::ModbusFrame;
 
     if request.len() < 2 {
-        log::warn!("respond_to_request: Request too short (len={})", request.len());
+        log::warn!(
+            "respond_to_request: Request too short (len={})",
+            request.len()
+        );
         return Err(anyhow!("Request too short"));
     }
 
@@ -645,7 +648,10 @@ fn respond_to_request(
         rmodbus::consts::ModbusFunction::GetHoldings => {
             match build_slave_holdings_response(&mut frame, &mut context) {
                 Ok(Some(resp)) => {
-                    log::debug!("respond_to_request: Built holdings response ({} bytes)", resp.len());
+                    log::debug!(
+                        "respond_to_request: Built holdings response ({} bytes)",
+                        resp.len()
+                    );
                     resp
                 }
                 _ => {
@@ -657,7 +663,10 @@ fn respond_to_request(
         rmodbus::consts::ModbusFunction::GetCoils => {
             match build_slave_coils_response(&mut frame, &mut context) {
                 Ok(Some(resp)) => {
-                    log::debug!("respond_to_request: Built coils response ({} bytes)", resp.len());
+                    log::debug!(
+                        "respond_to_request: Built coils response ({} bytes)",
+                        resp.len()
+                    );
                     resp
                 }
                 _ => {
@@ -667,7 +676,10 @@ fn respond_to_request(
             }
         }
         _ => {
-            log::error!("respond_to_request: Unsupported function code: {:?}", frame.func);
+            log::error!(
+                "respond_to_request: Unsupported function code: {:?}",
+                frame.func
+            );
             return Err(anyhow!("Unsupported function code: {:?}", frame.func));
         }
     };
@@ -684,7 +696,7 @@ fn respond_to_request(
 
     // Extract values from response for JSON output
     let values = extract_values_from_response(&response)?;
-    log::debug!("respond_to_request: Extracted values for output: {:?}", values);
+    log::debug!("respond_to_request: Extracted values for output: {values:?}");
 
     Ok(ModbusResponse {
         station_id,

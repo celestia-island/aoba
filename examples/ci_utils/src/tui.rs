@@ -79,7 +79,7 @@ pub async fn navigate_to_vcom<T: Expect>(
     }
 
     let port_idx =
-        port_line.ok_or_else(|| anyhow!("Could not find {} line index", detected_port_name))?;
+        port_line.ok_or_else(|| anyhow!("Could not find {detected_port_name} line index"))?;
     let curr_idx = cursor_line.unwrap_or(3);
 
     if port_idx != curr_idx {
@@ -283,7 +283,7 @@ pub async fn update_tui_registers<T: Expect>(
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers
-        let hex_val = format!("{:x}", val);
+        let hex_val = format!("{val:x}");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::TypeString(hex_val),
@@ -325,7 +325,7 @@ pub async fn update_tui_registers<T: Expect>(
                 session,
                 cap,
                 &actions,
-                &format!("nav_to_reg_{}", next_index),
+                &format!("nav_to_reg_{next_index}"),
             )
             .await?;
         }

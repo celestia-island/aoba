@@ -158,7 +158,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
             let mut file = File::create(&data_file)?;
             // Write the data as JSON for the CLI master to provide
             let json_data = serde_json::json!({"values": data});
-            writeln!(file, "{}", json_data)?;
+            writeln!(file, "{json_data}")?;
         }
 
         log::info!("🧪 Round {round}/{ROUNDS}: Starting CLI master-provide-persist on port2");

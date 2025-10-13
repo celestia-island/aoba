@@ -389,8 +389,7 @@ fn send_request_and_wait(
 
             let byte_count = response[2] as usize;
             log::debug!(
-                "send_request_and_wait: Parsing response - byte_count={byte_count}, expected data bytes={}"
-                , byte_count
+                "send_request_and_wait: Parsing response - byte_count={byte_count}, expected data bytes={byte_count}"
             );
             if bytes_read < 3 + byte_count + 2 {
                 log::error!(
@@ -406,7 +405,10 @@ fn send_request_and_wait(
                 let value = u16::from_be_bytes([response[offset], response[offset + 1]]);
                 values.push(value);
             }
-            log::info!("send_request_and_wait: Parsed {} register values: {:?}", values.len(), values);
+            log::info!(
+                "send_request_and_wait: Parsed {} register values: {values:?}",
+                values.len(),
+            );
             values
         }
         crate::protocol::status::types::modbus::RegisterMode::Coils
@@ -449,7 +451,10 @@ fn send_request_and_wait(
             }
             // Truncate to requested length
             values.truncate(register_length as usize);
-            log::info!("send_request_and_wait: Parsed {} coil/discrete values: {:?}", values.len(), values);
+            log::info!(
+                "send_request_and_wait: Parsed {} coil/discrete values: {values:?}",
+                values.len(),
+            );
             values
         }
     };
@@ -574,16 +579,16 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                             "IPC: Sending RegisterUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
                             response.values
                         );
-                        let _ = ipc_conns
-                            .status
-                            .send(&crate::protocol::ipc::IpcMessage::RegisterUpdate {
+                        let _ = ipc_conns.status.send(
+                            &crate::protocol::ipc::IpcMessage::RegisterUpdate {
                                 port_name: port.to_string(),
                                 station_id,
                                 register_type: register_mode.clone(),
                                 start_address: register_address,
                                 values: response.values.clone(),
                                 timestamp: None,
-                            });
+                            },
+                        );
                     }
                 }
             }

@@ -57,7 +57,7 @@ fn create_cli_data_source_path(port_name: &str) -> PathBuf {
 
     let timestamp = Local::now().format("%Y%m%d%H%M%S");
     let mut path = std::env::temp_dir();
-    path.push(format!("aoba_cli_{}_{}.jsonl", fallback, timestamp));
+    path.push(format!("aoba_cli_{fallback}_{timestamp}.jsonl"));
     path
 }
 
@@ -79,19 +79,12 @@ fn append_port_log(port_name: &str, raw: String) {
             })
             .is_none()
             {
-                log::warn!(
-                    "append_port_log: failed to acquire write lock for port {}",
-                    port_name
-                );
+                log::warn!("append_port_log: failed to acquire write lock for port {port_name}");
             }
         }
         Ok(())
     }) {
-        log::warn!(
-            "append_port_log: failed to persist log entry for {}: {}",
-            port_name,
-            err
-        );
+        log::warn!("append_port_log: failed to persist log entry for {port_name}: {err}");
     }
 }
 
@@ -157,7 +150,7 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
     }
 
     let mut file = options.open(path)?;
-    writeln!(file, "{}", serialized)?;
+    writeln!(file, "{serialized}")?;
     Ok(())
 }
 
@@ -225,8 +218,7 @@ fn apply_register_update_from_ipc(
                         handled = true;
                 } else {
                     log::debug!(
-                        "Register update for {port_name}: station {station_id} in mode {:?} not found",
-                        register_mode
+                        "Register update for {port_name}: station {station_id} in mode {register_mode:?} not found"
                     );
                 }
             })
@@ -244,8 +236,7 @@ fn apply_register_update_from_ipc(
 
     if !handled {
         log::debug!(
-            "Register update for {port_name}: no station handled for mode {:?}",
-            register_mode
+            "Register update for {port_name}: no station handled for mode {register_mode:?}"
         );
     }
 
@@ -991,12 +982,13 @@ fn run_core_thread(
                 for (port_name, _) in &dead_processes {
                     if let Some(port) = status.ports.map.get(port_name) {
                         if with_port_write(port, |port| {
-                            if let PortState::OccupiedByThis { owner } = &mut port.state {
-                                if let PortOwner::CliSubprocess(info) = owner {
-                                    cleanup_paths
-                                        .insert(port_name.clone(), info.data_source_path.clone());
-                                    port.state = PortState::Free;
-                                }
+                            if let PortState::OccupiedByThis {
+                                owner: PortOwner::CliSubprocess(info),
+                            } = &mut port.state
+                            {
+                                cleanup_paths
+                                    .insert(port_name.clone(), info.data_source_path.clone());
+                                port.state = PortState::Free;
                             }
                         })
                         .is_none()
@@ -1011,17 +1003,15 @@ fn run_core_thread(
             })?;
 
             for (port_name, exit_status) in dead_processes {
-                if let Some(path_opt) = cleanup_paths.remove(&port_name) {
-                    if let Some(path) = path_opt {
-                        if let Err(err) = fs::remove_file(&path) {
-                            log::debug!("cleanup: failed to remove data source {path}: {err}");
-                        }
+                if let Some(Some(path)) = cleanup_paths.remove(&port_name) {
+                    if let Err(err) = fs::remove_file(&path) {
+                        log::debug!("cleanup: failed to remove data source {path}: {err}");
                     }
                 }
 
                 append_port_log(
                     &port_name,
-                    format!("CLI subprocess exited: {:?}", exit_status),
+                    format!("CLI subprocess exited: {exit_status:?}"),
                 );
 
                 if let Err(err) = core_tx.send(CoreToUi::Refreshed) {

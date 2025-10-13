@@ -663,6 +663,7 @@ pub fn generate_modbus_request_bytes(
 }
 
 /// Generate a modbus master response to an incoming request (same logic as slave response)
+#[allow(clippy::manual_div_ceil)]
 pub fn generate_modbus_master_response(
     request: &[u8],
     port_arc: &Arc<RwLock<types::port::PortData>>,
@@ -716,10 +717,7 @@ pub fn generate_modbus_master_response(
     .flatten()
     .ok_or_else(|| {
         anyhow!(
-            "No matching station configuration for request (id={}, func=0x{function_code:02X}, addr={}, qty={})",
-            slave_id,
-            register_address,
-            quantity
+            "No matching station configuration for request (id={slave_id}, func=0x{function_code:02X}, addr={register_address}, qty={quantity})"
         )
     })?;
 

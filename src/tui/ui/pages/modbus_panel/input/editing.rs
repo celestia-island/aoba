@@ -32,7 +32,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
             let buffer_type = match &input_raw_buffer {
                 types::ui::InputRawBuffer::None => "None".to_string(),
-                types::ui::InputRawBuffer::Index(i) => format!("Index({})", i),
+                types::ui::InputRawBuffer::Index(i) => format!("Index({i})"),
                 types::ui::InputRawBuffer::String { bytes, .. } => {
                     format!(
                         "String(len={}, val='{}')",
@@ -41,18 +41,18 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     )
                 }
             };
-            log::info!("🟡 handle_editing_input: buffer type = {}", buffer_type);
+            log::info!("🟡 handle_editing_input: buffer type = {buffer_type}");
 
             let mut maybe_restart: Option<String> = None;
 
             match &input_raw_buffer {
                 types::ui::InputRawBuffer::Index(selected_index) => {
-                    log::info!("🟡 Committing selector edit, index={}", selected_index);
+                    log::info!("🟡 Committing selector edit, index={selected_index}");
                     maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                 }
                 types::ui::InputRawBuffer::String { bytes, .. } => {
                     let value = String::from_utf8_lossy(bytes).to_string();
-                    log::info!("🟡 Committing text edit, value='{}'", value);
+                    log::info!("🟡 Committing text edit, value='{value}'");
                     commit_text_edit(current_cursor, value, bus)?;
                 }
                 _ => {
@@ -326,7 +326,7 @@ fn commit_text_edit(
                                     item.last_values.resize(item.register_length as usize, 0);
                                 }
 
-                                let idx = register_index as usize;
+                                let idx = register_index;
                                 if idx >= item.last_values.len() {
                                     item.last_values.resize(idx + 1, 0);
                                 }
@@ -354,14 +354,11 @@ fn commit_text_edit(
                                 ));
 
                                 if matches!(mode, ModbusConnectionMode::Slave { .. }) {
-                                    let needs_enqueue = match owner_info.as_ref() {
+                                    let needs_enqueue = !matches!(
+                                        owner_info.as_ref(),
                                         Some(PortOwner::CliSubprocess(info))
-                                            if info.mode == PortSubprocessMode::MasterProvide =>
-                                        {
-                                            false
-                                        }
-                                        _ => true,
-                                    };
+                                            if info.mode == PortSubprocessMode::MasterProvide
+                                    );
 
                                     if needs_enqueue {
                                         enqueue_slave_write(item, register_addr, sanitized_value);
