@@ -102,18 +102,18 @@ pub async fn navigate_to_vcom<T: Expect>(
 
     // Press Enter to enter port details
     let port_pattern_regex = ports.port1_rx.clone();
-    
+
     // Retry action: if we entered wrong port, press Escape and try to navigate again
     let retry_action = Some(vec![
         crate::auto_cursor::CursorAction::PressEscape,
         crate::auto_cursor::CursorAction::Sleep { ms: 500 },
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
-            count: 20,  // Go all the way up
+            count: 20, // Go all the way up
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
     ]);
-    
+
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
         crate::auto_cursor::CursorAction::MatchPattern {
@@ -212,7 +212,7 @@ pub async fn enable_port_carefully<T: Expect>(
         description: "Enable Port option focused".to_string(),
         line_range: Some((line_start, line_end)),
         col_range: None,
-        retry_action: None,  // Already aligned, no retry needed
+        retry_action: None, // Already aligned, no retry needed
     }];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "align_enable_port_verify")
         .await?;
@@ -264,7 +264,7 @@ pub async fn enter_modbus_panel<T: Expect>(
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 3)),
             col_range: None,
-            retry_action: None,  // Clear navigation path, no retry needed
+            retry_action: None, // Clear navigation path, no retry needed
         },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_modbus_panel")

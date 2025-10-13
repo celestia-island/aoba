@@ -67,8 +67,8 @@ pub async fn execute_cursor_actions<T: Expect>(
             } => {
                 log::info!("🔍 Matching pattern '{description}' with nested retry logic");
 
-                const INNER_RETRIES: usize = 3;  // Number of screen captures before executing retry_action
-                const OUTER_RETRIES: usize = 3;  // Number of times to execute retry_action
+                const INNER_RETRIES: usize = 3; // Number of screen captures before executing retry_action
+                const OUTER_RETRIES: usize = 3; // Number of times to execute retry_action
                 const RETRY_INTERVAL_MS: u64 = 1000;
 
                 let mut matched = false;
@@ -80,7 +80,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                     // Inner loop: try to match pattern INNER_RETRIES times
                     for inner_attempt in 1..=INNER_RETRIES {
                         total_attempts += 1;
-                        
+
                         // Capture current screen
                         let screen = cap
                             .capture(
@@ -147,7 +147,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                             log::info!(
                                 "🔄 Pattern '{description}' not matched after {INNER_RETRIES} attempts, executing retry_action (outer attempt {outer_attempt}/{OUTER_RETRIES})..."
                             );
-                            
+
                             // Recursively execute retry_action using Box::pin for async recursion
                             Box::pin(execute_cursor_actions(
                                 session,
@@ -156,9 +156,9 @@ pub async fn execute_cursor_actions<T: Expect>(
                                 &format!("{session_name}_retry_{outer_attempt}"),
                             ))
                             .await?;
-                            
+
                             log::info!("✓ Retry action completed, resuming pattern matching...");
-                            
+
                             // Add a small delay after retry_action before next attempt
                             tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
                                 .await;
