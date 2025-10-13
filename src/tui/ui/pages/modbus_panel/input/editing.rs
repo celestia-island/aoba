@@ -326,7 +326,7 @@ fn commit_text_edit(
                                     item.last_values.resize(item.register_length as usize, 0);
                                 }
 
-                                let idx = register_index as usize;
+                                let idx = register_index;
                                 if idx >= item.last_values.len() {
                                     item.last_values.resize(idx + 1, 0);
                                 }
