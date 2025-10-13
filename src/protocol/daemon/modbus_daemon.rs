@@ -705,7 +705,7 @@ pub fn generate_modbus_master_response(
                 let station_start = station.register_address;
                 let station_end = station_start.saturating_add(station.register_length);
                 let request_end =
-                    register_address.checked_add(quantity).unwrap_or(u16::MAX);
+                    register_address.saturating_add(quantity);
                 register_address >= station_start && request_end <= station_end
             })
             .map(|station| StationSnapshot {
@@ -735,7 +735,7 @@ pub fn generate_modbus_master_response(
 
     match function_code {
         0x01 | 0x02 => {
-            let byte_count = ((quantity + 7) / 8) as usize;
+            let byte_count = quantity.div_ceil(8) as usize;
             response.push(byte_count as u8);
             let mut data = vec![0u8; byte_count];
             for idx in 0..quantity_usize {
