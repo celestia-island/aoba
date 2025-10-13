@@ -19,10 +19,74 @@ pub struct VcomMatchers {
     pub cursor_rx: Regex,
     pub port1_name: String,
     pub port2_name: String,
+    pub port1_aliases: Vec<String>,
+    pub port2_aliases: Vec<String>,
 }
 
 /// Build platform-appropriate Regex matchers for the two virtual ports.
 pub fn vcom_matchers() -> VcomMatchers {
+    use std::path::Path;
+
+    fn extend_unique(target: &mut Vec<String>, extras: impl IntoIterator<Item = String>) {
+        for item in extras {
+            if !target.iter().any(|existing| existing == &item) {
+                target.push(item);
+            }
+        }
+    }
+
+    fn collect_aliases(original: &str) -> Vec<String> {
+        let mut aliases: Vec<String> = Vec::new();
+        let mut push_unique = |candidate: String| {
+            if !aliases.iter().any(|existing| existing == &candidate) {
+                aliases.push(candidate);
+            }
+        };
+
+        push_unique(original.to_string());
+
+        let path = Path::new(original);
+        if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+            push_unique(name.to_string());
+        }
+
+        if let Ok(canonical) = std::fs::canonicalize(path) {
+            let canonical_str = canonical.to_string_lossy().to_string();
+            push_unique(canonical_str.clone());
+            if let Some(name) = canonical.file_name().and_then(|s| s.to_str()) {
+                push_unique(name.to_string());
+            }
+        }
+
+        if let Ok(target) = std::fs::read_link(path) {
+            let mut target_path = target.clone();
+            if !target_path.is_absolute() {
+                if let Some(parent) = path.parent() {
+                    target_path = parent.join(target_path);
+                }
+            }
+            let target_str = target_path.to_string_lossy().to_string();
+            push_unique(target_str.clone());
+            if let Some(name) = target_path.file_name().and_then(|s| s.to_str()) {
+                push_unique(name.to_string());
+            }
+        }
+
+        aliases
+    }
+
+    fn build_pattern(aliases: &[String]) -> String {
+        if aliases.is_empty() {
+            return String::new();
+        }
+        let escaped = aliases
+            .iter()
+            .map(|alias| regex::escape(alias))
+            .collect::<Vec<_>>()
+            .join("|");
+        format!("(?:{escaped})")
+    }
+
     let env1 = std::env::var("AOBATEST_PORT1").ok();
     let env2 = std::env::var("AOBATEST_PORT2").ok();
 
@@ -32,16 +96,25 @@ pub fn vcom_matchers() -> VcomMatchers {
         (DEFAULT_PORT1.to_string(), DEFAULT_PORT2.to_string())
     };
 
+    let mut port1_aliases = collect_aliases(&p1);
+    let mut port2_aliases = collect_aliases(&p2);
+
+    #[cfg(not(windows))]
+    {
+        extend_unique(&mut port1_aliases, collect_aliases(DEFAULT_PORT1));
+        extend_unique(&mut port2_aliases, collect_aliases(DEFAULT_PORT2));
+    }
+
     let (port1_rx, port2_rx, cursor_rx) = if cfg!(windows) {
-        let p1_e = regex::escape(&p1);
-        let p2_e = regex::escape(&p2);
+        let p1_e = build_pattern(&port1_aliases);
+        let p2_e = build_pattern(&port2_aliases);
         let port1_rx = Regex::new(&format!(r"(?i)\b{p1_e}\b")).unwrap();
         let port2_rx = Regex::new(&format!(r"(?i)\b{p2_e}\b")).unwrap();
         let cursor_rx = Regex::new(&format!(r"(?i)> ?(?:{p1_e}|{p2_e})\b")).unwrap();
         (port1_rx, port2_rx, cursor_rx)
     } else {
-        let p1_e = regex::escape(&p1);
-        let p2_e = regex::escape(&p2);
+        let p1_e = build_pattern(&port1_aliases);
+        let p2_e = build_pattern(&port2_aliases);
         let port1_rx = Regex::new(&p1_e).unwrap();
         let port2_rx = Regex::new(&p2_e).unwrap();
         let cursor_rx = Regex::new(&format!(r"> ?(?:{p1_e}|{p2_e})")).unwrap();
@@ -54,6 +127,8 @@ pub fn vcom_matchers() -> VcomMatchers {
         cursor_rx,
         port1_name: p1,
         port2_name: p2,
+        port1_aliases,
+        port2_aliases,
     }
 }
 

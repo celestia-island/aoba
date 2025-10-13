@@ -32,18 +32,35 @@ impl TerminalCapture {
     ) -> Result<String> {
         log::info!("📺 Screen capture point: {step_description}");
 
-        // Pull any available bytes from the session. Using a permissive
-        // regex ensures we take whatever is available and let the vt100
-        // parser apply cursor moves and SGR sequences correctly.
-        let matched = session.expect(ExpectRegex(".*"))?;
-        let bytes = matched.as_bytes();
+        // Capture the most recent frame we have; this may be empty on the first call.
+        let mut out = self.parser.screen().contents();
 
-        // Feed bytes into the parser which updates its internal Screen
-        self.parser.process(bytes);
+        if out.trim().is_empty() {
+            // First-time capture: poll in a non-blocking loop until the TUI paints something
+            // or we give up after a handful of retries. This avoids the long expect timeout.
+            const MAX_ATTEMPTS: usize = 10;
+            for attempt in 0..MAX_ATTEMPTS {
+                if let Ok(captures) = session.check(ExpectRegex("(?s).+")) {
+                    let bytes = captures.as_bytes();
+                    if !bytes.is_empty() {
+                        self.parser.process(bytes);
+                        out = self.parser.screen().contents();
+                        break;
+                    }
+                }
 
-        // Render the current screen contents (includes SGR sequences so
-        // colors/attributes are preserved in the textual snapshot)
-        let out = self.parser.screen().contents();
+                // Give the TUI a moment to draw before polling again.
+                if attempt + 1 < MAX_ATTEMPTS {
+                    sleep_a_while().await;
+                }
+            }
+        } else if let Ok(captures) = session.check(ExpectRegex("(?s).+")) {
+            let bytes = captures.as_bytes();
+            if !bytes.is_empty() {
+                self.parser.process(bytes);
+                out = self.parser.screen().contents();
+            }
+        }
 
         // Log as a single multi-line string to preserve CI log formatting
         log::info!("\n{out}\n");
