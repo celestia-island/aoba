@@ -372,17 +372,36 @@ fn commit_text_edit(
                         if let (
                             Some(PortOwner::CliSubprocess(_)),
                             Some((register_type, station_id, start_address, values)),
-                        ) = (owner_snapshot, payload)
+                        ) = (&owner_snapshot, &payload)
                         {
-                            if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                port_name: port_name.clone(),
+                            log::info!(
+                                "📤 Sending RegisterUpdate to core: port={}, station={}, type={}, addr={}, values={:?}",
+                                port_name,
                                 station_id,
                                 register_type,
                                 start_address,
-                                values,
+                                values
+                            );
+                            if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                                port_name: port_name.clone(),
+                                station_id: *station_id,
+                                register_type: register_type.clone(),
+                                start_address: *start_address,
+                                values: values.clone(),
                             }) {
                                 log::warn!("Failed to send IPC register update message: {err}");
+                            } else {
+                                log::info!("✅ RegisterUpdate message queued successfully");
                             }
+                        } else {
+                            log::debug!(
+                                "🚫 Not sending RegisterUpdate: owner_snapshot={:?}, payload={:?}",
+                                owner_snapshot.as_ref().map(|o| match o {
+                                    PortOwner::CliSubprocess(info) => format!("CliSubprocess(mode={:?})", info.mode),
+                                    _ => "Other".to_string(),
+                                }),
+                                payload.is_some()
+                            );
                         }
                     }
                 }
