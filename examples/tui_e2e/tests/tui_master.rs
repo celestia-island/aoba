@@ -292,6 +292,7 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
             description: "Station #1 created".to_string(),
             line_range: None,
             col_range: None,
+            retry_action: None,
         },
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
