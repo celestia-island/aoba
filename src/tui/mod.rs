@@ -7,6 +7,7 @@ use anyhow::{anyhow, Result};
 use chrono::Local;
 use std::{
     collections::HashMap,
+    convert::TryFrom,
     fs,
     io::{self, Write},
     path::PathBuf,
@@ -16,6 +17,7 @@ use std::{
 };
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
+use rmodbus::server::context::ModbusContext;
 
 use crate::{
     protocol::{
@@ -24,6 +26,7 @@ use crate::{
             init_status, read_status,
             types::{
                 self,
+                modbus::RegisterMode,
                 port::{
                     PortLogEntry, PortOwner, PortState, PortSubprocessInfo, PortSubprocessMode,
                 },
@@ -207,6 +210,117 @@ pub(crate) fn replace_cli_data_snapshot(
     )
 }
 
+fn apply_register_update_from_ipc(
+    port_name: &str,
+    station_id: u8,
+    register_mode: RegisterMode,
+    start_address: u16,
+    values: &[u16],
+) -> Result<()> {
+    let mut storage_handle: Option<Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>> = None;
+    let mut effective_length: Option<u16> = None;
+
+    write_status(|status| {
+        if let Some(port_entry) = status.ports.map.get(port_name) {
+            if with_port_write(port_entry, |port| {
+                if let types::port::PortConfig::Modbus { mode, stations } = &mut port.config {
+                    storage_handle = Some(match mode {
+                        types::modbus::ModbusConnectionMode::Master { storage } => {
+                            storage.clone()
+                        }
+                        types::modbus::ModbusConnectionMode::Slave { storage, .. } => {
+                            storage.clone()
+                        }
+                    });
+
+                    if let Some(item) = stations.iter_mut().find(|item| {
+                        item.station_id == station_id && item.register_mode == register_mode
+                    }) {
+                        item.req_total = item.req_total.saturating_add(1);
+                        item.req_success = item.req_success.saturating_add(1);
+                        item.last_response_time = Some(std::time::Instant::now());
+                        effective_length = Some(item.register_length);
+                    } else {
+                        log::debug!(
+                            "Register update for {port_name}: station {station_id} in mode {:?} not found",
+                            register_mode
+                        );
+                    }
+                }
+            })
+            .is_none()
+            {
+                log::warn!(
+                    "Register update for {port_name}: failed to acquire port write lock"
+                );
+            }
+        } else {
+            log::debug!("Register update for {port_name}: port not found in status map");
+        }
+        Ok(())
+    })?;
+
+    let Some(storage) = storage_handle else {
+        return Ok(());
+    };
+
+    let Some(configured_length) = effective_length else {
+        return Ok(());
+    };
+
+    let limit = std::cmp::min(configured_length as usize, values.len());
+    if limit == 0 {
+        return Ok(());
+    }
+
+    if values.len() > limit {
+        log::debug!(
+            "Register update for {port_name}: truncating values from {} to configured length {}",
+            values.len(),
+            configured_length
+        );
+    }
+    let mut context = storage
+        .lock()
+        .map_err(|err| anyhow!("Failed to lock Modbus storage for {port_name}: {err}"))?;
+
+    for (offset, value) in values.iter().take(limit).enumerate() {
+        let address = start_address + offset as u16;
+        match register_mode {
+            RegisterMode::Holding => {
+                if let Err(err) = context.set_holding(address, *value) {
+                    log::warn!(
+                        "Register update for {port_name}: failed to set holding 0x{address:04X}: {err}"
+                    );
+                }
+            }
+            RegisterMode::Input => {
+                if let Err(err) = context.set_input(address, *value) {
+                    log::warn!(
+                        "Register update for {port_name}: failed to set input 0x{address:04X}: {err}"
+                    );
+                }
+            }
+            RegisterMode::Coils => {
+                if let Err(err) = context.set_coil(address, *value != 0) {
+                    log::warn!(
+                        "Register update for {port_name}: failed to set coil 0x{address:04X}: {err}"
+                    );
+                }
+            }
+            RegisterMode::DiscreteInputs => {
+                if let Err(err) = context.set_discrete(address, *value != 0) {
+                    log::warn!(
+                        "Register update for {port_name}: failed to set discrete input 0x{address:04X}: {err}"
+                    );
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     match message {
         IpcMessage::PortOpened { .. } => {
@@ -238,9 +352,40 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Heartbeat { .. } => {
             // Heartbeat can be ignored for now or used for future monitoring
         }
-        IpcMessage::RegisterUpdate { values, .. } => {
-            log::info!("CLI[{port_name}]: RegisterUpdate {values:?}");
-            append_port_log(port_name, format!("CLI register update: {:?}", values));
+        IpcMessage::RegisterUpdate {
+            station_id,
+            register_type,
+            start_address,
+            values,
+            ..
+        } => {
+            log::info!(
+                "CLI[{port_name}]: RegisterUpdate station={station_id}, type={register_type}, addr=0x{start_address:04X}, values={values:?}"
+            );
+            append_port_log(
+                port_name,
+                format!(
+                    "CLI register update: station={station_id}, type={register_type}, addr=0x{start_address:04X}, values={values:?}"
+                ),
+            );
+
+            if let Ok(register_mode) = RegisterMode::try_from(register_type.as_str()) {
+                if let Err(err) = apply_register_update_from_ipc(
+                    port_name,
+                    station_id,
+                    register_mode,
+                    start_address,
+                    &values,
+                ) {
+                    log::warn!(
+                        "Register update for {port_name}: failed to apply to storage: {err:#}"
+                    );
+                }
+            } else {
+                log::warn!(
+                    "Register update for {port_name}: unrecognized register type {register_type}"
+                );
+            }
         }
         IpcMessage::Status {
             status, details, ..
@@ -800,7 +945,7 @@ fn run_core_thread(
                         let mut spawn_err: Option<anyhow::Error> = None;
                         let mut handle_opt: Option<crate::protocol::runtime::PortRuntimeHandle> =
                             None;
-                        const MAX_RETRIES: usize = 8;
+                        const MAX_RETRIES: usize = 12;
                         for attempt in 0..MAX_RETRIES {
                             match crate::protocol::runtime::PortRuntimeHandle::spawn(
                                 port_name.clone(),
@@ -815,14 +960,28 @@ fn run_core_thread(
                                     break;
                                 }
                                 Err(err) => {
+                                    let attempt_number = attempt + 1;
+                                    let err_display = err.to_string();
+                                    let busy_retry = err_display
+                                        .contains("Device or resource busy")
+                                        || err_display.contains("Resource busy");
+
+                                    let wait_ms = if busy_retry {
+                                        // Allow extra time for the previous holder to release the virtual port.
+                                        750
+                                    } else {
+                                        250
+                                    };
+
                                     spawn_err = Some(err);
                                     log::warn!(
-                                        "ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {}: {}",
-                                        attempt + 1,
-                                        spawn_err.as_ref().unwrap()
+                                        "ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {attempt_number}: {err_display}"
                                     );
-                                    if attempt + 1 < MAX_RETRIES {
-                                        let wait_ms = if attempt < 2 { 200 } else { 100 };
+
+                                    if attempt_number < MAX_RETRIES {
+                                        log::debug!(
+                                            "ToggleRuntime: retrying runtime spawn for {port_name} in {wait_ms}ms (busy_retry={busy_retry})"
+                                        );
                                         std::thread::sleep(std::time::Duration::from_millis(
                                             wait_ms,
                                         ));

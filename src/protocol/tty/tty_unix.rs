@@ -95,6 +95,44 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
         }
     }
 
+    // Fallback for non-sudo environments: dynamically generated temp links (e.g. /tmp/aoba_vcom1.*)
+    if let Ok(entries) = fs::read_dir("/tmp") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                if name.starts_with("aoba_vcom") {
+                    if let Ok(metadata) = fs::symlink_metadata(&path) {
+                        if metadata.file_type().is_symlink()
+                            || metadata.file_type().is_char_device()
+                        {
+                            virtual_ports.push(SerialPortInfo {
+                                port_name: path.to_string_lossy().to_string(),
+                                port_type: SerialPortType::Unknown,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Explicit environment overrides (set by test harness when socat fallback picks random names)
+    for env_key in ["AOBATEST_PORT1", "AOBATEST_PORT2"] {
+        if let Ok(value) = std::env::var(env_key) {
+            let path = Path::new(&value);
+            if path.exists() {
+                if let Ok(metadata) = fs::symlink_metadata(path) {
+                    if metadata.file_type().is_symlink() || metadata.file_type().is_char_device() {
+                        virtual_ports.push(SerialPortInfo {
+                            port_name: value.clone(),
+                            port_type: SerialPortType::Unknown,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
     virtual_ports
 }
 

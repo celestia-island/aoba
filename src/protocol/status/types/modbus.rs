@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    convert::TryFrom,
+    sync::{Arc, Mutex},
+};
 use strum::{EnumIter, FromRepr};
 
 use crate::i18n::lang;
@@ -108,6 +111,27 @@ impl RegisterMode {
 
     // Note: custom conversion helpers removed per request. Use `FromRepr::from_repr` and
     // direct casts where needed (e.g. `as u8` / `as usize`).
+}
+
+impl TryFrom<&str> for RegisterMode {
+    type Error = ();
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.eq_ignore_ascii_case("holding") || value.eq_ignore_ascii_case("holdings") {
+            Ok(Self::Holding)
+        } else if value.eq_ignore_ascii_case("input") || value.eq_ignore_ascii_case("inputs") {
+            Ok(Self::Input)
+        } else if value.eq_ignore_ascii_case("coil") || value.eq_ignore_ascii_case("coils") {
+            Ok(Self::Coils)
+        } else if value.eq_ignore_ascii_case("discrete")
+            || value.eq_ignore_ascii_case("discrete_input")
+            || value.eq_ignore_ascii_case("discrete_inputs")
+        {
+            Ok(Self::DiscreteInputs)
+        } else {
+            Err(())
+        }
+    }
 }
 
 impl std::fmt::Display for RegisterMode {
