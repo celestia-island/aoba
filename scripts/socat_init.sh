@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 
-# Unified socat init script for both tui and cli E2E tests
-# Usage: socat_init.sh [--mode cli|tui]
+# Unified socat init script for E2E tests
+# Modes:
+#   - cli: Creates 2 virtual serial ports (vcom1-vcom2) for CLI E2E tests
+#   - tui: Creates 2 virtual serial ports (vcom1-vcom2) for TUI E2E tests
+#   - tui_multiple: Creates 6 virtual serial ports (vcom1-vcom6) for multiple master/slave testing
+#
+# Usage: socat_init.sh [--mode cli|tui|tui_multiple]
+#
+# The tui_multiple mode creates 3 independent pairs:
+#   - vcom1 ↔ vcom2 (Master 1 with Slave 1)
+#   - vcom3 ↔ vcom4 (Master 2 with Slave 2)
+#   - vcom5 ↔ vcom6 (Slave 3 or interference testing)
 
 if [ -z "${BASH_VERSION:-}" ]; then
   if command -v bash >/dev/null 2>&1; then
