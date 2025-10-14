@@ -390,13 +390,17 @@ fn commit_text_edit(
                                 values: values.clone(),
                             }) {
                                 Ok(()) => {
-                                    log::info!("✅ RegisterUpdate message SENT successfully to channel");
+                                    log::info!(
+                                        "✅ RegisterUpdate message SENT successfully to channel"
+                                    );
                                 }
                                 Err(err) => {
-                                    log::error!("❌ Failed to send RegisterUpdate to channel: {err}");
+                                    log::error!(
+                                        "❌ Failed to send RegisterUpdate to channel: {err}"
+                                    );
                                 }
                             }
-                            
+
                             // WORKAROUND: Also directly update the data source file if in MasterProvide mode
                             // This bypasses potential IPC issues
                             if let Some(data_source_path) = &cli_info.data_source_path {
@@ -405,16 +409,24 @@ fn commit_text_edit(
                                     *start_address,
                                     values,
                                 ) {
-                                    log::warn!("Failed to directly update data source file {}: {}", data_source_path, err);
+                                    log::warn!(
+                                        "Failed to directly update data source file {}: {}",
+                                        data_source_path,
+                                        err
+                                    );
                                 } else {
-                                    log::info!("✅ Directly updated data source file: {}", data_source_path);
+                                    log::info!(
+                                        "✅ Directly updated data source file: {}",
+                                        data_source_path
+                                    );
                                 }
                             }
                         } else {
                             log::debug!(
                                 "🚫 Not sending RegisterUpdate: owner_snapshot={:?}, payload={:?}",
                                 owner_snapshot.as_ref().map(|o| match o {
-                                    PortOwner::CliSubprocess(info) => format!("CliSubprocess(mode={:?})", info.mode),
+                                    PortOwner::CliSubprocess(info) =>
+                                        format!("CliSubprocess(mode={:?})", info.mode),
                                     _ => "Other".to_string(),
                                 }),
                                 payload.is_some()
@@ -470,39 +482,35 @@ fn enqueue_slave_write(
 
 /// Directly update the CLI data source file with new register values
 /// This is a workaround for IPC timing issues in test environments
-fn update_cli_data_source_file(
-    path: &str,
-    start_address: u16,
-    values: &[u16],
-) -> Result<()> {
+fn update_cli_data_source_file(path: &str, start_address: u16, values: &[u16]) -> Result<()> {
     use std::{fs, path::PathBuf};
-    
+
     let path_buf = PathBuf::from(path);
-    
+
     // Read the current data
     let content = fs::read_to_string(&path_buf)?;
     let mut data: serde_json::Value = serde_json::from_str(&content)?;
-    
+
     // Update the values array, expanding if necessary
     if let Some(values_array) = data.get_mut("values").and_then(|v| v.as_array_mut()) {
         let start_idx = start_address as usize;
-        
+
         // Ensure the array is large enough
         let required_len = start_idx + values.len();
         while values_array.len() < required_len {
             values_array.push(serde_json::json!(0));
         }
-        
+
         // Update the values
         for (i, &value) in values.iter().enumerate() {
             let idx = start_idx + i;
             values_array[idx] = serde_json::json!(value);
         }
-        
+
         // Write back to file
         let updated = serde_json::to_string(&data)?;
         fs::write(&path_buf, updated)?;
     }
-    
+
     Ok(())
 }
