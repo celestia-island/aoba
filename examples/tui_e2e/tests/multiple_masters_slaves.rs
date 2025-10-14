@@ -242,20 +242,24 @@ async fn navigate_to_port<T: Expect>(
     log::info!("🔍 Looking for port: {port_name}");
 
     // First, capture the screen to see where we are
-    let screen = cap
-        .capture(session, "initial_port_list")
-        .await?;
-    
+    let screen = cap.capture(session, "initial_port_list").await?;
+
     log::info!("📺 Initial screen captured");
 
     // Check if the port is visible
     if !screen.contains(port_name) {
-        return Err(anyhow!("Port {port_name} not found in port list. Available ports: {}", 
-            screen.lines().filter(|l| l.contains("/tmp/") || l.contains("/dev/")).collect::<Vec<_>>().join(", ")));
+        return Err(anyhow!(
+            "Port {port_name} not found in port list. Available ports: {}",
+            screen
+                .lines()
+                .filter(|l| l.contains("/tmp/") || l.contains("/dev/"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
     }
 
     // Check if cursor is already on the target port
-    if screen.contains(&format!("> {}", port_name)) || screen.contains(&format!(">{}", port_name)) {
+    if screen.contains(&format!("> {port_name}")) || screen.contains(&format!(">{port_name}")) {
         log::info!("✅ Cursor already on {port_name}, pressing Enter");
         session.send_enter()?;
         sleep_seconds(1).await;
@@ -277,7 +281,9 @@ async fn navigate_to_port<T: Expect>(
             .await?;
 
         // Check if we're on the target port
-        if screen.contains(&format!("> {}", port_name)) || screen.contains(&format!(">{}", port_name)) {
+        if screen.contains(&format!("> {port_name}"))
+            || screen.contains(&format!(">{port_name}"))
+        {
             log::info!("✅ Found and selected {port_name} on attempt {attempt}");
             session.send_enter()?;
             sleep_seconds(1).await;
@@ -289,7 +295,9 @@ async fn navigate_to_port<T: Expect>(
         sleep_seconds(0).await;
     }
 
-    Err(anyhow!("Could not navigate to port {port_name} after 20 attempts"))
+    Err(anyhow!(
+        "Could not navigate to port {port_name} after 20 attempts"
+    ))
 }
 
 /// Verify that a slave receives the expected data
