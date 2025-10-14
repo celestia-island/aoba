@@ -75,10 +75,14 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
         "/dev/vcom2",
         "/dev/vcom3",
         "/dev/vcom4",
+        "/dev/vcom5",
+        "/dev/vcom6",
         "/tmp/vcom1",
         "/tmp/vcom2",
         "/tmp/vcom3",
         "/tmp/vcom4",
+        "/tmp/vcom5",
+        "/tmp/vcom6",
     ];
 
     for port_path in &virtual_port_paths {
