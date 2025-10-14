@@ -132,13 +132,24 @@ async fn main() -> Result<()> {
         }
 
         // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
-        log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
+        log::info!("🧪 Test 2/3: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
         tests::test_tui_master_with_cli_slave_continuous().await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
         {
             log::info!("🧪 Resetting virtual serial ports after Test 2...");
+            setup_virtual_serial_ports()?;
+        }
+
+        // Test 3: Multiple independent TUI masters and CLI slaves with interference checks
+        log::info!("🧪 Test 3/3: Multiple Masters and Slaves + interference handling (5 rounds)");
+        tests::test_multiple_masters_slaves().await?;
+
+        // Reset ports after Test 3 completes (Unix only)
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Resetting virtual serial ports after Test 3...");
             setup_virtual_serial_ports()?;
         }
 
