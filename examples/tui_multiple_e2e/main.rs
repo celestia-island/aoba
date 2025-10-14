@@ -58,7 +58,7 @@ fn apply_port_env_overrides(stdout: &[u8]) {
 
     for (env_var, value) in ports {
         std::env::set_var(&env_var, &value);
-        log::info!("🔗 Using virtual port override: {}={}", env_var, value);
+        log::info!("🔗 Using virtual port override: {env_var}={value}");
     }
 }
 

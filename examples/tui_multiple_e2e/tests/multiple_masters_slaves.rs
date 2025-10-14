@@ -49,12 +49,12 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
     let port6 = std::env::var("AOBATEST_PORT6").unwrap_or_else(|_| "/tmp/vcom6".to_string());
 
     log::info!("📍 Port configuration:");
-    log::info!("  Master 1: {} (TUI)", port1);
-    log::info!("  Slave 1:  {} (CLI)", port2);
-    log::info!("  Master 2: {} (TUI)", port3);
-    log::info!("  Slave 2:  {} (CLI)", port4);
-    log::info!("  Test 3:   {} (unused)", port5);
-    log::info!("  Slave 3:  {} (CLI - interference test)", port6);
+    log::info!("  Master 1: {port1} (TUI)");
+    log::info!("  Slave 1:  {port2} (CLI)");
+    log::info!("  Master 2: {port3} (TUI)");
+    log::info!("  Slave 2:  {port4} (CLI)");
+    log::info!("  Test 3:   {port5} (unused)");
+    log::info!("  Slave 3:  {port6} (CLI - interference test)");
 
     // Verify all ports exist
     for (name, port) in [
@@ -66,7 +66,9 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
         ("port6", &port6),
     ] {
         if !port_exists(port) {
-            return Err(anyhow!("{} ({}) does not exist or is not available", name, port));
+            return Err(anyhow!(
+                "{name} ({port}) does not exist or is not available"
+            ));
         }
     }
     log::info!("✅ All 6 virtual COM ports verified");
@@ -97,37 +99,37 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
 
     // Run test rounds with both masters
     for round in 1..=ROUNDS {
-        log::info!("🧪 ===== Round {}/{} =====", round, ROUNDS);
+        log::info!("🧪 ===== Round {round}/{ROUNDS} =====");
 
         // Generate different data for each master
         let data1 = generate_random_registers(REGISTER_LENGTH);
         let data2 = generate_random_registers(REGISTER_LENGTH);
 
-        log::info!("🧪 Round {}: Master 1 data: {:?}", round, data1);
-        log::info!("🧪 Round {}: Master 2 data: {:?}", round, data2);
+        log::info!("🧪 Round {round}: Master 1 data: {data1:?}");
+        log::info!("🧪 Round {round}: Master 2 data: {data2:?}");
 
         // Update Master 1 registers
-        log::info!("🧪 Round {}: Updating Master 1 registers", round);
+        log::info!("🧪 Round {round}: Updating Master 1 registers");
         update_tui_registers(&mut tui1_session, &mut tui1_cap, &data1, false).await?;
 
         // Update Master 2 registers
-        log::info!("🧪 Round {}: Updating Master 2 registers", round);
+        log::info!("🧪 Round {round}: Updating Master 2 registers");
         update_tui_registers(&mut tui2_session, &mut tui2_cap, &data2, false).await?;
 
         // Wait for IPC updates to propagate
-        log::info!("🧪 Round {}: Waiting for IPC propagation...", round);
+        log::info!("🧪 Round {round}: Waiting for IPC propagation...");
         tokio::time::sleep(Duration::from_millis(1500)).await;
 
         // Poll Slave 1 (should receive data1 from Master 1)
-        log::info!("🧪 Round {}: Polling Slave 1 from Master 1", round);
+        log::info!("🧪 Round {round}: Polling Slave 1 from Master 1");
         verify_slave_data(&port2, 1, &data1, round).await?;
 
         // Poll Slave 2 (should receive data2 from Master 2)
-        log::info!("🧪 Round {}: Polling Slave 2 from Master 2", round);
+        log::info!("🧪 Round {round}: Polling Slave 2 from Master 2");
         verify_slave_data(&port4, 1, &data2, round).await?;
 
         // Interference test: Poll Slave 3 on vcom6 (should fail or timeout since vcom5 has no master)
-        log::info!("🧪 Round {}: Interference test - polling Slave 3", round);
+        log::info!("🧪 Round {round}: Interference test - polling Slave 3");
         test_slave_interference(&port6, round).await?;
 
         // Small delay between rounds
@@ -140,10 +142,7 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
     tui2_session.send_ctrl_c()?;
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    log::info!(
-        "✅ Multiple Masters and Slaves test completed! All {} rounds passed.",
-        ROUNDS
-    );
+    log::info!("✅ Multiple Masters and Slaves test completed! All {ROUNDS} rounds passed.");
     Ok(())
 }
 
@@ -156,10 +155,10 @@ async fn configure_tui_master<T: Expect>(
 ) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring Master {} on port {}", master_id, target_port);
+    log::info!("📝 Configuring Master {master_id} on port {target_port}");
 
     // Navigate to the target port (vcom1 or vcom3)
-    log::info!("📍 Navigating to port {}", target_port);
+    log::info!("📍 Navigating to port {target_port}");
     navigate_to_port(session, cap, target_port).await?;
 
     // Enable the port
@@ -173,12 +172,11 @@ async fn configure_tui_master<T: Expect>(
 
     // Configure as Master
     let screen = cap
-        .capture(session, &format!("verify_modbus_panel_master{}", master_id))
+        .capture(session, &format!("verify_modbus_panel_master{master_id}"))
         .await?;
     if !screen.contains("ModBus Master/Slave Settings") {
         return Err(anyhow!(
-            "Expected to be inside ModBus panel for Master {}",
-            master_id
+            "Expected to be inside ModBus panel for Master {master_id}"
         ));
     }
 
@@ -198,12 +196,12 @@ async fn configure_tui_master<T: Expect>(
         session,
         cap,
         &actions,
-        &format!("create_station_master{}", master_id),
+        &format!("create_station_master{master_id}"),
     )
     .await?;
 
     // Set Register Length
-    log::info!("📝 Setting register length to {}", REGISTER_LENGTH);
+    log::info!("📝 Setting register length to {REGISTER_LENGTH}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
@@ -221,11 +219,11 @@ async fn configure_tui_master<T: Expect>(
         session,
         cap,
         &actions,
-        &format!("set_register_length_master{}", master_id),
+        &format!("set_register_length_master{master_id}"),
     )
     .await?;
 
-    log::info!("✅ Master {} configured successfully", master_id);
+    log::info!("✅ Master {master_id} configured successfully");
     Ok(())
 }
 
@@ -239,25 +237,25 @@ async fn navigate_to_port<T: Expect>(
     let port_name = std::path::Path::new(target_port)
         .file_name()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| anyhow!("Invalid port path: {}", target_port))?;
+        .ok_or_else(|| anyhow!("Invalid port path: {target_port}"))?;
 
-    log::info!("🔍 Looking for port: {}", port_name);
+    log::info!("🔍 Looking for port: {port_name}");
 
     // Navigate in the port list to find the target port
     // Try up to 10 times to find the port
     for attempt in 1..=10 {
         let screen = cap
-            .capture(session, &format!("navigate_attempt_{}", attempt))
+            .capture(session, &format!("navigate_attempt_{attempt}"))
             .await?;
 
         if screen.contains(port_name) {
-            log::info!("✅ Found port {} on attempt {}", port_name, attempt);
+            log::info!("✅ Found port {port_name} on attempt {attempt}");
 
             // Check if cursor is already on the target port
-            if screen.contains(&format!("> {}", port_name))
-                || screen.contains(&format!(">{}", port_name))
+            if screen.contains(&format!("> {port_name}"))
+                || screen.contains(&format!(">{port_name}"))
             {
-                log::info!("✅ Cursor already on {}", port_name);
+                log::info!("✅ Cursor already on {port_name}");
                 session.send_enter()?;
                 sleep_seconds(1).await;
                 return Ok(());
@@ -273,7 +271,7 @@ async fn navigate_to_port<T: Expect>(
         }
     }
 
-    Err(anyhow!("Could not find port {} after 10 attempts", port_name))
+    Err(anyhow!("Could not find port {port_name} after 10 attempts"))
 }
 
 /// Verify that a slave receives the expected data
@@ -289,13 +287,7 @@ async fn verify_slave_data(
     const RETRY_DELAY_MS: u64 = 1000;
 
     for attempt in 1..=MAX_RETRIES {
-        log::info!(
-            "🔍 Round {}, attempt {}/{}: Polling slave on {}",
-            round,
-            attempt,
-            MAX_RETRIES,
-            port
-        );
+        log::info!("🔍 Round {round}, attempt {attempt}/{MAX_RETRIES}: Polling slave on {port}");
 
         let cli_output = Command::new(&binary)
             .args([
@@ -319,21 +311,14 @@ async fn verify_slave_data(
 
         if !cli_output.status.success() {
             let stderr = String::from_utf8_lossy(&cli_output.stderr);
-            log::warn!(
-                "⚠️ Round {}, attempt {}: CLI poll failed: {}",
-                round,
-                attempt,
-                stderr
-            );
+            log::warn!("⚠️ Round {round}, attempt {attempt}: CLI poll failed: {stderr}");
 
             if attempt < MAX_RETRIES {
                 tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
                 continue;
             } else {
                 return Err(anyhow!(
-                    "CLI poll failed on round {} after {} attempts",
-                    round,
-                    MAX_RETRIES
+                    "CLI poll failed on round {round} after {MAX_RETRIES} attempts",
                 ));
             }
         }
@@ -350,19 +335,11 @@ async fn verify_slave_data(
                 .collect();
 
             if received == expected_data {
-                log::info!(
-                    "✅ Round {}, attempt {}: Data verified successfully!",
-                    round,
-                    attempt
-                );
+                log::info!("✅ Round {round}, attempt {attempt}: Data verified successfully!");
                 return Ok(());
             } else {
                 log::warn!(
-                    "⚠️ Round {}, attempt {}: Data mismatch. Expected {:?}, got {:?}",
-                    round,
-                    attempt,
-                    expected_data,
-                    received
+                    "⚠️ Round {round}, attempt {attempt}: Data mismatch. Expected {expected_data:?}, got {received:?}"
                 );
 
                 if attempt < MAX_RETRIES {
@@ -378,9 +355,7 @@ async fn verify_slave_data(
     }
 
     Err(anyhow!(
-        "Data verification failed on round {} after {} attempts",
-        round,
-        MAX_RETRIES
+        "Data verification failed on round {round} after {MAX_RETRIES} attempts"
     ))
 }
 
@@ -388,7 +363,7 @@ async fn verify_slave_data(
 async fn test_slave_interference(port: &str, round: usize) -> Result<()> {
     let binary = build_debug_bin("aoba")?;
 
-    log::info!("🔬 Round {}: Testing interference on {}", round, port);
+    log::info!("🔬 Round {round}: Testing interference on {port}");
 
     // Try to poll a slave on vcom6 (which has no master)
     // This should either timeout or fail gracefully
@@ -416,14 +391,13 @@ async fn test_slave_interference(port: &str, round: usize) -> Result<()> {
 
     // We expect this to fail (no master on vcom5)
     if cli_output.status.success() {
-        log::warn!("⚠️ Interference test: unexpectedly succeeded on port {}", port);
+        log::warn!("⚠️ Interference test: unexpectedly succeeded on port {port}");
         let stdout = String::from_utf8_lossy(&cli_output.stdout);
-        log::warn!("⚠️ Received: {}", stdout.trim());
+        log::warn!("⚠️ Received: {received}", received = stdout.trim());
         // This is not a hard failure, but worth noting
     } else {
         log::info!(
-            "✅ Interference test passed: port {} properly failed/timed out as expected",
-            port
+            "✅ Interference test passed: port {port} properly failed/timed out as expected"
         );
     }
 
