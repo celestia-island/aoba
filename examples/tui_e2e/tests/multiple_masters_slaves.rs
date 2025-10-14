@@ -20,7 +20,6 @@ use ci_utils::{
 const REGISTER_LENGTH: usize = 12;
 const MAX_RETRIES: usize = 10;
 const RETRY_INTERVAL_MS: u64 = 1000;
-const TIMEOUT_MS: u64 = 3000;
 
 /// Test Multiple Independent Masters and Slaves with Intentional Conflicts
 ///
@@ -212,8 +211,6 @@ async fn test_port_with_retries(
                 register_mode,
                 "--baud-rate",
                 "9600",
-                "--timeout",
-                &TIMEOUT_MS.to_string(),
                 "--json",
             ])
             .stdout(Stdio::piped())
