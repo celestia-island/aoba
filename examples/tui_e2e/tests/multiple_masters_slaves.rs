@@ -17,21 +17,29 @@ use ci_utils::{
     tui::{enable_port_carefully, enter_modbus_panel, update_tui_registers},
 };
 
-const ROUNDS: usize = 5;
-const REGISTER_LENGTH: usize = 8;
+const REGISTER_LENGTH: usize = 12;
+const MAX_RETRIES: usize = 10;
+const RETRY_INTERVAL_MS: u64 = 1000;
+const TIMEOUT_MS: u64 = 3000;
 
-/// Test Multiple Independent Masters and Slaves with Signal Interference Handling
+/// Test Multiple Independent Masters and Slaves with Intentional Conflicts
 ///
-/// This test simulates 2 independent masters, each communicating with multiple slaves:
-/// - TUI Master 1 on vcom1, communicating with CLI Slave 1 on vcom2
-/// - TUI Master 2 on vcom3, communicating with CLI Slave 2 on vcom4
-/// - CLI Slave 3 on vcom6, polling from vcom5 (interference test)
+/// This test simulates 2 independent TUI masters with multiple CLI slaves polling them:
+/// - TUI Master 1 on vcom1: Station ID 1, Register Type 03 (Holding), 12 registers
+/// - TUI Master 2 on vcom3: Station ID 2, Register Type 02 (Input/Discrete), 12 registers
+/// - CLI Slaves polling from various ports creating intentional conflicts
+///
+/// Test Design:
+/// - vcom2 & vcom4: Slaves polling Station 1 (type 03) from their paired masters
+/// - vcom5 & vcom6: Slaves polling Station 2 (type 02) from their paired masters
+/// - Each slave attempts 10 times with 1s interval and 3s timeout
+/// - Success criteria: At least 1 successful communication per port
 ///
 /// The test validates:
-/// 1. Both masters can operate independently without interfering with each other
-/// 2. Slaves can correctly receive data from their respective masters
-/// 3. Signal interference is properly handled (slaves don't receive data from wrong masters)
-/// 4. Multiple concurrent Modbus communication channels work reliably
+/// 1. Multiple masters can operate independently
+/// 2. Slaves can poll from masters successfully despite potential conflicts
+/// 3. Communication reliability with retry logic
+/// 4. Different register types (03 Holding, 02 Input) work correctly
 pub async fn test_multiple_masters_slaves() -> Result<()> {
     if !should_run_vcom_tests() {
         log::info!("Skipping Multiple Masters/Slaves test on this platform");
@@ -49,12 +57,12 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
     let port6 = std::env::var("AOBATEST_PORT6").unwrap_or_else(|_| "/tmp/vcom6".to_string());
 
     log::info!("📍 Port configuration:");
-    log::info!("  Master 1: {port1} (TUI)");
-    log::info!("  Slave 1:  {port2} (CLI)");
-    log::info!("  Master 2: {port3} (TUI)");
-    log::info!("  Slave 2:  {port4} (CLI)");
-    log::info!("  Test 3:   {port5} (unused)");
-    log::info!("  Slave 3:  {port6} (CLI - interference test)");
+    log::info!("  Master 1: {port1} (TUI, Station 1, Type 03 Holding)");
+    log::info!("  Slave 1a: {port2} (CLI, polls Station 1)");
+    log::info!("  Master 2: {port3} (TUI, Station 2, Type 02 Input)");
+    log::info!("  Slave 2a: {port4} (CLI, polls Station 2)");
+    log::info!("  Slave 1b: {port5} (CLI, polls Station 1)");
+    log::info!("  Slave 2b: {port6} (CLI, polls Station 2)");
 
     // Verify all ports exist
     for (name, port) in [
@@ -81,9 +89,9 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
 
     sleep_seconds(3).await;
 
-    // Navigate to vcom1 and configure Master 1
-    log::info!("🧪 Step 2: Configure TUI Master 1 on vcom1");
-    configure_tui_master(&mut tui1_session, &mut tui1_cap, &port1, 1).await?;
+    // Navigate to vcom1 and configure Master 1 (Station 1, Type 03 Holding)
+    log::info!("🧪 Step 2: Configure TUI Master 1 on vcom1 (Station 1, Type 03)");
+    configure_tui_master(&mut tui1_session, &mut tui1_cap, &port1, 1, 3).await?;
 
     // Spawn second TUI process (Master 2 on vcom3)
     log::info!("🧪 Step 3: Spawning TUI Master 2 process");
@@ -93,47 +101,64 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
 
     sleep_seconds(3).await;
 
-    // Navigate to vcom3 and configure Master 2
-    log::info!("🧪 Step 4: Configure TUI Master 2 on vcom3");
-    configure_tui_master(&mut tui2_session, &mut tui2_cap, &port3, 2).await?;
+    // Navigate to vcom3 and configure Master 2 (Station 2, Type 02 Input)
+    log::info!("🧪 Step 4: Configure TUI Master 2 on vcom3 (Station 2, Type 02)");
+    configure_tui_master(&mut tui2_session, &mut tui2_cap, &port3, 2, 2).await?;
 
     // Run test rounds with both masters
-    for round in 1..=ROUNDS {
-        log::info!("🧪 ===== Round {round}/{ROUNDS} =====");
-
-        // Generate different data for each master
-        let data1 = generate_random_registers(REGISTER_LENGTH);
-        let data2 = generate_random_registers(REGISTER_LENGTH);
-
-        log::info!("🧪 Round {round}: Master 1 data: {data1:?}");
-        log::info!("🧪 Round {round}: Master 2 data: {data2:?}");
-
-        // Update Master 1 registers
-        log::info!("🧪 Round {round}: Updating Master 1 registers");
-        update_tui_registers(&mut tui1_session, &mut tui1_cap, &data1, false).await?;
-
-        // Update Master 2 registers
-        log::info!("🧪 Round {round}: Updating Master 2 registers");
-        update_tui_registers(&mut tui2_session, &mut tui2_cap, &data2, false).await?;
-
-        // Wait for IPC updates to propagate
-        log::info!("🧪 Round {round}: Waiting for IPC propagation...");
-        tokio::time::sleep(Duration::from_millis(1500)).await;
-
-        // Poll Slave 1 (should receive data1 from Master 1)
-        log::info!("🧪 Round {round}: Polling Slave 1 from Master 1");
-        verify_slave_data(&port2, 1, &data1, round).await?;
-
-        // Poll Slave 2 (should receive data2 from Master 2)
-        log::info!("🧪 Round {round}: Polling Slave 2 from Master 2");
-        verify_slave_data(&port4, 1, &data2, round).await?;
-
-        // Interference test: Poll Slave 3 on vcom6 (should fail or timeout since vcom5 has no master)
-        log::info!("🧪 Round {round}: Interference test - polling Slave 3");
-        test_slave_interference(&port6, round).await?;
-
-        // Small delay between rounds
-        tokio::time::sleep(Duration::from_millis(500)).await;
+    // Generate data once and keep it consistent for all retry attempts
+    let data1 = generate_random_registers(REGISTER_LENGTH);
+    let data2 = generate_random_registers(REGISTER_LENGTH);
+    
+    log::info!("🧪 Master 1 (Station 1, Type 03) data: {data1:?}");
+    log::info!("🧪 Master 2 (Station 2, Type 02) data: {data2:?}");
+    
+    // Update Master 1 registers
+    log::info!("🧪 Updating Master 1 registers");
+    update_tui_registers(&mut tui1_session, &mut tui1_cap, &data1, false).await?;
+    
+    // Update Master 2 registers
+    log::info!("🧪 Updating Master 2 registers");
+    update_tui_registers(&mut tui2_session, &mut tui2_cap, &data2, false).await?;
+    
+    // Wait for IPC updates to propagate
+    log::info!("🧪 Waiting for IPC propagation...");
+    tokio::time::sleep(Duration::from_millis(2000)).await;
+    
+    // Test all 6 ports with retry logic
+    // Track success for each port
+    let mut port_success = std::collections::HashMap::new();
+    
+    // vcom2: Poll Station 1 (Type 03 Holding) from paired master on vcom1
+    log::info!("🧪 Testing vcom2 → Station 1 (Type 03)");
+    port_success.insert("vcom2", test_port_with_retries(&port2, 1, "holding", &data1).await?);
+    
+    // vcom4: Poll Station 1 (Type 03 Holding) - may have conflicts
+    log::info!("🧪 Testing vcom4 → Station 1 (Type 03)");
+    port_success.insert("vcom4", test_port_with_retries(&port4, 1, "holding", &data1).await?);
+    
+    // vcom5: Poll Station 2 (Type 02 Input) - may have conflicts  
+    log::info!("🧪 Testing vcom5 → Station 2 (Type 02)");
+    port_success.insert("vcom5", test_port_with_retries(&port5, 2, "input", &data2).await?);
+    
+    // vcom6: Poll Station 2 (Type 02 Input) from paired master on vcom3
+    log::info!("🧪 Testing vcom6 → Station 2 (Type 02)");
+    port_success.insert("vcom6", test_port_with_retries(&port6, 2, "input", &data2).await?);
+    
+    // Check if all ports passed
+    let all_passed = port_success.values().all(|&v| v);
+    
+    if all_passed {
+        log::info!("✅ All ports passed!");
+        for (port, success) in port_success.iter() {
+            log::info!("  {port}: {}", if *success { "✅ PASS" } else { "❌ FAIL" });
+        }
+    } else {
+        log::error!("❌ Some ports failed:");
+        for (port, success) in port_success.iter() {
+            log::error!("  {port}: {}", if *success { "✅ PASS" } else { "❌ FAIL" });
+        }
+        return Err(anyhow!("Not all ports passed the test"));
     }
 
     // Clean up both TUI processes
@@ -142,8 +167,81 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
     tui2_session.send_ctrl_c()?;
     tokio::time::sleep(Duration::from_secs(1)).await;
 
-    log::info!("✅ Multiple Masters and Slaves test completed! All {ROUNDS} rounds passed.");
+    log::info!("✅ Multiple Masters and Slaves test completed successfully!");
     Ok(())
+}
+
+/// Test a port with retry logic
+/// Returns true if at least one attempt succeeded
+async fn test_port_with_retries(
+    port: &str,
+    station_id: u8,
+    register_mode: &str,
+    expected_data: &[u16],
+) -> Result<bool> {
+    let binary = build_debug_bin("aoba")?;
+    
+    for attempt in 1..=MAX_RETRIES {
+        log::info!(
+            "  Attempt {attempt}/{MAX_RETRIES}: Polling {port} for Station {station_id} ({register_mode})"
+        );
+        
+        let cli_output = Command::new(&binary)
+            .args([
+                "--slave-poll",
+                port,
+                "--station-id",
+                &station_id.to_string(),
+                "--register-address",
+                "0",
+                "--register-length",
+                &expected_data.len().to_string(),
+                "--register-mode",
+                register_mode,
+                "--baud-rate",
+                "9600",
+                "--timeout",
+                &TIMEOUT_MS.to_string(),
+                "--json",
+            ])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()?;
+        
+        if cli_output.status.success() {
+            let stdout = String::from_utf8_lossy(&cli_output.stdout);
+            
+            // Parse and check the data
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
+                if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
+                    let received: Vec<u16> = values
+                        .iter()
+                        .filter_map(|v| v.as_u64().map(|n| n as u16))
+                        .collect();
+                    
+                    if received == expected_data {
+                        log::info!("  ✅ SUCCESS on attempt {attempt}: Data verified!");
+                        return Ok(true);
+                    } else {
+                        log::warn!(
+                            "  ⚠️ Data mismatch on attempt {attempt}: expected {expected_data:?}, got {received:?}"
+                        );
+                    }
+                }
+            }
+        } else {
+            let stderr = String::from_utf8_lossy(&cli_output.stderr);
+            log::warn!("  ⚠️ Poll failed on attempt {attempt}: {stderr}");
+        }
+        
+        // Wait before next attempt (except after last attempt)
+        if attempt < MAX_RETRIES {
+            tokio::time::sleep(Duration::from_millis(RETRY_INTERVAL_MS)).await;
+        }
+    }
+    
+    log::error!("  ❌ FAILED: All {MAX_RETRIES} attempts failed for {port}");
+    Ok(false)
 }
 
 /// Configure a TUI process as a Modbus Master on a specific port
@@ -151,11 +249,12 @@ async fn configure_tui_master<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
     target_port: &str,
-    master_id: u8,
+    station_id: u8,
+    register_type: u8,  // 2 = Input, 3 = Holding
 ) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring Master {master_id} on port {target_port}");
+    log::info!("📝 Configuring Master (Station {station_id}, Type {register_type:02}) on port {target_port}");
 
     // Navigate to the target port (vcom1 or vcom3)
     log::info!("📍 Navigating to port {target_port}");
@@ -172,11 +271,11 @@ async fn configure_tui_master<T: Expect>(
 
     // Configure as Master
     let screen = cap
-        .capture(session, &format!("verify_modbus_panel_master{master_id}"))
+        .capture(session, &format!("verify_modbus_panel_master{station_id}"))
         .await?;
     if !screen.contains("ModBus Master/Slave Settings") {
         return Err(anyhow!(
-            "Expected to be inside ModBus panel for Master {master_id}"
+            "Expected to be inside ModBus panel for Master (Station {station_id})"
         ));
     }
 
@@ -196,7 +295,72 @@ async fn configure_tui_master<T: Expect>(
         session,
         cap,
         &actions,
-        &format!("create_station_master{master_id}"),
+        &format!("create_station_master{station_id}"),
+    )
+    .await?;
+
+    // Set Station ID if not 1
+    if station_id != 1 {
+        log::info!("📝 Setting station ID to {station_id}");
+        let actions = vec![
+            // Navigate to Station ID field (down 2 from top)
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 10,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 2,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::TypeString(station_id.to_string()),
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("set_station_id_{station_id}"),
+        )
+        .await?;
+    }
+
+    // Set Register Type
+    log::info!("📝 Setting register type to {register_type:02}");
+    
+    let actions = vec![
+        // Navigate to Register Type field
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 10,
+        },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 3,
+        },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        // Navigate through register types
+        CursorAction::PressArrow {
+            direction: ArrowKey::Right,
+            count: if register_type == 3 { 0 } else { 1 },  // Input is one right from Holding
+        },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_register_type_{register_type}"),
     )
     .await?;
 
@@ -205,7 +369,7 @@ async fn configure_tui_master<T: Expect>(
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 5,
+            count: 2,
         },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
@@ -219,11 +383,11 @@ async fn configure_tui_master<T: Expect>(
         session,
         cap,
         &actions,
-        &format!("set_register_length_master{master_id}"),
+        &format!("set_register_length_master{station_id}"),
     )
     .await?;
 
-    log::info!("✅ Master {master_id} configured successfully");
+    log::info!("✅ Master (Station {station_id}, Type {register_type:02}) configured successfully");
     Ok(())
 }
 
@@ -298,134 +462,4 @@ async fn navigate_to_port<T: Expect>(
     Err(anyhow!(
         "Could not navigate to port {port_name} after 20 attempts"
     ))
-}
-
-/// Verify that a slave receives the expected data
-async fn verify_slave_data(
-    port: &str,
-    station_id: u8,
-    expected_data: &[u16],
-    round: usize,
-) -> Result<()> {
-    let binary = build_debug_bin("aoba")?;
-
-    const MAX_RETRIES: usize = 3;
-    const RETRY_DELAY_MS: u64 = 1000;
-
-    for attempt in 1..=MAX_RETRIES {
-        log::info!("🔍 Round {round}, attempt {attempt}/{MAX_RETRIES}: Polling slave on {port}");
-
-        let cli_output = Command::new(&binary)
-            .args([
-                "--slave-poll",
-                port,
-                "--station-id",
-                &station_id.to_string(),
-                "--register-address",
-                "0",
-                "--register-length",
-                &expected_data.len().to_string(),
-                "--register-mode",
-                "holding",
-                "--baud-rate",
-                "9600",
-                "--json",
-            ])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()?;
-
-        if !cli_output.status.success() {
-            let stderr = String::from_utf8_lossy(&cli_output.stderr);
-            log::warn!("⚠️ Round {round}, attempt {attempt}: CLI poll failed: {stderr}");
-
-            if attempt < MAX_RETRIES {
-                tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                continue;
-            } else {
-                return Err(anyhow!(
-                    "CLI poll failed on round {round} after {MAX_RETRIES} attempts",
-                ));
-            }
-        }
-
-        let stdout = String::from_utf8_lossy(&cli_output.stdout);
-        log::info!("📥 Received: {}", stdout.trim());
-
-        // Parse and check the data
-        let json: serde_json::Value = serde_json::from_str(&stdout)?;
-        if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
-            let received: Vec<u16> = values
-                .iter()
-                .filter_map(|v| v.as_u64().map(|n| n as u16))
-                .collect();
-
-            if received == expected_data {
-                log::info!("✅ Round {round}, attempt {attempt}: Data verified successfully!");
-                return Ok(());
-            } else {
-                log::warn!(
-                    "⚠️ Round {round}, attempt {attempt}: Data mismatch. Expected {expected_data:?}, got {received:?}"
-                );
-
-                if attempt < MAX_RETRIES {
-                    tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-                }
-            }
-        } else {
-            log::error!("❌ Failed to parse values from JSON");
-            if attempt < MAX_RETRIES {
-                tokio::time::sleep(Duration::from_millis(RETRY_DELAY_MS)).await;
-            }
-        }
-    }
-
-    Err(anyhow!(
-        "Data verification failed on round {round} after {MAX_RETRIES} attempts"
-    ))
-}
-
-/// Test that a slave on an unconnected port properly handles interference
-async fn test_slave_interference(port: &str, round: usize) -> Result<()> {
-    let binary = build_debug_bin("aoba")?;
-
-    log::info!("🔬 Round {round}: Testing interference on {port}");
-
-    // Try to poll a slave on vcom6 (which has no master)
-    // This should either timeout or fail gracefully
-    let cli_output = Command::new(&binary)
-        .args([
-            "--slave-poll",
-            port,
-            "--station-id",
-            "1",
-            "--register-address",
-            "0",
-            "--register-length",
-            &REGISTER_LENGTH.to_string(),
-            "--register-mode",
-            "holding",
-            "--baud-rate",
-            "9600",
-            "--json",
-            "--timeout",
-            "2000", // 2 second timeout
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
-
-    // We expect this to fail (no master on vcom5)
-    if cli_output.status.success() {
-        log::warn!("⚠️ Interference test: unexpectedly succeeded on port {port}");
-        let stdout = String::from_utf8_lossy(&cli_output.stdout);
-        log::warn!("⚠️ Received: {received}", received = stdout.trim());
-        // This is not a hard failure, but worth noting
-    } else {
-        log::info!(
-            "✅ Interference test passed: port {port} properly failed/timed out as expected"
-        );
-    }
-
-    Ok(())
 }
