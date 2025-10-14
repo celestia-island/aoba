@@ -109,45 +109,57 @@ pub async fn test_multiple_masters_slaves() -> Result<()> {
     // Generate data once and keep it consistent for all retry attempts
     let data1 = generate_random_registers(REGISTER_LENGTH);
     let data2 = generate_random_registers(REGISTER_LENGTH);
-    
+
     log::info!("🧪 Master 1 (Station 1, Type 03) data: {data1:?}");
     log::info!("🧪 Master 2 (Station 2, Type 02) data: {data2:?}");
-    
+
     // Update Master 1 registers
     log::info!("🧪 Updating Master 1 registers");
     update_tui_registers(&mut tui1_session, &mut tui1_cap, &data1, false).await?;
-    
+
     // Update Master 2 registers
     log::info!("🧪 Updating Master 2 registers");
     update_tui_registers(&mut tui2_session, &mut tui2_cap, &data2, false).await?;
-    
+
     // Wait for IPC updates to propagate
     log::info!("🧪 Waiting for IPC propagation...");
     tokio::time::sleep(Duration::from_millis(2000)).await;
-    
+
     // Test all 6 ports with retry logic
     // Track success for each port
     let mut port_success = std::collections::HashMap::new();
-    
+
     // vcom2: Poll Station 1 (Type 03 Holding) from paired master on vcom1
     log::info!("🧪 Testing vcom2 → Station 1 (Type 03)");
-    port_success.insert("vcom2", test_port_with_retries(&port2, 1, "holding", &data1).await?);
-    
+    port_success.insert(
+        "vcom2",
+        test_port_with_retries(&port2, 1, "holding", &data1).await?,
+    );
+
     // vcom4: Poll Station 1 (Type 03 Holding) - may have conflicts
     log::info!("🧪 Testing vcom4 → Station 1 (Type 03)");
-    port_success.insert("vcom4", test_port_with_retries(&port4, 1, "holding", &data1).await?);
-    
-    // vcom5: Poll Station 2 (Type 02 Input) - may have conflicts  
+    port_success.insert(
+        "vcom4",
+        test_port_with_retries(&port4, 1, "holding", &data1).await?,
+    );
+
+    // vcom5: Poll Station 2 (Type 02 Input) - may have conflicts
     log::info!("🧪 Testing vcom5 → Station 2 (Type 02)");
-    port_success.insert("vcom5", test_port_with_retries(&port5, 2, "input", &data2).await?);
-    
+    port_success.insert(
+        "vcom5",
+        test_port_with_retries(&port5, 2, "input", &data2).await?,
+    );
+
     // vcom6: Poll Station 2 (Type 02 Input) from paired master on vcom3
     log::info!("🧪 Testing vcom6 → Station 2 (Type 02)");
-    port_success.insert("vcom6", test_port_with_retries(&port6, 2, "input", &data2).await?);
-    
+    port_success.insert(
+        "vcom6",
+        test_port_with_retries(&port6, 2, "input", &data2).await?,
+    );
+
     // Check if all ports passed
     let all_passed = port_success.values().all(|&v| v);
-    
+
     if all_passed {
         log::info!("✅ All ports passed!");
         for (port, success) in port_success.iter() {
@@ -180,12 +192,12 @@ async fn test_port_with_retries(
     expected_data: &[u16],
 ) -> Result<bool> {
     let binary = build_debug_bin("aoba")?;
-    
+
     for attempt in 1..=MAX_RETRIES {
         log::info!(
             "  Attempt {attempt}/{MAX_RETRIES}: Polling {port} for Station {station_id} ({register_mode})"
         );
-        
+
         let cli_output = Command::new(&binary)
             .args([
                 "--slave-poll",
@@ -207,10 +219,10 @@ async fn test_port_with_retries(
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()?;
-        
+
         if cli_output.status.success() {
             let stdout = String::from_utf8_lossy(&cli_output.stdout);
-            
+
             // Parse and check the data
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&stdout) {
                 if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
@@ -218,7 +230,7 @@ async fn test_port_with_retries(
                         .iter()
                         .filter_map(|v| v.as_u64().map(|n| n as u16))
                         .collect();
-                    
+
                     if received == expected_data {
                         log::info!("  ✅ SUCCESS on attempt {attempt}: Data verified!");
                         return Ok(true);
@@ -233,13 +245,13 @@ async fn test_port_with_retries(
             let stderr = String::from_utf8_lossy(&cli_output.stderr);
             log::warn!("  ⚠️ Poll failed on attempt {attempt}: {stderr}");
         }
-        
+
         // Wait before next attempt (except after last attempt)
         if attempt < MAX_RETRIES {
             tokio::time::sleep(Duration::from_millis(RETRY_INTERVAL_MS)).await;
         }
     }
-    
+
     log::error!("  ❌ FAILED: All {MAX_RETRIES} attempts failed for {port}");
     Ok(false)
 }
@@ -250,7 +262,7 @@ async fn configure_tui_master<T: Expect>(
     cap: &mut TerminalCapture,
     target_port: &str,
     station_id: u8,
-    register_type: u8,  // 2 = Input, 3 = Holding
+    register_type: u8, // 2 = Input, 3 = Holding
 ) -> Result<()> {
     use regex::Regex;
 
@@ -332,7 +344,7 @@ async fn configure_tui_master<T: Expect>(
 
     // Set Register Type
     log::info!("📝 Setting register type to {register_type:02}");
-    
+
     let actions = vec![
         // Navigate to Register Type field
         CursorAction::PressArrow {
@@ -350,7 +362,7 @@ async fn configure_tui_master<T: Expect>(
         // Navigate through register types
         CursorAction::PressArrow {
             direction: ArrowKey::Right,
-            count: if register_type == 3 { 0 } else { 1 },  // Input is one right from Holding
+            count: if register_type == 3 { 0 } else { 1 }, // Input is one right from Holding
         },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
@@ -445,9 +457,7 @@ async fn navigate_to_port<T: Expect>(
             .await?;
 
         // Check if we're on the target port
-        if screen.contains(&format!("> {port_name}"))
-            || screen.contains(&format!(">{port_name}"))
-        {
+        if screen.contains(&format!("> {port_name}")) || screen.contains(&format!(">{port_name}")) {
             log::info!("✅ Found and selected {port_name} on attempt {attempt}");
             session.send_enter()?;
             sleep_seconds(1).await;
