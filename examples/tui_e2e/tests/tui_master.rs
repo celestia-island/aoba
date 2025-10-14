@@ -107,7 +107,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     // Configure the Modbus station while staying in the panel.
     log::info!("🧪 Step 5: Configure TUI as Master");
     configure_tui_master(&mut tui_session, &mut tui_cap).await?;
-    
+
     // Wait for configuration to stabilize and subprocess to be ready
     log::info!("🧪 Step 5.5: Waiting for subprocess to be fully ready...");
     tokio::time::sleep(Duration::from_secs(2)).await;

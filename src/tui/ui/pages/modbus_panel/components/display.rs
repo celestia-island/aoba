@@ -203,9 +203,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 Style::default().add_modifier(Modifier::BOLD),
             )]));
 
-                // Remove individual connection mode selector since we now have global mode
+            // Remove individual connection mode selector since we now have global mode
 
-                lines.push(create_line(
+            lines.push(create_line(
                     &lang().protocol.modbus.station_id,
                     matches!(
                         current_selection,
@@ -254,7 +254,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     },
                 )?);
 
-                lines.push(create_line(
+            lines.push(create_line(
                     &lang().protocol.modbus.register_mode,
                     matches!(
                         current_selection,
@@ -306,7 +306,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     },
                 )?);
 
-                lines.push(create_line(
+            lines.push(create_line(
                     &lang().protocol.modbus.register_start_address,
                     matches!(
                         current_selection,
@@ -355,7 +355,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     },
                 )?);
 
-                lines.push(create_line(
+            lines.push(create_line(
                     &lang().protocol.modbus.register_length,
                     matches!(
                         current_selection,
@@ -404,40 +404,39 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     },
                 )?);
 
-                if item.register_length > 0 {
-                    let item_start = item.register_address;
-                    let item_end = item_start + item.register_length;
+            if item.register_length > 0 {
+                let item_start = item.register_address;
+                let item_end = item_start + item.register_length;
 
-                    // Use 4 registers per row for 80-column terminals
-                    // TODO: Make this dynamic based on actual terminal width
-                    let registers_per_row = 4;
+                // Use 4 registers per row for 80-column terminals
+                // TODO: Make this dynamic based on actual terminal width
+                let registers_per_row = 4;
 
-                    let first_row =
-                        (item_start / registers_per_row as u16) * registers_per_row as u16;
-                    let last_row =
-                        item_end.div_ceil(registers_per_row as u16) * registers_per_row as u16;
+                let first_row = (item_start / registers_per_row as u16) * registers_per_row as u16;
+                let last_row =
+                    item_end.div_ceil(registers_per_row as u16) * registers_per_row as u16;
 
-                    let mut row = first_row;
-                    while row < last_row {
-                        let label = format!("  0x{row:04X}");
-                        if let Ok(line) = render_register_row_line(
-                            &label,
-                            index,
-                            row,
-                            item,
-                            current_selection,
-                            registers_per_row,
-                        ) {
-                            lines.push(line);
-                        }
-                        row += registers_per_row as u16;
+                let mut row = first_row;
+                while row < last_row {
+                    let label = format!("  0x{row:04X}");
+                    if let Ok(line) = render_register_row_line(
+                        &label,
+                        index,
+                        row,
+                        item,
+                        current_selection,
+                        registers_per_row,
+                    ) {
+                        lines.push(line);
                     }
-                }
-
-                if index < all_items.len() - 1 {
-                    lines.push(separator_line(SEP_LEN));
+                    row += registers_per_row as u16;
                 }
             }
+
+            if index < all_items.len() - 1 {
+                lines.push(separator_line(SEP_LEN));
+            }
+        }
     }
 
     Ok(lines)
