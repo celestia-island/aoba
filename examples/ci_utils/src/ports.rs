@@ -27,6 +27,7 @@ pub struct VcomMatchers {
 pub fn vcom_matchers() -> VcomMatchers {
     use std::path::Path;
 
+    #[cfg(not(windows))]
     fn extend_unique(target: &mut Vec<String>, extras: impl IntoIterator<Item = String>) {
         for item in extras {
             if !target.iter().any(|existing| existing == &item) {
@@ -38,7 +39,15 @@ pub fn vcom_matchers() -> VcomMatchers {
     fn collect_aliases(original: &str) -> Vec<String> {
         let mut aliases: Vec<String> = Vec::new();
         let mut push_unique = |candidate: String| {
-            if !aliases.iter().any(|existing| existing == &candidate) {
+            // Filter out overly short aliases (single character) that could match too broadly
+            // Exception: keep the original path even if it ends with a single character
+            let is_original = candidate == original;
+            let is_too_short =
+                candidate.len() == 1 && !candidate.chars().all(|c| c.is_ascii_alphabetic());
+
+            if (!is_too_short || is_original)
+                && !aliases.iter().any(|existing| existing == &candidate)
+            {
                 aliases.push(candidate);
             }
         };
@@ -96,14 +105,25 @@ pub fn vcom_matchers() -> VcomMatchers {
         (DEFAULT_PORT1.to_string(), DEFAULT_PORT2.to_string())
     };
 
-    let mut port1_aliases = collect_aliases(&p1);
-    let mut port2_aliases = collect_aliases(&p2);
+    #[cfg(not(windows))]
+    let port1_aliases = {
+        let mut aliases = collect_aliases(&p1);
+        extend_unique(&mut aliases, collect_aliases(DEFAULT_PORT1));
+        aliases
+    };
+
+    #[cfg(windows)]
+    let port1_aliases = collect_aliases(&p1);
 
     #[cfg(not(windows))]
-    {
-        extend_unique(&mut port1_aliases, collect_aliases(DEFAULT_PORT1));
-        extend_unique(&mut port2_aliases, collect_aliases(DEFAULT_PORT2));
-    }
+    let port2_aliases = {
+        let mut aliases = collect_aliases(&p2);
+        extend_unique(&mut aliases, collect_aliases(DEFAULT_PORT2));
+        aliases
+    };
+
+    #[cfg(windows)]
+    let port2_aliases = collect_aliases(&p2);
 
     let (port1_rx, port2_rx, cursor_rx) = if cfg!(windows) {
         let p1_e = build_pattern(&port1_aliases);

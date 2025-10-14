@@ -309,7 +309,7 @@ impl IpcClient {
 
         Ok(IpcConnection {
             reader: BufReader::new(stream),
-            writer: None,
+            _writer: None,
         })
     }
 
@@ -322,7 +322,7 @@ impl IpcClient {
 /// An active IPC connection from a CLI subprocess
 pub struct IpcConnection {
     reader: BufReader<interprocess::local_socket::Stream>,
-    writer: Option<interprocess::local_socket::Stream>,
+    _writer: Option<interprocess::local_socket::Stream>,
 }
 
 impl IpcConnection {
@@ -385,7 +385,7 @@ impl IpcConnection {
 /// IPC Command Client (runs in TUI to send commands to CLI subprocess)
 /// This is the reverse channel: TUI → CLI
 pub struct IpcCommandClient {
-    socket_name: String,
+    _socket_name: String,
     stream: Option<interprocess::local_socket::Stream>,
 }
 
@@ -404,7 +404,7 @@ impl IpcCommandClient {
         log::info!("IPC CMD: Successfully connected to command channel: {command_channel_name}");
 
         Ok(Self {
-            socket_name: command_channel_name,
+            _socket_name: command_channel_name,
             stream: Some(stream),
         })
     }
@@ -440,7 +440,7 @@ impl Drop for IpcCommandClient {
 /// IPC Command Listener (runs in CLI subprocess to receive commands from TUI)
 /// This listens on the reverse channel: TUI → CLI
 pub struct IpcCommandListener {
-    socket_name: String,
+    _socket_name: String,
     listener: Option<interprocess::local_socket::Listener>,
     connection: Option<IpcCommandConnection>,
 }
@@ -465,7 +465,7 @@ impl IpcCommandListener {
         log::info!("IPC CMD: Listening for commands on: {command_channel_name} (non-blocking)");
 
         Ok(Self {
-            socket_name: command_channel_name,
+            _socket_name: command_channel_name,
             listener: Some(listener),
             connection: None,
         })

@@ -41,11 +41,10 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { mode, stations: _ } =
-                                    &port_guard.config;
-                                return Ok(if mode.is_master() { 0 } else { 1 });
-                            }
+                            let port_guard = port_entry.read();
+                            let types::port::PortConfig::Modbus { mode, stations: _ } =
+                                &port_guard.config;
+                            return Ok(if mode.is_master() { 0 } else { 1 });
                         }
                     }
                 }
@@ -67,13 +66,12 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            if let Ok(port_guard) = port_entry.read() {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
-                                let all_items: Vec<_> = stations.iter().collect();
-                                if let Some(item) = all_items.get(index) {
-                                    return Ok((item.register_mode as u8 - 1) as usize);
-                                }
+                            let port_guard = port_entry.read();
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port_guard.config;
+                            let all_items: Vec<_> = stations.iter().collect();
+                            if let Some(item) = all_items.get(index) {
+                                return Ok((item.register_mode as u8 - 1) as usize);
                             }
                         }
                     }
@@ -119,13 +117,12 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 // Get the register mode to determine behavior
                 let register_mode = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        if let Ok(port_guard) = port_entry.read() {
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
-                            let all_items: Vec<_> = stations.iter().collect();
-                            if let Some(item) = all_items.get(slave_index) {
-                                return Ok(Some(item.register_mode));
-                            }
+                        let port_guard = port_entry.read();
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &port_guard.config;
+                        let all_items: Vec<_> = stations.iter().collect();
+                        if let Some(item) = all_items.get(slave_index) {
+                            return Ok(Some(item.register_mode));
                         }
                     }
                     Ok(None)
@@ -190,14 +187,11 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                 types::modbus::ModbusConnectionMode::Slave {
                                                     ..
                                                 } => {
-                                                    let should_queue = match owner_snapshot.as_ref() {
+                                                    let should_queue = !matches!(
+                                                        owner_snapshot.as_ref(),
                                                         Some(PortOwner::CliSubprocess(info))
-                                                            if info.mode == PortSubprocessMode::MasterProvide =>
-                                                        {
-                                                            false
-                                                        }
-                                                        _ => true,
-                                                    };
+                                                            if info.mode == PortSubprocessMode::MasterProvide
+                                                    );
 
                                                     if should_queue {
                                                         use crate::protocol::modbus::generate_pull_set_holding_request;

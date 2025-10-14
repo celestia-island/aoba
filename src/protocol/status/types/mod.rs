@@ -13,7 +13,7 @@ derive_struct! {
     pub Status {
         ports: {
             order: Vec<String> = vec![],
-            map: HashMap<String, std::sync::Arc<std::sync::RwLock<port::PortData>>>
+            map: HashMap<String, std::sync::Arc<parking_lot::RwLock<port::PortData>>>
                 = HashMap::new(),
         },
 

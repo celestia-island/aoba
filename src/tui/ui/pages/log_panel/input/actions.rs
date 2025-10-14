@@ -43,11 +43,10 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
                     // Get the current log count and set to last item
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port) = status.ports.map.get(port_name) {
-                            if let Ok(port_data) = port.read() {
-                                let log_count = port_data.logs.len();
-                                if log_count > 0 {
-                                    *selected_item = Some(log_count - 1);
-                                }
+                            let port_data = port.read();
+                            let log_count = port_data.logs.len();
+                            if log_count > 0 {
+                                *selected_item = Some(log_count - 1);
                             }
                         }
                     }
@@ -72,10 +71,9 @@ pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
         if let types::Page::LogPanel { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Ok(mut port_data) = port.write() {
-                        port_data.logs.clear();
-                        log::info!("Cleared logs for port: {port_name}");
-                    }
+                    let mut port_data = port.write();
+                    port_data.logs.clear();
+                    log::info!("Cleared logs for port: {port_name}");
                 }
             }
         }

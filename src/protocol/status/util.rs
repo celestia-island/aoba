@@ -1,24 +1,21 @@
 use crate::protocol::status::types::port::PortData;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 
 pub fn with_port_read<T, F>(port: &Arc<RwLock<PortData>>, f: F) -> Option<T>
 where
     F: FnOnce(&RwLockReadGuard<PortData>) -> T,
 {
-    match port.read() {
-        Ok(guard) => Some(f(&guard)),
-        Err(_) => None,
-    }
+    let guard = port.read();
+    Some(f(&guard))
 }
 
 pub fn with_port_write<T, F>(port: &Arc<RwLock<PortData>>, f: F) -> Option<T>
 where
     F: FnOnce(&mut RwLockWriteGuard<PortData>) -> T,
 {
-    match port.write() {
-        Ok(mut guard) => Some(f(&mut guard)),
-        Err(_) => None,
-    }
+    let mut guard = port.write();
+    Some(f(&mut guard))
 }
 
 pub fn crc16_modbus(data: &[u8]) -> u16 {
