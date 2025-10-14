@@ -5,13 +5,14 @@ pub mod utils;
 
 use anyhow::{anyhow, Result};
 use chrono::Local;
+use parking_lot::RwLock;
 use std::{
     collections::HashMap,
     convert::TryFrom,
     fs,
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::Arc,
     thread,
     time::Duration,
 };
@@ -976,8 +977,8 @@ fn run_core_thread(
                     start_address,
                     values,
                 } => {
-                    log::debug!(
-                        "SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
+                    log::info!(
+                        "🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                     );
 
                     // Send register update to CLI subprocess via IPC
@@ -988,9 +989,9 @@ fn run_core_thread(
                         start_address,
                         values,
                     ) {
-                        log::warn!("Failed to send register update to CLI subprocess for {port_name}: {err}");
+                        log::warn!("❌ Failed to send register update to CLI subprocess for {port_name}: {err}");
                     } else {
-                        log::info!("✓ Sent register update to CLI subprocess for {port_name}");
+                        log::info!("✅ Sent register update to CLI subprocess for {port_name}");
                     }
                 }
             }
@@ -1153,18 +1154,17 @@ pub fn log_state_snapshot() -> Result<()> {
         let mut port_states = vec![];
         for port_name in &status.ports.order {
             if let Some(port_arc) = status.ports.map.get(port_name) {
-                if let Ok(port) = port_arc.read() {
-                    let state_str = match &port.state {
-                        PortState::Free => "Free",
-                        PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
-                        PortState::OccupiedByOther => "OccupiedByOther",
-                    };
-                    port_states.push(json!({
-                        "name": port_name,
-                        "state": state_str,
-                        "type": &port.port_type,
-                    }));
-                }
+                let port = port_arc.read();
+                let state_str = match &port.state {
+                    PortState::Free => "Free",
+                    PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
+                    PortState::OccupiedByOther => "OccupiedByOther",
+                };
+                port_states.push(json!({
+                    "name": port_name,
+                    "state": state_str,
+                    "type": &port.port_type,
+                }));
             }
         }
 

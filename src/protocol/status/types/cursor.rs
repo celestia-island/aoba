@@ -360,13 +360,12 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
         if let Ok(Some(port_entry)) =
             read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
-            if let Ok(port_data) = port_entry.read() {
-                let crate::protocol::status::types::port::PortConfig::Modbus { mode: _, stations } =
-                    &port_data.config;
-                for it in stations.iter() {
-                    // Just add the item as-is since the global mode is now stored separately
-                    items_vec.push(it.clone());
-                }
+            let port_data = port_entry.read();
+            let crate::protocol::status::types::port::PortConfig::Modbus { mode: _, stations } =
+                &port_data.config;
+            for it in stations.iter() {
+                // Just add the item as-is since the global mode is now stored separately
+                items_vec.push(it.clone());
             }
         }
     }

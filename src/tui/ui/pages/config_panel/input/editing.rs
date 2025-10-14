@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use crossterm::event::{KeyCode, KeyEvent};

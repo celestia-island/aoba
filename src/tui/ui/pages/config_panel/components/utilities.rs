@@ -1,5 +1,6 @@
 use anyhow::Result;
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 use crate::protocol::status::{read_status, types, with_port_read};
 

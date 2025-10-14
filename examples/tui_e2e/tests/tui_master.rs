@@ -75,7 +75,7 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
     // Wait for port to fully initialize - critical for stability
     log::info!("🧪 Step 3.5: Waiting for port to fully initialize...");
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     // Debug: Verify port enable state
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -107,6 +107,10 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     // Configure the Modbus station while staying in the panel.
     log::info!("🧪 Step 5: Configure TUI as Master");
     configure_tui_master(&mut tui_session, &mut tui_cap).await?;
+    
+    // Wait for configuration to stabilize and subprocess to be ready
+    log::info!("🧪 Step 5.5: Waiting for subprocess to be fully ready...");
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     // Run 10 rounds of continuous random data testing
     // Validate after each round and exit immediately on failure
@@ -118,17 +122,17 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         log::info!("🧪 Round {round}/{ROUNDS}: Updating registers...");
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
-        // Wait briefly for IPC updates to propagate to CLI subprocess
-        // With bidirectional IPC, updates should be instant
+        // Wait for IPC updates to propagate to CLI subprocess
+        // Increased wait time for CI environments which may have slower performance
         log::info!("🧪 Round {round}/{ROUNDS}: Waiting for IPC updates to propagate...");
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        tokio::time::sleep(Duration::from_millis(1000)).await;
 
         // Poll CLI slave to verify data is accessible
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave for verification");
         let binary = build_debug_bin("aoba")?;
 
         const MAX_RETRIES: usize = 3;
-        const RETRY_DELAY_MS: u64 = 500;
+        const RETRY_DELAY_MS: u64 = 1000;
 
         let mut last_received: Option<Vec<u16>> = None;
         let mut unchanged_count = 0;

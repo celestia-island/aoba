@@ -5,7 +5,8 @@ pub use util::*;
 
 use anyhow::{anyhow, Result};
 use once_cell::sync::OnceCell;
-use std::sync::{Arc, RwLock};
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 use crate::protocol::status::types::Status;
 
@@ -34,9 +35,7 @@ where
     let status = STATUS
         .get()
         .ok_or_else(|| anyhow!("Status not initialized"))?;
-    let guard = status
-        .read()
-        .map_err(|err| anyhow!("status lock poisoned: {err}"))?;
+    let guard = status.read();
     // Call user closure with borrowed reference
     let val = f(&guard)?;
     // Clone once to decouple lifetime
@@ -57,9 +56,7 @@ where
     let status = STATUS
         .get()
         .ok_or_else(|| anyhow!("Status not initialized"))?;
-    let mut guard = status
-        .write()
-        .map_err(|err| anyhow!("status lock poisoned: {err}"))?;
+    let mut guard = status.write();
     let val = f(&mut guard)?;
     Ok(val.clone())
 }

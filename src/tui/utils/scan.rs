@@ -75,7 +75,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 };
                 status.ports.map.insert(
                     name.clone(),
-                    std::sync::Arc::new(std::sync::RwLock::new(pd)),
+                    std::sync::Arc::new(parking_lot::RwLock::new(pd)),
                 );
             }
 
