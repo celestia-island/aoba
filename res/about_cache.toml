@@ -91,6 +91,10 @@ name = "oneshot"
 version = "^0.1"
 
 [[dependencies]]
+name = "parking_lot"
+version = "^0.12"
+
+[[dependencies]]
 name = "percent-encoding"
 version = "^2"
 
@@ -194,6 +198,7 @@ log = "MIT OR Apache-2.0"
 num_enum = "BSD-3-Clause OR MIT OR Apache-2.0"
 once_cell = "MIT OR Apache-2.0"
 oneshot = "MIT OR Apache-2.0"
+parking_lot = "MIT OR Apache-2.0"
 percent-encoding = "MIT OR Apache-2.0"
 rand = "MIT OR Apache-2.0"
 ratatui = "MIT"

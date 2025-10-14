@@ -5,13 +5,14 @@ pub mod utils;
 
 use anyhow::{anyhow, Result};
 use chrono::Local;
+use parking_lot::RwLock;
 use std::{
     collections::HashMap,
     convert::TryFrom,
     fs,
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::Arc,
     thread,
     time::Duration,
 };
