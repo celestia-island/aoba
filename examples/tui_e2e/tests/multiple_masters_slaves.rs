@@ -409,67 +409,93 @@ async fn navigate_to_port<T: Expect>(
     cap: &mut TerminalCapture,
     target_port: &str,
 ) -> Result<()> {
-    // Get the port name (e.g., "vcom1" from "/tmp/vcom1")
-    let port_name = std::path::Path::new(target_port)
-        .file_name()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| anyhow!("Invalid port path: {target_port}"))?;
+    log::info!("🔍 Navigating to port: {target_port}");
 
-    log::info!("🔍 Looking for port: {port_name}");
+    // Capture screen - allow a few refresh cycles for port to appear
+    let mut screen = String::new();
+    const MAX_ATTEMPTS: usize = 10;
+    for attempt in 1..=MAX_ATTEMPTS {
+        screen = cap
+            .capture(session, &format!("nav_port_attempt_{attempt}"))
+            .await?;
 
-    // First, capture the screen to see where we are
-    let screen = cap.capture(session, "initial_port_list").await?;
+        if screen.contains(target_port) {
+            if attempt > 1 {
+                log::info!("✅ Port {target_port} detected after {attempt} attempts");
+            }
+            break;
+        }
 
-    log::info!("📺 Initial screen captured");
+        if attempt == MAX_ATTEMPTS {
+            return Err(anyhow!(
+                "Port {target_port} not found in port list after {MAX_ATTEMPTS} attempts. Available: {}",
+                screen
+                    .lines()
+                    .filter(|l| l.contains("/tmp/") || l.contains("/dev/"))
+                    .take(10)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
 
-    // Check if the port is visible
-    if !screen.contains(port_name) {
-        return Err(anyhow!(
-            "Port {port_name} not found in port list. Available ports: {}",
-            screen
-                .lines()
-                .filter(|l| l.contains("/tmp/") || l.contains("/dev/"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
+        log::info!("⏳ Port {target_port} not visible yet (attempt {attempt}/{MAX_ATTEMPTS})");
+        sleep_seconds(1).await;
     }
 
-    // Check if cursor is already on the target port
-    if screen.contains(&format!("> {port_name}")) || screen.contains(&format!(">{port_name}")) {
-        log::info!("✅ Cursor already on {port_name}, pressing Enter");
+    // Parse screen to find port line and cursor line
+    let lines: Vec<&str> = screen.lines().collect();
+    let mut port_line = None;
+    let mut cursor_line = None;
+
+    for (idx, line) in lines.iter().enumerate() {
+        if line.contains(target_port) {
+            port_line = Some(idx);
+        }
+        if line.contains("> ") {
+            let trimmed = line.trim();
+            if trimmed.starts_with("│ > ") || trimmed.starts_with("> ") {
+                cursor_line = Some(idx);
+            }
+        }
+    }
+
+    let port_idx = port_line
+        .ok_or_else(|| anyhow!("Could not find {target_port} line index in screen"))?;
+    let curr_idx = cursor_line.unwrap_or(3);
+
+    log::info!("📍 Port at line {port_idx}, cursor at line {curr_idx}");
+
+    // Check if already on the target port
+    if port_idx == curr_idx {
+        log::info!("✅ Cursor already on {target_port}, pressing Enter");
         session.send_enter()?;
         sleep_seconds(1).await;
         return Ok(());
     }
 
-    // Navigate by pressing down until we reach the port
-    // First go to the top of the list
-    log::info!("⬆️ Going to top of port list");
-    for _ in 0..20 {
-        session.send_arrow(ArrowKey::Up)?;
-    }
+    // Calculate delta and move cursor
+    let delta = port_idx.abs_diff(curr_idx);
+    let direction = if port_idx > curr_idx {
+        ArrowKey::Down
+    } else {
+        ArrowKey::Up
+    };
+
+    log::info!("➡️ Moving cursor {direction:?} by {delta} lines");
+
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction,
+            count: delta,
+        },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "navigate_to_target_port").await?;
+
+    // Press Enter to select the port
+    session.send_enter()?;
     sleep_seconds(1).await;
 
-    // Now navigate down to find the target
-    for attempt in 1..=20 {
-        let screen = cap
-            .capture(session, &format!("navigate_down_{attempt}"))
-            .await?;
-
-        // Check if we're on the target port
-        if screen.contains(&format!("> {port_name}")) || screen.contains(&format!(">{port_name}")) {
-            log::info!("✅ Found and selected {port_name} on attempt {attempt}");
-            session.send_enter()?;
-            sleep_seconds(1).await;
-            return Ok(());
-        }
-
-        // Move down
-        session.send_arrow(ArrowKey::Down)?;
-        sleep_seconds(0).await;
-    }
-
-    Err(anyhow!(
-        "Could not navigate to port {port_name} after 20 attempts"
-    ))
+    log::info!("✅ Successfully navigated to and selected {target_port}");
+    Ok(())
 }
