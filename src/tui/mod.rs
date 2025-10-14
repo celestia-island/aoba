@@ -490,8 +490,17 @@ fn run_core_thread(
                 UiToCore::PausePolling => "PausePolling".to_string(),
                 UiToCore::ResumePolling => "ResumePolling".to_string(),
                 UiToCore::ToggleRuntime(port) => format!("ToggleRuntime({})", port),
-                UiToCore::SendRegisterUpdate { port_name, station_id, start_address, values, .. } => {
-                    format!("SendRegisterUpdate(port={}, station={}, addr={}, values={:?})", port_name, station_id, start_address, values)
+                UiToCore::SendRegisterUpdate {
+                    port_name,
+                    station_id,
+                    start_address,
+                    values,
+                    ..
+                } => {
+                    format!(
+                        "SendRegisterUpdate(port={}, station={}, addr={}, values={:?})",
+                        port_name, station_id, start_address, values
+                    )
                 }
             };
             log::info!("🔵 Core thread received message: {}", msg_name);
@@ -996,9 +1005,13 @@ fn run_core_thread(
                 }
             }
         }
-        
+
         if msg_count_before > 0 || msg_count_processed > 0 {
-            log::info!("📊 Core thread: queue had {} messages, processed {}", msg_count_before, msg_count_processed);
+            log::info!(
+                "📊 Core thread: queue had {} messages, processed {}",
+                msg_count_before,
+                msg_count_processed
+            );
         }
 
         let dead_processes = subprocess_manager.reap_dead_processes();
