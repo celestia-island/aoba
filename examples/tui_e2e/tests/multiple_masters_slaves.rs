@@ -459,8 +459,8 @@ async fn navigate_to_port<T: Expect>(
         }
     }
 
-    let port_idx = port_line
-        .ok_or_else(|| anyhow!("Could not find {target_port} line index in screen"))?;
+    let port_idx =
+        port_line.ok_or_else(|| anyhow!("Could not find {target_port} line index in screen"))?;
     let curr_idx = cursor_line.unwrap_or(3);
 
     log::info!("📍 Port at line {port_idx}, cursor at line {curr_idx}");
