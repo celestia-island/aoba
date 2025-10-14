@@ -313,6 +313,10 @@ fn send_request_and_wait(
     register_length: u16,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
 ) -> Result<ModbusResponse> {
+    log::debug!(
+        "send_request_and_wait: Preparing request for station={station_id}, addr=0x{register_address:04X}, len={register_length}, mode={reg_mode:?}"
+    );
+
     // Generate request based on register mode
     let request_bytes = match reg_mode {
         crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -346,10 +350,14 @@ fn send_request_and_wait(
     };
 
     // Send request
+    log::info!(
+        "send_request_and_wait: Sending request to master: {:02X?}",
+        request_bytes.1
+    );
     let mut port = port_arc.lock().unwrap();
     port.write_all(&request_bytes.1)?; // .1 is the raw frame bytes
     port.flush()?;
-    log::info!("Sent request: {:02X?}", request_bytes.1);
+    log::debug!("send_request_and_wait: Request sent, waiting for response...");
     drop(port);
 
     // Wait for response
@@ -359,11 +367,14 @@ fn send_request_and_wait(
     drop(port);
 
     if bytes_read == 0 {
+        log::warn!("send_request_and_wait: No response received from master");
         return Err(anyhow!("No response received"));
     }
 
     let response = &buffer[..bytes_read];
-    log::info!("Received response: {response:02X?}");
+    log::info!(
+        "send_request_and_wait: Received response from master: {response:02X?} ({bytes_read} bytes)"
+    );
 
     // Parse response
     let values = match reg_mode {
@@ -372,11 +383,19 @@ fn send_request_and_wait(
             // Response format for read holdings/inputs:
             // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
             if bytes_read < 5 {
+                log::error!("send_request_and_wait: Response too short (need at least 5 bytes, got {bytes_read})");
                 return Err(anyhow!("Response too short"));
             }
 
             let byte_count = response[2] as usize;
+            log::debug!(
+                "send_request_and_wait: Parsing response - byte_count={byte_count}, expected data bytes={byte_count}"
+            );
             if bytes_read < 3 + byte_count + 2 {
+                log::error!(
+                    "send_request_and_wait: Incomplete response (need {} bytes, got {bytes_read})",
+                    3 + byte_count + 2
+                );
                 return Err(anyhow!("Incomplete response"));
             }
 
@@ -386,6 +405,10 @@ fn send_request_and_wait(
                 let value = u16::from_be_bytes([response[offset], response[offset + 1]]);
                 values.push(value);
             }
+            log::info!(
+                "send_request_and_wait: Parsed {} register values: {values:?}",
+                values.len(),
+            );
             values
         }
         crate::protocol::status::types::modbus::RegisterMode::Coils
@@ -393,11 +416,16 @@ fn send_request_and_wait(
             // Response format for read coils/discrete inputs:
             // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
             if bytes_read < 5 {
+                log::error!("send_request_and_wait: Response too short (need at least 5 bytes, got {bytes_read})");
                 return Err(anyhow!("Response too short"));
             }
 
             let byte_count = response[2] as usize;
             if bytes_read < 3 + byte_count + 2 {
+                log::error!(
+                    "send_request_and_wait: Incomplete response (need {} bytes, got {bytes_read})",
+                    3 + byte_count + 2
+                );
                 return Err(anyhow!("Incomplete response"));
             }
 
@@ -423,9 +451,17 @@ fn send_request_and_wait(
             }
             // Truncate to requested length
             values.truncate(register_length as usize);
+            log::info!(
+                "send_request_and_wait: Parsed {} coil/discrete values: {values:?}",
+                values.len(),
+            );
             values
         }
     };
+
+    log::info!(
+        "send_request_and_wait: Successfully completed - station={station_id}, addr=0x{register_address:04X}, values={values:?}"
+    );
 
     Ok(ModbusResponse {
         station_id,
@@ -456,21 +492,61 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
         "Starting persistent slave poll on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
 
+    // Setup IPC if requested
+    let mut ipc = crate::cli::actions::setup_ipc(matches);
+
     // Open serial port
-    let port_handle = serialport::new(port, baud_rate)
+    let port_handle = match serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(500))
         .open()
-        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+    {
+        Ok(handle) => handle,
+        Err(err) => {
+            // Try to send error via IPC if available
+            if let Some(ref mut ipc_conns) = ipc {
+                let _ = ipc_conns
+                    .status
+                    .send(&crate::protocol::ipc::IpcMessage::PortError {
+                        port_name: port.to_string(),
+                        error: format!("Failed to open port: {err}"),
+                        timestamp: None,
+                    });
+            }
+            return Err(anyhow!("Failed to open port {port}: {err}"));
+        }
+    };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Notify IPC that port was opened successfully
+    if let Some(ref mut ipc_conns) = ipc {
+        let _ = ipc_conns
+            .status
+            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+                port_name: port.to_string(),
+                timestamp: None,
+            });
+        log::info!("IPC: Sent PortOpened message for {port}");
+    }
 
     // Register cleanup to ensure port is released on program exit
     {
         let pa = port_arc.clone();
+        let port_name_clone = port.to_string();
         cleanup::register_cleanup(move || {
+            log::debug!("Cleanup handler: Releasing port {port_name_clone}");
+            // Explicitly drop the port and wait for OS to release it
+            if let Ok(mut port) = pa.lock() {
+                // Try to flush any pending data
+                let _ = std::io::Write::flush(&mut **port);
+                log::debug!("Cleanup handler: Flushed port {port_name_clone}");
+            }
             drop(pa);
-            std::thread::sleep(Duration::from_millis(100));
+            // Give the OS time to fully release the file descriptor
+            std::thread::sleep(Duration::from_millis(200));
+            log::debug!("Cleanup handler: Port {port_name_clone} released");
         });
+        log::debug!("Registered cleanup handler for port {port}");
     }
 
     // Continuously poll
@@ -496,6 +572,24 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     let json = serde_json::to_string(&response)?;
                     output_sink.write(&json)?;
                     last_written_values = Some(response.values.clone());
+
+                    // Send RegisterUpdate via IPC
+                    if let Some(ref mut ipc_conns) = ipc {
+                        log::info!(
+                            "IPC: Sending RegisterUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
+                            response.values
+                        );
+                        let _ = ipc_conns.status.send(
+                            &crate::protocol::ipc::IpcMessage::RegisterUpdate {
+                                port_name: port.to_string(),
+                                station_id,
+                                register_type: register_mode.clone(),
+                                start_address: register_address,
+                                values: response.values.clone(),
+                                timestamp: None,
+                            },
+                        );
+                    }
                 }
             }
             Err(err) => {

@@ -342,56 +342,61 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
         // Accept command connection if not yet connected
         if let Some(ref mut ipc_conns) = ipc_connections {
-            // Try to accept command connection (non-blocking after first attempt)
-            // This is a one-time operation
+            // Try to accept command connection - retry on each loop iteration until successful
             static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
             if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
-                if let Err(e) = ipc_conns.command_listener.accept() {
-                    log::debug!("Command channel accept not ready: {e}");
-                } else {
-                    log::info!("Command channel accepted");
-                    COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                match ipc_conns.command_listener.accept() {
+                    Ok(()) => {
+                        log::info!("Command channel accepted");
+                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        // Don't log every attempt to avoid spam, just keep trying
+                        log::trace!("Command channel accept not ready yet: {e}");
+                    }
                 }
             }
 
             // Check for incoming commands
-            if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
-                match msg {
-                    crate::protocol::ipc::IpcMessage::ConfigUpdate {
-                        station_id: new_station_id,
-                        register_type,
-                        start_address: new_start_address,
-                        register_length: new_length,
-                        ..
-                    } => {
-                        log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
-                        // TODO: Apply configuration updates to runtime
-                        // For now, just log them
-                    }
-                    crate::protocol::ipc::IpcMessage::RegisterUpdate {
-                        station_id: _,
-                        register_type,
-                        start_address: update_start_addr,
-                        values,
-                        ..
-                    } => {
-                        log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
-                        // Apply register updates directly to storage
-                        let mut context = storage.lock().unwrap();
-                        if register_type == "holding" {
-                            for (i, &val) in values.iter().enumerate() {
-                                if let Err(e) =
-                                    context.set_holding(update_start_addr + i as u16, val)
-                                {
-                                    log::warn!("Failed to set holding register: {e}");
-                                }
-                            }
-                            log::info!("Applied register update to storage");
+            if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
+                    match msg {
+                        crate::protocol::ipc::IpcMessage::ConfigUpdate {
+                            station_id: new_station_id,
+                            register_type,
+                            start_address: new_start_address,
+                            register_length: new_length,
+                            ..
+                        } => {
+                            log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
+                            // TODO: Apply configuration updates to runtime
+                            // For now, just log them
                         }
-                    }
-                    _ => {
-                        log::debug!("Ignoring non-command IPC message");
+                        crate::protocol::ipc::IpcMessage::RegisterUpdate {
+                            station_id: _,
+                            register_type,
+                            start_address: update_start_addr,
+                            values,
+                            ..
+                        } => {
+                            log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
+                            // Apply register updates directly to storage
+                            let mut context = storage.lock().unwrap();
+                            if register_type == "holding" {
+                                for (i, &val) in values.iter().enumerate() {
+                                    if let Err(e) =
+                                        context.set_holding(update_start_addr + i as u16, val)
+                                    {
+                                        log::warn!("Failed to set holding register: {e}");
+                                    }
+                                }
+                                log::info!("Applied register update to storage");
+                            }
+                        }
+                        _ => {
+                            log::debug!("Ignoring non-command IPC message");
+                        }
                     }
                 }
             }
@@ -612,20 +617,24 @@ fn respond_to_request(
     use rmodbus::server::ModbusFrame;
 
     if request.len() < 2 {
+        log::warn!(
+            "respond_to_request: Request too short (len={})",
+            request.len()
+        );
         return Err(anyhow!("Request too short"));
     }
 
     let request_station_id = request[0];
     if request_station_id != station_id {
         log::debug!(
-            "Ignoring request for station {request_station_id} (we are station {station_id})",
+            "respond_to_request: Ignoring request for station {request_station_id} (we are station {station_id})",
         );
         return Err(anyhow!(
             "Request for different station ID: {request_station_id} (we are {station_id})",
         ));
     }
 
-    log::info!("Received request: {request:02X?}");
+    log::info!("respond_to_request: Received request from slave: {request:02X?}");
 
     // Parse and respond to request
     let mut context = storage.lock().unwrap();
@@ -633,20 +642,49 @@ fn respond_to_request(
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response_buf);
     frame.parse()?;
 
+    log::debug!(
+        "respond_to_request: Parsed frame - func={:?}, reg_addr=0x{:04X?}, count={}",
+        frame.func,
+        frame.reg,
+        frame.count
+    );
+
     let response = match frame.func {
         rmodbus::consts::ModbusFunction::GetHoldings => {
             match build_slave_holdings_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => return Err(anyhow!("Failed to build holdings response")),
+                Ok(Some(resp)) => {
+                    log::debug!(
+                        "respond_to_request: Built holdings response ({} bytes)",
+                        resp.len()
+                    );
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build holdings response");
+                    return Err(anyhow!("Failed to build holdings response"));
+                }
             }
         }
         rmodbus::consts::ModbusFunction::GetCoils => {
             match build_slave_coils_response(&mut frame, &mut context) {
-                Ok(Some(resp)) => resp,
-                _ => return Err(anyhow!("Failed to build coils response")),
+                Ok(Some(resp)) => {
+                    log::debug!(
+                        "respond_to_request: Built coils response ({} bytes)",
+                        resp.len()
+                    );
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build coils response");
+                    return Err(anyhow!("Failed to build coils response"));
+                }
             }
         }
         _ => {
+            log::error!(
+                "respond_to_request: Unsupported function code: {:?}",
+                frame.func
+            );
             return Err(anyhow!("Unsupported function code: {:?}", frame.func));
         }
     };
@@ -659,10 +697,11 @@ fn respond_to_request(
     port.flush()?;
     drop(port);
 
-    log::info!("Sent response: {response:02X?}");
+    log::info!("respond_to_request: Sent response to slave: {response:02X?}");
 
     // Extract values from response for JSON output
     let values = extract_values_from_response(&response)?;
+    log::debug!("respond_to_request: Extracted values for output: {values:?}");
 
     Ok(ModbusResponse {
         station_id,

@@ -3,11 +3,8 @@ mod ui;
 use flume;
 
 use anyhow::{anyhow, Result};
-use std::{
-    sync::{Arc, RwLock},
-    thread,
-    time::Duration,
-};
+use parking_lot::RwLock;
+use std::{sync::Arc, thread, time::Duration};
 
 use eframe::{self, egui};
 use egui::{vec2, IconData};

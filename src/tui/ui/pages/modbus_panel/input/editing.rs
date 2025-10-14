@@ -32,7 +32,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
             let buffer_type = match &input_raw_buffer {
                 types::ui::InputRawBuffer::None => "None".to_string(),
-                types::ui::InputRawBuffer::Index(i) => format!("Index({})", i),
+                types::ui::InputRawBuffer::Index(i) => format!("Index({i})"),
                 types::ui::InputRawBuffer::String { bytes, .. } => {
                     format!(
                         "String(len={}, val='{}')",
@@ -41,18 +41,18 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     )
                 }
             };
-            log::info!("🟡 handle_editing_input: buffer type = {}", buffer_type);
+            log::info!("🟡 handle_editing_input: buffer type = {buffer_type}");
 
             let mut maybe_restart: Option<String> = None;
 
             match &input_raw_buffer {
                 types::ui::InputRawBuffer::Index(selected_index) => {
-                    log::info!("🟡 Committing selector edit, index={}", selected_index);
+                    log::info!("🟡 Committing selector edit, index={selected_index}");
                     maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
                 }
                 types::ui::InputRawBuffer::String { bytes, .. } => {
                     let value = String::from_utf8_lossy(bytes).to_string();
-                    log::info!("🟡 Committing text edit, value='{}'", value);
+                    log::info!("🟡 Committing text edit, value='{value}'");
                     commit_text_edit(current_cursor, value, bus)?;
                 }
                 _ => {
@@ -354,14 +354,11 @@ fn commit_text_edit(
                                 ));
 
                                 if matches!(mode, ModbusConnectionMode::Slave { .. }) {
-                                    let needs_enqueue = match owner_info.as_ref() {
+                                    let needs_enqueue = !matches!(
+                                        owner_info.as_ref(),
                                         Some(PortOwner::CliSubprocess(info))
-                                            if info.mode == PortSubprocessMode::MasterProvide =>
-                                        {
-                                            false
-                                        }
-                                        _ => true,
-                                    };
+                                            if info.mode == PortSubprocessMode::MasterProvide
+                                    );
 
                                     if needs_enqueue {
                                         enqueue_slave_write(item, register_addr, sanitized_value);
@@ -373,19 +370,55 @@ fn commit_text_edit(
                         });
 
                         if let (
-                            Some(PortOwner::CliSubprocess(_)),
+                            Some(PortOwner::CliSubprocess(cli_info)),
                             Some((register_type, station_id, start_address, values)),
-                        ) = (owner_snapshot, payload)
+                        ) = (&owner_snapshot, &payload)
                         {
-                            if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
-                                port_name: port_name.clone(),
+                            log::info!(
+                                "📤 Sending RegisterUpdate to core: port={}, station={}, type={}, addr={}, values={:?}",
+                                port_name,
                                 station_id,
                                 register_type,
                                 start_address,
-                                values,
+                                values
+                            );
+                            match bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                                port_name: port_name.clone(),
+                                station_id: *station_id,
+                                register_type: register_type.clone(),
+                                start_address: *start_address,
+                                values: values.clone(),
                             }) {
-                                log::warn!("Failed to send IPC register update message: {err}");
+                                Ok(()) => {
+                                    log::info!("✅ RegisterUpdate message SENT successfully to channel");
+                                }
+                                Err(err) => {
+                                    log::error!("❌ Failed to send RegisterUpdate to channel: {err}");
+                                }
                             }
+                            
+                            // WORKAROUND: Also directly update the data source file if in MasterProvide mode
+                            // This bypasses potential IPC issues
+                            if let Some(data_source_path) = &cli_info.data_source_path {
+                                if let Err(err) = update_cli_data_source_file(
+                                    data_source_path,
+                                    *start_address,
+                                    values,
+                                ) {
+                                    log::warn!("Failed to directly update data source file {}: {}", data_source_path, err);
+                                } else {
+                                    log::info!("✅ Directly updated data source file: {}", data_source_path);
+                                }
+                            }
+                        } else {
+                            log::debug!(
+                                "🚫 Not sending RegisterUpdate: owner_snapshot={:?}, payload={:?}",
+                                owner_snapshot.as_ref().map(|o| match o {
+                                    PortOwner::CliSubprocess(info) => format!("CliSubprocess(mode={:?})", info.mode),
+                                    _ => "Other".to_string(),
+                                }),
+                                payload.is_some()
+                            );
                         }
                     }
                 }
@@ -433,4 +466,43 @@ fn enqueue_slave_write(
             );
         }
     }
+}
+
+/// Directly update the CLI data source file with new register values
+/// This is a workaround for IPC timing issues in test environments
+fn update_cli_data_source_file(
+    path: &str,
+    start_address: u16,
+    values: &[u16],
+) -> Result<()> {
+    use std::{fs, path::PathBuf};
+    
+    let path_buf = PathBuf::from(path);
+    
+    // Read the current data
+    let content = fs::read_to_string(&path_buf)?;
+    let mut data: serde_json::Value = serde_json::from_str(&content)?;
+    
+    // Update the values array, expanding if necessary
+    if let Some(values_array) = data.get_mut("values").and_then(|v| v.as_array_mut()) {
+        let start_idx = start_address as usize;
+        
+        // Ensure the array is large enough
+        let required_len = start_idx + values.len();
+        while values_array.len() < required_len {
+            values_array.push(serde_json::json!(0));
+        }
+        
+        // Update the values
+        for (i, &value) in values.iter().enumerate() {
+            let idx = start_idx + i;
+            values_array[idx] = serde_json::json!(value);
+        }
+        
+        // Write back to file
+        let updated = serde_json::to_string(&data)?;
+        fs::write(&path_buf, updated)?;
+    }
+    
+    Ok(())
 }

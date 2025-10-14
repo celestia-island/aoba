@@ -5,13 +5,14 @@ pub mod utils;
 
 use anyhow::{anyhow, Result};
 use chrono::Local;
+use parking_lot::RwLock;
 use std::{
     collections::HashMap,
     convert::TryFrom,
     fs,
     io::{self, Write},
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::Arc,
     thread,
     time::Duration,
 };
@@ -57,7 +58,7 @@ fn create_cli_data_source_path(port_name: &str) -> PathBuf {
 
     let timestamp = Local::now().format("%Y%m%d%H%M%S");
     let mut path = std::env::temp_dir();
-    path.push(format!("aoba_cli_{}_{}.jsonl", fallback, timestamp));
+    path.push(format!("aoba_cli_{fallback}_{timestamp}.jsonl"));
     path
 }
 
@@ -79,19 +80,12 @@ fn append_port_log(port_name: &str, raw: String) {
             })
             .is_none()
             {
-                log::warn!(
-                    "append_port_log: failed to acquire write lock for port {}",
-                    port_name
-                );
+                log::warn!("append_port_log: failed to acquire write lock for port {port_name}");
             }
         }
         Ok(())
     }) {
-        log::warn!(
-            "append_port_log: failed to persist log entry for {}: {}",
-            port_name,
-            err
-        );
+        log::warn!("append_port_log: failed to persist log entry for {port_name}: {err}");
     }
 }
 
@@ -157,7 +151,7 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
     }
 
     let mut file = options.open(path)?;
-    writeln!(file, "{}", serialized)?;
+    writeln!(file, "{serialized}")?;
     Ok(())
 }
 
@@ -225,8 +219,7 @@ fn apply_register_update_from_ipc(
                         handled = true;
                 } else {
                     log::debug!(
-                        "Register update for {port_name}: station {station_id} in mode {:?} not found",
-                        register_mode
+                        "Register update for {port_name}: station {station_id} in mode {register_mode:?} not found"
                     );
                 }
             })
@@ -244,8 +237,7 @@ fn apply_register_update_from_ipc(
 
     if !handled {
         log::debug!(
-            "Register update for {port_name}: no station handled for mode {:?}",
-            register_mode
+            "Register update for {port_name}: no station handled for mode {register_mode:?}"
         );
     }
 
@@ -488,7 +480,21 @@ fn run_core_thread(
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         // Drain UI -> core messages
+        let msg_count_before = ui_rx.len();
+        let mut msg_count_processed = 0;
         while let Ok(msg) = ui_rx.try_recv() {
+            msg_count_processed += 1;
+            let msg_name = match &msg {
+                UiToCore::Quit => "Quit".to_string(),
+                UiToCore::Refresh => "Refresh".to_string(),
+                UiToCore::PausePolling => "PausePolling".to_string(),
+                UiToCore::ResumePolling => "ResumePolling".to_string(),
+                UiToCore::ToggleRuntime(port) => format!("ToggleRuntime({})", port),
+                UiToCore::SendRegisterUpdate { port_name, station_id, start_address, values, .. } => {
+                    format!("SendRegisterUpdate(port={}, station={}, addr={}, values={:?})", port_name, station_id, start_address, values)
+                }
+            };
+            log::info!("🔵 Core thread received message: {}", msg_name);
             match msg {
                 UiToCore::Quit => {
                     log::info!("Received quit signal");
@@ -635,6 +641,7 @@ fn run_core_thread(
                         }
                     }
 
+                    // Extract CLI inputs WITHOUT holding any locks during subprocess operations
                     let cli_inputs = read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
                             if let Some(result) = with_port_read(port, |port| {
@@ -666,6 +673,7 @@ fn run_core_thread(
                         }
                         Ok(None)
                     })?;
+                    // Lock released here - safe to do long operations
 
                     let mut cli_started = false;
 
@@ -689,6 +697,7 @@ fn run_core_thread(
                                     data_source: None,
                                 };
 
+                                // Spawn subprocess WITHOUT holding any status locks
                                 match subprocess_manager.start_subprocess(cli_config) {
                                     Ok(()) => {
                                         if let Some(snapshot) =
@@ -709,6 +718,7 @@ fn run_core_thread(
                                                     data_source_path: None, // SlavePoll doesn't use data source
                                                 });
 
+                                            // Now update status with the result (short lock hold)
                                             write_status(|status| {
                                                 if let Some(port) = status.ports.map.get(&port_name)
                                                 {
@@ -762,6 +772,7 @@ fn run_core_thread(
                                     "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name}"
                                 );
 
+                                // Initialize data source WITHOUT holding status lock
                                 let data_source_path =
                                     initialize_cli_data_source(&port_name, &station)?;
 
@@ -780,6 +791,7 @@ fn run_core_thread(
                                     )),
                                 };
 
+                                // Spawn subprocess WITHOUT holding any status locks
                                 match subprocess_manager.start_subprocess(cli_config) {
                                     Ok(()) => {
                                         if let Some(snapshot) =
@@ -805,6 +817,7 @@ fn run_core_thread(
                                                     ),
                                                 });
 
+                                            // Now update status with the result (short lock hold)
                                             write_status(|status| {
                                                 if let Some(port) = status.ports.map.get(&port_name)
                                                 {
@@ -964,8 +977,8 @@ fn run_core_thread(
                     start_address,
                     values,
                 } => {
-                    log::debug!(
-                        "SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
+                    log::info!(
+                        "🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                     );
 
                     // Send register update to CLI subprocess via IPC
@@ -976,12 +989,16 @@ fn run_core_thread(
                         start_address,
                         values,
                     ) {
-                        log::warn!("Failed to send register update to CLI subprocess for {port_name}: {err}");
+                        log::warn!("❌ Failed to send register update to CLI subprocess for {port_name}: {err}");
                     } else {
-                        log::info!("✓ Sent register update to CLI subprocess for {port_name}");
+                        log::info!("✅ Sent register update to CLI subprocess for {port_name}");
                     }
                 }
             }
+        }
+        
+        if msg_count_before > 0 || msg_count_processed > 0 {
+            log::info!("📊 Core thread: queue had {} messages, processed {}", msg_count_before, msg_count_processed);
         }
 
         let dead_processes = subprocess_manager.reap_dead_processes();
@@ -991,12 +1008,13 @@ fn run_core_thread(
                 for (port_name, _) in &dead_processes {
                     if let Some(port) = status.ports.map.get(port_name) {
                         if with_port_write(port, |port| {
-                            if let PortState::OccupiedByThis { owner } = &mut port.state {
-                                if let PortOwner::CliSubprocess(info) = owner {
-                                    cleanup_paths
-                                        .insert(port_name.clone(), info.data_source_path.clone());
-                                    port.state = PortState::Free;
-                                }
+                            if let PortState::OccupiedByThis {
+                                owner: PortOwner::CliSubprocess(info),
+                            } = &mut port.state
+                            {
+                                cleanup_paths
+                                    .insert(port_name.clone(), info.data_source_path.clone());
+                                port.state = PortState::Free;
                             }
                         })
                         .is_none()
@@ -1011,17 +1029,15 @@ fn run_core_thread(
             })?;
 
             for (port_name, exit_status) in dead_processes {
-                if let Some(path_opt) = cleanup_paths.remove(&port_name) {
-                    if let Some(path) = path_opt {
-                        if let Err(err) = fs::remove_file(&path) {
-                            log::debug!("cleanup: failed to remove data source {path}: {err}");
-                        }
+                if let Some(Some(path)) = cleanup_paths.remove(&port_name) {
+                    if let Err(err) = fs::remove_file(&path) {
+                        log::debug!("cleanup: failed to remove data source {path}: {err}");
                     }
                 }
 
                 append_port_log(
                     &port_name,
-                    format!("CLI subprocess exited: {:?}", exit_status),
+                    format!("CLI subprocess exited: {exit_status:?}"),
                 );
 
                 if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
@@ -1138,18 +1154,17 @@ pub fn log_state_snapshot() -> Result<()> {
         let mut port_states = vec![];
         for port_name in &status.ports.order {
             if let Some(port_arc) = status.ports.map.get(port_name) {
-                if let Ok(port) = port_arc.read() {
-                    let state_str = match &port.state {
-                        PortState::Free => "Free",
-                        PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
-                        PortState::OccupiedByOther => "OccupiedByOther",
-                    };
-                    port_states.push(json!({
-                        "name": port_name,
-                        "state": state_str,
-                        "type": &port.port_type,
-                    }));
-                }
+                let port = port_arc.read();
+                let state_str = match &port.state {
+                    PortState::Free => "Free",
+                    PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
+                    PortState::OccupiedByOther => "OccupiedByOther",
+                };
+                port_states.push(json!({
+                    "name": port_name,
+                    "state": state_str,
+                    "type": &port.port_type,
+                }));
             }
         }
 

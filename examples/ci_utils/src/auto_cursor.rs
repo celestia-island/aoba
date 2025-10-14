@@ -25,12 +25,14 @@ pub enum CursorAction {
     /// Wait for a fixed duration
     Sleep { ms: u64 },
     /// Match a pattern within specified line and column range
-    /// If match fails, dumps screen and returns error immediately
+    /// If match fails after retries, optionally execute retry_action and retry again
+    /// Implements nested retry: 3 attempts -> execute retry_action -> repeat 3 times (total 9 attempts)
     MatchPattern {
         pattern: Regex,
         description: String,
         line_range: Option<(usize, usize)>, // (start_line, end_line) inclusive, 0-indexed
         col_range: Option<(usize, usize)>,  // (start_col, end_col) inclusive, 0-indexed
+        retry_action: Option<Vec<CursorAction>>, // Actions to execute before retrying if match fails
     },
     /// Debug breakpoint: capture screen, print it, reset ports, and exit
     /// Only active when debug mode is enabled
@@ -61,75 +63,116 @@ pub async fn execute_cursor_actions<T: Expect>(
                 description,
                 line_range,
                 col_range,
+                retry_action,
             } => {
-                log::info!("🔍 Matching pattern '{description}' with retry logic");
+                log::info!("🔍 Matching pattern '{description}' with nested retry logic");
 
-                const MAX_RETRIES: usize = 10;
+                const INNER_RETRIES: usize = 3; // Number of screen captures before executing retry_action
+                const OUTER_RETRIES: usize = 3; // Number of times to execute retry_action
                 const RETRY_INTERVAL_MS: u64 = 1000;
 
                 let mut matched = false;
                 let mut last_screen = String::new();
+                let mut total_attempts = 0;
 
-                for attempt in 1..=MAX_RETRIES {
-                    // Capture current screen
-                    let screen = cap
-                        .capture(
-                            session,
-                            &format!("{session_name} - match {description} (attempt {attempt})"),
-                        )
-                        .await?;
-                    last_screen = screen.clone();
+                // Outer loop: execute retry_action up to OUTER_RETRIES times
+                for outer_attempt in 1..=OUTER_RETRIES {
+                    // Inner loop: try to match pattern INNER_RETRIES times
+                    for inner_attempt in 1..=INNER_RETRIES {
+                        total_attempts += 1;
 
-                    // Extract region to search based on line and column ranges
-                    let lines: Vec<&str> = screen.lines().collect();
-                    let total_lines = lines.len();
+                        // Capture current screen
+                        let screen = cap
+                            .capture(
+                                session,
+                                &format!("{session_name} - match {description} (outer {outer_attempt}/{OUTER_RETRIES}, inner {inner_attempt}/{INNER_RETRIES})"),
+                            )
+                            .await?;
+                        last_screen = screen.clone();
 
-                    let (start_line, end_line) =
-                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-                    let start_line = start_line.min(total_lines.saturating_sub(1));
-                    let end_line = end_line.min(total_lines.saturating_sub(1));
+                        // Extract region to search based on line and column ranges
+                        let lines: Vec<&str> = screen.lines().collect();
+                        let total_lines = lines.len();
 
-                    let mut search_text = String::new();
-                    for line_idx in start_line..=end_line {
-                        if line_idx >= lines.len() {
-                            break;
-                        }
-                        let line = lines[line_idx];
-                        let line_text = if let Some((start_col, end_col)) = col_range {
-                            let chars: Vec<char> = line.chars().collect();
-                            let char_count = chars.len();
-                            if char_count == 0 {
-                                String::new()
-                            } else {
-                                let sc = (*start_col).min(char_count.saturating_sub(1));
-                                let ec = (*end_col).min(char_count.saturating_sub(1));
-                                chars[sc..=ec].iter().collect()
+                        let (start_line, end_line) =
+                            line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                        let start_line = start_line.min(total_lines.saturating_sub(1));
+                        let end_line = end_line.min(total_lines.saturating_sub(1));
+
+                        let mut search_text = String::new();
+                        for line_idx in start_line..=end_line {
+                            if line_idx >= lines.len() {
+                                break;
                             }
+                            let line = lines[line_idx];
+                            let line_text = if let Some((start_col, end_col)) = col_range {
+                                let chars: Vec<char> = line.chars().collect();
+                                let char_count = chars.len();
+                                if char_count == 0 {
+                                    String::new()
+                                } else {
+                                    let sc = (*start_col).min(char_count.saturating_sub(1));
+                                    let ec = (*end_col).min(char_count.saturating_sub(1));
+                                    chars[sc..=ec].iter().collect()
+                                }
+                            } else {
+                                line.to_string()
+                            };
+                            search_text.push_str(&line_text);
+                            search_text.push('\n');
+                        }
+
+                        // Try to match pattern
+                        if pattern.is_match(&search_text) {
+                            log::info!(
+                                "✓ Pattern '{description}' matched successfully on attempt {total_attempts} (outer {outer_attempt}, inner {inner_attempt})"
+                            );
+                            matched = true;
+                            break;
                         } else {
-                            line.to_string()
-                        };
-                        search_text.push_str(&line_text);
-                        search_text.push('\n');
+                            log::debug!("Pattern '{description}' not matched on attempt {total_attempts}, retrying in {RETRY_INTERVAL_MS}ms...");
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
+                                .await;
+                        }
                     }
 
-                    // Try to match pattern
-                    if pattern.is_match(&search_text) {
-                        log::info!(
-                            "✓ Pattern '{description}' matched successfully on attempt {attempt}"
-                        );
-                        matched = true;
+                    // If matched in inner loop, break outer loop
+                    if matched {
                         break;
-                    } else if attempt < MAX_RETRIES {
-                        log::debug!("Pattern '{description}' not matched on attempt {attempt}, retrying in {RETRY_INTERVAL_MS}ms...");
-                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
-                            .await;
+                    }
+
+                    // If we have retry_action and haven't exhausted outer retries, execute it
+                    if let Some(ref retry_actions) = retry_action {
+                        if outer_attempt < OUTER_RETRIES {
+                            log::info!(
+                                "🔄 Pattern '{description}' not matched after {INNER_RETRIES} attempts, executing retry_action (outer attempt {outer_attempt}/{OUTER_RETRIES})..."
+                            );
+
+                            // Recursively execute retry_action using Box::pin for async recursion
+                            Box::pin(execute_cursor_actions(
+                                session,
+                                cap,
+                                retry_actions,
+                                &format!("{session_name}_retry_{outer_attempt}"),
+                            ))
+                            .await?;
+
+                            log::info!("✓ Retry action completed, resuming pattern matching...");
+
+                            // Add a small delay after retry_action before next attempt
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
+                                .await;
+                        }
+                    } else {
+                        // No retry_action, so we're done if not matched
+                        break;
                     }
                 }
 
                 if !matched {
                     // All retries failed - dump screen and return error
                     log::error!(
-                        "❌ Pattern '{description}' NOT FOUND after {MAX_RETRIES} attempts"
+                        "❌ Pattern '{description}' NOT FOUND after {total_attempts} total attempts ({OUTER_RETRIES} outer × {INNER_RETRIES} inner)"
                     );
                     log::error!("Expected pattern: {:?}", pattern.as_str());
 
@@ -145,7 +188,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                     log::error!("\n{last_screen}\n");
 
                     return Err(anyhow!(
-                        "Pattern '{description}' not found in {session_name} after {MAX_RETRIES} attempts (lines {start_line}..={end_line}, cols {col_range:?})",
+                        "Pattern '{description}' not found in {session_name} after {total_attempts} attempts (lines {start_line}..={end_line}, cols {col_range:?})",
                     ));
                 }
             }
