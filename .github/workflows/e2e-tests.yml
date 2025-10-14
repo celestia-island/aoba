@@ -24,8 +24,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          apt-get update
-          apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -40,7 +40,7 @@ jobs:
 
       - name: Build test dependencies
         run: |
-          cargo build --bin aoba
+          cargo build
 
       - name: Setup virtual serial ports
         run: |
