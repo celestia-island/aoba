@@ -84,14 +84,13 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                if let Ok(port_guard) = port_entry.read() {
-                                    let types::port::PortConfig::Modbus { mode: _, stations } =
-                                        &port_guard.config;
-                                    let all_items: Vec<_> = stations.iter().collect();
-                                    if let Some(item) = all_items.get(slave_index) {
-                                        let has_next = slave_index + 1 < all_items.len();
-                                        return Ok((item.register_length as usize, has_next));
-                                    }
+                                let port_guard = port_entry.read();
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &port_guard.config;
+                                let all_items: Vec<_> = stations.iter().collect();
+                                if let Some(item) = all_items.get(slave_index) {
+                                    let has_next = slave_index + 1 < all_items.len();
+                                    return Ok((item.register_length as usize, has_next));
                                 }
                             }
                         }
@@ -160,13 +159,12 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                if let Ok(port_guard) = port_entry.read() {
-                                    let types::port::PortConfig::Modbus { mode: _, stations } =
-                                        &port_guard.config;
-                                    let all_items: Vec<_> = stations.iter().collect();
-                                    if let Some(item) = all_items.get(slave_index) {
-                                        return Ok(item.register_length as usize);
-                                    }
+                                let port_guard = port_entry.read();
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &port_guard.config;
+                                let all_items: Vec<_> = stations.iter().collect();
+                                if let Some(item) = all_items.get(slave_index) {
+                                    return Ok(item.register_length as usize);
                                 }
                             }
                         }
@@ -237,14 +235,13 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                if let Ok(port_guard) = port_entry.read() {
-                                    let types::port::PortConfig::Modbus { mode: _, stations } =
-                                        &port_guard.config;
-                                    let all_items: Vec<_> = stations.iter().collect();
-                                    if let Some(item) = all_items.get(slave_index) {
-                                        let has_next = slave_index + 1 < all_items.len();
-                                        return Ok((item.register_length as usize, has_next));
-                                    }
+                                let port_guard = port_entry.read();
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &port_guard.config;
+                                let all_items: Vec<_> = stations.iter().collect();
+                                if let Some(item) = all_items.get(slave_index) {
+                                    let has_next = slave_index + 1 < all_items.len();
+                                    return Ok((item.register_length as usize, has_next));
                                 }
                             }
                         }

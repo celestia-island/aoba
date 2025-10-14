@@ -1154,18 +1154,17 @@ pub fn log_state_snapshot() -> Result<()> {
         let mut port_states = vec![];
         for port_name in &status.ports.order {
             if let Some(port_arc) = status.ports.map.get(port_name) {
-                if let Ok(port) = port_arc.read() {
-                    let state_str = match &port.state {
-                        PortState::Free => "Free",
-                        PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
-                        PortState::OccupiedByOther => "OccupiedByOther",
-                    };
-                    port_states.push(json!({
-                        "name": port_name,
-                        "state": state_str,
-                        "type": &port.port_type,
-                    }));
-                }
+                let port = port_arc.read();
+                let state_str = match &port.state {
+                    PortState::Free => "Free",
+                    PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
+                    PortState::OccupiedByOther => "OccupiedByOther",
+                };
+                port_states.push(json!({
+                    "name": port_name,
+                    "state": state_str,
+                    "type": &port.port_type,
+                }));
             }
         }
 
