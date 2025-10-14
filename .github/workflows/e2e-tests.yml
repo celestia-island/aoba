@@ -12,6 +12,9 @@ jobs:
   e2e-test:
     name: E2E Tests
     runs-on: ubuntu-latest
+    container:
+      image: ubuntu:latest
+      options: --cpus=2
     strategy:
       matrix:
         example: [cli_e2e, tui_e2e]
@@ -24,8 +27,8 @@ jobs:
 
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+          apt-get update
+          apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -40,7 +43,7 @@ jobs:
 
       - name: Build test dependencies
         run: |
-          cargo build
+          cargo build --bin aoba
 
       - name: Setup virtual serial ports
         run: |
