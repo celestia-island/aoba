@@ -12,9 +12,6 @@ jobs:
   e2e-test:
     name: E2E Tests
     runs-on: ubuntu-latest
-    container:
-      image: ubuntu:latest
-      options: --cpus=2
     strategy:
       matrix:
         example: [cli_e2e, tui_e2e]
