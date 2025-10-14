@@ -320,7 +320,21 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
 
     // Set Register Length to expected number of registers we will monitor
     log::info!("Switch Connection Mode to Slave");
+    
+    // Debug: Check cursor position before changing connection mode
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_change_connection_mode".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_conn_mode").await?;
+    
     let actions = vec![
+        // First, go up to ensure we're at the top of the form
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 10,
+        },
+        CursorAction::Sleep { ms: 300 },
+        // Now we should be on "Create Station", press Down to get to Connection Mode
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
