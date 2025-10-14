@@ -977,8 +977,8 @@ fn run_core_thread(
                     start_address,
                     values,
                 } => {
-                    log::debug!(
-                        "SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
+                    log::info!(
+                        "🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                     );
 
                     // Send register update to CLI subprocess via IPC
@@ -989,9 +989,9 @@ fn run_core_thread(
                         start_address,
                         values,
                     ) {
-                        log::warn!("Failed to send register update to CLI subprocess for {port_name}: {err}");
+                        log::warn!("❌ Failed to send register update to CLI subprocess for {port_name}: {err}");
                     } else {
-                        log::info!("✓ Sent register update to CLI subprocess for {port_name}");
+                        log::info!("✅ Sent register update to CLI subprocess for {port_name}");
                     }
                 }
             }
