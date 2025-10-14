@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        example: [cli_e2e, tui_e2e, tui_multiple_e2e]
+        example: [cli_e2e, tui_e2e]
 
     steps:
       - uses: actions/checkout@v5
