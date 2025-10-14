@@ -241,37 +241,55 @@ async fn navigate_to_port<T: Expect>(
 
     log::info!("🔍 Looking for port: {port_name}");
 
-    // Navigate in the port list to find the target port
-    // Try up to 10 times to find the port
-    for attempt in 1..=10 {
-        let screen = cap
-            .capture(session, &format!("navigate_attempt_{attempt}"))
-            .await?;
+    // First, capture the screen to see where we are
+    let screen = cap
+        .capture(session, "initial_port_list")
+        .await?;
+    
+    log::info!("📺 Initial screen captured");
 
-        if screen.contains(port_name) {
-            log::info!("✅ Found port {port_name} on attempt {attempt}");
-
-            // Check if cursor is already on the target port
-            if screen.contains(&format!("> {port_name}"))
-                || screen.contains(&format!(">{port_name}"))
-            {
-                log::info!("✅ Cursor already on {port_name}");
-                session.send_enter()?;
-                sleep_seconds(1).await;
-                return Ok(());
-            }
-
-            // Move cursor to the port
-            session.send_arrow(ArrowKey::Down)?;
-            sleep_seconds(1).await;
-        } else {
-            // Port not visible, scroll down
-            session.send_arrow(ArrowKey::Down)?;
-            sleep_seconds(1).await;
-        }
+    // Check if the port is visible
+    if !screen.contains(port_name) {
+        return Err(anyhow!("Port {port_name} not found in port list. Available ports: {}", 
+            screen.lines().filter(|l| l.contains("/tmp/") || l.contains("/dev/")).collect::<Vec<_>>().join(", ")));
     }
 
-    Err(anyhow!("Could not find port {port_name} after 10 attempts"))
+    // Check if cursor is already on the target port
+    if screen.contains(&format!("> {}", port_name)) || screen.contains(&format!(">{}", port_name)) {
+        log::info!("✅ Cursor already on {port_name}, pressing Enter");
+        session.send_enter()?;
+        sleep_seconds(1).await;
+        return Ok(());
+    }
+
+    // Navigate by pressing down until we reach the port
+    // First go to the top of the list
+    log::info!("⬆️ Going to top of port list");
+    for _ in 0..20 {
+        session.send_arrow(ArrowKey::Up)?;
+    }
+    sleep_seconds(1).await;
+
+    // Now navigate down to find the target
+    for attempt in 1..=20 {
+        let screen = cap
+            .capture(session, &format!("navigate_down_{attempt}"))
+            .await?;
+
+        // Check if we're on the target port
+        if screen.contains(&format!("> {}", port_name)) || screen.contains(&format!(">{}", port_name)) {
+            log::info!("✅ Found and selected {port_name} on attempt {attempt}");
+            session.send_enter()?;
+            sleep_seconds(1).await;
+            return Ok(());
+        }
+
+        // Move down
+        session.send_arrow(ArrowKey::Down)?;
+        sleep_seconds(0).await;
+    }
+
+    Err(anyhow!("Could not navigate to port {port_name} after 20 attempts"))
 }
 
 /// Verify that a slave receives the expected data
