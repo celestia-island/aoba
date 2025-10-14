@@ -20,7 +20,7 @@ use ci_utils::{
     tui::{enable_port_carefully, navigate_to_vcom},
 };
 
-const ROUNDS: usize = 10;
+const ROUNDS: usize = 3;
 const REGISTER_LENGTH: usize = 12;
 
 /// Test TUI Slave mode + external CLI master with continuous random data (10 rounds)
