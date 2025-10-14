@@ -483,14 +483,20 @@ fn update_cli_data_source_file(
     let content = fs::read_to_string(&path_buf)?;
     let mut data: serde_json::Value = serde_json::from_str(&content)?;
     
-    // Update the values array
+    // Update the values array, expanding if necessary
     if let Some(values_array) = data.get_mut("values").and_then(|v| v.as_array_mut()) {
         let start_idx = start_address as usize;
+        
+        // Ensure the array is large enough
+        let required_len = start_idx + values.len();
+        while values_array.len() < required_len {
+            values_array.push(serde_json::json!(0));
+        }
+        
+        // Update the values
         for (i, &value) in values.iter().enumerate() {
             let idx = start_idx + i;
-            if idx < values_array.len() {
-                values_array[idx] = serde_json::json!(value);
-            }
+            values_array[idx] = serde_json::json!(value);
         }
         
         // Write back to file
