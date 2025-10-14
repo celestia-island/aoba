@@ -1,0 +1,19 @@
+[package]
+name = "tui_multiple_e2e"
+version = "0.0.1"
+edition = "2021"
+
+[[bin]]
+name = "tui_multiple_e2e"
+path = "main.rs"
+
+[dependencies]
+anyhow = "^1"
+tokio = { version = "^1", features = ["full"] }
+log = "^0.4"
+env_logger = "^0.11"
+serde = { version = "^1", features = ["derive"] }
+serde_json = "^1"
+expectrl = "^0.8"
+regex = "^1"
+ci_utils = { path = "../ci_utils" }
