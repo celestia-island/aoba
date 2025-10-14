@@ -136,7 +136,7 @@ fn get_refresh_content() -> Vec<Line<'static>> {
 /// serial parameters in a compact layout.
 fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     // Fetch the port Arc once under the status read lock to minimize lock churn
-    let port_arc_opt: Option<std::sync::Arc<std::sync::RwLock<types::port::PortData>>> =
+    let port_arc_opt: Option<std::sync::Arc<parking_lot::RwLock<types::port::PortData>>> =
         read_status(|s| {
             Ok(s.ports
                 .order

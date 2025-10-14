@@ -176,11 +176,10 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
-                    if let Ok(port_guard) = port_entry.read() {
-                        match &port_guard.config {
-                            types::port::PortConfig::Modbus { mode: _, stations } => {
-                                return Ok(!stations.is_empty());
-                            }
+                    let port_guard = port_entry.read();
+                    match &port_guard.config {
+                        types::port::PortConfig::Modbus { mode: _, stations } => {
+                            return Ok(!stations.is_empty());
                         }
                     }
                 }
@@ -193,16 +192,16 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     }
 
     if let Some(port_entry) = &port_data {
-        if let Ok(port_data_guard) = port_entry.read() {
-            let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
-            let all_items = stations.clone();
+        let port_data_guard = port_entry.read();
+        let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
+        let all_items = stations.clone();
 
-            for (index, item) in all_items.iter().enumerate() {
-                let group_title = format!("#{} - ID: {}", index + 1, item.station_id);
-                lines.push(Line::from(vec![Span::styled(
-                    group_title,
-                    Style::default().add_modifier(Modifier::BOLD),
-                )]));
+        for (index, item) in all_items.iter().enumerate() {
+            let group_title = format!("#{} - ID: {}", index + 1, item.station_id);
+            lines.push(Line::from(vec![Span::styled(
+                group_title,
+                Style::default().add_modifier(Modifier::BOLD),
+            )]));
 
                 // Remove individual connection mode selector since we now have global mode
 
@@ -439,7 +438,6 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     lines.push(separator_line(SEP_LEN));
                 }
             }
-        }
     }
 
     Ok(lines)

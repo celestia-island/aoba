@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
+use parking_lot::RwLock;
 use std::{
-    sync::{Arc, RwLock},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -27,41 +28,40 @@ pub fn handle_modbus_communication() -> Result<()> {
             status.ports.map.len()
         );
         for (port_name, port_arc) in &status.ports.map {
-            if let Ok(port_data) = port_arc.read() {
+            let port_data = port_arc.read();
+            log::info!(
+                "  Port {}: state={:?}",
+                port_name,
+                match &port_data.state {
+                    types::port::PortState::Free => "Free",
+                    types::port::PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
+                    types::port::PortState::OccupiedByOther => "OccupiedByOther",
+                }
+            );
+
+            if port_data.state.runtime_handle().is_some() {
+                let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
                 log::info!(
-                    "  Port {}: state={:?}",
-                    port_name,
-                    match &port_data.state {
-                        types::port::PortState::Free => "Free",
-                        types::port::PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
-                        types::port::PortState::OccupiedByOther => "OccupiedByOther",
-                    }
+                    "    Config: Modbus with {} stations in {:?} mode",
+                    stations.len(),
+                    if mode.is_master() { "Master" } else { "Slave" }
                 );
 
-                if port_data.state.runtime_handle().is_some() {
-                    let types::port::PortConfig::Modbus { mode, stations } = &port_data.config;
-                    log::info!(
-                        "    Config: Modbus with {} stations in {:?} mode",
+                if !stations.is_empty() {
+                    ports.push((
+                        port_name.clone(),
+                        port_arc.clone(),
+                        mode.clone(),
+                        stations.clone(),
+                    ));
+                    log::trace!(
+                        "Found active port {} with {} stations in {:?} mode",
+                        port_name,
                         stations.len(),
                         if mode.is_master() { "Master" } else { "Slave" }
                     );
-
-                    if !stations.is_empty() {
-                        ports.push((
-                            port_name.clone(),
-                            port_arc.clone(),
-                            mode.clone(),
-                            stations.clone(),
-                        ));
-                        log::trace!(
-                            "Found active port {} with {} stations in {:?} mode",
-                            port_name,
-                            stations.len(),
-                            if mode.is_master() { "Master" } else { "Slave" }
-                        );
-                    } else {
-                        log::info!("    ⚠️ Port has no stations configured");
-                    }
+                } else {
+                    log::info!("    ⚠️ Port has no stations configured");
                 }
             }
         }
@@ -663,6 +663,7 @@ pub fn generate_modbus_request_bytes(
 }
 
 /// Generate a modbus master response to an incoming request (same logic as slave response)
+#[allow(clippy::manual_div_ceil)]
 pub fn generate_modbus_master_response(
     request: &[u8],
     port_arc: &Arc<RwLock<types::port::PortData>>,
@@ -716,10 +717,7 @@ pub fn generate_modbus_master_response(
     .flatten()
     .ok_or_else(|| {
         anyhow!(
-            "No matching station configuration for request (id={}, func=0x{function_code:02X}, addr={}, qty={})",
-            slave_id,
-            register_address,
-            quantity
+            "No matching station configuration for request (id={slave_id}, func=0x{function_code:02X}, addr={register_address}, qty={quantity})"
         )
     })?;
 

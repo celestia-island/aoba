@@ -79,7 +79,7 @@ pub async fn navigate_to_vcom<T: Expect>(
     }
 
     let port_idx =
-        port_line.ok_or_else(|| anyhow!("Could not find {} line index", detected_port_name))?;
+        port_line.ok_or_else(|| anyhow!("Could not find {detected_port_name} line index"))?;
     let curr_idx = cursor_line.unwrap_or(3);
 
     if port_idx != curr_idx {
@@ -102,6 +102,18 @@ pub async fn navigate_to_vcom<T: Expect>(
 
     // Press Enter to enter port details
     let port_pattern_regex = ports.port1_rx.clone();
+
+    // Retry action: if we entered wrong port, press Escape and try to navigate again
+    let retry_action = Some(vec![
+        crate::auto_cursor::CursorAction::PressEscape,
+        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 20, // Go all the way up
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ]);
+
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
         crate::auto_cursor::CursorAction::MatchPattern {
@@ -109,6 +121,7 @@ pub async fn navigate_to_vcom<T: Expect>(
             description: format!("In {detected_port_name} port details"),
             line_range: Some((0, 3)),
             col_range: None,
+            retry_action,
         },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_port").await?;
@@ -199,6 +212,7 @@ pub async fn enable_port_carefully<T: Expect>(
         description: "Enable Port option focused".to_string(),
         line_range: Some((line_start, line_end)),
         col_range: None,
+        retry_action: None, // Already aligned, no retry needed
     }];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "align_enable_port_verify")
         .await?;
@@ -250,6 +264,7 @@ pub async fn enter_modbus_panel<T: Expect>(
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 3)),
             col_range: None,
+            retry_action: None, // Clear navigation path, no retry needed
         },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_modbus_panel")
@@ -283,7 +298,7 @@ pub async fn update_tui_registers<T: Expect>(
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers
-        let hex_val = format!("{:x}", val);
+        let hex_val = format!("{val:x}");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::TypeString(hex_val),
@@ -325,7 +340,7 @@ pub async fn update_tui_registers<T: Expect>(
                 session,
                 cap,
                 &actions,
-                &format!("nav_to_reg_{}", next_index),
+                &format!("nav_to_reg_{next_index}"),
             )
             .await?;
         }

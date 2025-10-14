@@ -79,15 +79,14 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
             let occupied_ports = crate::protocol::status::read_status(|status| {
                 let mut ports = std::collections::HashSet::new();
                 for (port_name, port_arc) in &status.ports.map {
-                    if let Ok(port_data) = port_arc.read() {
-                        if matches!(
-                            &port_data.state,
-                            crate::protocol::status::types::port::PortState::OccupiedByThis {
-                                owner: _
-                            }
-                        ) {
-                            ports.insert(port_name.clone());
+                    let port_data = port_arc.read();
+                    if matches!(
+                        &port_data.state,
+                        crate::protocol::status::types::port::PortState::OccupiedByThis {
+                            owner: _
                         }
+                    ) {
+                        ports.insert(port_name.clone());
                     }
                 }
                 Ok(ports)
