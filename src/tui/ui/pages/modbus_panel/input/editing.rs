@@ -375,12 +375,7 @@ fn commit_text_edit(
                         ) = (&owner_snapshot, &payload)
                         {
                             log::info!(
-                                "📤 Sending RegisterUpdate to core: port={}, station={}, type={}, addr={}, values={:?}",
-                                port_name,
-                                station_id,
-                                register_type,
-                                start_address,
-                                values
+                                "📤 Sending RegisterUpdate to core: port={port_name}, station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                             );
                             match bus.ui_tx.send(UiToCore::SendRegisterUpdate {
                                 port_name: port_name.clone(),
@@ -410,14 +405,11 @@ fn commit_text_edit(
                                     values,
                                 ) {
                                     log::warn!(
-                                        "Failed to directly update data source file {}: {}",
-                                        data_source_path,
-                                        err
-                                    );
+                                            "Failed to directly update data source file {data_source_path}: {err}"
+                                        );
                                 } else {
                                     log::info!(
-                                        "✅ Directly updated data source file: {}",
-                                        data_source_path
+                                        "✅ Directly updated data source file: {data_source_path}"
                                     );
                                 }
                             }
