@@ -8,13 +8,6 @@ use clap::{Arg, ArgMatches, Command};
 pub fn parse_args() -> ArgMatches {
     Command::new("aoba")
         .arg(
-            Arg::new("gui")
-                .long("gui")
-                .short('g')
-                .help("Force GUI mode")
-                .action(clap::ArgAction::SetTrue),
-        )
-        .arg(
             Arg::new("tui")
                 .long("tui")
                 .short('t')
