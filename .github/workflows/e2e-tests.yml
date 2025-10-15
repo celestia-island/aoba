@@ -58,4 +58,4 @@ jobs:
           pkill socat || true
 
           # Remove virtual port links if they exist
-          rm -f /tmp/vcom1 /tmp/vcom2 /tmp/aoba_vcom* || true
+          rm -f /tmp/vcom1 /tmp/vcom2 /tmp/vcom3 /tmp/vcom4 /tmp/vcom5 /tmp/vcom6 /tmp/aoba_vcom* || true
