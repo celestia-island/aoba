@@ -149,5 +149,19 @@ pub fn parse_args() -> ArgMatches {
                 .value_name("UUID")
                 .hide(false), // Show in help but with warning
         )
+        .arg(
+            Arg::new("serial-daemon")
+                .long("serial-daemon")
+                .help("Run as serial port daemon (IPC mode) - occupies port and provides IPC communication")
+                .value_name("PORT")
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist"]),
+        )
+        .arg(
+            Arg::new("modbus-daemon")
+                .long("modbus-daemon")
+                .help("Run as Modbus daemon (IPC mode) - communicates via IPC without holding port directly")
+                .value_name("IPC_CHANNEL")
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon"]),
+        )
         .get_matches()
 }

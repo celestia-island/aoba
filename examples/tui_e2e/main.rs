@@ -39,60 +39,15 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     }
 }
 
-/// Setup 6 virtual serial ports for multiple master/slave test
-pub fn setup_multiple_virtual_serial_ports() -> Result<bool> {
-    log::info!("🧪 Setting up 6 virtual serial ports for multiple test...");
-
-    let script_path = std::path::Path::new("scripts/socat_init.sh");
-
-    if !script_path.exists() {
-        log::warn!(
-            "⚠️ socat_init.sh script not found at {}",
-            script_path.display()
-        );
-        return Ok(false);
-    }
-
-    // Run the script with tui_multiple mode
-    let output = Command::new("bash")
-        .arg(script_path)
-        .arg("--mode")
-        .arg("tui_multiple")
-        .output()?;
-
-    if output.status.success() {
-        apply_port_env_overrides(&output.stdout);
-        log::info!("✅ 6 virtual serial ports setup successfully");
-        Ok(true)
-    } else {
-        log::warn!("⚠️ Failed to setup 6 virtual serial ports:");
-        log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-        log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        Ok(false)
-    }
-}
-
 fn apply_port_env_overrides(stdout: &[u8]) {
     let mut port1: Option<String> = None;
     let mut port2: Option<String> = None;
-    let mut port3: Option<String> = None;
-    let mut port4: Option<String> = None;
-    let mut port5: Option<String> = None;
-    let mut port6: Option<String> = None;
 
     for line in String::from_utf8_lossy(stdout).lines() {
         if let Some(value) = line.strip_prefix("PORT1=") {
             port1 = Some(value.trim().to_string());
         } else if let Some(value) = line.strip_prefix("PORT2=") {
             port2 = Some(value.trim().to_string());
-        } else if let Some(value) = line.strip_prefix("PORT3=") {
-            port3 = Some(value.trim().to_string());
-        } else if let Some(value) = line.strip_prefix("PORT4=") {
-            port4 = Some(value.trim().to_string());
-        } else if let Some(value) = line.strip_prefix("PORT5=") {
-            port5 = Some(value.trim().to_string());
-        } else if let Some(value) = line.strip_prefix("PORT6=") {
-            port6 = Some(value.trim().to_string());
         }
     }
 
@@ -103,22 +58,6 @@ fn apply_port_env_overrides(stdout: &[u8]) {
     if let Some(p2) = port2 {
         std::env::set_var("AOBATEST_PORT2", &p2);
         log::info!("🔗 Using virtual port override: AOBATEST_PORT2={p2}");
-    }
-    if let Some(p3) = port3 {
-        std::env::set_var("AOBATEST_PORT3", &p3);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT3={p3}");
-    }
-    if let Some(p4) = port4 {
-        std::env::set_var("AOBATEST_PORT4", &p4);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT4={p4}");
-    }
-    if let Some(p5) = port5 {
-        std::env::set_var("AOBATEST_PORT5", &p5);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT5={p5}");
-    }
-    if let Some(p6) = port6 {
-        std::env::set_var("AOBATEST_PORT6", &p6);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT6={p6}");
     }
 }
 
@@ -193,7 +132,7 @@ async fn main() -> Result<()> {
         }
 
         // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
-        log::info!("🧪 Test 2/3: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
+        log::info!("🧪 Test 2/4: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
         tests::test_tui_master_with_cli_slave_continuous().await?;
 
         // Reset ports after test completes (Unix only)
@@ -203,22 +142,24 @@ async fn main() -> Result<()> {
             setup_virtual_serial_ports()?;
         }
 
-        // Test 3: Multiple independent TUI masters and CLI slaves with interference checks
-        log::info!("🧪 Test 3/3: Multiple Masters and Slaves + interference handling (5 rounds)");
-        // Setup 6 ports for this test
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Setting up 6 virtual serial ports for Test 3...");
-            setup_multiple_virtual_serial_ports()?;
-        }
-        tests::test_multiple_masters_slaves().await?;
+        // Test 3: Multiple TUI Masters on vcom1
+        log::info!(
+            "🧪 Test 3/4: Multiple TUI Masters on vcom1 (4 stations with different register types)"
+        );
+        tests::test_tui_masters().await?;
 
-        // Reset ports after Test 3 completes (Unix only) - back to 2 ports
+        // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
         {
             log::info!("🧪 Resetting virtual serial ports after Test 3...");
             setup_virtual_serial_ports()?;
         }
+
+        // Test 4: Multiple TUI Slaves on vcom2
+        log::info!(
+            "🧪 Test 4/4: Multiple TUI Slaves on vcom2 (4 stations with different register types)"
+        );
+        tests::test_tui_slaves().await?;
 
         if loop_count > 1 {
             log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
