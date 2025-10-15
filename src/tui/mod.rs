@@ -489,7 +489,7 @@ fn run_core_thread(
                 UiToCore::Refresh => "Refresh".to_string(),
                 UiToCore::PausePolling => "PausePolling".to_string(),
                 UiToCore::ResumePolling => "ResumePolling".to_string(),
-                UiToCore::ToggleRuntime(port) => format!("ToggleRuntime({})", port),
+                UiToCore::ToggleRuntime(port) => format!("ToggleRuntime({port})"),
                 UiToCore::SendRegisterUpdate {
                     port_name,
                     station_id,
@@ -498,12 +498,11 @@ fn run_core_thread(
                     ..
                 } => {
                     format!(
-                        "SendRegisterUpdate(port={}, station={}, addr={}, values={:?})",
-                        port_name, station_id, start_address, values
+                        "SendRegisterUpdate(port={port_name}, station={station_id}, addr={start_address}, values={values:?})"
                     )
                 }
             };
-            log::info!("🔵 Core thread received message: {}", msg_name);
+            log::info!("🔵 Core thread received message: {msg_name}");
             match msg {
                 UiToCore::Quit => {
                     log::info!("Received quit signal");
@@ -1008,9 +1007,7 @@ fn run_core_thread(
 
         if msg_count_before > 0 || msg_count_processed > 0 {
             log::info!(
-                "📊 Core thread: queue had {} messages, processed {}",
-                msg_count_before,
-                msg_count_processed
+                "📊 Core thread: queue had {msg_count_before} messages, processed {msg_count_processed}",
             );
         }
 

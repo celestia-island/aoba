@@ -132,7 +132,7 @@ async fn main() -> Result<()> {
         }
 
         // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
-        log::info!("🧪 Test 2/2: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
+        log::info!("🧪 Test 2/4: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
         tests::test_tui_master_with_cli_slave_continuous().await?;
 
         // Reset ports after test completes (Unix only)
@@ -141,6 +141,25 @@ async fn main() -> Result<()> {
             log::info!("🧪 Resetting virtual serial ports after Test 2...");
             setup_virtual_serial_ports()?;
         }
+
+        // Test 3: Multiple TUI Masters on vcom1
+        log::info!(
+            "🧪 Test 3/4: Multiple TUI Masters on vcom1 (4 stations with different register types)"
+        );
+        tests::test_tui_masters().await?;
+
+        // Reset ports after test completes (Unix only)
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Resetting virtual serial ports after Test 3...");
+            setup_virtual_serial_ports()?;
+        }
+
+        // Test 4: Multiple TUI Slaves on vcom2
+        log::info!(
+            "🧪 Test 4/4: Multiple TUI Slaves on vcom2 (4 stations with different register types)"
+        );
+        tests::test_tui_slaves().await?;
 
         if loop_count > 1 {
             log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
