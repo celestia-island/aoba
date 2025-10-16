@@ -248,8 +248,8 @@ pub async fn configure_tui_master_common<T: Expect>(
         log::info!("🔍 Single station configuration, using standard navigation");
 
         // For single station, use standard navigation
-        // The issue: when we enter register type selection, it defaults to Discrete Inputs(02)
-        // But we want Holding(03). We need to navigate from 02 to 03.
+        // The issue: when we enter register type selection, it defaults to Holding(03)
+        // But we want Holding(03). We don't need to navigate, just press Enter to confirm.
         let actions = vec![
             // Navigate to Register Type field
             CursorAction::PressArrow {
@@ -264,13 +264,8 @@ pub async fn configure_tui_master_common<T: Expect>(
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 300 },
-            // When we enter register type selection, it defaults to Discrete Inputs(02)
-            // We need to navigate to Holding(03) - based on testing, try pressing Right twice
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: 2, // Try right arrow twice to reach Holding(03)
-            },
-            CursorAction::Sleep { ms: 300 },
+            // When we enter register type selection, it defaults to Holding(03)
+            // Just press Enter to confirm the selection
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
             // Verify the register type was set correctly
@@ -456,8 +451,8 @@ pub async fn configure_tui_slave_common<T: Expect>(
         log::info!("🔍 Single station configuration, using standard navigation");
 
         // For single station, use standard navigation
-        // The issue: when we enter register type selection, it defaults to Discrete Inputs(02)
-        // But we want Holding(03). We need to navigate from 02 to 03.
+        // The issue: when we enter register type selection, it defaults to Coils(01)
+        // But we want Holding(03). We need to navigate from 01 to 03.
         let actions = vec![
             // Navigate to Register Type field
             CursorAction::PressArrow {
@@ -472,12 +467,11 @@ pub async fn configure_tui_slave_common<T: Expect>(
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 300 },
-            // When we enter register type selection, it defaults to Discrete Inputs(02)
-            // We need to navigate to Holding(03) - try different navigation strategies
-            // First try: press Right once to go from 02 to 03
+            // When we enter register type selection, it defaults to Coils(01)
+            // We need to navigate to Holding(03) - press Right twice to go from 01 to 03
             CursorAction::PressArrow {
                 direction: ArrowKey::Right,
-                count: 1,
+                count: 2, // From Coils(01) to Discrete Inputs(02) to Holding(03)
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,

@@ -1,16 +1,19 @@
 use anyhow::Result;
+use std::{
+    process::{Command, Stdio},
+    time::Duration,
+};
+
 use aoba::cli::config::{
     CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
     PersistenceMode, RegisterType,
 };
-use std::process::{Command, Stdio};
-use std::time::Duration;
 
-/// 测试同站点不同寄存器类型的多个主站配置
+/// Test multiple masters with same station ID but different register types
 pub async fn test_multi_masters_same_station() -> Result<()> {
     log::info!("🧪 Testing multiple masters with same station ID but different register types...");
 
-    // 使用类型安全的 Config struct 创建配置
+    // Create configuration using the type-safe Config struct
     let config = Config {
         port_name: "/tmp/vcom1".to_string(),
         baud_rate: 9600,
@@ -44,20 +47,20 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
         ],
     };
 
-    // 将配置转换为 JSON 字符串
+    // Convert configuration to a JSON string
     let config_json = serde_json::to_string_pretty(&config)?;
 
-    // 将配置写入临时文件
+    // Write the configuration to a temporary file
     let temp_dir = std::env::temp_dir();
     let config_file = temp_dir.join("test_multi_masters_same_station.json");
     std::fs::write(&config_file, config_json)?;
 
     log::info!("🧪 Created configuration file for same station test");
 
-    // 构建二进制文件
+    // Build the binary
     let binary = ci_utils::build_debug_bin("aoba")?;
 
-    // 启动配置模式
+    // Start configuration mode
     log::info!("🧪 Starting multi-masters with same station configuration...");
     let process = Command::new(&binary)
         .arg("--config")
@@ -66,17 +69,17 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // 等待一段时间让进程启动
+    // Wait a bit to allow the process to start
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // 等待进程完成
+    // Wait for the process to complete
     let output = process.wait_with_output()?;
 
-    // 检查进程是否成功退出
+    // Check whether the process exited successfully
     if output.status.success() {
         log::info!("✅ Multi-masters with same station configuration completed successfully");
 
-        // 检查输出中是否包含配置加载成功的消息
+        // Check whether the output contains the configuration loaded successfully message
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -101,7 +104,7 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
         ));
     }
 
-    // 清理临时文件
+    // Clean up temporary files
     std::fs::remove_file(&config_file)?;
 
     log::info!("✅ Multi-masters same station test completed successfully");

@@ -15,3 +15,6 @@ chrono = { version = "^0.4", features = ["serde", "alloc"] }
 
 [dependencies.ci_utils]
 path = "../ci_utils"
+
+[dependencies.aoba]
+path = "../.."

@@ -16,3 +16,6 @@ expectrl = "^0.8"
 
 [dependencies.ci_utils]
 path = "../ci_utils"
+
+[dependencies.aoba]
+path = "../.."
