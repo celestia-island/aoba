@@ -168,8 +168,15 @@ fn apply_register_update_from_ipc(
         if let Some(port_entry) = status.ports.map.get(port_name) {
             if with_port_write(port_entry, |port| {
                 let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
+                // Find the station that matches station_id, register_mode AND address range
                 if let Some(item) = stations.iter_mut().find(|item| {
-                    item.station_id == station_id && item.register_mode == register_mode
+                    if item.station_id != station_id || item.register_mode != register_mode {
+                        return false;
+                    }
+                    // Check if start_address falls within this station's address range
+                    let item_start = item.register_address;
+                    let item_end = item_start + item.register_length;
+                    start_address >= item_start && start_address < item_end
                 }) {
                         item.req_total = item.req_total.saturating_add(1);
                         item.req_success = item.req_success.saturating_add(1);
