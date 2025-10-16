@@ -5,6 +5,7 @@ mod e2e;
 mod utils;
 
 use anyhow::Result;
+#[cfg(not(windows))]
 use std::process::Command;
 
 use basic_master::test_tui_master_with_cli_slave_continuous;
@@ -14,41 +15,51 @@ use cli_port_cleanup::test_cli_port_release;
 /// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
 pub fn setup_virtual_serial_ports() -> Result<bool> {
-    log::info!("🧪 Setting up virtual serial ports...");
-
-    // Find the socat_init.sh script (centralized at repo root)
-    let script_path = std::path::Path::new("scripts/socat_init.sh");
-
-    if !script_path.exists() {
-        log::warn!(
-            "⚠️ socat_init.sh script not found at {}",
-            script_path.display()
-        );
+    #[cfg(windows)]
+    {
+        log::info!("🧪 Windows platform: skipping virtual serial port setup (socat not available)");
         return Ok(false);
     }
 
-    // Run the script directly; it operates entirely in user-mode
-    let output = Command::new("bash")
-        .arg(script_path)
-        .arg("--mode")
-        .arg("tui")
-        .output()?;
+    #[cfg(not(windows))]
+    {
+        log::info!("🧪 Setting up virtual serial ports...");
 
-    if output.status.success() {
-        apply_port_env_overrides(&output.stdout);
-        log::info!("✅ Virtual serial ports reset successfully");
-        Ok(true)
-    } else {
-        log::warn!("⚠️ Failed to setup virtual serial ports:");
-        log::warn!(
-            "stdout: {stdout}",
-            stdout = String::from_utf8_lossy(&output.stdout)
-        );
-        log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        Ok(false)
+        // Find the socat_init.sh script (centralized at repo root)
+        let script_path = std::path::Path::new("scripts/socat_init.sh");
+
+        if !script_path.exists() {
+            log::warn!(
+                "⚠️ socat_init.sh script not found at {}",
+                script_path.display()
+            );
+            return Ok(false);
+        }
+
+        // Run the script directly; it operates entirely in user-mode
+        let output = Command::new("bash")
+            .arg(script_path)
+            .arg("--mode")
+            .arg("tui")
+            .output()?;
+
+        if output.status.success() {
+            apply_port_env_overrides(&output.stdout);
+            log::info!("✅ Virtual serial ports reset successfully");
+            Ok(true)
+        } else {
+            log::warn!("⚠️ Failed to setup virtual serial ports:");
+            log::warn!(
+                "stdout: {stdout}",
+                stdout = String::from_utf8_lossy(&output.stdout)
+            );
+            log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
+            Ok(false)
+        }
     }
 }
 
+#[cfg(not(windows))]
 fn apply_port_env_overrides(stdout: &[u8]) {
     let mut port1: Option<String> = None;
     let mut port2: Option<String> = None;
