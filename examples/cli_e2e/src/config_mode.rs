@@ -1,8 +1,8 @@
-use anyhow::Result;
-use aoba::cli::config::{
+use _bin::cli::config::{
     CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
     PersistenceMode, RegisterType,
 };
+use anyhow::Result;
 use ci_utils::terminal::run_binary_sync;
 
 /// Test configuration mode with multiple scenarios

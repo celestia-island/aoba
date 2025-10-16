@@ -1,8 +1,15 @@
-mod tests;
+mod basic_master;
+mod basic_slave;
+mod cli_port_cleanup;
+mod e2e;
 mod utils;
 
 use anyhow::Result;
 use std::process::Command;
+
+use basic_master::test_tui_master_with_cli_slave_continuous;
+use basic_slave::test_tui_slave_with_cli_master_continuous;
+use cli_port_cleanup::test_cli_port_release;
 
 /// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
@@ -112,7 +119,7 @@ async fn main() -> Result<()> {
 
         // Test 0: CLI port release test - verify CLI properly releases ports on exit
         log::info!("🧪 Test 0/2: CLI port release verification");
-        tests::test_cli_port_release().await?;
+        test_cli_port_release().await?;
 
         // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
         #[cfg(not(windows))]
@@ -125,7 +132,7 @@ async fn main() -> Result<()> {
         log::info!(
             "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
         );
-        tests::test_tui_slave_with_cli_master_continuous().await?;
+        test_tui_slave_with_cli_master_continuous().await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
@@ -136,7 +143,7 @@ async fn main() -> Result<()> {
 
         // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
         log::info!("🧪 Test 2/4: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
-        tests::test_tui_master_with_cli_slave_continuous().await?;
+        test_tui_master_with_cli_slave_continuous().await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
@@ -147,7 +154,7 @@ async fn main() -> Result<()> {
 
         // Test 3: Multiple TUI Masters on vcom1
         log::info!("🧪 Test 3/4: Multiple TUI Masters on vcom1 (E2E test suite)");
-        tests::e2e::test_tui_multi_masters().await?;
+        e2e::test_tui_multi_masters().await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
@@ -158,7 +165,7 @@ async fn main() -> Result<()> {
 
         // Test 4: Multiple TUI Slaves on vcom2
         log::info!("🧪 Test 4/4: Multiple TUI Slaves on vcom2 (E2E test suite)");
-        tests::e2e::test_tui_multi_slaves().await?;
+        e2e::test_tui_multi_slaves().await?;
 
         if loop_count > 1 {
             log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
