@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        bin: [cli_e2e, tui_e2e]
+        package: [cli_e2e, tui_e2e]
 
     steps:
       - uses: actions/checkout@v5
@@ -49,7 +49,7 @@ jobs:
 
       - name: Run E2E tests
         run: |
-          cargo run --bin ${{ matrix.bin }}
+          cargo run --package ${{ matrix.package }}
 
       - name: Cleanup virtual ports
         if: always()
