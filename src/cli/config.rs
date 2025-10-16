@@ -1,51 +1,51 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// 通信模式
+/// Communication mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CommunicationMode {
-    /// Modbus 主站模式
+    /// Modbus master mode
     Master,
-    /// Modbus 从站模式
+    /// Modbus slave mode
     Slave,
 }
 
-/// 通信方式
+/// Communication method
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CommunicationMethod {
-    /// IPC 通信
+    /// IPC communication
     Ipc,
-    /// 标准输入输出通信
+    /// Standard input/output communication
     Stdio,
-    /// 文件通信
+    /// File-based communication
     File,
 }
 
-/// 持久化模式
+/// Persistence mode
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PersistenceMode {
-    /// 持久化运行
+    /// Persistent run
     Persistent,
-    /// 临时运行
+    /// Temporary run
     Temporary,
-    /// 一次性运行
+    /// One-shot run
     OneShot,
 }
 
-/// 寄存器类型
+/// Register type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegisterType {
-    /// 保持寄存器
+    /// Holding registers
     Holding,
-    /// 输入寄存器
+    /// Input registers
     Input,
-    /// 线圈寄存器
+    /// Coil registers
     Coils,
-    /// 离散输入寄存器
+    /// Discrete input registers
     Discrete,
 }
 
@@ -60,46 +60,46 @@ impl fmt::Display for RegisterType {
     }
 }
 
-/// 通信线程参数
+/// Communication thread parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunicationParams {
-    /// 通信方式
+    /// Communication method
     pub mode: CommunicationMethod,
-    /// 从外部动态拉取数据
+    /// Dynamically pull data from external source
     pub dynamic_pull: bool,
-    /// 等待时间（秒）
+    /// Wait time (seconds)
     pub wait_time: Option<f64>,
-    /// 超时时间（秒）
+    /// Timeout (seconds)
     pub timeout: Option<f64>,
-    /// 持久化模式
+    /// Persistence mode
     pub persistence: PersistenceMode,
 }
 
-/// Modbus 寄存器信息
+/// Modbus register information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModbusRegister {
-    /// 站点 ID
+    /// Station ID
     pub station_id: u8,
-    /// 寄存器类型
+    /// Register type
     pub register_type: RegisterType,
-    /// 起始地址
+    /// Start address
     pub start_address: u16,
-    /// 寄存器数量
+    /// Number of registers
     pub length: u16,
 }
 
-/// 根配置结构
+/// Root configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    /// 端口名称
+    /// Port name
     pub port_name: String,
-    /// 端口通信配置（波特率）
+    /// Port communication configuration (baud rate)
     pub baud_rate: u32,
-    /// 端口通信模式
+    /// Port communication mode
     pub communication_mode: CommunicationMode,
-    /// 通信线程参数
+    /// Communication thread parameters
     pub communication_params: CommunicationParams,
-    /// Modbus 配置列表
+    /// List of Modbus configurations
     pub modbus_configs: Vec<ModbusRegister>,
 }
 
@@ -127,18 +127,18 @@ impl Default for ModbusRegister {
 }
 
 impl Config {
-    /// 从 JSON 字符串解析配置
+    /// Parse configuration from a JSON string
     pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_str)
     }
 
-    /// 从文件读取配置
+    /// Read configuration from a file
     pub fn from_file(file_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let content = std::fs::read_to_string(file_path)?;
         Self::from_json(&content).map_err(|e| e.into())
     }
 
-    /// 转换为 JSON 字符串
+    /// Convert to a JSON string
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
