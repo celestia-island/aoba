@@ -22,7 +22,10 @@ pub fn analyze_log_tail(path: &str, num_lines: usize) -> Result<String> {
     let lines = tail_log_file(path, num_lines)?;
 
     let mut analysis = String::new();
-    analysis.push_str(&format!("=== Last {} lines of log ===\n", lines.len()));
+    analysis.push_str(&format!(
+        "=== Last {lines} lines of log ===\n",
+        lines = lines.len()
+    ));
 
     let mut error_count = 0;
     let mut warn_count = 0;

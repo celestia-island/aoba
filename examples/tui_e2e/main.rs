@@ -33,7 +33,10 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         Ok(true)
     } else {
         log::warn!("⚠️ Failed to setup virtual serial ports:");
-        log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+        log::warn!(
+            "stdout: {stdout}",
+            stdout = String::from_utf8_lossy(&output.stdout)
+        );
         log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         Ok(false)
     }
