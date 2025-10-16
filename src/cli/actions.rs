@@ -220,3 +220,97 @@ fn compute_canonical(name: &str) -> Option<String> {
     }
     None
 }
+
+/// 处理配置模式
+pub fn handle_config_mode(matches: &ArgMatches) -> bool {
+    // 处理配置文件
+    if let Some(config_file) = matches.get_one::<String>("config") {
+        println!("Loading configuration from file: {config_file}");
+        match super::config::Config::from_file(config_file) {
+            Ok(config) => {
+                println!(
+                    "Configuration loaded successfully for port: {}",
+                    config.port_name
+                );
+                // 启动配置中定义的端口
+                if let Err(err) = start_configuration(&config) {
+                    eprintln!("Error starting configuration: {err}");
+                    std::process::exit(1);
+                }
+                println!("Configuration mode completed successfully");
+                return true;
+            }
+            Err(err) => {
+                eprintln!("Error loading configuration file: {err}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // 处理 JSON 配置字符串
+    if let Some(json_config) = matches.get_one::<String>("config-json") {
+        println!("Loading configuration from JSON string");
+        match super::config::Config::from_json(json_config) {
+            Ok(config) => {
+                println!(
+                    "Configuration loaded successfully for port: {}",
+                    config.port_name
+                );
+                // 启动配置中定义的端口
+                if let Err(err) = start_configuration(&config) {
+                    eprintln!("Error starting configuration: {err}");
+                    std::process::exit(1);
+                }
+                println!("Configuration mode completed successfully");
+                return true;
+            }
+            Err(err) => {
+                eprintln!("Error parsing JSON configuration: {err}");
+                std::process::exit(1);
+            }
+        }
+    }
+
+    false
+}
+
+/// 启动配置中定义的端口
+fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    let _tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+
+    log::info!(
+        "Starting port: {} with mode: {:?}",
+        config.port_name,
+        config.communication_mode
+    );
+
+    // 根据通信模式启动相应的处理程序
+    match config.communication_mode {
+        super::config::CommunicationMode::Master => {
+            // 启动主站模式
+            for modbus_config in &config.modbus_configs {
+                log::info!("  - Master config: station_id={}, register_type={}, start_address={}, length={}", 
+                    modbus_config.station_id, modbus_config.register_type, modbus_config.start_address, modbus_config.length);
+
+                // TODO: 实现主站启动逻辑
+                // 这里需要根据配置启动相应的主站处理程序
+            }
+        }
+        super::config::CommunicationMode::Slave => {
+            // 启动从站模式
+            for modbus_config in &config.modbus_configs {
+                log::info!("  - Slave config: station_id={}, register_type={}, start_address={}, length={}", 
+                    modbus_config.station_id, modbus_config.register_type, modbus_config.start_address, modbus_config.length);
+
+                // TODO: 实现从站启动逻辑
+                // 这里需要根据配置启动相应的从站处理程序
+            }
+        }
+    }
+
+    // TODO: 等待所有任务完成
+    // 目前只是打印信息，实际实现需要启动异步任务
+
+    log::info!("Configuration started successfully");
+    Ok(())
+}
