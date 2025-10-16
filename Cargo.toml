@@ -8,6 +8,14 @@ license = "Apache-2.0"
 version = "0.0.2"
 edition = "2021"
 
+[[bin]]
+name = "aoba"
+path = "src/main.rs"
+
+[lib]
+name = "aoba"
+path = "src/lib.rs"
+
 [profile.release]
 lto = true
 opt-level = 'z'

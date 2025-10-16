@@ -146,10 +146,8 @@ async fn main() -> Result<()> {
         }
 
         // Test 3: Multiple TUI Masters on vcom1
-        log::info!(
-            "🧪 Test 3/4: Multiple TUI Masters on vcom1 (4 stations with different register types)"
-        );
-        tests::test_tui_masters().await?;
+        log::info!("🧪 Test 3/4: Multiple TUI Masters on vcom1 (E2E test suite)");
+        tests::e2e::test_tui_multi_masters().await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
@@ -159,10 +157,8 @@ async fn main() -> Result<()> {
         }
 
         // Test 4: Multiple TUI Slaves on vcom2
-        log::info!(
-            "🧪 Test 4/4: Multiple TUI Slaves on vcom2 (4 stations with different register types)"
-        );
-        tests::test_tui_slaves().await?;
+        log::info!("🧪 Test 4/4: Multiple TUI Slaves on vcom2 (E2E test suite)");
+        tests::e2e::test_tui_multi_slaves().await?;
 
         if loop_count > 1 {
             log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");

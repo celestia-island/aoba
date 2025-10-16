@@ -221,9 +221,9 @@ fn compute_canonical(name: &str) -> Option<String> {
     None
 }
 
-/// 处理配置模式
+/// Handle configuration mode
 pub fn handle_config_mode(matches: &ArgMatches) -> bool {
-    // 处理配置文件
+    // Handle configuration file
     if let Some(config_file) = matches.get_one::<String>("config") {
         println!("Loading configuration from file: {config_file}");
         match super::config::Config::from_file(config_file) {
@@ -232,7 +232,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
                     "Configuration loaded successfully for port: {}",
                     config.port_name
                 );
-                // 启动配置中定义的端口
+                // Start the ports defined in the configuration
                 if let Err(err) = start_configuration(&config) {
                     eprintln!("Error starting configuration: {err}");
                     std::process::exit(1);
@@ -247,7 +247,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
         }
     }
 
-    // 处理 JSON 配置字符串
+    // Handle JSON configuration string
     if let Some(json_config) = matches.get_one::<String>("config-json") {
         println!("Loading configuration from JSON string");
         match super::config::Config::from_json(json_config) {
@@ -256,7 +256,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
                     "Configuration loaded successfully for port: {}",
                     config.port_name
                 );
-                // 启动配置中定义的端口
+                // Start the ports defined in the configuration
                 if let Err(err) = start_configuration(&config) {
                     eprintln!("Error starting configuration: {err}");
                     std::process::exit(1);
@@ -274,7 +274,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
     false
 }
 
-/// 启动配置中定义的端口
+/// Start the ports defined in the configuration
 fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std::error::Error>> {
     let _tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
@@ -284,32 +284,32 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
         config.communication_mode
     );
 
-    // 根据通信模式启动相应的处理程序
+    // Start the appropriate handlers based on communication mode
     match config.communication_mode {
         super::config::CommunicationMode::Master => {
-            // 启动主站模式
+            // Start master mode
             for modbus_config in &config.modbus_configs {
                 log::info!("  - Master config: station_id={}, register_type={}, start_address={}, length={}", 
                     modbus_config.station_id, modbus_config.register_type, modbus_config.start_address, modbus_config.length);
 
-                // TODO: 实现主站启动逻辑
-                // 这里需要根据配置启动相应的主站处理程序
+                // TODO: Implement master startup logic
+                // Here we need to spawn the appropriate master handlers according to the config
             }
         }
         super::config::CommunicationMode::Slave => {
-            // 启动从站模式
+            // Start slave mode
             for modbus_config in &config.modbus_configs {
                 log::info!("  - Slave config: station_id={}, register_type={}, start_address={}, length={}", 
                     modbus_config.station_id, modbus_config.register_type, modbus_config.start_address, modbus_config.length);
 
-                // TODO: 实现从站启动逻辑
-                // 这里需要根据配置启动相应的从站处理程序
+                // TODO: Implement slave startup logic
+                // Here we need to spawn the appropriate slave handlers according to the config
             }
         }
     }
 
-    // TODO: 等待所有任务完成
-    // 目前只是打印信息，实际实现需要启动异步任务
+    // TODO: Wait for all tasks to finish
+    // Currently this only logs information; the real implementation should spawn async tasks
 
     log::info!("Configuration started successfully");
     Ok(())
