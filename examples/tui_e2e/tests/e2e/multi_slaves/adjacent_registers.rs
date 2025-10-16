@@ -72,19 +72,20 @@ pub async fn test_tui_multi_slaves_adjacent_registers() -> Result<()> {
 
     // Configure 3 slaves on vcom2 with different station IDs and adjacent register addresses
     let slaves = [
-        (1, 3, "holding"), // Station 1, Type 03 Holding Register, Address 0-5
-        (2, 3, "holding"), // Station 2, Type 03 Holding Register, Address 6-11
-        (3, 3, "holding"), // Station 3, Type 03 Holding Register, Address 12-17
+        (1, 3, "holding", 0), // Station 1, Type 03 Holding Register, Address 0-5
+        (2, 3, "holding", 0), // Station 2, Type 03 Holding Register, Address 0-5
+        (3, 3, "holding", 0), // Station 3, Type 03 Holding Register, Address 0-5
     ];
 
     log::info!("🧪 Step 2: Configuring 3 slaves on {port2} with adjacent register addresses");
-    for &(station_id, register_type, register_mode) in &slaves {
+    for &(station_id, register_type, register_mode, start_address) in &slaves {
         configure_tui_slave_common(
             &mut tui_session,
             &mut tui_cap,
             station_id,
             register_type,
             register_mode,
+            start_address,
             REGISTER_LENGTH,
         )
         .await?;
@@ -97,12 +98,11 @@ pub async fn test_tui_multi_slaves_adjacent_registers() -> Result<()> {
 
     log::info!("🧪 Updating all slave registers");
     for (i, data) in slave_data.iter().enumerate() {
-        let (station_id, _, _) = slaves[i];
-        let start_address = i * REGISTER_LENGTH;
+        let (station_id, _, _, start_address) = slaves[i];
         log::info!(
-            "  Slave {} (Station {station_id}, Address {start_address}-{}) data: {data:?}",
+            "  Slave {} (Station {station_id}, Address 0x{start_address:04X}-0x{:04X}) data: {data:?}",
             i + 1,
-            start_address + REGISTER_LENGTH - 1
+            start_address + REGISTER_LENGTH as u16 - 1
         );
         update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
     }
@@ -114,7 +114,7 @@ pub async fn test_tui_multi_slaves_adjacent_registers() -> Result<()> {
     // Test all 3 stations from vcom1
     let mut station_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, _, register_mode)) in slaves.iter().enumerate() {
+    for (i, &(station_id, _, register_mode, start_address)) in slaves.iter().enumerate() {
         log::info!("🧪 Testing Station {station_id} ({register_mode})");
         station_success.insert(
             station_id,
@@ -122,6 +122,7 @@ pub async fn test_tui_multi_slaves_adjacent_registers() -> Result<()> {
                 &port1,
                 station_id,
                 register_mode,
+                start_address,
                 &slave_data[i],
                 MAX_RETRIES,
                 RETRY_INTERVAL_MS,

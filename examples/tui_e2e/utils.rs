@@ -116,11 +116,12 @@ pub async fn configure_tui_master_common<T: Expect>(
     station_id: u8,
     register_type: u8,
     register_mode: &str,
+    start_address: u16,
     register_length: usize,
 ) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring Master (Station {station_id}, Type {register_type:02})");
+    log::info!("📝 Configuring Master (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X})");
 
     // Verify we are inside Modbus panel
     let screen = cap
@@ -286,12 +287,35 @@ pub async fn configure_tui_master_common<T: Expect>(
         .await?;
     }
 
+    // Set Start Address
+    log::info!("📝 Setting start address to 0x{start_address:04X}");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(start_address.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_start_address_master{station_id}"),
+    )
+    .await?;
+
     // Set Register Length
     log::info!("📝 Setting register length to {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 2,
+            count: 1,
         },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
@@ -309,7 +333,7 @@ pub async fn configure_tui_master_common<T: Expect>(
     )
     .await?;
 
-    log::info!("✅ Master (Station {station_id}, Type {register_type:02}) configured successfully");
+    log::info!("✅ Master (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X}) configured successfully");
     Ok(())
 }
 
@@ -320,11 +344,12 @@ pub async fn configure_tui_slave_common<T: Expect>(
     station_id: u8,
     register_type: u8,
     register_mode: &str,
+    start_address: u16,
     register_length: usize,
 ) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring Slave (Station {station_id}, Type {register_type:02})");
+    log::info!("📝 Configuring Slave (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X})");
 
     // Verify we are inside Modbus panel
     let screen = cap
@@ -494,12 +519,35 @@ pub async fn configure_tui_slave_common<T: Expect>(
         .await?;
     }
 
+    // Set Start Address
+    log::info!("📝 Setting start address to 0x{start_address:04X}");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(start_address.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_start_address_slave{station_id}"),
+    )
+    .await?;
+
     // Set Register Length
     log::info!("📝 Setting register length to {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 2,
+            count: 1,
         },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
@@ -517,7 +565,7 @@ pub async fn configure_tui_slave_common<T: Expect>(
     )
     .await?;
 
-    log::info!("✅ Slave (Station {station_id}, Type {register_type:02}) configured successfully");
+    log::info!("✅ Slave (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X}) configured successfully");
     Ok(())
 }
 
@@ -548,6 +596,7 @@ pub async fn test_station_with_retries(
     port: &str,
     station_id: u8,
     register_mode: &str,
+    start_address: u16,
     expected_data: &[u16],
     max_retries: usize,
     retry_interval_ms: u64,
@@ -558,7 +607,7 @@ pub async fn test_station_with_retries(
 
     for attempt in 1..=max_retries {
         log::info!(
-            "  Attempt {attempt}/{max_retries}: Polling {port} for Station {station_id} ({register_mode})"
+            "  Attempt {attempt}/{max_retries}: Polling {port} for Station {station_id} ({register_mode}) at address 0x{start_address:04X}"
         );
 
         let cli_output = Command::new(&binary)
@@ -568,7 +617,7 @@ pub async fn test_station_with_retries(
                 "--station-id",
                 &station_id.to_string(),
                 "--register-address",
-                "0",
+                &start_address.to_string(),
                 "--register-length",
                 &expected_data.len().to_string(),
                 "--register-mode",

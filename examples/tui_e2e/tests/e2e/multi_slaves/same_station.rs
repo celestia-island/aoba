@@ -71,19 +71,20 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
 
     // Configure 3 slaves on vcom2 with same station ID but different register types
     let slaves = [
-        (1, 3, "holding"), // Station 1, Type 03 Holding Register
-        (1, 4, "input"),   // Station 1, Type 04 Input Register
-        (1, 1, "coils"),   // Station 1, Type 01 Coils
+        (1, 3, "holding", 0), // Station 1, Type 03 Holding Register, Address 0
+        (1, 4, "input", 0),   // Station 1, Type 04 Input Register, Address 0
+        (1, 1, "coils", 0),   // Station 1, Type 01 Coils, Address 0
     ];
 
     log::info!("🧪 Step 2: Configuring 3 slaves on {port2} with same station ID");
-    for &(station_id, register_type, register_mode) in &slaves {
+    for &(station_id, register_type, register_mode, start_address) in &slaves {
         configure_tui_slave_common(
             &mut tui_session,
             &mut tui_cap,
             station_id,
             register_type,
             register_mode,
+            start_address,
             REGISTER_LENGTH,
         )
         .await?;
@@ -96,7 +97,7 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
 
     log::info!("🧪 Updating all slave registers");
     for (i, data) in slave_data.iter().enumerate() {
-        let (_, register_type, register_mode) = slaves[i];
+        let (_, register_type, register_mode, _) = slaves[i];
         log::info!(
             "  Slave {} (Type {register_type}, {register_mode}) data: {data:?}",
             i + 1
@@ -111,7 +112,7 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
     // Test all 3 register types from vcom1
     let mut register_type_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, register_type, register_mode)) in slaves.iter().enumerate() {
+    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate() {
         log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode})");
         register_type_success.insert(
             register_type,
@@ -119,6 +120,7 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
                 &port1,
                 station_id,
                 register_mode,
+                start_address,
                 &slave_data[i],
                 MAX_RETRIES,
                 RETRY_INTERVAL_MS,

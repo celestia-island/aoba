@@ -14,22 +14,25 @@ use ci_utils::{
 
 /// Test Multiple TUI Masters on Single Port with IPC Communication - Basic Scenario
 ///
-/// This test simulates 4 independent TUI masters on vcom1 with different station IDs using holding registers:
-/// - Master 1: Station ID 1, Register Type 03 (Holding Register)
-/// - Master 2: Station ID 2, Register Type 03 (Holding Register)
-/// - Master 3: Station ID 3, Register Type 03 (Holding Register)
-/// - Master 4: Station ID 4, Register Type 03 (Holding Register)
+/// This test simulates 4 independent TUI masters on vcom1 with the same station ID and register type,
+/// but managing different register address ranges:
+/// - Master 1: Station ID 1, Register Type 03 (Holding Register), Address 0x0000-0x000B (0-11)
+/// - Master 2: Station ID 1, Register Type 03 (Holding Register), Address 0x000C-0x0017 (12-23)
+/// - Master 3: Station ID 1, Register Type 03 (Holding Register), Address 0x0018-0x0023 (24-35)
+/// - Master 4: Station ID 1, Register Type 03 (Holding Register), Address 0x0024-0x002F (36-47)
 ///
 /// Test Design:
-/// - All masters share the same vcom1 port but use different station IDs
+/// - All masters share the same vcom1 port, same station ID, and same register type
+/// - Each master manages a different, non-overlapping register address range
 /// - Uses IPC communication to avoid port conflicts
 /// - Each master has 12 registers with random data
-/// - CLI slaves on vcom2 poll each station to verify communication
+/// - CLI slaves on vcom2 poll each address range to verify communication
 ///
 /// The test validates:
-/// 1. Multiple masters can operate on the same port using different station IDs
-/// 2. IPC communication prevents port conflicts
-/// 3. Communication reliability with retry logic
+/// 1. Multiple masters can operate on the same port with same station ID and register type
+/// 2. Different register address ranges are properly managed without conflicts
+/// 3. IPC communication prevents port conflicts
+/// 4. Communication reliability with retry logic
 pub async fn test_tui_multi_masters_basic() -> Result<()> {
     const REGISTER_LENGTH: usize = 12;
     const MAX_RETRIES: usize = 10;
@@ -48,8 +51,8 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     let port2 = ports.port2_name.clone();
 
     log::info!("📍 Port configuration:");
-    log::info!("  Masters: {port1} (4 stations with different station IDs)");
-    log::info!("  Slaves: {port2} (CLI, polls all stations)");
+    log::info!("  Masters: {port1} (4 masters on same station, same register type, different address ranges)");
+    log::info!("  Slaves: {port2} (CLI, polls all address ranges)");
 
     // Verify ports exist
     for (name, port) in [("port1", &port1), ("port2", &port2)] {
@@ -69,18 +72,18 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
 
     sleep_seconds(3).await;
 
-    // Configure all 4 masters on vcom1 - use only holding registers for compatibility
+    // Configure all 4 masters on vcom1 - same station ID, same register type, different address ranges
     let masters = [
-        (1, 3, "holding"), // Station 1, Type 03 Holding Register
-        (2, 3, "holding"), // Station 2, Type 03 Holding Register
-        (3, 3, "holding"), // Station 3, Type 03 Holding Register
-        (4, 3, "holding"), // Station 4, Type 03 Holding Register
+        (1, 3, "holding", 0),   // Station 1, Type 03, Address 0-11
+        (1, 3, "holding", 12),  // Station 1, Type 03, Address 12-23
+        (1, 3, "holding", 24),  // Station 1, Type 03, Address 24-35
+        (1, 3, "holding", 36),  // Station 1, Type 03, Address 36-47
     ];
 
     log::info!("🧪 Step 2: Configuring 4 masters on {port1}");
-    for &(station_id, register_type, register_mode) in &masters {
+    for (i, &(station_id, register_type, register_mode, start_address)) in masters.iter().enumerate() {
         // Setup port once for the first master, subsequent masters share the same port
-        if station_id == 1 {
+        if i == 0 {
             setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
         }
 
@@ -90,6 +93,7 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             station_id,
             register_type,
             register_mode,
+            start_address,
             REGISTER_LENGTH,
         )
         .await?;
@@ -110,17 +114,18 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     log::info!("🧪 Waiting for IPC propagation...");
     tokio::time::sleep(Duration::from_millis(3000)).await;
 
-    // Test all 4 stations from vcom2
-    let mut station_success = std::collections::HashMap::new();
+    // Test all 4 address ranges from vcom2
+    let mut address_range_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, _, register_mode)) in masters.iter().enumerate() {
-        log::info!("🧪 Testing Station {station_id} ({register_mode})");
-        station_success.insert(
-            station_id,
+    for (i, &(station_id, _, register_mode, start_address)) in masters.iter().enumerate() {
+        log::info!("🧪 Testing Address Range {}: Station {station_id} ({register_mode}) at 0x{start_address:04X}", i + 1);
+        address_range_success.insert(
+            i,
             test_station_with_retries(
                 &port2,
                 station_id,
                 register_mode,
+                start_address,
                 &master_data[i],
                 MAX_RETRIES,
                 RETRY_INTERVAL_MS,
@@ -129,26 +134,30 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         );
     }
 
-    // Check if all stations passed
-    let all_passed = station_success.values().all(|&v| v);
+    // Check if all address ranges passed
+    let all_passed = address_range_success.values().all(|&v| v);
 
     if all_passed {
-        log::info!("✅ All stations passed!");
-        for (station, success) in station_success.iter() {
+        log::info!("✅ All address ranges passed!");
+        for (range_idx, success) in address_range_success.iter() {
+            let start_addr = masters[*range_idx].3;
             log::info!(
-                "  Station {station}: {}",
+                "  Address Range {} (0x{start_addr:04X}): {}",
+                range_idx + 1,
                 if *success { "✅ PASS" } else { "❌ FAIL" }
             );
         }
     } else {
-        log::error!("❌ Some stations failed:");
-        for (station, success) in station_success.iter() {
+        log::error!("❌ Some address ranges failed:");
+        for (range_idx, success) in address_range_success.iter() {
+            let start_addr = masters[*range_idx].3;
             log::error!(
-                "  Station {station}: {}",
+                "  Address Range {} (0x{start_addr:04X}): {}",
+                range_idx + 1,
                 if *success { "✅ PASS" } else { "❌ FAIL" }
             );
         }
-        return Err(anyhow!("Not all stations passed the test"));
+        return Err(anyhow!("Not all address ranges passed the test"));
     }
 
     // Clean up TUI process
