@@ -1,5 +1,6 @@
 pub mod actions;
 pub mod cleanup;
+pub mod config;
 pub mod modbus;
 
 use clap::{Arg, ArgMatches, Command};
@@ -27,6 +28,21 @@ pub fn parse_args() -> ArgMatches {
                 .short('j')
                 .help("Output one-shot results in JSON format")
                 .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("config")
+                .long("config")
+                .short('c')
+                .help("Load configuration from JSON file")
+                .value_name("FILE")
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon", "modbus-daemon"]),
+        )
+        .arg(
+            Arg::new("config-json")
+                .long("config-json")
+                .help("Load configuration from JSON string")
+                .value_name("JSON")
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon", "modbus-daemon", "config"]),
         )
         .arg(
             Arg::new("slave-listen")

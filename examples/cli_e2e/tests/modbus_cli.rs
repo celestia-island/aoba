@@ -119,7 +119,7 @@ pub async fn test_master_provide_temp() -> Result<()> {
             "--register-mode",
             "holding",
             "--data-source",
-            &format!("file:{}", data_file.display()),
+            &format!("file:{data}", data = data_file.display()),
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

@@ -37,13 +37,13 @@ pub async fn navigate_to_port<T: Expect>(
 
         if attempt == MAX_ATTEMPTS {
             return Err(anyhow!(
-                "Port {target_port} not found in port list after {MAX_ATTEMPTS} attempts. Available: {}",
-                screen
-                    .lines()
-                    .filter(|l| l.contains("/tmp/") || l.contains("/dev/"))
-                    .take(10)
-                    .collect::<Vec<_>>()
-                    .join(", ")
+            "Port {target_port} not found in port list after {MAX_ATTEMPTS} attempts. Available: {available}",
+            available = screen
+                .lines()
+                .filter(|l| l.contains("/tmp/") || l.contains("/dev/"))
+                .take(10)
+                .collect::<Vec<_>>()
+                .join(", ")
             ));
         }
 
@@ -186,36 +186,110 @@ pub async fn configure_tui_master_common<T: Expect>(
     // Set Register Type
     log::info!("📝 Setting register type to {register_type:02} ({register_mode})");
 
-    let actions = vec![
-        // Navigate to Register Type field
-        CursorAction::PressArrow {
-            direction: ArrowKey::Up,
-            count: 10,
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 3,
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
-        // Navigate through register types to reach target type
-        CursorAction::PressArrow {
-            direction: ArrowKey::Right,
-            count: register_type as usize - 1, // Adjust for 1-based indexing
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(
-        session,
-        cap,
-        &actions,
-        &format!("set_register_type_{register_type}"),
-    )
-    .await?;
+    // First, capture the current screen to understand the layout
+    let screen = cap
+        .capture(
+            session,
+            &format!("before_set_register_type_{register_type}"),
+        )
+        .await?;
+
+    // Check if we're in a multi-station configuration
+    let is_multi_station = screen.lines().filter(|l| l.contains("#")).count() > 1;
+
+    if is_multi_station {
+        log::info!("🔍 Multi-station configuration detected, using precise navigation");
+
+        // For multi-station, navigate more carefully to the register type field
+        // First, ensure we're at the top of the current station section
+        let actions = vec![
+            // Navigate to top of the current station section
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 20,
+            },
+            CursorAction::Sleep { ms: 300 },
+            // Navigate down to the current station's Register Type field
+            // In multi-station mode, each station has its own Register Type field
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 3,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            // Navigate through register types to reach target type
+            // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
+            // We need to navigate from current position to target type
+            CursorAction::PressArrow {
+                direction: ArrowKey::Right,
+                count: register_type as usize, // Direct mapping: 1=Coils, 2=Discrete, 3=Holding, 4=Input
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+            // Verify the register type was set correctly
+            CursorAction::MatchPattern {
+                pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
+                description: format!("Register type set to {register_type:02}"),
+                line_range: None,
+                col_range: None,
+                retry_action: None,
+            },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("set_register_type_{register_type}_multi"),
+        )
+        .await?;
+    } else {
+        log::info!("🔍 Single station configuration, using standard navigation");
+
+        // For single station, use standard navigation
+        // The issue: when we enter register type selection, it defaults to Discrete Inputs(02)
+        // But we want Holding(03). We need to navigate from 02 to 03.
+        let actions = vec![
+            // Navigate to Register Type field
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 10,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 3,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            // When we enter register type selection, it defaults to Discrete Inputs(02)
+            // We need to navigate to Holding(03) - based on testing, try pressing Right twice
+            CursorAction::PressArrow {
+                direction: ArrowKey::Right,
+                count: 2, // Try right arrow twice to reach Holding(03)
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+            // Verify the register type was set correctly
+            CursorAction::MatchPattern {
+                pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
+                description: format!("Register type set to {register_type:02}"),
+                line_range: None,
+                col_range: None,
+                retry_action: None,
+            },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("set_register_type_{register_type}_single"),
+        )
+        .await?;
+    }
 
     // Set Register Length
     log::info!("📝 Setting register length to {register_length}");
@@ -321,36 +395,110 @@ pub async fn configure_tui_slave_common<T: Expect>(
     // Set Register Type
     log::info!("📝 Setting register type to {register_type:02} ({register_mode})");
 
-    let actions = vec![
-        // Navigate to Register Type field
-        CursorAction::PressArrow {
-            direction: ArrowKey::Up,
-            count: 10,
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 3,
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
-        // Navigate through register types to reach target type
-        CursorAction::PressArrow {
-            direction: ArrowKey::Right,
-            count: register_type as usize - 1, // Adjust for 1-based indexing
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(
-        session,
-        cap,
-        &actions,
-        &format!("set_register_type_{register_type}"),
-    )
-    .await?;
+    // First, capture the current screen to understand the layout
+    let screen = cap
+        .capture(
+            session,
+            &format!("before_set_register_type_{register_type}"),
+        )
+        .await?;
+
+    // Check if we're in a multi-station configuration
+    let is_multi_station = screen.lines().filter(|l| l.contains("#")).count() > 1;
+
+    if is_multi_station {
+        log::info!("🔍 Multi-station configuration detected, using precise navigation");
+
+        // For multi-station, navigate more carefully to the register type field
+        let actions = vec![
+            // Navigate to top of the current station section
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 15,
+            },
+            CursorAction::Sleep { ms: 300 },
+            // Navigate down to Register Type field (usually 3rd field in station)
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 3,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            // Debug: capture the register type selection screen
+            CursorAction::DebugBreakpoint {
+                description: "register_type_selection_screen".to_string(),
+            },
+            // Navigate through register types to reach target type
+            // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
+            // Try different navigation strategies
+            CursorAction::PressArrow {
+                direction: ArrowKey::Left,
+                count: 5, // Go all the way left first
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Right,
+                count: register_type as usize, // Then go right to target type
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("set_register_type_{register_type}_multi"),
+        )
+        .await?;
+    } else {
+        log::info!("🔍 Single station configuration, using standard navigation");
+
+        // For single station, use standard navigation
+        // The issue: when we enter register type selection, it defaults to Discrete Inputs(02)
+        // But we want Holding(03). We need to navigate from 02 to 03.
+        let actions = vec![
+            // Navigate to Register Type field
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 10,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 3,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            // When we enter register type selection, it defaults to Discrete Inputs(02)
+            // We need to navigate to Holding(03) - try different navigation strategies
+            // First try: press Right once to go from 02 to 03
+            CursorAction::PressArrow {
+                direction: ArrowKey::Right,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+            // Verify the register type was set correctly
+            CursorAction::MatchPattern {
+                pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
+                description: format!("Register type set to {register_type:02}"),
+                line_range: None,
+                col_range: None,
+                retry_action: None,
+            },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("set_register_type_{register_type}_single"),
+        )
+        .await?;
+    }
 
     // Set Register Length
     log::info!("📝 Setting register length to {register_length}");

@@ -32,7 +32,10 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         Ok(true)
     } else {
         log::warn!("⚠️ Failed to setup virtual serial ports:");
-        log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
+        log::warn!(
+            "stdout: {stdout}",
+            stdout = String::from_utf8_lossy(&output.stdout)
+        );
         log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         Ok(false)
     }
@@ -99,25 +102,45 @@ async fn main() -> Result<()> {
             log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
             // Run each E2E test with fresh port initialization
-            log::info!("🧪 Test 1/5: Slave listen with virtual ports");
+            log::info!("🧪 Test 1/7: Slave listen with virtual ports");
             setup_virtual_serial_ports()?;
             tests::test_slave_listen_with_vcom().await?;
 
-            log::info!("🧪 Test 2/5: Master provide with virtual ports");
+            log::info!("🧪 Test 2/7: Master provide with virtual ports");
             setup_virtual_serial_ports()?;
             tests::test_master_provide_with_vcom().await?;
 
-            log::info!("🧪 Test 3/5: Master-slave communication");
+            log::info!("🧪 Test 3/7: Master-slave communication");
             setup_virtual_serial_ports()?;
             tests::test_master_slave_communication().await?;
 
-            log::info!("🧪 Test 4/5: Continuous connection with files");
+            log::info!("🧪 Test 4/7: Basic master-slave communication");
             setup_virtual_serial_ports()?;
-            tests::test_continuous_connection_with_files().await?;
+            tests::test_basic_master_slave_communication().await?;
 
-            log::info!("🧪 Test 5/5: Continuous connection with pipes");
+            log::info!("🧪 Test 5/7: Configuration mode test");
             setup_virtual_serial_ports()?;
-            tests::test_continuous_connection_with_pipes().await?;
+            tests::test_config_mode().await?;
+
+            log::info!("🧪 Test 6/7: Multi-master configurations");
+            setup_virtual_serial_ports()?;
+            tests::test_multi_masters().await?;
+
+            log::info!("🧪 Test 7/7: Multi-master same station configurations");
+            setup_virtual_serial_ports()?;
+            tests::test_multi_masters_same_station().await?;
+
+            log::info!("🧪 Test 8/7: Multi-slave configurations");
+            setup_virtual_serial_ports()?;
+            tests::test_multi_slaves().await?;
+
+            log::info!("🧪 Test 9/7: Multi-slave same station configurations");
+            setup_virtual_serial_ports()?;
+            tests::test_multi_slaves_same_station().await?;
+
+            log::info!("🧪 Test 10/7: Multi-slave adjacent registers configurations");
+            setup_virtual_serial_ports()?;
+            tests::test_multi_slaves_adjacent_registers().await?;
         } else {
             log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
         }

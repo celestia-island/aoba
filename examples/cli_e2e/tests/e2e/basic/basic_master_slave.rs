@@ -7,16 +7,16 @@ use std::{
 
 use ci_utils::{create_modbus_command, sleep_a_while, vcom_matchers};
 
-/// Test master-slave communication with virtual serial ports
+/// Test basic master-slave communication with virtual serial ports
 /// Server = Modbus Master (provides data, responds to requests) on port1
 /// Client = Modbus Slave polling (sends requests, receives data) on port2
-pub async fn test_master_slave_communication() -> Result<()> {
-    log::info!("🧪 Testing master-slave communication with virtual serial ports...");
+pub async fn test_basic_master_slave_communication() -> Result<()> {
+    log::info!("🧪 Testing basic master-slave communication with virtual serial ports...");
     let temp_dir = std::env::temp_dir();
     let ports = vcom_matchers();
 
     // Create a data file for the server to provide
-    let data_file = temp_dir.join("test_modbus_e2e_data.json");
+    let data_file = temp_dir.join("test_basic_modbus_e2e_data.json");
     {
         let mut file = File::create(&data_file)?;
         writeln!(file, r#"{{"values": [10, 20, 30, 40, 50]}}"#)?;
@@ -34,14 +34,13 @@ pub async fn test_master_slave_communication() -> Result<()> {
         false, // master-provide
         &ports.port1_name,
         true, // persistent
-        Some(&format!("file:{data}", data = data_file.display())),
+        Some(&format!("file:{}", data_file.display())),
     )?
     .stdout(Stdio::from(server_output_file))
     .stderr(Stdio::piped())
     .spawn()?;
 
     // Give server time to start and fully acquire the port
-    // use multiple async short waits to emulate a few seconds
     sleep_a_while().await;
     sleep_a_while().await;
     sleep_a_while().await;
@@ -141,83 +140,4 @@ pub async fn test_master_slave_communication() -> Result<()> {
     }
 
     Ok(())
-}
-
-/// Test slave listen with temporary mode and virtual ports
-pub async fn test_slave_listen_with_vcom() -> Result<()> {
-    log::info!("🧪 Testing slave listen temporary mode with virtual serial ports...");
-
-    // Just verify the command works with virtual ports
-    let output = create_modbus_command(true, "/tmp/vcom1", false, None)?
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn();
-
-    match output {
-        Ok(mut child) => {
-            // Wait for a short time
-            sleep_a_while().await;
-            child.kill()?;
-            child.wait()?;
-
-            log::info!("✅ Slave listen command accepted with virtual ports");
-
-            // Give extra time for port to be fully released
-            sleep_a_while().await;
-
-            Ok(())
-        }
-        Err(err) => {
-            log::error!("Failed to spawn slave listen: {err}");
-            Err(anyhow!("Failed to spawn: {err}"))
-        }
-    }
-}
-
-/// Test master provide with persistent mode and virtual ports
-pub async fn test_master_provide_with_vcom() -> Result<()> {
-    log::info!("🧪 Testing master provide persistent mode with virtual serial ports...");
-
-    // Create a temporary file with test data
-    let temp_dir = std::env::temp_dir();
-    let data_file = temp_dir.join("test_modbus_vcom_data.json");
-
-    {
-        let mut file = File::create(&data_file)?;
-        writeln!(file, r#"{{"values": [100, 200, 300, 400, 500]}}"#)?;
-    }
-
-    let output = create_modbus_command(
-        false,
-        "/tmp/vcom2",
-        true,
-        Some(&format!("file:{}", data_file.display())),
-    )?
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn();
-
-    match output {
-        Ok(mut child) => {
-            // Let it run for a bit
-            sleep_a_while().await;
-            child.kill()?;
-            child.wait()?;
-
-            log::info!("✅ Master provide persist command accepted with virtual ports");
-
-            // Clean up
-            std::fs::remove_file(&data_file)?;
-
-            // Give extra time for port to be fully released
-            sleep_a_while().await;
-
-            Ok(())
-        }
-        Err(err) => {
-            std::fs::remove_file(&data_file)?;
-            log::error!("Failed to spawn master provide persist: {err}");
-            Err(anyhow!("Failed to spawn: {err}"))
-        }
-    }
 }

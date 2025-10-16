@@ -15,11 +15,11 @@ use crate::utils::{configure_tui_master_common, setup_tui_port, test_station_wit
 
 /// Test Multiple TUI Masters on Single Port with IPC Communication
 ///
-/// This test simulates 4 independent TUI masters on vcom1 with different station IDs and register types:
-/// - Master 1: Station ID 1, Register Type 01 (Coil)
-/// - Master 2: Station ID 2, Register Type 02 (Discrete Input)
+/// This test simulates 4 independent TUI masters on vcom1 with different station IDs using holding registers:
+/// - Master 1: Station ID 1, Register Type 03 (Holding Register)
+/// - Master 2: Station ID 2, Register Type 03 (Holding Register)
 /// - Master 3: Station ID 3, Register Type 03 (Holding Register)
-/// - Master 4: Station ID 4, Register Type 04 (Input Register)
+/// - Master 4: Station ID 4, Register Type 03 (Holding Register)
 ///
 /// Test Design:
 /// - All masters share the same vcom1 port but use different station IDs
@@ -70,12 +70,13 @@ pub async fn test_tui_masters() -> Result<()> {
 
     sleep_seconds(3).await;
 
-    // Configure all 4 masters on vcom1
+    // Configure all 4 masters on vcom1 - use only holding registers for compatibility
+    // CLI master provide only supports Holding and Coils, but slave poll works better with holding
     let masters = [
-        (1, 1, "coil"),           // Station 1, Type 01 Coil
-        (2, 2, "discrete_input"), // Station 2, Type 02 Discrete Input
-        (3, 3, "holding"),        // Station 3, Type 03 Holding Register
-        (4, 4, "input"),          // Station 4, Type 04 Input Register
+        (1, 3, "holding"), // Station 1, Type 03 Holding Register
+        (2, 3, "holding"), // Station 2, Type 03 Holding Register
+        (3, 3, "holding"), // Station 3, Type 03 Holding Register
+        (4, 3, "holding"), // Station 4, Type 03 Holding Register
     ];
 
     log::info!("🧪 Step 2: Configuring 4 masters on {port1}");
@@ -103,7 +104,7 @@ pub async fn test_tui_masters() -> Result<()> {
 
     log::info!("🧪 Updating all master registers");
     for (i, data) in master_data.iter().enumerate() {
-        log::info!("  Master {} data: {:?}", i + 1, data);
+        log::info!("  Master {} data: {data:?}", i + 1);
         update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
     }
 

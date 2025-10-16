@@ -180,7 +180,7 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
                 "--baud-rate",
                 "9600",
                 "--data-source",
-                &format!("file:{}", data_file.display()),
+                &format!("file:{data}", data = data_file.display()),
                 "--json",
             ])
             .stdout(Stdio::piped())

@@ -27,6 +27,11 @@ async fn main() -> Result<()> {
 
     let matches = aoba::cli::parse_args();
 
+    // Handle configuration mode first
+    if aoba::cli::actions::handle_config_mode(&matches) {
+        return Ok(());
+    }
+
     // One-shot actions (e.g., --list-ports). If handled, exit.
     if aoba::cli::actions::run_one_shot_actions(&matches) {
         return Ok(());

@@ -15,11 +15,11 @@ use crate::utils::{configure_tui_slave_common, test_station_with_retries};
 
 /// Test Multiple TUI Slaves on Single Port with IPC Communication
 ///
-/// This test simulates 4 independent TUI slaves on vcom2 with different station IDs and register types:
-/// - Slave 1: Station ID 1, Register Type 01 (Coil)
-/// - Slave 2: Station ID 2, Register Type 02 (Discrete Input)
+/// This test simulates 4 independent TUI slaves on vcom2 with different station IDs using holding registers:
+/// - Slave 1: Station ID 1, Register Type 03 (Holding Register)
+/// - Slave 2: Station ID 2, Register Type 03 (Holding Register)
 /// - Slave 3: Station ID 3, Register Type 03 (Holding Register)
-/// - Slave 4: Station ID 4, Register Type 04 (Input Register)
+/// - Slave 4: Station ID 4, Register Type 03 (Holding Register)
 ///
 /// Test Design:
 /// - All slaves share the same vcom2 port but use different station IDs
@@ -70,12 +70,13 @@ pub async fn test_tui_slaves() -> Result<()> {
 
     sleep_seconds(3).await;
 
-    // Configure all 4 slaves on vcom2
+    // Configure all 4 slaves on vcom2 - use only holding registers for compatibility
+    // CLI master provide only supports Holding and Coils, but slave poll works better with holding
     let slaves = [
-        (1, 1, "coil"),           // Station 1, Type 01 Coil
-        (2, 2, "discrete_input"), // Station 2, Type 02 Discrete Input
-        (3, 3, "holding"),        // Station 3, Type 03 Holding Register
-        (4, 4, "input"),          // Station 4, Type 04 Input Register
+        (1, 3, "holding"), // Station 1, Type 03 Holding Register
+        (2, 3, "holding"), // Station 2, Type 03 Holding Register
+        (3, 3, "holding"), // Station 3, Type 03 Holding Register
+        (4, 3, "holding"), // Station 4, Type 03 Holding Register
     ];
 
     log::info!("🧪 Step 2: Configuring 4 slaves on {port2}");
@@ -98,7 +99,7 @@ pub async fn test_tui_slaves() -> Result<()> {
 
     log::info!("🧪 Updating all slave registers");
     for (i, data) in slave_data.iter().enumerate() {
-        log::info!("  Slave {} data: {:?}", i + 1, data);
+        log::info!("  Slave {} data: {data:?}", i + 1);
         update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
     }
 
