@@ -371,23 +371,24 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // After configuration, cursor is inside the station config (on Register Length field).
-    // First, escape back to station list to ensure station is saved, then re-enter to access registers.
-    // This also gives us a consistent starting position.
+    // After configuration, cursor is on Register Length field (just saved it).
+    // The register grid is below. Based on iteration 9 data where Down 3 gave us
+    // registers 8-11 (row 3 of grid), we can infer:
+    // - Down 0 = stay on Register Length (wrong)
+    // - Down 1 = row 1 of grid (registers 0-3) - what we want!
+    // - Down 2 = row 2 of grid (registers 4-7)
+    // - Down 3 = row 3 of grid (registers 8-11) - confirmed by iter 9
+    
     let actions = vec![
-        // Escape to go back to station list (this saves the station configuration)
-        crate::auto_cursor::CursorAction::PressEscape,
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-        // Now cursor is on the station in the list
-        // Press Down to expand/enter the station and show its register grid
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Down,
-            count: 1,
+            count: 1, // Move from Register Length to first row of register grid
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_first_register")
         .await?;
+    
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers
@@ -445,6 +446,22 @@ pub async fn update_tui_registers<T: Expect>(
     crate::helpers::sleep_a_while().await;
     crate::helpers::sleep_a_while().await;
     crate::helpers::sleep_a_while().await; // Extra safety margin
+
+    // Navigate back to top of page for next station configuration
+    // After editing registers, cursor is at the last register. The next call to
+    // configure_tui_master_common expects to be near the top of the Modbus panel (station list).
+    // We need to go up but NOT leave the Modbus panel (which would take us to port config).
+    // The register grid is ~3-4 rows, so Up 10 should be safe to reach station list without leaving panel.
+    log::info!("⬆️ Navigating back to station list within Modbus panel");
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 10, // Moderate count to reach station list without leaving Modbus panel
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_station_list")
+        .await?;
 
     Ok(())
 }
