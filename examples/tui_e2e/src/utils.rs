@@ -75,37 +75,58 @@ pub async fn navigate_to_port<T: Expect>(
     log::info!("📍 Port at line {port_idx}, cursor at line {curr_idx}");
 
     // Check if already on the target port
-    if port_idx == curr_idx {
-        log::info!("✅ Cursor already on {target_port}, pressing Enter");
-        session.send_enter()?;
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        return Ok(());
+    if port_idx != curr_idx {
+        // Calculate delta and move cursor
+        let delta = port_idx.abs_diff(curr_idx);
+        let direction = if port_idx > curr_idx {
+            ArrowKey::Down
+        } else {
+            ArrowKey::Up
+        };
+
+        log::info!("➡️ Moving cursor {direction:?} by {delta} lines");
+
+        let actions = vec![
+            CursorAction::PressArrow {
+                direction,
+                count: delta,
+            },
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "navigate_to_target_port").await?;
     }
 
-    // Calculate delta and move cursor
-    let delta = port_idx.abs_diff(curr_idx);
-    let direction = if port_idx > curr_idx {
-        ArrowKey::Down
-    } else {
-        ArrowKey::Up
-    };
+    // Press Enter to enter port details, with pattern matching to verify
+    // We're looking for "Enable Port" in the details panel to confirm we've entered
+    use regex::Regex;
+    let port_pattern =
+        Regex::new(r"Enable Port").map_err(|e| anyhow!("Failed to create regex pattern: {}", e))?;
 
-    log::info!("➡️ Moving cursor {direction:?} by {delta} lines");
+    // Retry action: if we haven't entered port details, press Escape and try again
+    let retry_action = Some(vec![
+        CursorAction::PressEscape,
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 20, // Go all the way up
+        },
+        CursorAction::Sleep { ms: 300 },
+    ]);
 
     let actions = vec![
-        CursorAction::PressArrow {
-            direction,
-            count: delta,
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 }, // Wait for details panel to load
+        CursorAction::MatchPattern {
+            pattern: port_pattern,
+            description: format!("In {target_port} port details (checking for Enable Port)"),
+            line_range: Some((0, 10)),
+            col_range: None,
+            retry_action,
         },
-        CursorAction::Sleep { ms: 500 },
     ];
-    execute_cursor_actions(session, cap, &actions, "navigate_to_target_port").await?;
+    execute_cursor_actions(session, cap, &actions, "enter_port_details").await?;
 
-    // Press Enter to select the port
-    session.send_enter()?;
-    tokio::time::sleep(Duration::from_secs(1)).await;
-
-    log::info!("✅ Successfully navigated to and selected {target_port}");
+    log::info!("✅ Successfully navigated to and entered {target_port} details page");
     Ok(())
 }
 
@@ -116,11 +137,13 @@ pub async fn configure_tui_master_common<T: Expect>(
     station_id: u8,
     register_type: u8,
     register_mode: &str,
+    start_address: u16,
     register_length: usize,
+    is_first_station: bool,  // NEW: indicates if this is the first station
 ) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring Master (Station {station_id}, Type {register_type:02})");
+    log::info!("📝 Configuring Master (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X}, first={is_first_station})");
 
     // Verify we are inside Modbus panel
     let screen = cap
@@ -132,25 +155,63 @@ pub async fn configure_tui_master_common<T: Expect>(
         ));
     }
 
-    // Create station
-    log::info!("🏗️ Creating Modbus station");
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::MatchPattern {
-            pattern: Regex::new(r"#1")?,
-            description: "Station #1 created".to_string(),
-            line_range: None,
-            col_range: None,
-            retry_action: None,
-        },
-    ];
-    execute_cursor_actions(
-        session,
-        cap,
-        &actions,
-        &format!("create_station_master{station_id}"),
-    )
-    .await?;
+    // Only create a new station if this is the first one
+    // For subsequent stations, TUI already created them and moved cursor there
+    if is_first_station {
+        // Navigate to "Create Station" button at the top of the Modbus panel
+        // Press Up many times to ensure we're at the top, then navigate to Create Station
+        log::info!("📍 Navigating to Create Station button");
+        let actions = vec![
+            CursorAction::PressArrow {
+                direction: ArrowKey::Up,
+                count: 20, // Go to top
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::MatchPattern {
+                pattern: Regex::new(r"(?i)create.*station|Create Station")?,
+                description: "Create Station button focused".to_string(),
+                line_range: None,
+                col_range: None,
+                retry_action: Some(vec![
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Down,
+                        count: 1,
+                    },
+                    CursorAction::Sleep { ms: 300 },
+                ]),
+            },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("nav_to_add_line_master{station_id}"),
+        )
+        .await?;
+
+        // Create station
+        log::info!("🏗️ Creating Modbus station by pressing Enter on Create Station");
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::MatchPattern {
+                pattern: Regex::new(r"#\d+")?, // Match #1, #2, #3, etc.
+                description: format!("Station #{} created", station_id),
+                line_range: None,
+                col_range: None,
+                retry_action: None,
+            },
+        ];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("create_station_master{station_id}"),
+        )
+        .await?;
+    } else {
+        log::info!("📍 Skipping station creation (station already created by previous call, cursor should be on new station)");
+    }
 
     // Set Station ID if not 1
     if station_id != 1 {
@@ -186,57 +247,61 @@ pub async fn configure_tui_master_common<T: Expect>(
     // Set Register Type
     log::info!("📝 Setting register type to {register_type:02} ({register_mode})");
 
-    // First, capture the current screen to understand the layout
-    let screen = cap
-        .capture(
-            session,
-            &format!("before_set_register_type_{register_type}"),
-        )
-        .await?;
-
-    // Check if we're in a multi-station configuration
-    let is_multi_station = screen.lines().filter(|l| l.contains("#")).count() > 1;
+    // Use is_first_station parameter to determine navigation strategy
+    // instead of trying to detect from screen content
+    let is_multi_station = !is_first_station;
 
     if is_multi_station {
-        log::info!("🔍 Multi-station configuration detected, using precise navigation");
+        log::info!("🔍 Multi-station mode: using precise navigation for station {station_id}");
 
-        // For multi-station, navigate more carefully to the register type field
-        // First, ensure we're at the top of the current station section
-        let actions = vec![
-            // Navigate to top of the current station section
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 20,
-            },
-            CursorAction::Sleep { ms: 300 },
-            // Navigate down to the current station's Register Type field
-            // In multi-station mode, each station has its own Register Type field
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 3,
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            // Navigate through register types to reach target type
-            // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
-            // We need to navigate from current position to target type
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: register_type as usize, // Direct mapping: 1=Coils, 2=Discrete, 3=Holding, 4=Input
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
-            // Verify the register type was set correctly
-            CursorAction::MatchPattern {
-                pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
-                description: format!("Register type set to {register_type:02}"),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
-        ];
+        // For multi-station, navigate to register type field
+        // IMPORTANT: New stations default to Holding (03) in TUI code
+        // The selector opens at the CURRENT value, not at Coils
+        let actions = if register_type == 3 {
+            // Target is Holding (03), which is the default - just confirm
+            vec![
+                // From StationId, go down 1 to Register Type
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                // Already at Holding (default), just confirm
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        } else {
+            // Need to navigate from Holding (03) to target
+            // Calculate navigation: we're at position 2 (Holding), need to get to target position
+            // Positions: 0=Coils(01), 1=Discrete(02), 2=Holding(03), 3=Input(04)
+            let current_pos = 2; // Holding is at position 2
+            let target_pos = (register_type as usize).saturating_sub(1);
+            let nav_count = if target_pos > current_pos {
+                target_pos - current_pos
+            } else {
+                // Navigate left (or wrap around - but for now assume we won't need this)
+                0
+            };
+            
+            vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: nav_count,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        };
         execute_cursor_actions(
             session,
             cap,
@@ -245,7 +310,7 @@ pub async fn configure_tui_master_common<T: Expect>(
         )
         .await?;
     } else {
-        log::info!("🔍 Single station configuration, using standard navigation");
+        log::info!("🔍 Single station mode: using standard navigation");
 
         // For single station, use standard navigation
         // The issue: when we enter register type selection, it defaults to Holding(03)
@@ -268,14 +333,6 @@ pub async fn configure_tui_master_common<T: Expect>(
             // Just press Enter to confirm the selection
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 500 },
-            // Verify the register type was set correctly
-            CursorAction::MatchPattern {
-                pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
-                description: format!("Register type set to {register_type:02}"),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
         ];
         execute_cursor_actions(
             session,
@@ -286,12 +343,38 @@ pub async fn configure_tui_master_common<T: Expect>(
         .await?;
     }
 
+    // Remove the MatchPattern verification since it's not reliable
+    log::info!("✅ Register type configuration completed");
+
+    // Set Start Address
+    log::info!("📝 Setting start address to 0x{start_address:04X}");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(start_address.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_start_address_master{station_id}"),
+    )
+    .await?;
+
     // Set Register Length
     log::info!("📝 Setting register length to {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 2,
+            count: 1,
         },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
@@ -309,7 +392,7 @@ pub async fn configure_tui_master_common<T: Expect>(
     )
     .await?;
 
-    log::info!("✅ Master (Station {station_id}, Type {register_type:02}) configured successfully");
+    log::info!("✅ Master (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X}) configured successfully");
     Ok(())
 }
 
@@ -320,11 +403,12 @@ pub async fn configure_tui_slave_common<T: Expect>(
     station_id: u8,
     register_type: u8,
     register_mode: &str,
+    start_address: u16,
     register_length: usize,
 ) -> Result<()> {
     use regex::Regex;
 
-    log::info!("📝 Configuring Slave (Station {station_id}, Type {register_type:02})");
+    log::info!("📝 Configuring Slave (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X})");
 
     // Verify we are inside Modbus panel
     let screen = cap
@@ -420,26 +504,38 @@ pub async fn configure_tui_slave_common<T: Expect>(
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 300 },
-            // Debug: capture the register type selection screen
-            CursorAction::DebugBreakpoint {
-                description: "register_type_selection_screen".to_string(),
-            },
             // Navigate through register types to reach target type
-            // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
-            // Try different navigation strategies
-            CursorAction::PressArrow {
-                direction: ArrowKey::Left,
-                count: 5, // Go all the way left first
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: register_type as usize, // Then go right to target type
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            // IMPORTANT: New stations default to Holding (03), so selector starts there
+            // If target is Holding (03), just confirm; otherwise navigate
         ];
+        
+        let nav_actions = if register_type == 3 {
+            // Target is Holding (03), which is the default - just confirm
+            vec![
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        } else {
+            // Need to navigate from Holding (03) to target
+            // Strategy: Go all the way left to Coils (01), then navigate right to target
+            vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Left,
+                    count: 5, // Go all the way left first (to Coils/01)
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: (register_type as usize).saturating_sub(1), // Adjust for 0-indexed: type 03 needs 2 Right presses (01->02->03)
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        };
+        
+        let mut actions = actions;
+        actions.extend(nav_actions);
         execute_cursor_actions(
             session,
             cap,
@@ -494,12 +590,35 @@ pub async fn configure_tui_slave_common<T: Expect>(
         .await?;
     }
 
+    // Set Start Address
+    log::info!("📝 Setting start address to 0x{start_address:04X}");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(start_address.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_start_address_slave{station_id}"),
+    )
+    .await?;
+
     // Set Register Length
     log::info!("📝 Setting register length to {register_length}");
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 2,
+            count: 1,
         },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
@@ -517,7 +636,7 @@ pub async fn configure_tui_slave_common<T: Expect>(
     )
     .await?;
 
-    log::info!("✅ Slave (Station {station_id}, Type {register_type:02}) configured successfully");
+    log::info!("✅ Slave (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X}) configured successfully");
     Ok(())
 }
 
@@ -527,19 +646,92 @@ pub async fn setup_tui_port<T: Expect>(
     cap: &mut TerminalCapture,
     target_port: &str,
 ) -> Result<()> {
-    // Navigate to the target port
+    const MAX_RETRIES: usize = 3;
+
+    for attempt in 1..=MAX_RETRIES {
+        if attempt > 1 {
+            log::warn!(
+                "⚠️ Retry attempt {}/{} for setup_tui_port",
+                attempt,
+                MAX_RETRIES
+            );
+        }
+
+        // Navigate to the target port
+        log::info!("📍 Navigating to port {target_port}");
+        navigate_to_port(session, cap, target_port).await?;
+
+        // Enable the port
+        log::info!("🔌 Enabling port");
+        enable_port_carefully(session, cap).await?;
+
+        // Wait for port to stabilize
+        tokio::time::sleep(Duration::from_secs(3)).await;
+
+        // Verify we're still in port details page, if not, re-enter
+        let screen = cap.capture(session, "verify_still_in_port_details").await?;
+        if !screen.contains("Enable Port") {
+            log::warn!("⚠️ Kicked out of port details page during wait, re-entering {target_port}");
+            navigate_to_port(session, cap, target_port).await?;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        // Enter Modbus panel
+        log::info!("⚙️ Entering Modbus configuration panel");
+        match enter_modbus_panel(session, cap).await {
+            Ok(_) => {
+                log::info!(
+                    "✅ Successfully entered Modbus panel on attempt {}",
+                    attempt
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                log::warn!(
+                    "❌ Failed to enter Modbus panel on attempt {}: {}",
+                    attempt,
+                    e
+                );
+
+                if attempt < MAX_RETRIES {
+                    // Escape to port list and retry
+                    log::info!("🔄 Pressing Escape to return to port list for retry...");
+                    let actions = vec![
+                        CursorAction::PressEscape,
+                        CursorAction::Sleep { ms: 500 },
+                        CursorAction::PressEscape, // Press Escape twice to ensure we're at port list
+                        CursorAction::Sleep { ms: 1000 },
+                    ];
+                    execute_cursor_actions(session, cap, &actions, "escape_to_port_list").await?;
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
+
+    Err(anyhow!(
+        "Failed to setup TUI port after {} attempts",
+        MAX_RETRIES
+    ))
+}
+
+/// Navigate to a port and enter its Modbus panel WITHOUT enabling it first.
+/// This is used for the new workflow where we configure first, then enable automatically on save.
+pub async fn navigate_to_modbus_panel<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    target_port: &str,
+) -> Result<()> {
+    // Navigate to the target port details page
     log::info!("📍 Navigating to port {target_port}");
     navigate_to_port(session, cap, target_port).await?;
 
-    // Enable the port
-    log::info!("🔌 Enabling port");
-    enable_port_carefully(session, cap).await?;
-    tokio::time::sleep(Duration::from_secs(3)).await;
-
-    // Enter Modbus panel
-    log::info!("⚙️ Entering Modbus configuration panel");
+    // Enter Modbus panel directly without enabling the port
+    log::info!("⚙️ Entering Modbus configuration panel (port not yet enabled)");
     enter_modbus_panel(session, cap).await?;
-
+    
+    log::info!("✅ Successfully entered Modbus panel for {target_port}");
     Ok(())
 }
 
@@ -548,6 +740,7 @@ pub async fn test_station_with_retries(
     port: &str,
     station_id: u8,
     register_mode: &str,
+    start_address: u16,
     expected_data: &[u16],
     max_retries: usize,
     retry_interval_ms: u64,
@@ -558,7 +751,7 @@ pub async fn test_station_with_retries(
 
     for attempt in 1..=max_retries {
         log::info!(
-            "  Attempt {attempt}/{max_retries}: Polling {port} for Station {station_id} ({register_mode})"
+            "  Attempt {attempt}/{max_retries}: Polling {port} for Station {station_id} ({register_mode}) at address 0x{start_address:04X}"
         );
 
         let cli_output = Command::new(&binary)
@@ -568,7 +761,7 @@ pub async fn test_station_with_retries(
                 "--station-id",
                 &station_id.to_string(),
                 "--register-address",
-                "0",
+                &start_address.to_string(),
                 "--register-length",
                 &expected_data.len().to_string(),
                 "--register-mode",

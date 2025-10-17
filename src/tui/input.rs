@@ -83,6 +83,13 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
             bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
             return Ok(());
         }
+
+        // Handle Ctrl + Esc for "force return without saving"
+        if let KeyCode::Esc = key.code {
+            log::info!("⚠️ Ctrl+Esc detected: force return without saving");
+            // This will be handled by page-specific handlers
+            // The modifier flag will be checked in the page handlers
+        }
     }
 
     // Check if we're in global edit mode first

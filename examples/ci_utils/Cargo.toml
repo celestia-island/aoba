@@ -10,11 +10,17 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = { version = "^1", features = ["backtrace"] }
+
+env_logger = "^0.11"
 log = "^0.4"
-regex = "^1"
-tokio = { version = "^1", features = ["full"] }
-expectrl = "^0.8"
-vt100 = "^0.15"
-rand = "^0.8"
+
 serde_json = "^1"
+rand = "0.9"
+regex = "^1"
+chrono = { version = "^0.4", features = ["serde", "alloc"] }
+
+tokio = { version = "^1", features = ["rt-multi-thread", "macros", "time"] }
+expectrl = "^0.8"
+
+vt100 = "^0.15"
 serialport = "^4"

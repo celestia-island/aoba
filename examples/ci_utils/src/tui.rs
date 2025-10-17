@@ -217,21 +217,45 @@ pub async fn enable_port_carefully<T: Expect>(
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "align_enable_port_verify")
         .await?;
 
+    log::info!("↩️ Pressing Enter to toggle port enable");
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
-        crate::auto_cursor::CursorAction::Sleep { ms: 1500 },
+        crate::auto_cursor::CursorAction::Sleep { ms: 2000 },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "toggle_enable_port")
         .await?;
 
+    // Give UI extra time to process port enable and re-render
+    log::info!("Waiting for UI to update port status");
+    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_a_while().await;
+
     // Verify that the UI now shows the port as enabled to catch navigation drift early.
-    let screen = cap
-        .capture(session, "verify_port_toggle")
-        .await
-        .map_err(|err| anyhow!("Failed to capture screen after enabling port: {err}"))?;
-    if !screen.contains("Enable Port") || !screen.contains("Enabled") {
+    // Use a retry loop to wait for UI to update
+    log::info!("Verifying port enabled status with retry logic");
+    let mut verified = false;
+    for attempt in 1..=5 {
+        let screen = cap
+            .capture(session, &format!("verify_port_toggle_attempt_{attempt}"))
+            .await
+            .map_err(|err| anyhow!("Failed to capture screen after enabling port: {err}"))?;
+
+        if screen.contains("Enable Port") && screen.contains("Enabled") {
+            log::info!("✅ Port enabled status verified on attempt {attempt}");
+            verified = true;
+            break;
+        }
+
+        if attempt < 5 {
+            log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/5)");
+            crate::helpers::sleep_a_while().await;
+        }
+    }
+
+    if !verified {
+        let final_screen = cap.capture(session, "verify_port_toggle_failed").await?;
         return Err(anyhow!(
-            "Port toggle did not reflect as enabled; latest screen:\n{screen}"
+            "Port toggle did not reflect as enabled after 5 attempts; latest screen:\n{final_screen}"
         ));
     }
 
@@ -251,24 +275,91 @@ pub async fn enter_modbus_panel<T: Expect>(
         return Ok(());
     }
 
+    // Verify we're in port details page (should see "Enable Port")
+    // If not, we might have been kicked back to port list - need to re-enter
+    if !screen.contains("Enable Port") {
+        log::warn!("⚠️ Not in port details page - attempting to recover");
+        log::warn!("Current screen:\n{}", screen);
+        return Err(anyhow!(
+            "Not in port details page when trying to enter Modbus panel. Expected 'Enable Port' in screen."
+        ));
+    }
+
     // From port details page, navigate down to "Business Configuration" and enter
+    // First, capture screen to determine cursor position relative to target
+    let screen = cap.capture(session, "before_modbus_nav").await?;
+    let lines: Vec<&str> = screen.lines().collect();
+
+    // Find "Enter Business Configuration" line
+    let target_idx = lines
+        .iter()
+        .enumerate()
+        .find_map(|(idx, line)| line.contains("Enter Business Configuration").then_some(idx))
+        .ok_or_else(|| anyhow!("'Enter Business Configuration' not found in screen"))?;
+
+    // Find cursor position - look for "> " at the beginning of menu items in the details panel
+    // The cursor should be on lines containing options like "Enable Port", "Enter Business Configuration", etc.
+    let cursor_idx = lines
+        .iter()
+        .enumerate()
+        .find_map(|(idx, line)| {
+            // Look for lines that have "> " followed by a known menu item
+            // Check for "> " anywhere in the line (after │ or whitespace)
+            if line.contains("> Enable Port")
+                || line.contains("> Protocol Mode")
+                || line.contains("> Enter Business")
+                || line.contains("> Enter Log")
+                || line.contains("> Baud rate")
+                || line.contains("> Data bits")
+                || line.contains("> Parity")
+                || line.contains("> Stop bits")
+            {
+                // Exclude port list items (contain "COM" or "/tmp/")
+                if !line.contains("COM") && !line.contains("/tmp/") && !line.contains("/dev/") {
+                    return Some(idx);
+                }
+            }
+            None
+        })
+        .unwrap_or(0);
+
+    log::info!(
+        "Navigating from line {} to 'Enter Business Configuration' at line {}",
+        cursor_idx,
+        target_idx
+    );
+
+    let delta = target_idx.abs_diff(cursor_idx);
+    let direction = if target_idx > cursor_idx {
+        crate::key_input::ArrowKey::Down
+    } else {
+        crate::key_input::ArrowKey::Up
+    };
+
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Down,
-            count: 2,
+            direction,
+            count: delta,
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 500 },
         crate::auto_cursor::CursorAction::PressEnter,
+        crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Give page time to load and stabilize rendering
         crate::auto_cursor::CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Settings")?,
             description: "In Modbus settings".to_string(),
-            line_range: Some((0, 3)),
+            line_range: Some((0, 10)), // Expanded range to catch the header even if scrolled
             col_range: None,
-            retry_action: None, // Clear navigation path, no retry needed
+            retry_action: None, // Retry is handled at a higher level (setup_tui_port)
         },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_modbus_panel")
         .await?;
+
+    // Additional sleep after successful entry to allow UI to fully stabilize
+    // This works around a rendering issue where the UI briefly shows incorrect state after page transition
+    log::info!("✅ Entered Modbus panel, waiting for UI to fully stabilize...");
+    crate::helpers::sleep_a_while().await;
+
     Ok(())
 }
 
@@ -280,21 +371,24 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // Navigate to top of page first to ensure consistent starting position
+    // After configuration, cursor is on Register Length field (just saved it).
+    // The register grid is below. Based on iteration 9 data where Down 3 gave us
+    // registers 8-11 (row 3 of grid), we can infer:
+    // - Down 0 = stay on Register Length (wrong)
+    // - Down 1 = row 1 of grid (registers 0-3) - what we want!
+    // - Down 2 = row 2 of grid (registers 4-7)
+    // - Down 3 = row 3 of grid (registers 8-11) - confirmed by iter 9
+    
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 20, // Go way up to ensure we hit the top
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-        crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Down,
-            count: 6,
+            count: 1, // Move from Register Length to first row of register grid
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_first_register")
         .await?;
+    
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers
@@ -345,6 +439,29 @@ pub async fn update_tui_registers<T: Expect>(
             .await?;
         }
     }
+
+    // Critical: Wait for all register values to be fully saved to internal storage
+    // before any subsequent operations (like navigating to add another station)
+    log::info!("⏱️ Waiting for all register values to be committed...");
+    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_a_while().await; // Extra safety margin
+
+    // Navigate back to top of page for next station configuration
+    // After editing registers, cursor is at the last register. The next call to
+    // configure_tui_master_common expects to be near the top of the Modbus panel (station list).
+    // We need to go up but NOT leave the Modbus panel (which would take us to port config).
+    // The register grid is ~3-4 rows, so Up 10 should be safe to reach station list without leaving panel.
+    log::info!("⬆️ Navigating back to station list within Modbus panel");
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 10, // Moderate count to reach station list without leaving Modbus panel
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_station_list")
+        .await?;
 
     Ok(())
 }

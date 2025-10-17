@@ -55,6 +55,7 @@ pub async fn execute_cursor_actions<T: Expect>(
     );
 
     for (idx, action) in actions.iter().enumerate() {
+        log::info!("📍 Action {} of {}: starting", idx + 1, actions.len());
         log::debug!("Action {} / {}: {:?}", idx + 1, actions.len(), action);
 
         match action {
@@ -246,7 +247,13 @@ pub async fn execute_cursor_actions<T: Expect>(
             }
         }
 
+        log::info!(
+            "📍 Action {} of {}: completed, sleeping",
+            idx + 1,
+            actions.len()
+        );
         sleep_a_while().await;
+        log::info!("📍 Action {} of {}: sleep done", idx + 1, actions.len());
     }
 
     log::info!("✓ All cursor actions executed successfully for {session_name}");
