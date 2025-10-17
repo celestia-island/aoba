@@ -96,6 +96,13 @@ async fn main() -> Result<()> {
         log::info!("💡 Test will capture screen and exit at breakpoints");
     }
 
+    // Check if we should skip basic tests and run only multi tests
+    let skip_basic =
+        args.contains(&"--skip-basic".to_string()) || std::env::var("SKIP_BASIC_TESTS").is_ok();
+    if skip_basic {
+        log::info!("⏭️  Skipping basic TUI tests, running only multi-masters/slaves");
+    }
+
     // Check if we should loop the tests
     let loop_count = std::env::var("TEST_LOOP")
         .ok()
@@ -128,39 +135,43 @@ async fn main() -> Result<()> {
 
         log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
-        // Test 0: CLI port release test - verify CLI properly releases ports on exit
-        log::info!("🧪 Test 0/2: CLI port release verification");
-        test_cli_port_release().await?;
+        if !skip_basic {
+            // Test 0: CLI port release test - verify CLI properly releases ports on exit
+            log::info!("🧪 Test 0/2: CLI port release verification");
+            test_cli_port_release().await?;
 
-        // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 0...");
-            setup_virtual_serial_ports()?;
-        }
+            // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
+            #[cfg(not(windows))]
+            {
+                log::info!("🧪 Resetting virtual serial ports after Test 0...");
+                setup_virtual_serial_ports()?;
+            }
 
-        // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
-        log::info!(
-            "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
-        );
-        test_tui_slave_with_cli_master_continuous().await?;
+            // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
+            log::info!(
+                "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
+            );
+            test_tui_slave_with_cli_master_continuous().await?;
 
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 1...");
-            setup_virtual_serial_ports()?;
-        }
+            // Reset ports after test completes (Unix only)
+            #[cfg(not(windows))]
+            {
+                log::info!("🧪 Resetting virtual serial ports after Test 1...");
+                setup_virtual_serial_ports()?;
+            }
 
-        // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
-        log::info!("🧪 Test 2/4: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
-        test_tui_master_with_cli_slave_continuous().await?;
+            // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
+            log::info!("🧪 Test 2/4: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
+            test_tui_master_with_cli_slave_continuous().await?;
 
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 2...");
-            setup_virtual_serial_ports()?;
+            // Reset ports after test completes (Unix only)
+            #[cfg(not(windows))]
+            {
+                log::info!("🧪 Resetting virtual serial ports after Test 2...");
+                setup_virtual_serial_ports()?;
+            }
+        } else {
+            log::info!("⏭️  Skipped Tests 0-2 (basic TUI tests)");
         }
 
         // Test 3: Multiple TUI Masters on vcom1

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_master_common, setup_tui_port, test_station_with_retries};
+use crate::utils::{configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -11,6 +11,7 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
+use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with IPC Communication - Basic Scenario
 ///
@@ -72,21 +73,70 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
 
     sleep_seconds(3).await;
 
+    // Try an initial capture to "wake up" the terminal
+    log::info!("🔄 Initializing screen capture...");
+    let initial_screen = tui_cap.capture(&mut tui_session, "initial_screen").await?;
+    if initial_screen.trim().is_empty() {
+        log::warn!("⚠️ Initial screen capture is empty, TUI may not be rendering");
+    } else {
+        log::info!("✅ TUI screen initialized successfully");
+    }
+
     // Configure all 4 masters on vcom1 - same station ID, same register type, different address ranges
     let masters = [
-        (1, 3, "holding", 0),   // Station 1, Type 03, Address 0-11
-        (1, 3, "holding", 12),  // Station 1, Type 03, Address 12-23
-        (1, 3, "holding", 24),  // Station 1, Type 03, Address 24-35
-        (1, 3, "holding", 36),  // Station 1, Type 03, Address 36-47
+        (1, 3, "holding", 0),  // Station 1, Type 03, Address 0-11
+        (1, 3, "holding", 12), // Station 1, Type 03, Address 12-23
+        (1, 3, "holding", 24), // Station 1, Type 03, Address 24-35
+        (1, 3, "holding", 36), // Station 1, Type 03, Address 36-47
     ];
 
-    log::info!("🧪 Step 2: Configuring 4 masters on {port1}");
-    for (i, &(station_id, register_type, register_mode, start_address)) in masters.iter().enumerate() {
-        // Setup port once for the first master, subsequent masters share the same port
-        if i == 0 {
-            setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
+    // Generate register data for all masters first (before configuration)
+    let master_data: Vec<Vec<u16>> = (0..4)
+        .map(|_| generate_random_registers(REGISTER_LENGTH))
+        .collect();
+
+    log::info!("🧪 Step 2: Configuring and updating 4 masters on {port1}");
+    
+    // Navigate to port and enter Modbus panel (without enabling the port yet)
+    navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
+    
+    for (i, &(station_id, register_type, register_mode, start_address)) in
+        masters.iter().enumerate()
+    {
+        log::info!(
+            "🔧 Configuring Master {} (Station {}, Type {:02}, Addr 0x{:04X})",
+            i + 1,
+            station_id,
+            register_type,
+            start_address
+        );
+
+        // For second and subsequent masters, create a new station first
+        if i > 0 {
+            log::info!("➕ Creating new station entry for Master {}", i + 1);
+            // Navigate to "Create Station" button and press Enter
+            use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+            use ci_utils::key_input::ArrowKey;
+            let actions = vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Up,
+                    count: 30, // Ensure we're at the top
+                },
+                CursorAction::Sleep { ms: 500 },
+                CursorAction::PressEnter, // Press Enter on "Create Station"
+                CursorAction::Sleep { ms: 1000 }, // Wait for station to be created
+            ];
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &actions,
+                &format!("create_station_for_master_{}", i + 1),
+            )
+            .await?;
+            log::info!("✅ New station created, cursor should now be on it");
         }
 
+        // Configure the station (skip creation since it's already done)
         configure_tui_master_common(
             &mut tui_session,
             &mut tui_cap,
@@ -95,24 +145,107 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             register_mode,
             start_address,
             REGISTER_LENGTH,
+            i == 0, // is_first_station: true only for the first master
+        )
+        .await?;
+
+        // Immediately update data for this master
+        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
+        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
+
+        // Wait for register updates to be saved before configuring next master
+        log::info!("⏱️ Waiting for register updates to be fully saved...");
+        ci_utils::sleep_a_while().await;
+        ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
+
+        // Debug breakpoint: capture screen after configuring and updating each master
+        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+        if std::env::var("DEBUG_MODE").is_ok() {
+            log::info!(
+                "🔴 DEBUG: Capturing screen after Master {} configuration",
+                i + 1
+            );
+            let actions = vec![CursorAction::DebugBreakpoint {
+                description: format!("after_master_{}_config", i + 1),
+            }];
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &actions,
+                &format!("debug_master_{}", i + 1),
+            )
+            .await?;
+        }
+    }
+
+    // After configuring all Masters, save and exit Modbus panel
+    log::info!("🔄 All Masters configured, saving configuration...");
+    
+    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
+    log::info!("⌨️ Sending first Esc to trigger auto-enable...");
+    tui_session.send("\x1b")?;
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+    
+    // Workaround for rendering bug: send another Esc to go to Entry, then Enter to return to ConfigPanel
+    log::info!("⌨️ Workaround: Esc to Entry, then Enter to ConfigPanel...");
+    tui_session.send("\x1b")?;  // Go to Entry page
+    ci_utils::sleep_a_while().await;
+    tui_session.send("\n")?;  // Enter on first port to go back to ConfigPanel
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+    
+    // Verify we're back at port details page
+    let screen = tui_cap.capture(&mut tui_session, "after_save_modbus").await?;
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    
+    if !screen.contains("Enable Port") && !screen.contains("Disable Port") {
+        return Err(anyhow!(
+            "Failed to return to port details page after saving Modbus configuration. Screen: {}",
+            screen.lines().take(10).collect::<Vec<_>>().join("\n")
+        ));
+    }
+    
+    log::info!("✅ Successfully returned to port details page");
+    
+    // Debug: check if data file was created
+    let data_files = std::fs::read_dir("/tmp")
+        .ok()
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .starts_with("aoba_cli_")
+                        && e.file_name().to_string_lossy().ends_with(".jsonl")
+                })
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    
+    if data_files.is_empty() {
+        log::error!("❌ NO DATA FILES FOUND in /tmp! Runtime may not have started.");
+    } else {
+        log::info!("✅ Found {} data file(s): {:?}", data_files.len(), data_files);
+    }
+
+    // Debug breakpoint: capture screen before starting polls
+    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+    if std::env::var("DEBUG_MODE").is_ok() {
+        log::info!("🔴 DEBUG: Capturing screen before starting polls");
+        let actions = vec![CursorAction::DebugBreakpoint {
+            description: "before_polling".to_string(),
+        }];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            "debug_before_poll",
         )
         .await?;
     }
-
-    // Generate and update register data for all masters
-    let master_data: Vec<Vec<u16>> = (0..4)
-        .map(|_| generate_random_registers(REGISTER_LENGTH))
-        .collect();
-
-    log::info!("🧪 Updating all master registers");
-    for (i, data) in master_data.iter().enumerate() {
-        log::info!("  Master {} data: {data:?}", i + 1);
-        update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
-    }
-
-    // Wait for IPC updates to propagate
-    log::info!("🧪 Waiting for IPC propagation...");
-    tokio::time::sleep(Duration::from_millis(3000)).await;
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();

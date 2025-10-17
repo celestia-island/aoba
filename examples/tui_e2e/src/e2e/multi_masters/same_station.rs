@@ -83,6 +83,29 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
             setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
         }
 
+        // For second and subsequent masters, create a new station first
+        if i > 0 {
+            log::info!("➕ Creating new station entry for Master {}", i + 1);
+            use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+            use ci_utils::key_input::ArrowKey;
+            let actions = vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Up,
+                    count: 30,
+                },
+                CursorAction::Sleep { ms: 500 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 1000 },
+            ];
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &actions,
+                &format!("create_station_for_master_{}", i + 1),
+            )
+            .await?;
+        }
+
         configure_tui_master_common(
             &mut tui_session,
             &mut tui_cap,
@@ -91,6 +114,7 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
             register_mode,
             start_address,
             REGISTER_LENGTH,
+            i == 0, // is_first_station
         )
         .await?;
     }
