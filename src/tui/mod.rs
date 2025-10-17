@@ -275,6 +275,84 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
     Ok(())
 }
 
+fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
+    // Read current station values and rebuild the merged data file
+    let merged_data = read_status(|status| {
+        if let Some(port_entry) = status.ports.map.get(port_name) {
+            if let Some(port) = with_port_read(port_entry, |port| {
+                let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+                
+                if stations.is_empty() {
+                    return None;
+                }
+
+                // Use first station's metadata as reference
+                let first = &stations[0];
+                let station_id = first.station_id;
+                let register_mode = first.register_mode;
+
+                // Find min and max addresses across all matching stations
+                let mut min_addr = u16::MAX;
+                let mut max_addr = 0u16;
+                
+                for station in stations {
+                    if station.station_id != station_id || station.register_mode != register_mode {
+                        continue;
+                    }
+
+                    let start = station.register_address;
+                    let end = start + station.register_length;
+                    
+                    if start < min_addr {
+                        min_addr = start;
+                    }
+                    if end > max_addr {
+                        max_addr = end;
+                    }
+                }
+
+                let total_length = max_addr - min_addr;
+                
+                // Create merged data array
+                let mut merged_data = vec![0u16; total_length as usize];
+                
+                // Fill in data from each station
+                for station in stations {
+                    if station.station_id != station_id || station.register_mode != register_mode {
+                        continue;
+                    }
+
+                    let start_offset = (station.register_address - min_addr) as usize;
+                    let station_values = station_values_for_cli(station);
+                    
+                    for (i, &value) in station_values.iter().enumerate() {
+                        let target_idx = start_offset + i;
+                        if target_idx < merged_data.len() {
+                            merged_data[target_idx] = value;
+                        }
+                    }
+                }
+
+                Some(merged_data)
+            }) {
+                return Ok(port);
+            }
+        }
+        Ok(None)
+    })?;
+
+    if let Some(data) = merged_data {
+        write_cli_data_snapshot(path, &data, true)?;
+        log::debug!(
+            "Updated CLI data file at {} with {} values",
+            path.display(),
+            data.len()
+        );
+    }
+
+    Ok(())
+}
+
 fn apply_register_update_from_ipc(
     port_name: &str,
     station_id: u8,
@@ -283,6 +361,7 @@ fn apply_register_update_from_ipc(
     values: &[u16],
 ) -> Result<()> {
     let mut handled = false;
+    let mut data_source_path: Option<PathBuf> = None;
 
     write_status(|status| {
         if let Some(port_entry) = status.ports.map.get(port_name) {
@@ -356,6 +435,22 @@ fn apply_register_update_from_ipc(
                     "Register update for {port_name}: failed to acquire port write lock"
                 );
             }
+            
+            // Get data source path if available for this port
+            if with_port_read(port_entry, |port| {
+                if let PortState::OccupiedByThis {
+                    owner: PortOwner::CliSubprocess(info),
+                } = &port.state
+                {
+                    if let Some(path_str) = &info.data_source_path {
+                        data_source_path = Some(PathBuf::from(path_str));
+                    }
+                }
+            })
+            .is_none()
+            {
+                log::debug!("Register update for {port_name}: failed to acquire port read lock for data path");
+            }
         } else {
             log::debug!("Register update for {port_name}: port not found in status map");
         }
@@ -366,6 +461,12 @@ fn apply_register_update_from_ipc(
         log::debug!(
             "Register update for {port_name}: no station handled for mode {register_mode:?}"
         );
+        return Ok(());
+    }
+
+    // If we have a data source path, update the file with latest values from all stations
+    if let Some(path) = data_source_path {
+        update_cli_data_file(port_name, &path)?;
     }
 
     Ok(())
