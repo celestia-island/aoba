@@ -268,10 +268,11 @@ pub async fn configure_tui_master_common<T: Expect>(
             CursorAction::Sleep { ms: 300 },
             // Navigate through register types to reach target type
             // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
-            // We need to navigate from current position to target type
+            // Default starts at Coils (01), so we need (register_type - 1) Right presses
+            // For type 03 (Holding): Right 2 times (01 -> 02 -> 03)
             CursorAction::PressArrow {
                 direction: ArrowKey::Right,
-                count: register_type as usize, // Direct mapping: 1=Coils, 2=Discrete, 3=Holding, 4=Input
+                count: (register_type as usize).saturating_sub(1), // Adjust for 0-indexed navigation
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
@@ -488,12 +489,12 @@ pub async fn configure_tui_slave_common<T: Expect>(
             // Try different navigation strategies
             CursorAction::PressArrow {
                 direction: ArrowKey::Left,
-                count: 5, // Go all the way left first
+                count: 5, // Go all the way left first (to Coils/01)
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow {
                 direction: ArrowKey::Right,
-                count: register_type as usize, // Then go right to target type
+                count: (register_type as usize).saturating_sub(1), // Adjust for 0-indexed: type 03 needs 2 Right presses (01->02->03)
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
