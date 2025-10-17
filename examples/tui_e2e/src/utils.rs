@@ -6,7 +6,7 @@ use expectrl::Expect;
 
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
-    key_input::{ArrowKey, ExpectKeyExt},
+    key_input::ArrowKey,
     snapshot::TerminalCapture,
     tui::{enable_port_carefully, enter_modbus_panel},
 };
@@ -216,25 +216,40 @@ pub async fn configure_tui_master_common<T: Expect>(
     // Set Station ID if not 1
     if station_id != 1 {
         log::info!("📝 Setting station ID to {station_id}");
-        let actions = vec![
-            // Navigate to Station ID field (down 2 from top)
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 10,
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 2,
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::TypeString(station_id.to_string()),
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
-        ];
+        
+        // When is_first_station=false, cursor is already on StationId field after creation
+        // When is_first_station=true, we need to navigate to StationId field
+        let actions = if is_first_station {
+            vec![
+                // Navigate to Station ID field (down 2 from top)
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Up,
+                    count: 10,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 2,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::TypeString(station_id.to_string()),
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        } else {
+            // Cursor is already on StationId field after creation
+            vec![
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::TypeString(station_id.to_string()),
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        };
         execute_cursor_actions(
             session,
             cap,
@@ -242,6 +257,19 @@ pub async fn configure_tui_master_common<T: Expect>(
             &format!("set_station_id_{station_id}"),
         )
         .await?;
+    } else if !is_first_station {
+        // If station_id is 1 and we're in multi-station mode (not first station),
+        // cursor is on StationId field but we didn't press Enter/change it.
+        // We need to move down to the next field (Register Type) to continue configuration.
+        log::info!("📝 Station ID is default (1), moving to Register Type field");
+        let actions = vec![
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 300 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "move_to_register_type").await?;
     }
 
     // Set Register Type
@@ -254,18 +282,12 @@ pub async fn configure_tui_master_common<T: Expect>(
     if is_multi_station {
         log::info!("🔍 Multi-station mode: using precise navigation for station {station_id}");
 
-        // For multi-station, navigate to register type field
+        // For multi-station, cursor is already on Register Type field after the station_id logic above
         // IMPORTANT: New stations default to Holding (03) in TUI code
         // The selector opens at the CURRENT value, not at Coils
         let actions = if register_type == 3 {
             // Target is Holding (03), which is the default - just confirm
             vec![
-                // From StationId, go down 1 to Register Type
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep { ms: 300 },
                 CursorAction::PressEnter,
                 CursorAction::Sleep { ms: 300 },
                 // Already at Holding (default), just confirm
@@ -286,11 +308,6 @@ pub async fn configure_tui_master_common<T: Expect>(
             };
 
             vec![
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep { ms: 300 },
                 CursorAction::PressEnter,
                 CursorAction::Sleep { ms: 300 },
                 CursorAction::PressArrow {
