@@ -40,12 +40,25 @@ impl TerminalCapture {
             // or we give up after a handful of retries. This avoids the long expect timeout.
             const MAX_ATTEMPTS: usize = 10;
             for attempt in 0..MAX_ATTEMPTS {
-                if let Ok(captures) = session.check(ExpectRegex("(?s).+")) {
-                    let bytes = captures.as_bytes();
-                    if !bytes.is_empty() {
-                        self.parser.process(bytes);
-                        out = self.parser.screen().contents();
-                        break;
+                match session.check(ExpectRegex("(?s).+")) {
+                    Ok(captures) => {
+                        let bytes = captures.as_bytes();
+                        log::debug!(
+                            "🔍 Captured {} bytes on attempt {}",
+                            bytes.len(),
+                            attempt + 1
+                        );
+                        if !bytes.is_empty() {
+                            self.parser.process(bytes);
+                            out = self.parser.screen().contents();
+                            if !out.trim().is_empty() {
+                                log::info!("✅ Screen content captured on attempt {}", attempt + 1);
+                                break;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("⚠️ Check failed on attempt {}: {}", attempt + 1, e);
                     }
                 }
 
@@ -53,6 +66,10 @@ impl TerminalCapture {
                 if attempt + 1 < MAX_ATTEMPTS {
                     sleep_a_while().await;
                 }
+            }
+
+            if out.trim().is_empty() {
+                log::warn!("⚠️ Screen still empty after {} attempts", MAX_ATTEMPTS);
             }
         } else if let Ok(captures) = session.check(ExpectRegex("(?s).+")) {
             let bytes = captures.as_bytes();

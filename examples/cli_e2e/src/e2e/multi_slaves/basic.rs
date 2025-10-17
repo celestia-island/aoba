@@ -4,20 +4,20 @@ use std::{
     time::Duration,
 };
 
-use aoba::cli::config::{
+use _bin::cli::config::{
     CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
     PersistenceMode, RegisterType,
 };
 
-/// Test multiple masters configuration
-pub async fn test_multi_masters() -> Result<()> {
-    log::info!("🧪 Testing multiple masters configuration...");
+/// Test multiple slaves configuration
+pub async fn test_multi_slaves() -> Result<()> {
+    log::info!("🧪 Testing multiple slaves configuration...");
 
     // Create configuration using the type-safe Config struct
     let config = Config {
-        port_name: "/tmp/vcom1".to_string(),
+        port_name: "/tmp/vcom2".to_string(),
         baud_rate: 9600,
-        communication_mode: CommunicationMode::Master,
+        communication_mode: CommunicationMode::Slave,
         communication_params: CommunicationParams {
             mode: CommunicationMethod::Stdio,
             dynamic_pull: false,
@@ -52,7 +52,7 @@ pub async fn test_multi_masters() -> Result<()> {
 
     // Write the configuration to a temporary file
     let temp_dir = std::env::temp_dir();
-    let config_file = temp_dir.join("test_multi_masters.json");
+    let config_file = temp_dir.join("test_multi_slaves.json");
     std::fs::write(&config_file, config_json)?;
 
     log::info!("🧪 Created configuration file: {config_file:?}");
@@ -61,7 +61,7 @@ pub async fn test_multi_masters() -> Result<()> {
     let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Start configuration mode
-    log::info!("🧪 Starting multi-masters configuration...");
+    log::info!("🧪 Starting multi-slaves configuration...");
     let process = Command::new(&binary)
         .arg("--config")
         .arg(&config_file)
@@ -77,7 +77,7 @@ pub async fn test_multi_masters() -> Result<()> {
 
     // Check whether the process exited successfully
     if output.status.success() {
-        log::info!("✅ Multi-masters configuration completed successfully");
+        log::info!("✅ Multi-slaves configuration completed successfully");
 
         // Check whether the output contains the configuration loaded successfully message
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -94,17 +94,17 @@ pub async fn test_multi_masters() -> Result<()> {
         }
     } else {
         log::warn!(
-            "⚠️ Multi-masters configuration failed with status: {}",
+            "⚠️ Multi-slaves configuration failed with status: {}",
             output.status
         );
         log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        return Err(anyhow::anyhow!("Multi-masters configuration failed"));
+        return Err(anyhow::anyhow!("Multi-slaves configuration failed"));
     }
 
     // Clean up temporary files
     std::fs::remove_file(&config_file)?;
 
-    log::info!("✅ Multi-masters test completed successfully");
+    log::info!("✅ Multi-slaves test completed successfully");
     Ok(())
 }
