@@ -15,8 +15,11 @@ use crate::{
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
 /// because another scan was already in progress.
 pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool) -> Result<bool> {
-    // Return early if scan already in progress
+    // Return early if scan already in progress, but still send Refreshed to update UI
     if *scan_in_progress {
+        core_tx
+            .send(CoreToUi::Refreshed)
+            .map_err(|err| anyhow!("failed to send Refreshed (scan in progress): {err}"))?;
         return Ok(false);
     }
 
