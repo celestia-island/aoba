@@ -371,13 +371,18 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // The cursor should already be positioned on the newly created station after configuration.
-    // The station list cursor is on the station name. We need to navigate to reach the register grid.
-    // Try moving down just 1 time to enter the station details and land on the first field.
+    // After configuration, cursor is inside the station config (on Register Length field).
+    // First, escape back to station list to ensure station is saved, then re-enter to access registers.
+    // This also gives us a consistent starting position.
     let actions = vec![
+        // Escape to go back to station list (this saves the station configuration)
+        crate::auto_cursor::CursorAction::PressEscape,
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        // Now cursor is on the station in the list
+        // Press Down to expand/enter the station and show its register grid
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Down,
-            count: 1, // Move down once to enter station and reach first register
+            count: 1,
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
     ];
