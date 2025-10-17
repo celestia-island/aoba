@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries};
+use crate::utils::{
+    configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -96,10 +98,10 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         .collect();
 
     log::info!("🧪 Step 2: Configuring and updating 4 masters on {port1}");
-    
+
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
-    
+
     for (i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {
@@ -180,40 +182,53 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
 
     // After configuring all Masters, save and exit Modbus panel
     log::info!("🔄 All Masters configured, saving configuration...");
-    
+
     // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
     log::info!("⌨️ Sending first Esc to trigger auto-enable...");
     tui_session.send("\x1b")?;
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
-    
+
     // Workaround for rendering bug: send another Esc to go to Entry, then Enter to return to ConfigPanel
     log::info!("⌨️ Workaround: Esc to Entry, then Enter to ConfigPanel...");
-    tui_session.send("\x1b")?;  // Go to Entry page
+    tui_session.send("\x1b")?; // Go to Entry page
     ci_utils::sleep_a_while().await;
-    tui_session.send("\r")?;  // Enter (carriage return) on first port to go back to ConfigPanel
+    tui_session.send("\r")?; // Enter (carriage return) on first port to go back to ConfigPanel
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
-    
+
     // Verify we're back at port details page with retry logic
     log::info!("⏳ Waiting for screen to update to ConfigPanel...");
     let mut screen = String::new();
     let max_attempts = 10;
     let mut success = false;
-    
+
     for attempt in 1..=max_attempts {
         ci_utils::sleep_a_while().await;
-        screen = tui_cap.capture(&mut tui_session, &format!("after_save_modbus_attempt_{}", attempt)).await?;
-        
+        screen = tui_cap
+            .capture(
+                &mut tui_session,
+                &format!("after_save_modbus_attempt_{}", attempt),
+            )
+            .await?;
+
         if screen.contains("Enable Port") || screen.contains("Disable Port") {
-            log::info!("✅ Screen updated correctly on attempt {}/{}", attempt, max_attempts);
+            log::info!(
+                "✅ Screen updated correctly on attempt {}/{}",
+                attempt,
+                max_attempts
+            );
             success = true;
             break;
         }
-        
-        log::warn!("⏳ Attempt {}/{}: Screen not updated yet, waiting...", attempt, max_attempts);
+
+        log::warn!(
+            "⏳ Attempt {}/{}: Screen not updated yet, waiting...",
+            attempt,
+            max_attempts
+        );
     }
-    
+
     if !success {
         return Err(anyhow!(
             "Failed to return to port details page after saving Modbus configuration (tried {} times). Screen: {}",
@@ -221,10 +236,10 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             screen.lines().take(10).collect::<Vec<_>>().join("\n")
         ));
     }
-    
+
     log::info!("💾 Saved Modbus configuration and auto-enabled port");
     log::info!("✅ Successfully returned to port details page");
-    
+
     // Debug: check if data file was created
     let data_files = std::fs::read_dir("/tmp")
         .ok()
@@ -232,20 +247,22 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             entries
                 .filter_map(|e| e.ok())
                 .filter(|e| {
-                    e.file_name()
-                        .to_string_lossy()
-                        .starts_with("aoba_cli_")
+                    e.file_name().to_string_lossy().starts_with("aoba_cli_")
                         && e.file_name().to_string_lossy().ends_with(".jsonl")
                 })
                 .map(|e| e.file_name().to_string_lossy().to_string())
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    
+
     if data_files.is_empty() {
         log::error!("❌ NO DATA FILES FOUND in /tmp! Runtime may not have started.");
     } else {
-        log::info!("✅ Found {} data file(s): {:?}", data_files.len(), data_files);
+        log::info!(
+            "✅ Found {} data file(s): {:?}",
+            data_files.len(),
+            data_files
+        );
     }
 
     // Debug breakpoint: capture screen before starting polls
