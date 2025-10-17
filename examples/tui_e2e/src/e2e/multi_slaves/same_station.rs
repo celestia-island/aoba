@@ -112,7 +112,8 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
     // Test all 3 register types from vcom1
     let mut register_type_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate() {
+    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    {
         log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode})");
         register_type_success.insert(
             register_type,

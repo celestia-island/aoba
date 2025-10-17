@@ -79,7 +79,9 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 4 masters on {port1} with different register types");
-    for (i, &(station_id, register_type, register_mode, start_address)) in masters.iter().enumerate() {
+    for (i, &(station_id, register_type, register_mode, start_address)) in
+        masters.iter().enumerate()
+    {
         // Setup port once for the first master, subsequent masters share the same port
         if i == 0 {
             setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
@@ -143,7 +145,9 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
     // Test all 4 stations from vcom2
     let mut station_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in masters.iter().enumerate() {
+    for (i, &(station_id, register_type, register_mode, start_address)) in
+        masters.iter().enumerate()
+    {
         log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode})");
         station_success.insert(
             station_id,

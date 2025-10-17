@@ -260,13 +260,14 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 let is_modbus_empty = read_status(|status| {
                     if let Some(port) = status.ports.map.get(&port_name) {
                         let port_data = port.read();
-                        if let types::port::PortConfig::Modbus { stations, .. } = &port_data.config {
+                        if let types::port::PortConfig::Modbus { stations, .. } = &port_data.config
+                        {
                             return Ok(stations.is_empty());
                         }
                     }
                     Ok(false)
                 })?;
-                
+
                 if is_modbus_empty {
                     log::warn!("⚠️  Cannot enable Modbus port with empty configuration");
                     write_status(|status| {
@@ -276,10 +277,12 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                         });
                         Ok(())
                     })?;
-                    bus.ui_tx.send(UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                    bus.ui_tx
+                        .send(UiToCore::Refresh)
+                        .map_err(|err| anyhow!(err))?;
                     return Ok(());
                 }
-                
+
                 log::info!("Sending ToggleRuntime for port: {port_name}");
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx

@@ -378,7 +378,7 @@ pub async fn update_tui_registers<T: Expect>(
     // - Down 1 = row 1 of grid (registers 0-3) - what we want!
     // - Down 2 = row 2 of grid (registers 4-7)
     // - Down 3 = row 3 of grid (registers 8-11) - confirmed by iter 9
-    
+
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Down,
@@ -388,7 +388,6 @@ pub async fn update_tui_registers<T: Expect>(
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_first_register")
         .await?;
-    
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers
