@@ -43,11 +43,11 @@ use crate::{
 };
 
 /// Create a stable data source file path for a specific station on a port.
-/// 
+///
 /// The path is deterministic based on port name, station ID, register mode, and address,
 /// allowing multiple Masters on the same port to maintain separate data files without
 /// conflicts. The format is: `aoba_cli_{port}_s{station_id}_t{type:02}_a{addr:04X}.jsonl`
-/// 
+///
 /// Example: `/tmp/aoba_cli__tmp_vcom1_s1_t03_a0000.jsonl`
 fn create_cli_data_source_path(
     port_name: &str,
@@ -141,20 +141,22 @@ fn station_values_for_cli(station: &types::modbus::ModbusRegisterItem) -> Vec<u1
 }
 
 /// Initialize CLI data source for Master mode by merging all stations' data.
-/// 
+///
 /// For a Master port with multiple stations (address ranges), this function:
 /// 1. Collects all stations with the same station_id and register_mode
 /// 2. Determines the overall address range (min to max)
 /// 3. Merges all stations' data into a continuous array
 /// 4. Writes the merged data to a single data file
-/// 
+///
 /// The CLI subprocess will then serve this entire address range.
 fn initialize_cli_data_source(
     port_name: &str,
     stations: &[types::modbus::ModbusRegisterItem],
 ) -> Result<(PathBuf, u16, u16, u16)> {
     if stations.is_empty() {
-        return Err(anyhow::anyhow!("No stations provided for data source initialization"));
+        return Err(anyhow::anyhow!(
+            "No stations provided for data source initialization"
+        ));
     }
 
     // Use first station's metadata as reference
@@ -165,7 +167,7 @@ fn initialize_cli_data_source(
     // Find min and max addresses across all stations
     let mut min_addr = u16::MAX;
     let mut max_addr = 0u16;
-    
+
     for station in stations {
         if station.station_id != station_id {
             log::warn!(
@@ -185,7 +187,7 @@ fn initialize_cli_data_source(
 
         let start = station.register_address;
         let end = start + station.register_length;
-        
+
         if start < min_addr {
             min_addr = start;
         }
@@ -207,7 +209,7 @@ fn initialize_cli_data_source(
 
     // Create merged data array
     let mut merged_data = vec![0u16; total_length as usize];
-    
+
     // Fill in data from each station
     for station in stations {
         if station.station_id != station_id || station.register_mode != register_mode {
@@ -216,7 +218,7 @@ fn initialize_cli_data_source(
 
         let start_offset = (station.register_address - min_addr) as usize;
         let station_values = station_values_for_cli(station);
-        
+
         log::debug!(
             "  Merging station at 0x{:04X}, length={}, into offset {}",
             station.register_address,
@@ -233,12 +235,7 @@ fn initialize_cli_data_source(
     }
 
     // Create path using first station's info (but covering full range)
-    let path = create_cli_data_source_path(
-        port_name,
-        station_id,
-        register_mode,
-        min_addr,
-    );
+    let path = create_cli_data_source_path(port_name, station_id, register_mode, min_addr);
 
     if let Err(err) = write_cli_data_snapshot(&path, &merged_data, true) {
         log::error!(
@@ -281,7 +278,7 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
         if let Some(port_entry) = status.ports.map.get(port_name) {
             if let Some(port) = with_port_read(port_entry, |port| {
                 let types::port::PortConfig::Modbus { stations, .. } = &port.config;
-                
+
                 if stations.is_empty() {
                     return None;
                 }
@@ -294,7 +291,7 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
                 // Find min and max addresses across all matching stations
                 let mut min_addr = u16::MAX;
                 let mut max_addr = 0u16;
-                
+
                 for station in stations {
                     if station.station_id != station_id || station.register_mode != register_mode {
                         continue;
@@ -302,7 +299,7 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
 
                     let start = station.register_address;
                     let end = start + station.register_length;
-                    
+
                     if start < min_addr {
                         min_addr = start;
                     }
@@ -312,10 +309,10 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
                 }
 
                 let total_length = max_addr - min_addr;
-                
+
                 // Create merged data array
                 let mut merged_data = vec![0u16; total_length as usize];
-                
+
                 // Fill in data from each station
                 for station in stations {
                     if station.station_id != station_id || station.register_mode != register_mode {
@@ -324,7 +321,7 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
 
                     let start_offset = (station.register_address - min_addr) as usize;
                     let station_values = station_values_for_cli(station);
-                    
+
                     for (i, &value) in station_values.iter().enumerate() {
                         let target_idx = start_offset + i;
                         if target_idx < merged_data.len() {
@@ -435,7 +432,7 @@ fn apply_register_update_from_ipc(
                     "Register update for {port_name}: failed to acquire port write lock"
                 );
             }
-            
+
             // Get data source path if available for this port
             if with_port_read(port_entry, |port| {
                 if let PortState::OccupiedByThis {
@@ -920,7 +917,7 @@ fn run_core_thread(
                             types::modbus::ModbusConnectionMode::Slave { .. } => {
                                 // For Slave mode, use first station (slaves typically have one config)
                                 let station = &stations[0];
-                                
+
                                 log::info!(
                                     "ToggleRuntime: attempting to spawn CLI subprocess (SlavePoll) for {port_name}"
                                 );
@@ -1015,8 +1012,12 @@ fn run_core_thread(
                                 );
 
                                 // Initialize merged data source for all stations
-                                let (data_source_path, merged_station_id, merged_start_addr, merged_length) =
-                                    initialize_cli_data_source(&port_name, &stations)?;
+                                let (
+                                    data_source_path,
+                                    merged_station_id,
+                                    merged_start_addr,
+                                    merged_length,
+                                ) = initialize_cli_data_source(&port_name, &stations)?;
 
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),
@@ -1024,8 +1025,10 @@ fn run_core_thread(
                                     station_id: merged_station_id as u8,
                                     register_address: merged_start_addr,
                                     register_length: merged_length,
-                                    register_mode: register_mode_to_cli_arg(stations[0].register_mode)
-                                        .to_string(),
+                                    register_mode: register_mode_to_cli_arg(
+                                        stations[0].register_mode,
+                                    )
+                                    .to_string(),
                                     baud_rate,
                                     data_source: Some(format!(
                                         "file:{}",

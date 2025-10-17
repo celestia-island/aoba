@@ -139,7 +139,7 @@ pub async fn configure_tui_master_common<T: Expect>(
     register_mode: &str,
     start_address: u16,
     register_length: usize,
-    is_first_station: bool,  // NEW: indicates if this is the first station
+    is_first_station: bool, // NEW: indicates if this is the first station
 ) -> Result<()> {
     use regex::Regex;
 
@@ -284,7 +284,7 @@ pub async fn configure_tui_master_common<T: Expect>(
                 // Navigate left (or wrap around - but for now assume we won't need this)
                 0
             };
-            
+
             vec![
                 CursorAction::PressArrow {
                     direction: ArrowKey::Down,
@@ -508,13 +508,10 @@ pub async fn configure_tui_slave_common<T: Expect>(
             // IMPORTANT: New stations default to Holding (03), so selector starts there
             // If target is Holding (03), just confirm; otherwise navigate
         ];
-        
+
         let nav_actions = if register_type == 3 {
             // Target is Holding (03), which is the default - just confirm
-            vec![
-                CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 500 },
-            ]
+            vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }]
         } else {
             // Need to navigate from Holding (03) to target
             // Strategy: Go all the way left to Coils (01), then navigate right to target
@@ -533,7 +530,7 @@ pub async fn configure_tui_slave_common<T: Expect>(
                 CursorAction::Sleep { ms: 500 },
             ]
         };
-        
+
         let mut actions = actions;
         actions.extend(nav_actions);
         execute_cursor_actions(
@@ -730,7 +727,7 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
     // Enter Modbus panel directly without enabling the port
     log::info!("⚙️ Entering Modbus configuration panel (port not yet enabled)");
     enter_modbus_panel(session, cap).await?;
-    
+
     log::info!("✅ Successfully entered Modbus panel for {target_port}");
     Ok(())
 }
