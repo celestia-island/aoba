@@ -254,30 +254,54 @@ pub async fn configure_tui_master_common<T: Expect>(
     if is_multi_station {
         log::info!("🔍 Multi-station mode: using precise navigation for station {station_id}");
 
-        // For multi-station, navigate more carefully to the register type field
-        // The cursor should already be on the new station's StationId field
-        // Navigate down to Register Type field
-        let actions = vec![
-            // From StationId, go down 1 to Register Type
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 1,
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            // Navigate through register types to reach target type
-            // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
-            // Default starts at Coils (01), so we need (register_type - 1) Right presses
-            // For type 03 (Holding): Right 2 times (01 -> 02 -> 03)
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: (register_type as usize).saturating_sub(1), // Adjust for 0-indexed navigation
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
-        ];
+        // For multi-station, navigate to register type field
+        // IMPORTANT: New stations default to Holding (03) in TUI code
+        // The selector opens at the CURRENT value, not at Coils
+        let actions = if register_type == 3 {
+            // Target is Holding (03), which is the default - just confirm
+            vec![
+                // From StationId, go down 1 to Register Type
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                // Already at Holding (default), just confirm
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        } else {
+            // Need to navigate from Holding (03) to target
+            // Calculate navigation: we're at position 2 (Holding), need to get to target position
+            // Positions: 0=Coils(01), 1=Discrete(02), 2=Holding(03), 3=Input(04)
+            let current_pos = 2; // Holding is at position 2
+            let target_pos = (register_type as usize).saturating_sub(1);
+            let nav_count = if target_pos > current_pos {
+                target_pos - current_pos
+            } else {
+                // Navigate left (or wrap around - but for now assume we won't need this)
+                0
+            };
+            
+            vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: nav_count,
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        };
         execute_cursor_actions(
             session,
             cap,
@@ -480,26 +504,38 @@ pub async fn configure_tui_slave_common<T: Expect>(
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 300 },
-            // Debug: capture the register type selection screen
-            CursorAction::DebugBreakpoint {
-                description: "register_type_selection_screen".to_string(),
-            },
             // Navigate through register types to reach target type
-            // Register types: 01=Coils, 02=Discrete Inputs, 03=Holding, 04=Input
-            // Try different navigation strategies
-            CursorAction::PressArrow {
-                direction: ArrowKey::Left,
-                count: 5, // Go all the way left first (to Coils/01)
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: (register_type as usize).saturating_sub(1), // Adjust for 0-indexed: type 03 needs 2 Right presses (01->02->03)
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            // IMPORTANT: New stations default to Holding (03), so selector starts there
+            // If target is Holding (03), just confirm; otherwise navigate
         ];
+        
+        let nav_actions = if register_type == 3 {
+            // Target is Holding (03), which is the default - just confirm
+            vec![
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        } else {
+            // Need to navigate from Holding (03) to target
+            // Strategy: Go all the way left to Coils (01), then navigate right to target
+            vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Left,
+                    count: 5, // Go all the way left first (to Coils/01)
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: (register_type as usize).saturating_sub(1), // Adjust for 0-indexed: type 03 needs 2 Right presses (01->02->03)
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+            ]
+        };
+        
+        let mut actions = actions;
+        actions.extend(nav_actions);
         execute_cursor_actions(
             session,
             cap,
