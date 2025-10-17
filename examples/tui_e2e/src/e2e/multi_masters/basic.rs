@@ -191,21 +191,38 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     log::info!("⌨️ Workaround: Esc to Entry, then Enter to ConfigPanel...");
     tui_session.send("\x1b")?;  // Go to Entry page
     ci_utils::sleep_a_while().await;
-    tui_session.send("\n")?;  // Enter on first port to go back to ConfigPanel
+    tui_session.send("\r")?;  // Enter (carriage return) on first port to go back to ConfigPanel
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
     
-    // Verify we're back at port details page
-    let screen = tui_cap.capture(&mut tui_session, "after_save_modbus").await?;
-    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    // Verify we're back at port details page with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel...");
+    let mut screen = String::new();
+    let max_attempts = 10;
+    let mut success = false;
     
-    if !screen.contains("Enable Port") && !screen.contains("Disable Port") {
+    for attempt in 1..=max_attempts {
+        ci_utils::sleep_a_while().await;
+        screen = tui_cap.capture(&mut tui_session, &format!("after_save_modbus_attempt_{}", attempt)).await?;
+        
+        if screen.contains("Enable Port") || screen.contains("Disable Port") {
+            log::info!("✅ Screen updated correctly on attempt {}/{}", attempt, max_attempts);
+            success = true;
+            break;
+        }
+        
+        log::warn!("⏳ Attempt {}/{}: Screen not updated yet, waiting...", attempt, max_attempts);
+    }
+    
+    if !success {
         return Err(anyhow!(
-            "Failed to return to port details page after saving Modbus configuration. Screen: {}",
+            "Failed to return to port details page after saving Modbus configuration (tried {} times). Screen: {}",
+            max_attempts,
             screen.lines().take(10).collect::<Vec<_>>().join("\n")
         ));
     }
     
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
     log::info!("✅ Successfully returned to port details page");
     
     // Debug: check if data file was created
