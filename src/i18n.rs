@@ -28,6 +28,7 @@ derive_struct! {
             invalid_port_selection: String = "invalid_port_selection".to_string(),
             entry_page_required: String = "entry_page_required".to_string(),
             error_loading_content: String = "error_loading_content".to_string(),
+            err_modbus_config_empty: String = "err-modbus-config-empty".to_string(),
         },
 
         about: {
@@ -56,10 +57,13 @@ derive_struct! {
             press_enter_modify: String = "press_enter_modify".to_string(),
             press_enter_submit: String = "press_enter_submit".to_string(),
             press_esc_cancel: String = "press_esc_cancel".to_string(),
+            press_esc_save_and_return: String = "press_esc_save_and_return".to_string(),
+            press_ctrl_esc_return_no_save: String = "press_ctrl_esc_return_no_save".to_string(),
             press_q_quit: String = "press_q_quit".to_string(),
 
             hint_enter_subpage: String = "hint_enter_subpage".to_string(),
             hint_back_list: String = "hint_back_list".to_string(),
+            hint_back_list_save: String = "hint_back_list_save".to_string(),
             hint_switch_tab: String = "hint_switch_tab".to_string(),
             hint_move_vertical: String = "hint_move_vertical".to_string(),
             hint_move_with_panels: String = "hint_move_with_panels".to_string(),

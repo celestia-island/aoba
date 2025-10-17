@@ -82,13 +82,86 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::Esc => {
-            write_status(|status| {
-                status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
-                Ok(())
-            })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            // Check if Ctrl is pressed for "force return without saving"
+            let is_ctrl_esc = key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL);
+
+            if is_ctrl_esc {
+                // Ctrl+Esc: Force return without saving
+                log::info!("⚠️ Ctrl+Esc: Discarding changes and returning");
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
+                    Ok(())
+                })?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                return Ok(());
+            }
+
+            // Regular Esc: Save changes if any, then return
+            let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+
+            // Check if there's pending data to save
+            let has_pending_data = !matches!(input_raw_buffer, types::ui::InputRawBuffer::None);
+
+            if has_pending_data {
+                log::info!("💾 Esc: Saving pending changes before returning");
+
+                let current_cursor = read_status(|status| {
+                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                        Ok(*cursor)
+                    } else {
+                        Ok(types::cursor::ModbusDashboardCursor::AddLine)
+                    }
+                })?;
+
+                let mut maybe_restart: Option<String> = None;
+
+                match &input_raw_buffer {
+                    types::ui::InputRawBuffer::Index(selected_index) => {
+                        log::info!("💾 Committing selector edit on Esc, index={selected_index}");
+                        maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
+                    }
+                    types::ui::InputRawBuffer::String { bytes, .. } => {
+                        let value = String::from_utf8_lossy(bytes).to_string();
+                        log::info!("💾 Committing text edit on Esc, value='{value}'");
+                        commit_text_edit(current_cursor, value, bus)?;
+                    }
+                    _ => {}
+                }
+
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
+                    Ok(())
+                })?;
+
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+
+                if let Some(port_name) = maybe_restart {
+                    // Toggle twice to restart runtime with new config
+                    bus.ui_tx
+                        .send(UiToCore::ToggleRuntime(port_name.clone()))
+                        .map_err(|err| anyhow!(err))?;
+                    bus.ui_tx
+                        .send(UiToCore::ToggleRuntime(port_name))
+                        .map_err(|err| anyhow!(err))?;
+                }
+            } else {
+                // No pending data, just clear buffer and refresh
+                log::info!("↩️ Esc: No pending changes, just exiting edit mode");
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
+                    Ok(())
+                })?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+            }
+
             Ok(())
         }
         KeyCode::Left | KeyCode::Char('h') => {

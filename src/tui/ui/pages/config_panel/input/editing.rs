@@ -6,6 +6,7 @@ use strum::IntoEnumIterator;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
+    i18n::lang,
     protocol::{
         runtime::RuntimeCommand,
         status::{
@@ -18,7 +19,7 @@ use crate::{
             with_port_read, with_port_write, write_status,
         },
     },
-    tui::utils::bus::Bus,
+    tui::{utils::bus::Bus, UiToCore},
 };
 
 use super::{
@@ -255,6 +256,30 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                     Ok(None)
                 }
             })? {
+                // Check if this is a Modbus port with empty configuration
+                let is_modbus_empty = read_status(|status| {
+                    if let Some(port) = status.ports.map.get(&port_name) {
+                        let port_data = port.read();
+                        if let types::port::PortConfig::Modbus { stations, .. } = &port_data.config {
+                            return Ok(stations.is_empty());
+                        }
+                    }
+                    Ok(false)
+                })?;
+                
+                if is_modbus_empty {
+                    log::warn!("⚠️  Cannot enable Modbus port with empty configuration");
+                    write_status(|status| {
+                        status.temporarily.error = Some(types::ErrorInfo {
+                            message: lang().index.err_modbus_config_empty.clone(),
+                            timestamp: chrono::Local::now(),
+                        });
+                        Ok(())
+                    })?;
+                    bus.ui_tx.send(UiToCore::Refresh).map_err(|err| anyhow!(err))?;
+                    return Ok(());
+                }
+                
                 log::info!("Sending ToggleRuntime for port: {port_name}");
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx

@@ -72,17 +72,40 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
 
     // Configure 4 masters on vcom1 with different station IDs and register types
     let masters = [
-        (1, 3, "holding"),  // Station 1, Type 03 Holding Register
-        (2, 4, "input"),    // Station 2, Type 04 Input Register
-        (3, 1, "coils"),    // Station 3, Type 01 Coils
-        (4, 2, "discrete"), // Station 4, Type 02 Discrete Inputs
+        (1, 3, "holding", 0),  // Station 1, Type 03 Holding Register, Address 0
+        (2, 4, "input", 0),    // Station 2, Type 04 Input Register, Address 0
+        (3, 1, "coils", 0),    // Station 3, Type 01 Coils, Address 0
+        (4, 2, "discrete", 0), // Station 4, Type 02 Discrete Inputs, Address 0
     ];
 
     log::info!("🧪 Step 2: Configuring 4 masters on {port1} with different register types");
-    for &(station_id, register_type, register_mode) in &masters {
+    for (i, &(station_id, register_type, register_mode, start_address)) in masters.iter().enumerate() {
         // Setup port once for the first master, subsequent masters share the same port
-        if station_id == 1 {
+        if i == 0 {
             setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
+        }
+
+        // For second and subsequent masters, create a new station first
+        if i > 0 {
+            log::info!("➕ Creating new station entry for Master {}", i + 1);
+            use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+            use ci_utils::key_input::ArrowKey;
+            let actions = vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Up,
+                    count: 30,
+                },
+                CursorAction::Sleep { ms: 500 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 1000 },
+            ];
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &actions,
+                &format!("create_station_for_master_{}", i + 1),
+            )
+            .await?;
         }
 
         configure_tui_master_common(
@@ -91,7 +114,9 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
             station_id,
             register_type,
             register_mode,
+            start_address,
             REGISTER_LENGTH,
+            i == 0, // is_first_station
         )
         .await?;
     }
@@ -103,7 +128,7 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
 
     log::info!("🧪 Updating all master registers");
     for (i, data) in master_data.iter().enumerate() {
-        let (station_id, register_type, register_mode) = masters[i];
+        let (station_id, register_type, register_mode, _) = masters[i];
         log::info!(
             "  Master {} (Station {station_id}, Type {register_type}, {register_mode}) data: {data:?}",
             i + 1
@@ -118,7 +143,7 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
     // Test all 4 stations from vcom2
     let mut station_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, register_type, register_mode)) in masters.iter().enumerate() {
+    for (i, &(station_id, register_type, register_mode, start_address)) in masters.iter().enumerate() {
         log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode})");
         station_success.insert(
             station_id,
@@ -126,6 +151,7 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
                 &port2,
                 station_id,
                 register_mode,
+                start_address,
                 &master_data[i],
                 MAX_RETRIES,
                 RETRY_INTERVAL_MS,

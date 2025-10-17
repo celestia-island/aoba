@@ -4,20 +4,20 @@ use std::{
     time::Duration,
 };
 
-use aoba::cli::config::{
+use _bin::cli::config::{
     CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
     PersistenceMode, RegisterType,
 };
 
-/// Test multiple slaves with adjacent and non-adjacent register addresses
-pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
-    log::info!("🧪 Testing multiple slaves with adjacent and non-adjacent register addresses...");
+/// Test multiple masters with same station ID but different register types
+pub async fn test_multi_masters_same_station() -> Result<()> {
+    log::info!("🧪 Testing multiple masters with same station ID but different register types...");
 
     // Create configuration using the type-safe Config struct
     let config = Config {
-        port_name: "/tmp/vcom2".to_string(),
+        port_name: "/tmp/vcom1".to_string(),
         baud_rate: 9600,
-        communication_mode: CommunicationMode::Slave,
+        communication_mode: CommunicationMode::Master,
         communication_params: CommunicationParams {
             mode: CommunicationMethod::Stdio,
             dynamic_pull: false,
@@ -34,14 +34,14 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
             },
             ModbusRegister {
                 station_id: 1,
-                register_type: RegisterType::Holding,
-                start_address: 10,
+                register_type: RegisterType::Input,
+                start_address: 100,
                 length: 5,
             },
             ModbusRegister {
                 station_id: 1,
-                register_type: RegisterType::Holding,
-                start_address: 50,
+                register_type: RegisterType::Coils,
+                start_address: 200,
                 length: 8,
             },
         ],
@@ -52,16 +52,16 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
 
     // Write the configuration to a temporary file
     let temp_dir = std::env::temp_dir();
-    let config_file = temp_dir.join("test_multi_slaves_adjacent.json");
+    let config_file = temp_dir.join("test_multi_masters_same_station.json");
     std::fs::write(&config_file, config_json)?;
 
-    log::info!("🧪 Created configuration file for adjacent registers test");
+    log::info!("🧪 Created configuration file for same station test");
 
     // Build the binary
     let binary = ci_utils::build_debug_bin("aoba")?;
 
     // Start configuration mode
-    log::info!("🧪 Starting multi-slaves with adjacent registers configuration...");
+    log::info!("🧪 Starting multi-masters with same station configuration...");
     let process = Command::new(&binary)
         .arg("--config")
         .arg(&config_file)
@@ -77,7 +77,7 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
 
     // Check whether the process exited successfully
     if output.status.success() {
-        log::info!("✅ Multi-slaves with adjacent registers configuration completed successfully");
+        log::info!("✅ Multi-masters with same station configuration completed successfully");
 
         // Check whether the output contains the configuration loaded successfully message
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -94,19 +94,19 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
         }
     } else {
         log::warn!(
-            "⚠️ Multi-slaves with adjacent registers configuration failed with status: {}",
+            "⚠️ Multi-masters with same station configuration failed with status: {}",
             output.status
         );
         log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
         log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
         return Err(anyhow::anyhow!(
-            "Multi-slaves with adjacent registers configuration failed"
+            "Multi-masters with same station configuration failed"
         ));
     }
 
     // Clean up temporary files
     std::fs::remove_file(&config_file)?;
 
-    log::info!("✅ Multi-slaves adjacent registers test completed successfully");
+    log::info!("✅ Multi-masters same station test completed successfully");
     Ok(())
 }

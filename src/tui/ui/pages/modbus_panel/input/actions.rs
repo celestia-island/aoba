@@ -29,7 +29,34 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
         types::cursor::ModbusDashboardCursor::AddLine => {
             log::info!("🔵 AddLine action - calling create_new_modbus_entry");
             create_new_modbus_entry(bus)?;
-            log::info!("🔵 Station created successfully, sending refresh");
+            log::info!("🔵 Station created successfully");
+            
+            // Move cursor to the new station's StationId field
+            let new_station_index = read_status(|status| {
+                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            let port_guard = port_entry.read();
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port_guard.config;
+                            return Ok(stations.len().saturating_sub(1));
+                        }
+                    }
+                }
+                Ok(0)
+            })?;
+            
+            write_status(|status| {
+                if let types::Page::ModbusDashboard { cursor, .. } = &mut status.page {
+                    *cursor = types::cursor::ModbusDashboardCursor::StationId { 
+                        index: new_station_index 
+                    };
+                    log::info!("🔵 Moved cursor to new station StationId field (index: {})", new_station_index);
+                }
+                Ok(())
+            })?;
+            
+            log::info!("🔵 Sending refresh");
             bus.ui_tx
                 .send(UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
@@ -289,6 +316,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
 }
 
 pub fn handle_leave_page(bus: &Bus) -> Result<()> {
+    log::info!("🟦 handle_leave_page called");
+    
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -296,6 +325,82 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
             Ok(0)
         }
     })?;
+    
+    log::info!("🟦 Selected port index: {}", selected_port);
+    
+    // Check if we need to restart the runtime or auto-enable the port
+    let (port_name, should_restart, should_auto_enable, has_stations) = read_status(|status| {
+        let port_name = status.ports.order.get(selected_port).cloned();
+        log::info!("🟦 Port name: {:?}", port_name);
+            
+        let (should_restart, should_auto_enable, has_stations) = if let Some(name) = &port_name {
+            let port_data = status.ports.map.get(name);
+            let port_state = port_data.as_ref().map(|p| {
+                let port = p.read();
+                log::info!("🟦 Port state: {:?}", port.state);
+                port.state.clone()
+            });
+            
+            // Check if port has any stations configured
+            let has_stations = port_data.as_ref().map(|p| {
+                let port = p.read();
+                if let types::port::PortConfig::Modbus { stations, .. } = &port.config {
+                    !stations.is_empty()
+                } else {
+                    false
+                }
+            }).unwrap_or(false);
+            
+            let should_restart = matches!(
+                port_state,
+                Some(types::port::PortState::OccupiedByThis {
+                    owner: types::port::PortOwner::Runtime(_)
+                })
+            );
+            
+            // Auto-enable if: port is Free AND has stations configured
+            let should_auto_enable = matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
+            
+            log::info!("🟦 Should restart: {}, Should auto-enable: {}, Has stations: {}", 
+                should_restart, should_auto_enable, has_stations);
+            (should_restart, should_auto_enable, has_stations)
+        } else {
+            log::info!("🟦 No port name, should_restart=false, should_auto_enable=false");
+            (false, false, false)
+        };
+            
+        Ok((port_name, should_restart, should_auto_enable, has_stations))
+    })?;
+    
+    // If port is running, restart it to apply the new configuration
+    if should_restart {
+        if let Some(name) = &port_name {
+            log::info!(
+                "🔄 Restarting runtime for {name} to apply Modbus configuration changes"
+            );
+            bus.ui_tx
+                .send(UiToCore::ToggleRuntime(name.clone()))
+                .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;
+            bus.ui_tx
+                .send(UiToCore::ToggleRuntime(name.clone()))
+                .map_err(|err| {
+                    anyhow!("Failed to send ToggleRuntime for restart (start phase): {err}")
+                })?;
+        }
+    }
+    // Auto-enable port if it's free and has stations configured
+    else if should_auto_enable {
+        if let Some(name) = &port_name {
+            log::info!(
+                "🚀 Auto-enabling port {name} with {} station(s) configured",
+                if has_stations { "valid" } else { "no" }
+            );
+            bus.ui_tx
+                .send(UiToCore::ToggleRuntime(name.clone()))
+                .map_err(|err| anyhow!("Failed to send ToggleRuntime for auto-enable: {err}"))?;
+        }
+    }
+    
     write_status(|status| {
         status.page = types::Page::ConfigPanel {
             selected_port,
@@ -310,7 +415,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     Ok(())
 }
 
-fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
+fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
     log::info!("🟢 create_new_modbus_entry called");
     let selected_port = read_status(|status| {
         if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -386,20 +491,15 @@ fn create_new_modbus_entry(bus: &Bus) -> Result<()> {
             });
             log::info!("🟢 with_port_write completed");
 
-            // If port was occupied, restart it to apply new station configuration
+            // NOTE: Removed automatic restart when creating new station
+            // Restart will be triggered when user saves configuration (presses Esc)
+            // This allows users to configure multiple stations before restarting
             if should_restart_runtime {
                 log::info!(
-                    "🔄 Restarting native runtime for {port_name} to apply new station configuration"
+                    "🔄 Port {port_name} runtime needs restart (deferred until save)"
                 );
-                bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;
-                bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| {
-                        anyhow!("Failed to send ToggleRuntime for restart (start phase): {err}")
-                    })?;
             }
+            // The restart logic has been moved to handle_leave_page() function
         } else {
             log::error!("🟢 Port entry is None for: {port_name}");
         }
