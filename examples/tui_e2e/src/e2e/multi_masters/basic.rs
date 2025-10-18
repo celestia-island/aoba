@@ -136,6 +136,20 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             )
             .await?;
             log::info!("✅ New station created, cursor should now be on it");
+            
+            // Debug: capture screen right after station creation
+            if std::env::var("DEBUG_MODE").is_ok() {
+                let actions = vec![CursorAction::DebugBreakpoint {
+                    description: format!("after_creating_station_{}", i + 1),
+                }];
+                execute_cursor_actions(
+                    &mut tui_session,
+                    &mut tui_cap,
+                    &actions,
+                    &format!("debug_after_create_station_{}", i + 1),
+                )
+                .await?;
+            }
         }
 
         // Configure the station (skip creation since it's already done)
@@ -183,19 +197,13 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     // After configuring all Masters, save and exit Modbus panel
     log::info!("🔄 All Masters configured, saving configuration...");
 
-    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
-    log::info!("⌨️ Sending first Esc to trigger auto-enable...");
+    // Send Esc to exit ModBus panel and save configuration
+    // This triggers handle_leave_page which auto-enables the port if stations are configured
+    log::info!("⌨️ Sending Esc to save and exit ModBus panel...");
     tui_session.send("\x1b")?;
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
-
-    // Workaround for rendering bug: send another Esc to go to Entry, then Enter to return to ConfigPanel
-    log::info!("⌨️ Workaround: Esc to Entry, then Enter to ConfigPanel...");
-    tui_session.send("\x1b")?; // Go to Entry page
-    ci_utils::sleep_a_while().await;
-    tui_session.send("\r")?; // Enter (carriage return) on first port to go back to ConfigPanel
-    ci_utils::sleep_a_while().await;
-    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await; // Extra wait for auto-enable to complete
 
     // Verify we're back at port details page with retry logic
     log::info!("⏳ Waiting for screen to update to ConfigPanel...");

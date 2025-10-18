@@ -446,23 +446,15 @@ pub async fn update_tui_registers<T: Expect>(
     crate::helpers::sleep_a_while().await;
     crate::helpers::sleep_a_while().await; // Extra safety margin
 
-    // CRITICAL: Exit edit mode first before navigating!
-    // After editing the last register, we're still in HEX edit mode.
-    // We must press Esc to exit edit mode, otherwise Up arrow won't navigate properly.
-    log::info!("🚪 Exiting edit mode by pressing Esc");
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressEscape,
-        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "exit_edit_mode")
-        .await?;
-
+    // After updating all register values, cursor is on the last updated register field.
+    // We pressed Enter to confirm the last value, so we're OUT of edit mode already.
+    // We do NOT need to press Esc - that would exit the ModBus panel entirely!
+    //
     // Navigate back to top of page for next station configuration
-    // After exiting edit mode and register editing, we need to navigate back to station list.
     // The next call to configure_tui_master_common expects to be near the top of the Modbus panel (station list).
     // We need to go up but NOT leave the Modbus panel (which would take us to port config).
     // The register grid is ~3-4 rows, so Up 10 should be safe to reach station list without leaving panel.
-    log::info!("⬆️ Navigating back to station list within Modbus panel");
+    log::info!("⬆️ Navigating back to station list within Modbus panel (already out of edit mode)");
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
