@@ -13,6 +13,7 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         package: [cli_e2e, tui_e2e]
 
