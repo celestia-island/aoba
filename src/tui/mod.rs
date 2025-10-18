@@ -1235,7 +1235,7 @@ fn run_core_thread(
                         "🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                     );
 
-                    // Send register update to CLI subprocess via IPC
+                    // Send individual register update (deprecated but kept for backward compatibility)
                     if let Err(err) = subprocess_manager.send_register_update(
                         &port_name,
                         station_id,
@@ -1245,7 +1245,19 @@ fn run_core_thread(
                     ) {
                         log::warn!("❌ Failed to send register update to CLI subprocess for {port_name}: {err}");
                     } else {
-                        log::info!("✅ Sent register update to CLI subprocess for {port_name}");
+                        log::info!(
+                            "✅ Sent individual register update to CLI subprocess for {port_name}"
+                        );
+                    }
+
+                    // Send full stations update for complete synchronization
+                    log::debug!(
+                        "📡 Sending full stations update for {port_name} to ensure synchronization"
+                    );
+                    if let Err(err) = subprocess_manager.send_stations_update_for_port(&port_name) {
+                        log::warn!("❌ Failed to send stations update for {port_name}: {err}");
+                    } else {
+                        log::debug!("✅ Sent full stations update for {port_name}");
                     }
                 }
             }
