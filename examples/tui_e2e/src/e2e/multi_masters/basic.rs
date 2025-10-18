@@ -159,25 +159,6 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         log::info!("⏱️ Waiting for register updates to be fully saved...");
         ci_utils::sleep_a_while().await;
         ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
-
-        // Debug breakpoint: capture screen after configuring and updating each master
-        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-        if std::env::var("DEBUG_MODE").is_ok() {
-            log::info!(
-                "🔴 DEBUG: Capturing screen after Master {} configuration",
-                i + 1
-            );
-            let actions = vec![CursorAction::DebugBreakpoint {
-                description: format!("after_master_{}_config", i + 1),
-            }];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &actions,
-                &format!("debug_master_{}", i + 1),
-            )
-            .await?;
-        }
     }
 
     // After configuring all Masters, save and exit Modbus panel
@@ -189,11 +170,12 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
 
-    // Verify we're at ConfigPanel (port details page) with retry logic
-    log::info!("⏳ Waiting for screen to update to ConfigPanel...");
+    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
     let mut screen = String::new();
-    let max_attempts = 10;
-    let mut success = false;
+    let max_attempts = 3;
+    let mut at_config_panel = false;
+    let mut port_enabled = false;
 
     for attempt in 1..=max_attempts {
         ci_utils::sleep_a_while().await;
@@ -204,24 +186,43 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             )
             .await?;
 
-        if screen.contains("Enable Port") || screen.contains("Disable Port") {
-            log::info!(
-                "✅ Screen updated correctly on attempt {}/{}",
+        // Check if we're at ConfigPanel
+        if screen.contains("Enable Port") {
+            at_config_panel = true;
+
+            // Check if port is showing as Enabled
+            // Look for lines that contain both "Enable Port" and "Enabled"
+            for line in screen.lines() {
+                if line.contains("Enable Port") && line.contains("Enabled") {
+                    port_enabled = true;
+                    break;
+                }
+            }
+
+            if port_enabled {
+                log::info!(
+                    "✅ Port enabled and shown in UI on attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+                break;
+            } else {
+                log::info!(
+                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
+                    attempt,
+                    max_attempts
+                );
+            }
+        } else {
+            log::warn!(
+                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
                 attempt,
                 max_attempts
             );
-            success = true;
-            break;
         }
-
-        log::warn!(
-            "⏳ Attempt {}/{}: Screen not updated yet, waiting...",
-            attempt,
-            max_attempts
-        );
     }
 
-    if !success {
+    if !at_config_panel {
         return Err(anyhow!(
             "Failed to return to port details page after saving Modbus configuration (tried {} times). Screen: {}",
             max_attempts,
@@ -229,49 +230,16 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         ));
     }
 
+    if !port_enabled {
+        return Err(anyhow!(
+            "Port not showing as Enabled after {} attempts. Screen: {}",
+            max_attempts,
+            screen.lines().take(15).collect::<Vec<_>>().join("\n")
+        ));
+    }
+
     log::info!("💾 Saved Modbus configuration and auto-enabled port");
-    log::info!("✅ Successfully returned to port details page");
-
-    // Debug: check if data file was created
-    let data_files = std::fs::read_dir("/tmp")
-        .ok()
-        .map(|entries| {
-            entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    e.file_name().to_string_lossy().starts_with("aoba_cli_")
-                        && e.file_name().to_string_lossy().ends_with(".jsonl")
-                })
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-
-    if data_files.is_empty() {
-        log::error!("❌ NO DATA FILES FOUND in /tmp! Runtime may not have started.");
-    } else {
-        log::info!(
-            "✅ Found {} data file(s): {:?}",
-            data_files.len(),
-            data_files
-        );
-    }
-
-    // Debug breakpoint: capture screen before starting polls
-    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-    if std::env::var("DEBUG_MODE").is_ok() {
-        log::info!("🔴 DEBUG: Capturing screen before starting polls");
-        let actions = vec![CursorAction::DebugBreakpoint {
-            description: "before_polling".to_string(),
-        }];
-        execute_cursor_actions(
-            &mut tui_session,
-            &mut tui_cap,
-            &actions,
-            "debug_before_poll",
-        )
-        .await?;
-    }
+    log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();

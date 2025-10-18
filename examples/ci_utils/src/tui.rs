@@ -234,7 +234,7 @@ pub async fn enable_port_carefully<T: Expect>(
     // Use a retry loop to wait for UI to update
     log::info!("Verifying port enabled status with retry logic");
     let mut verified = false;
-    for attempt in 1..=5 {
+    for attempt in 1..=3 {
         let screen = cap
             .capture(session, &format!("verify_port_toggle_attempt_{attempt}"))
             .await
@@ -246,8 +246,8 @@ pub async fn enable_port_carefully<T: Expect>(
             break;
         }
 
-        if attempt < 5 {
-            log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/5)");
+        if attempt < 3 {
+            log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/3)");
             crate::helpers::sleep_a_while().await;
         }
     }
@@ -255,7 +255,7 @@ pub async fn enable_port_carefully<T: Expect>(
     if !verified {
         let final_screen = cap.capture(session, "verify_port_toggle_failed").await?;
         return Err(anyhow!(
-            "Port toggle did not reflect as enabled after 5 attempts; latest screen:\n{final_screen}"
+            "Port toggle did not reflect as enabled after 3 attempts; latest screen:\n{final_screen}"
         ));
     }
 

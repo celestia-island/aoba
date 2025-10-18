@@ -8,7 +8,7 @@ use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
     key_input::ArrowKey,
     snapshot::TerminalCapture,
-    tui::{enable_port_carefully, enter_modbus_panel},
+    tui::enter_modbus_panel,
 };
 
 /// Common cursor navigation and configuration utilities for TUI E2E tests
@@ -635,82 +635,6 @@ pub async fn configure_tui_slave_common<T: Expect>(
 
     log::info!("✅ Slave (Station {station_id}, Type {register_type:02}, Address 0x{start_address:04X}) configured successfully");
     Ok(())
-}
-
-/// Common setup for TUI port configuration
-pub async fn setup_tui_port<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-    target_port: &str,
-) -> Result<()> {
-    const MAX_RETRIES: usize = 3;
-
-    for attempt in 1..=MAX_RETRIES {
-        if attempt > 1 {
-            log::warn!(
-                "⚠️ Retry attempt {}/{} for setup_tui_port",
-                attempt,
-                MAX_RETRIES
-            );
-        }
-
-        // Navigate to the target port
-        log::info!("📍 Navigating to port {target_port}");
-        navigate_to_port(session, cap, target_port).await?;
-
-        // Enable the port
-        log::info!("🔌 Enabling port");
-        enable_port_carefully(session, cap).await?;
-
-        // Wait for port to stabilize
-        tokio::time::sleep(Duration::from_secs(3)).await;
-
-        // Verify we're still in port details page, if not, re-enter
-        let screen = cap.capture(session, "verify_still_in_port_details").await?;
-        if !screen.contains("Enable Port") {
-            log::warn!("⚠️ Kicked out of port details page during wait, re-entering {target_port}");
-            navigate_to_port(session, cap, target_port).await?;
-            tokio::time::sleep(Duration::from_secs(1)).await;
-        }
-
-        // Enter Modbus panel
-        log::info!("⚙️ Entering Modbus configuration panel");
-        match enter_modbus_panel(session, cap).await {
-            Ok(_) => {
-                log::info!(
-                    "✅ Successfully entered Modbus panel on attempt {}",
-                    attempt
-                );
-                return Ok(());
-            }
-            Err(e) => {
-                log::warn!(
-                    "❌ Failed to enter Modbus panel on attempt {}: {}",
-                    attempt,
-                    e
-                );
-
-                if attempt < MAX_RETRIES {
-                    // Escape to port list and retry
-                    log::info!("🔄 Pressing Escape to return to port list for retry...");
-                    let actions = vec![
-                        CursorAction::PressEscape,
-                        CursorAction::Sleep { ms: 500 },
-                        CursorAction::PressEscape, // Press Escape twice to ensure we're at port list
-                        CursorAction::Sleep { ms: 1000 },
-                    ];
-                    execute_cursor_actions(session, cap, &actions, "escape_to_port_list").await?;
-                } else {
-                    return Err(e);
-                }
-            }
-        }
-    }
-
-    Err(anyhow!(
-        "Failed to setup TUI port after {} attempts",
-        MAX_RETRIES
-    ))
 }
 
 /// Navigate to a port and enter its Modbus panel WITHOUT enabling it first.
