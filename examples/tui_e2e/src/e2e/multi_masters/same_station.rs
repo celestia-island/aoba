@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries};
+use crate::utils::{
+    configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -77,15 +79,15 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 3 masters on {port1} with same station ID");
-    
+
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
-    
+
     // Generate register data for all masters first (before configuration)
     let master_data: Vec<Vec<u16>> = (0..3)
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
-    
+
     for (i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {
@@ -130,11 +132,11 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
             i == 0, // is_first_station
         )
         .await?;
-        
+
         // Immediately update data for this master
         log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
         update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
-        
+
         // Wait for register updates to be saved before configuring next master
         log::info!("⏱️ Waiting for register updates to be fully saved...");
         ci_utils::sleep_a_while().await;
@@ -169,7 +171,7 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
         // Check if we're at ConfigPanel
         if screen.contains("Enable Port") {
             at_config_panel = true;
-            
+
             // Check if port is showing as Enabled
             for line in screen.lines() {
                 if line.contains("Enable Port") && line.contains("Enabled") {
@@ -177,7 +179,7 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
                     break;
                 }
             }
-            
+
             if port_enabled {
                 log::info!(
                     "✅ Port enabled and shown in UI on attempt {}/{}",

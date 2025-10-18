@@ -208,7 +208,7 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         // Check if we're at ConfigPanel
         if screen.contains("Enable Port") {
             at_config_panel = true;
-            
+
             // Check if port is showing as Enabled
             // Look for lines that contain both "Enable Port" and "Enabled"
             for line in screen.lines() {
@@ -217,7 +217,7 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
                     break;
                 }
             }
-            
+
             if port_enabled {
                 log::info!(
                     "✅ Port enabled and shown in UI on attempt {}/{}",
