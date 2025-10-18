@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use expectrl::Expect;
 use std::time::Duration;
 
 use crate::utils::{configure_tui_master_common, test_station_with_retries};
