@@ -189,11 +189,12 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
 
-    // Verify we're at ConfigPanel (port details page) with retry logic
-    log::info!("⏳ Waiting for screen to update to ConfigPanel...");
+    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
     let mut screen = String::new();
-    let max_attempts = 10;
-    let mut success = false;
+    let max_attempts = 20; // Increased for CLI subprocess startup time
+    let mut at_config_panel = false;
+    let mut port_enabled = false;
 
     for attempt in 1..=max_attempts {
         ci_utils::sleep_a_while().await;
@@ -204,24 +205,43 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             )
             .await?;
 
-        if screen.contains("Enable Port") || screen.contains("Disable Port") {
-            log::info!(
-                "✅ Screen updated correctly on attempt {}/{}",
+        // Check if we're at ConfigPanel
+        if screen.contains("Enable Port") {
+            at_config_panel = true;
+            
+            // Check if port is showing as Enabled
+            // Look for lines that contain both "Enable Port" and "Enabled"
+            for line in screen.lines() {
+                if line.contains("Enable Port") && line.contains("Enabled") {
+                    port_enabled = true;
+                    break;
+                }
+            }
+            
+            if port_enabled {
+                log::info!(
+                    "✅ Port enabled and shown in UI on attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+                break;
+            } else {
+                log::info!(
+                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
+                    attempt,
+                    max_attempts
+                );
+            }
+        } else {
+            log::warn!(
+                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
                 attempt,
                 max_attempts
             );
-            success = true;
-            break;
         }
-
-        log::warn!(
-            "⏳ Attempt {}/{}: Screen not updated yet, waiting...",
-            attempt,
-            max_attempts
-        );
     }
 
-    if !success {
+    if !at_config_panel {
         return Err(anyhow!(
             "Failed to return to port details page after saving Modbus configuration (tried {} times). Screen: {}",
             max_attempts,
@@ -229,8 +249,16 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         ));
     }
 
+    if !port_enabled {
+        return Err(anyhow!(
+            "Port not showing as Enabled after {} attempts. Screen: {}",
+            max_attempts,
+            screen.lines().take(15).collect::<Vec<_>>().join("\n")
+        ));
+    }
+
     log::info!("💾 Saved Modbus configuration and auto-enabled port");
-    log::info!("✅ Successfully returned to port details page");
+    log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Debug: check if data file was created
     let data_files = std::fs::read_dir("/tmp")
