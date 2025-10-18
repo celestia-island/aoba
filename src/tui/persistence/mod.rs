@@ -1,6 +1,11 @@
-//! Configuration persistence module
+//! Configuration persistence module for TUI
 //! 
 //! Provides functionality to save and load port configurations to/from disk.
+//! 
+//! **IMPORTANT**: This module is designed EXCLUSIVELY for TUI use. CLI processes
+//! should NOT use this persistence layer to avoid communication conflicts and race
+//! conditions. The configuration file is stored in the working directory as
+//! `aoba_tui_config.json` to ensure cross-platform compatibility.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -38,21 +43,24 @@ pub struct SerializableStation {
 }
 
 /// Get the path to the configuration file
+/// 
+/// This configuration file is **TUI-only** and should NOT be used by CLI processes
+/// to avoid communication conflicts. The file is stored in the working directory
+/// for cross-platform compatibility.
 fn get_config_path() -> Result<PathBuf> {
-    // Use /tmp for test environments, or ~/.config/aoba for production
-    let config_dir = if std::env::var("TUI_E2E_TEST").is_ok() {
-        PathBuf::from("/tmp/aoba_test_config")
-    } else {
-        dirs::config_dir()
-            .context("Failed to get config directory")?
-            .join("aoba")
-    };
-
-    fs::create_dir_all(&config_dir).context("Failed to create config directory")?;
-    Ok(config_dir.join("ports.json"))
+    // Get the current working directory (where the program binary is located)
+    let config_dir = std::env::current_dir()
+        .context("Failed to get current working directory")?;
+    
+    // Store config in working directory for cross-platform compatibility
+    // File name includes "tui" prefix to clearly indicate it's TUI-only
+    Ok(config_dir.join("aoba_tui_config.json"))
 }
 
-/// Save port configurations to disk
+/// Save port configurations to disk (TUI-only)
+/// 
+/// This function saves TUI port configurations to the working directory.
+/// CLI processes should NOT call this function.
 pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
     let path = get_config_path()?;
     
@@ -97,7 +105,10 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
     Ok(())
 }
 
-/// Load port configurations from disk
+/// Load port configurations from disk (TUI-only)
+/// 
+/// This function loads TUI port configurations from the working directory.
+/// CLI processes should NOT call this function.
 pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     let path = get_config_path()?;
     

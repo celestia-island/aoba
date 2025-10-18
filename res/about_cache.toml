@@ -39,10 +39,6 @@ name = "derive_more"
 version = "^2"
 
 [[dependencies]]
-name = "dirs"
-version = "^5"
-
-[[dependencies]]
 name = "eframe"
 version = "^0.32"
 
@@ -193,7 +189,6 @@ clap = "MIT OR Apache-2.0"
 crossterm = "MIT"
 ctrlc = "MIT/Apache-2.0"
 derive_more = "MIT"
-dirs = "MIT OR Apache-2.0"
 eframe = "MIT OR Apache-2.0"
 egui = "MIT OR Apache-2.0"
 env_logger = "MIT OR Apache-2.0"
