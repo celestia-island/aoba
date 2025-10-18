@@ -3,10 +3,11 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
+    i18n::lang,
     protocol::status::{
         read_status,
         types::{self, cursor::Cursor},
-        write_status,
+        with_port_read, with_port_write, write_status,
     },
     tui::utils::bus::{Bus, UiToCore},
 };
@@ -15,6 +16,17 @@ use super::actions::{handle_enter_action, handle_leave_page};
 
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("🟠 ModbusDashboard navigation input: {:?}", key.code);
+    
+    // Handle Ctrl+S for saving configuration
+    if matches!(key.code, KeyCode::Char('s') | KeyCode::Char('S'))
+        && key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        log::info!("💾 Ctrl+S pressed - saving configuration and enabling port");
+        // This will trigger port enable with current configuration
+        handle_save_config(bus)?;
+        return Ok(());
+    }
+    
     match key.code {
         KeyCode::Left | KeyCode::Char('h') => {
             let current_cursor = read_status(|status| match &status.page {
@@ -314,4 +326,89 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         _ => Ok(()),
     }
+}
+
+/// Handle saving configuration with Ctrl+S
+/// This marks the config as saved and triggers port enable if not already enabled
+fn handle_save_config(bus: &Bus) -> Result<()> {
+    use crate::protocol::status::{with_port_write, write_status};
+    use chrono::Local;
+
+    let selected_port = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            Ok(*selected_port)
+        } else {
+            Ok(0)
+        }
+    })?;
+
+    let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
+
+    if let Some(port_name) = port_name_opt {
+        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+            // Check if port has any stations configured
+            let has_stations = with_port_read(&port, |port| {
+                match &port.config {
+                    crate::protocol::status::types::port::PortConfig::Modbus { stations, .. } => {
+                        !stations.is_empty()
+                    }
+                }
+            }).unwrap_or(false);
+
+            if !has_stations {
+                // Show error if no stations configured
+                write_status(|status| {
+                    status.temporarily.error = Some(crate::protocol::status::types::ErrorInfo {
+                        message: lang().index.err_modbus_config_empty.clone(),
+                        timestamp: Local::now(),
+                    });
+                    Ok(())
+                })?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                return Ok(());
+            }
+
+            // Mark config as not modified
+            with_port_write(&port, |port| {
+                port.config_modified = false;
+                // Set status to AppliedSuccess for 3 seconds
+                port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::AppliedSuccess {
+                    timestamp: Local::now(),
+                };
+            });
+
+            // Check if port is already enabled
+            let is_enabled = with_port_read(&port, |port| {
+                matches!(
+                    port.state,
+                    crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                )
+            }).unwrap_or(false);
+
+            if !is_enabled {
+                // Enable the port if not already enabled
+                log::info!("Port not enabled, triggering enable via ToggleRuntime");
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!(err))?;
+            } else {
+                // Port already enabled, just restart it with new config
+                log::info!("Port already enabled, restarting with new config");
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name))
+                    .map_err(|err| anyhow!(err))?;
+            }
+
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+        }
+    }
+
+    Ok(())
 }

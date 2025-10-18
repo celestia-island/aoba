@@ -8,7 +8,11 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types, with_port_read},
+    protocol::status::{
+        read_status,
+        types::{self, port::PortStatusIndicator},
+        with_port_read,
+    },
 };
 
 fn get_port_name(selected_port: usize) -> Result<String> {
@@ -28,11 +32,24 @@ fn get_port_name(selected_port: usize) -> Result<String> {
     Ok(port_name)
 }
 
+/// Get the status indicator for the currently selected port
+fn get_port_status_indicator(selected_port: usize) -> Result<Option<PortStatusIndicator>> {
+    read_status(|status| {
+        let port_name_opt = status.ports.order.get(selected_port).cloned();
+        if let Some(port_name) = port_name_opt {
+            if let Some(port_entry) = status.ports.map.get(&port_name) {
+                return Ok(with_port_read(port_entry, |port| port.status_indicator));
+            }
+        }
+        Ok(None)
+    })
+}
+
 pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
-    // Horizontal layout: left (spinner + breadcrumb) + right (reserved)
+    // Horizontal layout: left (icon + breadcrumb) + right (status indicator)
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(10), Constraint::Length(2)])
+        .constraints([Constraint::Min(10), Constraint::Length(30)])
         .split(area);
 
     // Background bar
@@ -41,24 +58,15 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         .style(Style::default().bg(Color::Gray));
     frame.render_widget(bg_block, area);
 
-    // Build breadcrumb as a sequence of styled Spans with spinner at the beginning
+    // Build breadcrumb with port icon on the left
     let mut breadcrumb_spans: Vec<Span> = Vec::new();
 
-    // Always reserve 2 spaces from left then draw spinner which always animates.
-    // Spinner color: yellow when busy, white when idle.
-    let busy = read_status(|status| Ok(status.temporarily.busy.busy))?;
-    let frame_index = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
-    let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
-    let ch = frames[frame_index % frames.len()];
-    // leading spaces
+    // Static port/plug icon on the left (🔌 plug emoji)
     breadcrumb_spans.push(Span::raw("  "));
-    // spinner with color depending on busy
-    let spinner_style = if busy {
-        Style::default().fg(Color::Yellow)
-    } else {
-        Style::default().fg(Color::White)
-    };
-    breadcrumb_spans.push(Span::styled(ch.to_string(), spinner_style));
+    breadcrumb_spans.push(Span::styled(
+        "🔌",
+        Style::default().fg(Color::White),
+    ));
     breadcrumb_spans.push(Span::raw("   "));
 
     // Add breadcrumb path based on current page
@@ -115,5 +123,117 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
     let title_para = Paragraph::new(vec![Line::from(breadcrumb_spans)]).alignment(Alignment::Left);
     frame.render_widget(title_para, chunks[0]);
 
+    // Render status indicator on the right side (only for port-related pages)
+    let selected_port_opt = match read_status(|status| Ok(status.page.clone()))? {
+        types::Page::ConfigPanel { selected_port, .. }
+        | types::Page::ModbusDashboard { selected_port, .. }
+        | types::Page::LogPanel { selected_port, .. } => Some(selected_port),
+        _ => None,
+    };
+
+    if let Some(selected_port) = selected_port_opt {
+        if let Some(indicator) = get_port_status_indicator(selected_port)? {
+            let (status_text, status_icon, status_color) = get_status_display(&indicator)?;
+            
+            // Check if we need to show AppliedSuccess for only 3 seconds
+            let should_show_applied = if let PortStatusIndicator::AppliedSuccess { timestamp } = indicator {
+                use chrono::Local;
+                let elapsed = Local::now().signed_duration_since(timestamp);
+                elapsed.num_seconds() < 3
+            } else {
+                true
+            };
+
+            if should_show_applied {
+                let mut status_spans = Vec::new();
+                status_spans.push(Span::styled(
+                    status_text,
+                    Style::default().fg(status_color),
+                ));
+                status_spans.push(Span::raw(" "));
+                status_spans.push(Span::styled(
+                    status_icon,
+                    Style::default().fg(status_color),
+                ));
+
+                let status_para = Paragraph::new(vec![Line::from(status_spans)])
+                    .alignment(Alignment::Right);
+                frame.render_widget(status_para, chunks[1]);
+            }
+        }
+    }
+
     Ok(())
+}
+
+/// Get the display text, icon, and color for a port status indicator
+fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String, Color)> {
+    let lang = lang();
+    
+    match indicator {
+        PortStatusIndicator::NotStarted => {
+            Ok((
+                lang.protocol.common.status_not_started.clone(),
+                "×".to_string(),
+                Color::Red,
+            ))
+        }
+        PortStatusIndicator::Starting => {
+            // Spinning animation for "starting" state
+            let frame_index = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
+            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
+            let spinner = frames[frame_index % frames.len()].to_string();
+            
+            Ok((
+                lang.protocol.common.status_starting.clone(),
+                spinner,
+                Color::Yellow,
+            ))
+        }
+        PortStatusIndicator::Running => {
+            Ok((
+                lang.protocol.common.status_running.clone(),
+                "●".to_string(),
+                Color::Green,
+            ))
+        }
+        PortStatusIndicator::RunningWithChanges => {
+            Ok((
+                lang.protocol.common.status_running_with_changes.clone(),
+                "○".to_string(),
+                Color::Yellow,
+            ))
+        }
+        PortStatusIndicator::Saving => {
+            // Green spinning animation for "saving" state
+            let frame_index = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
+            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
+            let spinner = frames[frame_index % frames.len()].to_string();
+            
+            Ok((
+                lang.protocol.common.status_saving.clone(),
+                spinner,
+                Color::Green,
+            ))
+        }
+        PortStatusIndicator::Syncing => {
+            // Yellow spinning animation for "syncing" state
+            let frame_index = read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
+            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
+            let spinner = frames[frame_index % frames.len()].to_string();
+            
+            Ok((
+                lang.protocol.common.status_syncing.clone(),
+                spinner,
+                Color::Yellow,
+            ))
+        }
+        PortStatusIndicator::AppliedSuccess { .. } => {
+            Ok((
+                lang.protocol.common.status_applied_success.clone(),
+                "✔".to_string(),
+                Color::Green,
+            ))
+        }
+    }
 }
