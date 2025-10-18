@@ -8,7 +8,6 @@ use chrono::Local;
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,
-    convert::TryFrom,
     fs,
     io::{self, Write},
     path::PathBuf,
@@ -272,6 +271,10 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
     Ok(())
 }
 
+// DEPRECATED: This function is no longer used with the new StationsUpdate IPC message format.
+// Kept for reference during transition to new Config structure.
+// TODO: Remove this function once full state synchronization is implemented.
+#[allow(dead_code)]
 fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
     // Read current station values and rebuild the merged data file
     let merged_data = read_status(|status| {
@@ -350,6 +353,11 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+// DEPRECATED: This function is no longer used with the new StationsUpdate IPC message format.
+// Individual RegisterUpdate messages have been replaced by full StationsUpdate synchronization.
+// Kept for reference during transition to new Config structure.
+// TODO: Remove this function once full state synchronization is implemented.
+#[allow(dead_code)]
 fn apply_register_update_from_ipc(
     port_name: &str,
     station_id: u8,
@@ -500,40 +508,45 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Heartbeat { .. } => {
             // Heartbeat can be ignored for now or used for future monitoring
         }
-        IpcMessage::RegisterUpdate {
-            station_id,
-            register_type,
-            start_address,
-            values,
-            ..
-        } => {
+        IpcMessage::StationsUpdate { stations_data, .. } => {
             log::info!(
-                "CLI[{port_name}]: RegisterUpdate station={station_id}, type={register_type}, addr=0x{start_address:04X}, values={values:?}"
-            );
-            append_port_log(
-                port_name,
-                format!(
-                    "CLI register update: station={station_id}, type={register_type}, addr=0x{start_address:04X}, values={values:?}"
-                ),
+                "CLI[{port_name}]: StationsUpdate received, {} bytes",
+                stations_data.len()
             );
 
-            if let Ok(register_mode) = RegisterMode::try_from(register_type.as_str()) {
-                if let Err(err) = apply_register_update_from_ipc(
+            // Deserialize and update the port's station configuration
+            if let Ok(stations) =
+                postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data)
+            {
+                log::info!("CLI[{port_name}]: Decoded {} stations", stations.len());
+                append_port_log(
                     port_name,
-                    station_id,
-                    register_mode,
-                    start_address,
-                    &values,
-                ) {
-                    log::warn!(
-                        "Register update for {port_name}: failed to apply to storage: {err:#}"
-                    );
-                }
+                    format!("CLI stations update: {} stations", stations.len()),
+                );
+
+                // TODO: Apply the stations update to the port's ModbusRegisterItem list
+                // This will require converting from StationConfig format to ModbusRegisterItem format
+                // For now, just log it
             } else {
-                log::warn!(
-                    "Register update for {port_name}: unrecognized register type {register_type}"
+                log::warn!("CLI[{port_name}]: Failed to deserialize stations data");
+                append_port_log(
+                    port_name,
+                    "CLI stations update: failed to deserialize".to_string(),
                 );
             }
+        }
+        IpcMessage::StateLockRequest { requester, .. } => {
+            log::info!("CLI[{port_name}]: StateLockRequest from {requester}");
+            append_port_log(
+                port_name,
+                format!("CLI state lock request from {requester}"),
+            );
+            // TODO: Implement state locking mechanism
+        }
+        IpcMessage::StateLockAck { locked, .. } => {
+            log::info!("CLI[{port_name}]: StateLockAck locked={locked}");
+            append_port_log(port_name, format!("CLI state lock ack: locked={locked}"));
+            // TODO: Handle state lock acknowledgment
         }
         IpcMessage::Status {
             status, details, ..
@@ -549,10 +562,6 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Log { level, message, .. } => {
             log::info!("CLI[{port_name}]: log[{level}] {message}");
             append_port_log(port_name, format!("CLI log[{level}]: {message}"));
-        }
-        IpcMessage::ConfigUpdate { .. } => {
-            // ConfigUpdate is sent FROM TUI TO CLI, so we don't expect to receive it here
-            log::warn!("CLI[{port_name}]: Unexpected ConfigUpdate message received");
         }
     }
     Ok(())
@@ -1226,7 +1235,7 @@ fn run_core_thread(
                         "🔵 SendRegisterUpdate requested for {port_name}: station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                     );
 
-                    // Send register update to CLI subprocess via IPC
+                    // Send individual register update (deprecated but kept for backward compatibility)
                     if let Err(err) = subprocess_manager.send_register_update(
                         &port_name,
                         station_id,
@@ -1236,7 +1245,19 @@ fn run_core_thread(
                     ) {
                         log::warn!("❌ Failed to send register update to CLI subprocess for {port_name}: {err}");
                     } else {
-                        log::info!("✅ Sent register update to CLI subprocess for {port_name}");
+                        log::info!(
+                            "✅ Sent individual register update to CLI subprocess for {port_name}"
+                        );
+                    }
+
+                    // Send full stations update for complete synchronization
+                    log::debug!(
+                        "📡 Sending full stations update for {port_name} to ensure synchronization"
+                    );
+                    if let Err(err) = subprocess_manager.send_stations_update_for_port(&port_name) {
+                        log::warn!("❌ Failed to send stations update for {port_name}: {err}");
+                    } else {
+                        log::debug!("✅ Sent full stations update for {port_name}");
                     }
                 }
             }
