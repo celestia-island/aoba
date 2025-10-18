@@ -78,11 +78,11 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 3 masters on {port1} with same station ID");
-    
+
     // Navigate to port and enter ModBus panel (once for all masters)
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
     enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-    
+
     for (i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {

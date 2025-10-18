@@ -136,7 +136,7 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
             )
             .await?;
             log::info!("✅ New station created, cursor should now be on it");
-            
+
             // Debug: capture screen right after station creation
             if std::env::var("DEBUG_MODE").is_ok() {
                 let actions = vec![CursorAction::DebugBreakpoint {

@@ -216,7 +216,7 @@ pub async fn configure_tui_master_common<T: Expect>(
     // Set Station ID if not 1
     if station_id != 1 {
         log::info!("📝 Setting station ID to {station_id}");
-        
+
         // When is_first_station=false, cursor is already on StationId field after creation
         // When is_first_station=true, we need to navigate to StationId field
         let actions = if is_first_station {
@@ -290,23 +290,28 @@ pub async fn configure_tui_master_common<T: Expect>(
         // - Type 02 (Discrete): position 1
         // - Type 03 (Holding): position 2 (DEFAULT)
         // - Type 04 (Input): position 3
-        
+
         if register_type == 3 {
             // Optimization: Skip selector for Holding (03) since it's the default
-            log::info!("✅ Register Type is already Holding (03) by default, skipping confirmation");
+            log::info!(
+                "✅ Register Type is already Holding (03) by default, skipping confirmation"
+            );
         } else {
             // Need to change register type
-            log::info!("📝 Setting register type to {:02} (from default Holding/03)", register_type);
-            
+            log::info!(
+                "📝 Setting register type to {:02} (from default Holding/03)",
+                register_type
+            );
+
             // Calculate navigation: default is position 2 (Holding)
             let default_pos = 2;
             let target_pos = register_type as usize - 1; // 01->0, 02->1, 03->2, 04->3
-            
+
             let mut actions = vec![
                 CursorAction::PressEnter, // Open selector
                 CursorAction::Sleep { ms: 300 },
             ];
-            
+
             // Navigate to target position
             if target_pos < default_pos {
                 // Navigate left
@@ -321,13 +326,13 @@ pub async fn configure_tui_master_common<T: Expect>(
                     count: target_pos - default_pos,
                 });
             }
-            
+
             actions.extend_from_slice(&[
                 CursorAction::Sleep { ms: 300 },
                 CursorAction::PressEnter, // Confirm selection
                 CursorAction::Sleep { ms: 500 },
             ]);
-            
+
             execute_cursor_actions(
                 session,
                 cap,
@@ -336,7 +341,7 @@ pub async fn configure_tui_master_common<T: Expect>(
             )
             .await?;
         }
-        
+
         // No need for explicit repositioning - we're already on Register Type field
         // (or we just confirmed a selection which leaves us on Register Type field)
         // Continue to Start Address which is Down 1 from here
