@@ -45,6 +45,18 @@ Aoba is a multi-protocol debugging and simulation CLI tool that primarily suppor
 - Use `cargo check` to verify compilation
 - Follow Rust best practices and ownership semantics
 
+### Code Import Conventions
+- When creating or modifying Rust code, organize `use` statements according to the following guidelines for imports in Rust:
+- Group same-package/module imports together as much as possible, merging them where suitable (e.g., several separate `use a::xxx` can be combined into `use a::{xxx, xxx::{xxx, self}};`).
+- Group all `use` statements into three categories, with an empty line between each group, and ensure a final empty line after all `use` statements to separate from the main code.
+- **Group 1**: External general-purpose libraries like `anyhow`, `serde`, `base64`, `chrono`, `tokio`, etc. This includes `std` (despite it being the standard library, it's considered an internal lib but should be placed in this first group).
+- **Group 2**: External domain-specific libraries like `rmodbus`, `ratatui`, `tauri`, `axum`, `sea_orm`, etc., used for specialized business requirements.
+- **Group 3**: Internal references starting with `crate::`, `super::`, or references to local Workspace crates via relative paths (except for patched external crates, which are treated as emergency patches rather than internal).
+- After organizing the imports, always run `cargo fmt` to ensure intra-group ordering follows Rust compiler formatting recommendations.
+- `use` statements must all be placed at the start of the file, without exceptions, except in isolated modules like `mod test { ... }` for unit tests.
+- Avoid abbreviations in imported identifiers unless the original name is particularly long; ensure readability (e.g., do not shorten `KeyCode` to `KC`).
+- For frequently used modules like `types`, `models` where direct imports risk naming conflicts, import the module itself and reference items through it (e.g., start with `use xxx::types::{self, yyy::zzz::SpecialEnum}` and use `types::xxx` in code instead of importing individual items).
+
 ### Testing Process
 
 To ensure smooth testing, the following requirements must be followed:
