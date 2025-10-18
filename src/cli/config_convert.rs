@@ -107,7 +107,7 @@ pub fn register_items_to_stations(
     for item in items {
         let map = station_map
             .entry(item.station_id)
-            .or_insert_with(RegisterMap::default);
+            .or_default();
 
         let range = RegisterRange {
             address_start: item.register_address,

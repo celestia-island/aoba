@@ -557,7 +557,42 @@ impl SubprocessManager {
         self.processes.keys().cloned().collect()
     }
 
+    /// Send full stations update to CLI subprocess via IPC
+    /// This sends the complete station configuration for the port
+    pub fn send_stations_update_for_port(&mut self, port_name: &str) -> Result<()> {
+        use crate::protocol::status::port_stations_to_config;
+        use crate::protocol::status::read_status;
+
+        // Get current stations configuration from the port
+        let stations: Vec<crate::cli::config::StationConfig> = read_status(|status| {
+            if let Some(port_arc) = status.ports.map.get(port_name) {
+                let port_data = port_arc.read();
+                let stations_vec = port_stations_to_config(&port_data);
+                Ok(stations_vec)
+            } else {
+                Ok(vec![]) // Return empty vec if port not found
+            }
+        })?;
+
+        if stations.is_empty() {
+            return Err(anyhow!("Port {port_name} not found or has no stations"));
+        }
+
+        // Send to subprocess
+        if let Some(subprocess) = self.processes.get_mut(port_name) {
+            subprocess.send_stations_update(&stations)?;
+            log::info!(
+                "✅ Sent stations update ({} stations) for {port_name}",
+                stations.len()
+            );
+            Ok(())
+        } else {
+            Err(anyhow!("No subprocess found for port {port_name}"))
+        }
+    }
+
     /// Send register update to CLI subprocess via IPC
+    /// DEPRECATED: Consider using send_stations_update_for_port for full synchronization
     pub fn send_register_update(
         &mut self,
         port_name: &str,
