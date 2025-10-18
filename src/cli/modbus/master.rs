@@ -362,36 +362,82 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
                     match msg {
-                        crate::protocol::ipc::IpcMessage::ConfigUpdate {
-                            station_id: new_station_id,
-                            register_type,
-                            start_address: new_start_address,
-                            register_length: new_length,
-                            ..
+                        crate::protocol::ipc::IpcMessage::StationsUpdate {
+                            stations_data, ..
                         } => {
-                            log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
-                            // TODO: Apply configuration updates to runtime
-                            // For now, just log them
-                        }
-                        crate::protocol::ipc::IpcMessage::RegisterUpdate {
-                            station_id: _,
-                            register_type,
-                            start_address: update_start_addr,
-                            values,
-                            ..
-                        } => {
-                            log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
-                            // Apply register updates directly to storage
-                            let mut context = storage.lock().unwrap();
-                            if register_type == "holding" {
-                                for (i, &val) in values.iter().enumerate() {
-                                    if let Err(e) =
-                                        context.set_holding(update_start_addr + i as u16, val)
-                                    {
-                                        log::warn!("Failed to set holding register: {e}");
+                            log::info!("Received stations update, {} bytes", stations_data.len());
+
+                            // Deserialize stations using postcard
+                            if let Ok(stations) = postcard::from_bytes::<
+                                Vec<crate::cli::config::StationConfig>,
+                            >(&stations_data)
+                            {
+                                log::info!("Deserialized {} stations", stations.len());
+
+                                // Apply the station updates to storage
+                                let mut context = storage.lock().unwrap();
+                                for station in &stations {
+                                    log::info!(
+                                        "  Applying Station {}: mode={:?}",
+                                        station.id,
+                                        station.mode
+                                    );
+
+                                    // Update holding registers
+                                    for range in &station.map.holding {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_holding(addr, val) {
+                                                log::warn!(
+                                                    "Failed to set holding register at {}: {}",
+                                                    addr,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // Update coils
+                                    for range in &station.map.coils {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_coil(addr, val != 0) {
+                                                log::warn!("Failed to set coil at {}: {}", addr, e);
+                                            }
+                                        }
+                                    }
+
+                                    // Update discrete inputs
+                                    for range in &station.map.discrete_inputs {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_discrete(addr, val != 0) {
+                                                log::warn!(
+                                                    "Failed to set discrete input at {}: {}",
+                                                    addr,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // Update input registers
+                                    for range in &station.map.input {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_input(addr, val) {
+                                                log::warn!(
+                                                    "Failed to set input register at {}: {}",
+                                                    addr,
+                                                    e
+                                                );
+                                            }
+                                        }
                                     }
                                 }
-                                log::info!("Applied register update to storage");
+                                log::info!("Applied all station updates to storage");
+                            } else {
+                                log::warn!("Failed to deserialize stations data");
                             }
                         }
                         _ => {

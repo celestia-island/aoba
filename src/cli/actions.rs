@@ -279,33 +279,55 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
     let _tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
 
     log::info!(
-        "Starting port: {} with mode: {:?}",
+        "Starting port: {} with {} stations",
         config.port_name,
-        config.communication_mode
+        config.stations.len()
     );
 
-    // Start the appropriate handlers based on communication mode
-    match config.communication_mode {
-        super::config::CommunicationMode::Master => {
-            // Start master mode
-            for modbus_config in &config.modbus_configs {
-                log::info!("  - Master config: station_id={}, register_type={}, start_address={}, length={}", 
-                    modbus_config.station_id, modbus_config.register_type, modbus_config.start_address, modbus_config.length);
+    // Start handlers for each station based on its mode
+    for station in &config.stations {
+        log::info!(
+            "  - Station {}: mode={}, coils={}, discrete={}, holding={}, input={}",
+            station.id,
+            station.mode,
+            station.map.coils.len(),
+            station.map.discrete_inputs.len(),
+            station.map.holding.len(),
+            station.map.input.len()
+        );
 
-                // TODO: Implement master startup logic
-                // Here we need to spawn the appropriate master handlers according to the config
-            }
+        // Log register ranges for this station
+        for range in &station.map.coils {
+            log::info!(
+                "    Coils: addr={}, len={}",
+                range.address_start,
+                range.length
+            );
         }
-        super::config::CommunicationMode::Slave => {
-            // Start slave mode
-            for modbus_config in &config.modbus_configs {
-                log::info!("  - Slave config: station_id={}, register_type={}, start_address={}, length={}", 
-                    modbus_config.station_id, modbus_config.register_type, modbus_config.start_address, modbus_config.length);
+        for range in &station.map.discrete_inputs {
+            log::info!(
+                "    Discrete Inputs: addr={}, len={}",
+                range.address_start,
+                range.length
+            );
+        }
+        for range in &station.map.holding {
+            log::info!(
+                "    Holding: addr={}, len={}",
+                range.address_start,
+                range.length
+            );
+        }
+        for range in &station.map.input {
+            log::info!(
+                "    Input: addr={}, len={}",
+                range.address_start,
+                range.length
+            );
+        }
 
-                // TODO: Implement slave startup logic
-                // Here we need to spawn the appropriate slave handlers according to the config
-            }
-        }
+        // TODO: Implement station startup logic based on mode
+        // For now, we just log the station information
     }
 
     // TODO: Wait for all tasks to finish
