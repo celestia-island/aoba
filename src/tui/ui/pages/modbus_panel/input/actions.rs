@@ -349,11 +349,8 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 .as_ref()
                 .map(|p| {
                     let port = p.read();
-                    if let types::port::PortConfig::Modbus { stations, .. } = &port.config {
-                        !stations.is_empty()
-                    } else {
-                        false
-                    }
+                    let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+                    !stations.is_empty()
                 })
                 .unwrap_or(false);
 

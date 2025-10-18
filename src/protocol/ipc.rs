@@ -45,17 +45,6 @@ pub enum IpcMessage {
         timestamp: Option<i64>,
     },
 
-    /// Modbus register data update (for master/server providing data)
-    RegisterUpdate {
-        port_name: String,
-        station_id: u8,
-        register_type: String, // "holding", "input", "coil", "discrete_input"
-        start_address: u16,
-        values: Vec<u16>, // For holding/input registers (also used for coil/discrete input as 0/1)
-        #[serde(default)]
-        timestamp: Option<i64>,
-    },
-
     /// Status report from CLI subprocess
     Status {
         port_name: String,
@@ -73,14 +62,25 @@ pub enum IpcMessage {
         timestamp: Option<i64>,
     },
 
-    /// Configuration update from TUI to CLI subprocess
-    /// Used to synchronize station configuration changes
-    ConfigUpdate {
-        port_name: String,
-        station_id: u8,
-        register_type: String, // "holding", "input", "coil", "discrete_input"
-        start_address: u16,
-        register_length: u16,
+    /// Full station configuration update (TUI -> CLI or CLI -> TUI)
+    /// This replaces all previous station configs with the new list
+    StationsUpdate {
+        /// Serialized stations data using postcard
+        stations_data: Vec<u8>,
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
+
+    /// Request to lock state for synchronization (before sending update)
+    StateLockRequest {
+        requester: String, // "tui" or "cli"
+        #[serde(default)]
+        timestamp: Option<i64>,
+    },
+
+    /// Acknowledge state lock (lock granted or released)
+    StateLockAck {
+        locked: bool,
         #[serde(default)]
         timestamp: Option<i64>,
     },
@@ -155,38 +155,26 @@ impl IpcMessage {
         }
     }
 
-    /// Create a RegisterUpdate message with current timestamp
-    pub fn register_update(
-        port_name: String,
-        station_id: u8,
-        register_type: String,
-        start_address: u16,
-        values: Vec<u16>,
-    ) -> Self {
-        Self::RegisterUpdate {
-            port_name,
-            station_id,
-            register_type,
-            start_address,
-            values,
+    /// Create a StationsUpdate message with current timestamp
+    pub fn stations_update(stations_data: Vec<u8>) -> Self {
+        Self::StationsUpdate {
+            stations_data,
             timestamp: Some(Self::timestamp()),
         }
     }
 
-    /// Create a ConfigUpdate message with current timestamp
-    pub fn config_update(
-        port_name: String,
-        station_id: u8,
-        register_type: String,
-        start_address: u16,
-        register_length: u16,
-    ) -> Self {
-        Self::ConfigUpdate {
-            port_name,
-            station_id,
-            register_type,
-            start_address,
-            register_length,
+    /// Create a StateLockRequest message with current timestamp
+    pub fn state_lock_request(requester: String) -> Self {
+        Self::StateLockRequest {
+            requester,
+            timestamp: Some(Self::timestamp()),
+        }
+    }
+
+    /// Create a StateLockAck message with current timestamp
+    pub fn state_lock_ack(locked: bool) -> Self {
+        Self::StateLockAck {
+            locked,
             timestamp: Some(Self::timestamp()),
         }
     }

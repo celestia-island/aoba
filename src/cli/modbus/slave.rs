@@ -574,21 +574,14 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     last_written_values = Some(response.values.clone());
 
                     // Send RegisterUpdate via IPC
-                    if let Some(ref mut ipc_conns) = ipc {
+                    if let Some(ref _ipc_conns) = ipc {
                         log::info!(
-                            "IPC: Sending RegisterUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
+                            "IPC: Would send StationsUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
                             response.values
                         );
-                        let _ = ipc_conns.status.send(
-                            &crate::protocol::ipc::IpcMessage::RegisterUpdate {
-                                port_name: port.to_string(),
-                                station_id,
-                                register_type: register_mode.clone(),
-                                start_address: register_address,
-                                values: response.values.clone(),
-                                timestamp: None,
-                            },
-                        );
+                        // TODO: With new design, we send full StationsUpdate instead of individual RegisterUpdate
+                        // For now, we skip this to avoid breaking the new IPC message format
+                        // Later, we'll implement proper state synchronization that sends all stations
                     }
                 }
             }
