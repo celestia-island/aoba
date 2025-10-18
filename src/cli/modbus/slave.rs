@@ -574,7 +574,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     last_written_values = Some(response.values.clone());
 
                     // Send RegisterUpdate via IPC
-                    if let Some(ref mut ipc_conns) = ipc {
+                    if let Some(ref _ipc_conns) = ipc {
                         log::info!(
                             "IPC: Would send StationsUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
                             response.values

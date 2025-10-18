@@ -363,13 +363,15 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
                     match msg {
                         crate::protocol::ipc::IpcMessage::StationsUpdate {
-                            stations_data,
-                            ..
+                            stations_data, ..
                         } => {
                             log::info!("Received stations update, {} bytes", stations_data.len());
                             // TODO: Deserialize stations_data using postcard and apply updates
                             // For now, just log it
-                            if let Ok(stations) = postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data) {
+                            if let Ok(stations) = postcard::from_bytes::<
+                                Vec<crate::cli::config::StationConfig>,
+                            >(&stations_data)
+                            {
                                 log::info!("Deserialized {} stations", stations.len());
                                 for station in stations {
                                     log::info!("  Station {}: mode={:?}", station.id, station.mode);

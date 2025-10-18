@@ -348,7 +348,7 @@ impl ManagedSubprocess {
             // Serialize stations using postcard
             let stations_data = postcard::to_allocvec(stations)
                 .map_err(|e| anyhow!("Failed to serialize stations: {}", e))?;
-            
+
             let msg = IpcMessage::stations_update(stations_data);
             client.send(&msg)?;
             log::info!(
@@ -364,7 +364,7 @@ impl ManagedSubprocess {
 
     // Legacy methods kept for compatibility but marked as deprecated
     // They now convert to the new stations_update format
-    
+
     /// Send a configuration update to the subprocess via command channel
     /// DEPRECATED: Use send_stations_update instead
     pub fn send_config_update(

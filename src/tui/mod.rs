@@ -272,6 +272,10 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
     Ok(())
 }
 
+// DEPRECATED: This function is no longer used with the new StationsUpdate IPC message format.
+// Kept for reference during transition to new Config structure.
+// TODO: Remove this function once full state synchronization is implemented.
+#[allow(dead_code)]
 fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
     // Read current station values and rebuild the merged data file
     let merged_data = read_status(|status| {
@@ -350,6 +354,11 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+// DEPRECATED: This function is no longer used with the new StationsUpdate IPC message format.
+// Individual RegisterUpdate messages have been replaced by full StationsUpdate synchronization.
+// Kept for reference during transition to new Config structure.
+// TODO: Remove this function once full state synchronization is implemented.
+#[allow(dead_code)]
 fn apply_register_update_from_ipc(
     port_name: &str,
     station_id: u8,
@@ -500,23 +509,22 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Heartbeat { .. } => {
             // Heartbeat can be ignored for now or used for future monitoring
         }
-        IpcMessage::StationsUpdate {
-            stations_data,
-            ..
-        } => {
+        IpcMessage::StationsUpdate { stations_data, .. } => {
             log::info!(
                 "CLI[{port_name}]: StationsUpdate received, {} bytes",
                 stations_data.len()
             );
-            
+
             // Deserialize and update the port's station configuration
-            if let Ok(stations) = postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data) {
+            if let Ok(stations) =
+                postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data)
+            {
                 log::info!("CLI[{port_name}]: Decoded {} stations", stations.len());
                 append_port_log(
                     port_name,
                     format!("CLI stations update: {} stations", stations.len()),
                 );
-                
+
                 // TODO: Apply the stations update to the port's ModbusRegisterItem list
                 // This will require converting from StationConfig format to ModbusRegisterItem format
                 // For now, just log it
@@ -530,7 +538,10 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         }
         IpcMessage::StateLockRequest { requester, .. } => {
             log::info!("CLI[{port_name}]: StateLockRequest from {requester}");
-            append_port_log(port_name, format!("CLI state lock request from {requester}"));
+            append_port_log(
+                port_name,
+                format!("CLI state lock request from {requester}"),
+            );
             // TODO: Implement state locking mechanism
         }
         IpcMessage::StateLockAck { locked, .. } => {
@@ -539,9 +550,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             // TODO: Handle state lock acknowledgment
         }
         IpcMessage::Status {
-            status,
-            details,
-            ..
+            status, details, ..
         } => {
             let msg = if let Some(details) = details {
                 format!("CLI status: {status} ({details})")
