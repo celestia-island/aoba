@@ -1,14 +1,23 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Communication mode
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Communication mode (Master or Slave)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum CommunicationMode {
+pub enum StationMode {
     /// Modbus master mode
     Master,
     /// Modbus slave mode
     Slave,
+}
+
+impl fmt::Display for StationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StationMode::Master => write!(f, "master"),
+            StationMode::Slave => write!(f, "slave"),
+        }
+    }
 }
 
 /// Communication method
@@ -36,28 +45,68 @@ pub enum PersistenceMode {
 }
 
 /// Register type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RegisterType {
-    /// Holding registers
-    Holding,
-    /// Input registers
-    Input,
-    /// Coil registers
+    /// Coil registers (read/write bits)
     Coils,
-    /// Discrete input registers
-    Discrete,
+    /// Discrete input registers (read-only bits)
+    DiscreteInputs,
+    /// Holding registers (read/write words)
+    Holding,
+    /// Input registers (read-only words)
+    Input,
 }
 
 impl fmt::Display for RegisterType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            RegisterType::Coils => write!(f, "coils"),
+            RegisterType::DiscreteInputs => write!(f, "discrete_inputs"),
             RegisterType::Holding => write!(f, "holding"),
             RegisterType::Input => write!(f, "input"),
-            RegisterType::Coils => write!(f, "coils"),
-            RegisterType::Discrete => write!(f, "discrete"),
         }
     }
+}
+
+/// Register range configuration for a specific register type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterRange {
+    /// Start address
+    pub address_start: u16,
+    /// Number of registers
+    pub length: u16,
+    /// Initial values (for master mode, optional for slave mode)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub initial_values: Vec<u16>,
+}
+
+/// Register map containing all register types for a station
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RegisterMap {
+    /// Coil register ranges
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coils: Vec<RegisterRange>,
+    /// Discrete input register ranges
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discrete_inputs: Vec<RegisterRange>,
+    /// Holding register ranges
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holding: Vec<RegisterRange>,
+    /// Input register ranges
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input: Vec<RegisterRange>,
+}
+
+/// Station configuration with ID, mode, and register map
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationConfig {
+    /// Station ID (1-247 for Modbus)
+    pub id: u8,
+    /// Station mode (Master or Slave)
+    pub mode: StationMode,
+    /// Register map for this station
+    pub map: RegisterMap,
 }
 
 /// Communication thread parameters
@@ -75,19 +124,6 @@ pub struct CommunicationParams {
     pub persistence: PersistenceMode,
 }
 
-/// Modbus register information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModbusRegister {
-    /// Station ID
-    pub station_id: u8,
-    /// Register type
-    pub register_type: RegisterType,
-    /// Start address
-    pub start_address: u16,
-    /// Number of registers
-    pub length: u16,
-}
-
 /// Root configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -95,12 +131,10 @@ pub struct Config {
     pub port_name: String,
     /// Port communication configuration (baud rate)
     pub baud_rate: u32,
-    /// Port communication mode
-    pub communication_mode: CommunicationMode,
     /// Communication thread parameters
     pub communication_params: CommunicationParams,
-    /// List of Modbus configurations
-    pub modbus_configs: Vec<ModbusRegister>,
+    /// List of station configurations
+    pub stations: Vec<StationConfig>,
 }
 
 impl Default for CommunicationParams {
@@ -115,13 +149,22 @@ impl Default for CommunicationParams {
     }
 }
 
-impl Default for ModbusRegister {
+impl Default for RegisterRange {
     fn default() -> Self {
         Self {
-            station_id: 1,
-            register_type: RegisterType::Holding,
-            start_address: 0,
+            address_start: 0,
             length: 10,
+            initial_values: Vec::new(),
+        }
+    }
+}
+
+impl Default for StationConfig {
+    fn default() -> Self {
+        Self {
+            id: 1,
+            mode: StationMode::Master,
+            map: RegisterMap::default(),
         }
     }
 }
@@ -142,6 +185,16 @@ impl Config {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
+
+    /// Serialize to postcard bytes for IPC communication
+    pub fn to_postcard(&self) -> Result<Vec<u8>, postcard::Error> {
+        postcard::to_allocvec(self)
+    }
+
+    /// Deserialize from postcard bytes for IPC communication
+    pub fn from_postcard(bytes: &[u8]) -> Result<Self, postcard::Error> {
+        postcard::from_bytes(bytes)
+    }
 }
 
 #[cfg(test)]
@@ -153,20 +206,31 @@ mod tests {
         let config = Config {
             port_name: "COM1".to_string(),
             baud_rate: 9600,
-            communication_mode: CommunicationMode::Master,
             communication_params: CommunicationParams::default(),
-            modbus_configs: vec![
-                ModbusRegister {
-                    station_id: 1,
-                    register_type: RegisterType::Holding,
-                    start_address: 0,
-                    length: 10,
+            stations: vec![
+                StationConfig {
+                    id: 1,
+                    mode: StationMode::Master,
+                    map: RegisterMap {
+                        holding: vec![RegisterRange {
+                            address_start: 0,
+                            length: 10,
+                            initial_values: vec![100, 200, 300],
+                        }],
+                        ..Default::default()
+                    },
                 },
-                ModbusRegister {
-                    station_id: 2,
-                    register_type: RegisterType::Input,
-                    start_address: 100,
-                    length: 5,
+                StationConfig {
+                    id: 2,
+                    mode: StationMode::Slave,
+                    map: RegisterMap {
+                        input: vec![RegisterRange {
+                            address_start: 100,
+                            length: 5,
+                            initial_values: Vec::new(),
+                        }],
+                        ..Default::default()
+                    },
                 },
             ],
         };
@@ -176,8 +240,14 @@ mod tests {
 
         let parsed_config = Config::from_json(&json).unwrap();
         assert_eq!(parsed_config.port_name, "COM1");
-        assert_eq!(parsed_config.modbus_configs.len(), 2);
-        assert_eq!(parsed_config.modbus_configs[0].station_id, 1);
-        assert_eq!(parsed_config.modbus_configs[1].station_id, 2);
+        assert_eq!(parsed_config.stations.len(), 2);
+        assert_eq!(parsed_config.stations[0].id, 1);
+        assert_eq!(parsed_config.stations[1].id, 2);
+
+        // Test postcard serialization
+        let postcard_bytes = config.to_postcard().unwrap();
+        let parsed_postcard = Config::from_postcard(&postcard_bytes).unwrap();
+        assert_eq!(parsed_postcard.port_name, "COM1");
+        assert_eq!(parsed_postcard.stations.len(), 2);
     }
 }

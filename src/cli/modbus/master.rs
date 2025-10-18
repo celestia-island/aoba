@@ -362,36 +362,20 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
                     match msg {
-                        crate::protocol::ipc::IpcMessage::ConfigUpdate {
-                            station_id: new_station_id,
-                            register_type,
-                            start_address: new_start_address,
-                            register_length: new_length,
+                        crate::protocol::ipc::IpcMessage::StationsUpdate {
+                            stations_data,
                             ..
                         } => {
-                            log::info!("Received config update: station={new_station_id}, type={register_type}, addr={new_start_address}, len={new_length}");
-                            // TODO: Apply configuration updates to runtime
-                            // For now, just log them
-                        }
-                        crate::protocol::ipc::IpcMessage::RegisterUpdate {
-                            station_id: _,
-                            register_type,
-                            start_address: update_start_addr,
-                            values,
-                            ..
-                        } => {
-                            log::info!("Received register update: type={register_type}, addr={update_start_addr}, values={values:?}");
-                            // Apply register updates directly to storage
-                            let mut context = storage.lock().unwrap();
-                            if register_type == "holding" {
-                                for (i, &val) in values.iter().enumerate() {
-                                    if let Err(e) =
-                                        context.set_holding(update_start_addr + i as u16, val)
-                                    {
-                                        log::warn!("Failed to set holding register: {e}");
-                                    }
+                            log::info!("Received stations update, {} bytes", stations_data.len());
+                            // TODO: Deserialize stations_data using postcard and apply updates
+                            // For now, just log it
+                            if let Ok(stations) = postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data) {
+                                log::info!("Deserialized {} stations", stations.len());
+                                for station in stations {
+                                    log::info!("  Station {}: mode={:?}", station.id, station.mode);
                                 }
-                                log::info!("Applied register update to storage");
+                            } else {
+                                log::warn!("Failed to deserialize stations data");
                             }
                         }
                         _ => {

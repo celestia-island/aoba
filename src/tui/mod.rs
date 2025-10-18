@@ -500,43 +500,48 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Heartbeat { .. } => {
             // Heartbeat can be ignored for now or used for future monitoring
         }
-        IpcMessage::RegisterUpdate {
-            station_id,
-            register_type,
-            start_address,
-            values,
+        IpcMessage::StationsUpdate {
+            stations_data,
             ..
         } => {
             log::info!(
-                "CLI[{port_name}]: RegisterUpdate station={station_id}, type={register_type}, addr=0x{start_address:04X}, values={values:?}"
+                "CLI[{port_name}]: StationsUpdate received, {} bytes",
+                stations_data.len()
             );
-            append_port_log(
-                port_name,
-                format!(
-                    "CLI register update: station={station_id}, type={register_type}, addr=0x{start_address:04X}, values={values:?}"
-                ),
-            );
-
-            if let Ok(register_mode) = RegisterMode::try_from(register_type.as_str()) {
-                if let Err(err) = apply_register_update_from_ipc(
+            
+            // Deserialize and update the port's station configuration
+            if let Ok(stations) = postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data) {
+                log::info!("CLI[{port_name}]: Decoded {} stations", stations.len());
+                append_port_log(
                     port_name,
-                    station_id,
-                    register_mode,
-                    start_address,
-                    &values,
-                ) {
-                    log::warn!(
-                        "Register update for {port_name}: failed to apply to storage: {err:#}"
-                    );
-                }
+                    format!("CLI stations update: {} stations", stations.len()),
+                );
+                
+                // TODO: Apply the stations update to the port's ModbusRegisterItem list
+                // This will require converting from StationConfig format to ModbusRegisterItem format
+                // For now, just log it
             } else {
-                log::warn!(
-                    "Register update for {port_name}: unrecognized register type {register_type}"
+                log::warn!("CLI[{port_name}]: Failed to deserialize stations data");
+                append_port_log(
+                    port_name,
+                    "CLI stations update: failed to deserialize".to_string(),
                 );
             }
         }
+        IpcMessage::StateLockRequest { requester, .. } => {
+            log::info!("CLI[{port_name}]: StateLockRequest from {requester}");
+            append_port_log(port_name, format!("CLI state lock request from {requester}"));
+            // TODO: Implement state locking mechanism
+        }
+        IpcMessage::StateLockAck { locked, .. } => {
+            log::info!("CLI[{port_name}]: StateLockAck locked={locked}");
+            append_port_log(port_name, format!("CLI state lock ack: locked={locked}"));
+            // TODO: Handle state lock acknowledgment
+        }
         IpcMessage::Status {
-            status, details, ..
+            status,
+            details,
+            ..
         } => {
             let msg = if let Some(details) = details {
                 format!("CLI status: {status} ({details})")
@@ -549,10 +554,6 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::Log { level, message, .. } => {
             log::info!("CLI[{port_name}]: log[{level}] {message}");
             append_port_log(port_name, format!("CLI log[{level}]: {message}"));
-        }
-        IpcMessage::ConfigUpdate { .. } => {
-            // ConfigUpdate is sent FROM TUI TO CLI, so we don't expect to receive it here
-            log::warn!("CLI[{port_name}]: Unexpected ConfigUpdate message received");
         }
     }
     Ok(())

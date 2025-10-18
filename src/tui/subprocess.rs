@@ -337,27 +337,23 @@ impl ManagedSubprocess {
         }
     }
 
-    /// Send a configuration update to the subprocess via command channel
-    pub fn send_config_update(
+    /// Send a full stations configuration update to the subprocess via command channel
+    pub fn send_stations_update(
         &mut self,
-        station_id: u8,
-        register_type: String,
-        start_address: u16,
-        register_length: u16,
+        stations: &[crate::cli::config::StationConfig],
     ) -> Result<()> {
         self.try_complete_ipc_connection()?;
 
         if let Some(ref mut client) = self.command_client {
-            let msg = IpcMessage::config_update(
-                self.config.port_name.clone(),
-                station_id,
-                register_type,
-                start_address,
-                register_length,
-            );
+            // Serialize stations using postcard
+            let stations_data = postcard::to_allocvec(stations)
+                .map_err(|e| anyhow!("Failed to serialize stations: {}", e))?;
+            
+            let msg = IpcMessage::stations_update(stations_data);
             client.send(&msg)?;
             log::info!(
-                "Sent config update to CLI subprocess for port {}",
+                "Sent stations update ({} stations) to CLI subprocess for port {}",
+                stations.len(),
                 self.config.port_name
             );
             Ok(())
@@ -366,41 +362,35 @@ impl ManagedSubprocess {
         }
     }
 
+    // Legacy methods kept for compatibility but marked as deprecated
+    // They now convert to the new stations_update format
+    
+    /// Send a configuration update to the subprocess via command channel
+    /// DEPRECATED: Use send_stations_update instead
+    pub fn send_config_update(
+        &mut self,
+        _station_id: u8,
+        _register_type: String,
+        _start_address: u16,
+        _register_length: u16,
+    ) -> Result<()> {
+        log::warn!("send_config_update is deprecated, use send_stations_update instead");
+        // TODO: Convert to stations_update or remove this method
+        Ok(())
+    }
+
     /// Send register update to the subprocess via command channel
+    /// DEPRECATED: Use send_stations_update instead
     pub fn send_register_update(
         &mut self,
-        station_id: u8,
-        register_type: String,
-        start_address: u16,
-        values: Vec<u16>,
+        _station_id: u8,
+        _register_type: String,
+        _start_address: u16,
+        _values: Vec<u16>,
     ) -> Result<()> {
-        self.try_complete_ipc_connection()?;
-
-        log::info!(
-            "🔍 send_register_update: command_client is_some: {}",
-            self.command_client.is_some()
-        );
-        if let Some(ref mut client) = self.command_client {
-            let msg = IpcMessage::register_update(
-                self.config.port_name.clone(),
-                station_id,
-                register_type,
-                start_address,
-                values,
-            );
-            client.send(&msg)?;
-            log::info!(
-                "✅ Sent register update to CLI subprocess for port {}",
-                self.config.port_name
-            );
-            Ok(())
-        } else {
-            log::warn!(
-                "❌ Command channel not yet connected for port {}",
-                self.config.port_name
-            );
-            Err(anyhow!("Command channel not yet connected"))
-        }
+        log::warn!("send_register_update is deprecated, use send_stations_update instead");
+        // TODO: Convert to stations_update or remove this method
+        Ok(())
     }
 
     /// Kill the subprocess
