@@ -99,6 +99,10 @@ name = "percent-encoding"
 version = "^2"
 
 [[dependencies]]
+name = "postcard"
+version = "^1"
+
+[[dependencies]]
 name = "rand"
 version = "^0.9"
 
@@ -200,6 +204,7 @@ once_cell = "MIT OR Apache-2.0"
 oneshot = "MIT OR Apache-2.0"
 parking_lot = "MIT OR Apache-2.0"
 percent-encoding = "MIT OR Apache-2.0"
+postcard = "MIT OR Apache-2.0"
 rand = "MIT OR Apache-2.0"
 ratatui = "MIT"
 regex = "MIT OR Apache-2.0"

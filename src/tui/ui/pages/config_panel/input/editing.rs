@@ -260,10 +260,8 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 let is_modbus_empty = read_status(|status| {
                     if let Some(port) = status.ports.map.get(&port_name) {
                         let port_data = port.read();
-                        if let types::port::PortConfig::Modbus { stations, .. } = &port_data.config
-                        {
-                            return Ok(stations.is_empty());
-                        }
+                        let types::port::PortConfig::Modbus { stations, .. } = &port_data.config;
+                        return Ok(stations.is_empty());
                     }
                     Ok(false)
                 })?;
