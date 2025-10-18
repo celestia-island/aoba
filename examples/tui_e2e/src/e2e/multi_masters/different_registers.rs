@@ -158,7 +158,7 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
     // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
     log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
     let mut screen;
-    let max_attempts = 20;
+    let max_attempts = 3;
     let mut at_config_panel = false;
     let mut port_enabled = false;
 

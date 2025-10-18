@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_slave_common, setup_tui_port, test_station_with_retries};
+use crate::utils::{
+    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -11,6 +13,7 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::{enter_modbus_panel, update_tui_registers},
 };
+use expectrl::Expect;
 
 /// Test Multiple TUI Slaves on Single Port with IPC Communication - Basic Scenario
 ///
@@ -86,6 +89,10 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         .collect();
 
     log::info!("🧪 Step 2: Configuring and updating 4 slaves on {port2}");
+
+    // Navigate to port and enter Modbus panel (without enabling the port yet)
+    navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
+
     for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
     {
         log::info!(
@@ -95,15 +102,6 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
             register_type,
             start_address
         );
-
-        // Setup port once for the first slave, subsequent slaves share the same port
-        if i == 0 {
-            setup_tui_port(&mut tui_session, &mut tui_cap, &port2).await?;
-        } else {
-            // For subsequent slaves, navigate back to Modbus panel to add another station
-            log::info!("🔄 Navigating back to Modbus panel for Slave {}", i + 1);
-            enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-        }
 
         configure_tui_slave_common(
             &mut tui_session,
@@ -145,9 +143,82 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         }
     }
 
-    // Wait for IPC updates to propagate
-    log::info!("🧪 Waiting for IPC propagation...");
-    tokio::time::sleep(Duration::from_millis(3000)).await;
+    // After configuring all Slaves, save and exit Modbus panel
+    log::info!("🔄 All Slaves configured, saving configuration...");
+
+    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
+    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
+    tui_session.send("\x1b")?;
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+
+    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
+    let mut screen;
+    let max_attempts = 3;
+    let mut at_config_panel = false;
+    let mut port_enabled = false;
+
+    for attempt in 1..=max_attempts {
+        ci_utils::sleep_a_while().await;
+        screen = tui_cap
+            .capture(
+                &mut tui_session,
+                &format!("after_save_modbus_attempt_{}", attempt),
+            )
+            .await?;
+
+        // Check if we're at ConfigPanel
+        if screen.contains("Enable Port") {
+            at_config_panel = true;
+
+            // Check if port is showing as Enabled
+            for line in screen.lines() {
+                if line.contains("Enable Port") && line.contains("Enabled") {
+                    port_enabled = true;
+                    break;
+                }
+            }
+
+            if port_enabled {
+                log::info!(
+                    "✅ Port enabled and shown in UI on attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+                break;
+            } else {
+                log::info!(
+                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
+                    attempt,
+                    max_attempts
+                );
+            }
+        } else {
+            log::warn!(
+                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
+                attempt,
+                max_attempts
+            );
+        }
+    }
+
+    if !at_config_panel {
+        return Err(anyhow!(
+            "Failed to return to port details page after saving Modbus configuration (tried {} times)",
+            max_attempts
+        ));
+    }
+
+    if !port_enabled {
+        return Err(anyhow!(
+            "Port not showing as Enabled after {} attempts",
+            max_attempts
+        ));
+    }
+
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Debug breakpoint: capture screen before starting polls
     use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
