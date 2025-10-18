@@ -72,9 +72,21 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
     navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
 
+    // Debug: Verify we're on the port details page
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_navigate_to_vcom".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_nav").await?;
+
     // Enter Modbus configuration panel directly (new workflow: no enable_port before config)
     log::info!("🧪 Step 3: Enter Modbus configuration panel");
     enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    // Debug: Verify we're in Modbus panel and check cursor position
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_enter_modbus_panel".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_in_modbus").await?;
 
     // Configure inside the panel - do not escape back to port details afterwards.
     log::info!("🧪 Step 4: Configure TUI as Slave (client/poll mode)");
@@ -82,11 +94,24 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
 
     // Save configuration with Ctrl+S which will auto-enable the port
     log::info!("🧪 Step 5: Save configuration with Ctrl+S to auto-enable port");
+    
+    // Debug: Check state before Ctrl+S
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_ctrl_s".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_before_save").await?;
+    
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
+
+    // Debug: Check state immediately after Ctrl+S
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_ctrl_s".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_save").await?;
 
     // Verify port is enabled by checking for the green checkmark or Running status
     log::info!("🧪 Step 6: Verify port is enabled after Ctrl+S");
@@ -288,10 +313,35 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
         ));
     }
 
-    // Create station (should be on "Create Station" by default)
+    // Debug: Check initial cursor position
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_create_station".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_create").await?;
+
+    // Navigate to "Create Station" button first to ensure we're at the right position
+    log::info!("Navigate to Create Station button");
+    let actions = vec![
+        // Go all the way up to ensure we start from a known position
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 20,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
+
+    // Debug: Verify cursor is at top
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "at_top_before_create".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_at_top").await?;
+
+    // Create station (should be on "Create Station" by default after going to top)
     log::info!("Create new Modbus station");
     let actions = vec![
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 }, // Wait for station to be created
         CursorAction::MatchPattern {
             pattern: Regex::new(r"#1")?,
             description: "Station #1 created".to_string(),
@@ -308,15 +358,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     }];
     execute_cursor_actions(session, cap, &actions, "debug_station_created").await?;
 
-    // Debug: Check if station was created
-    let debug_mode = std::env::var("DEBUG_MODE").is_ok();
-    if debug_mode {
-        log::info!("🔴 DEBUG: After creating station");
-        let screen = cap.capture(session, "after_create_station").await?;
-        log::info!("📺 Screen after creating station:\n{screen}\n");
-    }
-
-    // Set Register Length to expected number of registers we will monitor
+    // Set Connection Mode to Slave
     log::info!("Switch Connection Mode to Slave");
 
     // Debug: Check cursor position before changing connection mode
@@ -326,46 +368,87 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     execute_cursor_actions(session, cap, &actions, "debug_before_conn_mode").await?;
 
     let actions = vec![
-        // First, go up to ensure we're at the top of the form
+        // First, go up to ensure we're at the top of the station entry
         CursorAction::PressArrow {
             direction: ArrowKey::Up,
             count: 10,
         },
         CursorAction::Sleep { ms: 300 },
-        // Now we should be on "Create Station", press Down to get to Connection Mode
+        // Now we should be on "Create Station" or similar, press Down 1 to get to Connection Mode
+        // The structure is: Create Station (line 0), then the station fields start
+        // Field order: Connection Mode (line 1 from Create Station)
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
         CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_connection_mode").await?;
+
+    // Debug: Check cursor position on connection mode
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "at_connection_mode".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_at_conn_mode").await?;
+
+    // Enter edit mode and change to Slave
+    let actions = vec![
         CursorAction::PressEnter,
-        // Move from Master -> Slave (selector wraps if already Slave)
+        CursorAction::Sleep { ms: 300 },
+        // Move from Master -> Slave (selector)
         CursorAction::PressArrow {
             direction: ArrowKey::Right,
             count: 1,
         },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
         CursorAction::MatchPattern {
-            pattern: Regex::new(r"Connection Mode\s+Slave")?,
+            pattern: Regex::new(r"Slave")?,
             description: "Connection mode set to Slave".to_string(),
-            line_range: Some((0, 6)),
+            line_range: Some((0, 8)),
             col_range: None,
             retry_action: None,
         },
     ];
     execute_cursor_actions(session, cap, &actions, "set_connection_mode_slave").await?;
 
+    // Debug: Verify connection mode was changed
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_change_connection_mode".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_after_conn_mode").await?;
+
+    // Navigate to Register Length field
     log::info!("Navigate to Register Length and set to {REGISTER_LENGTH} registers for monitoring");
     let actions = vec![
+        // From Connection Mode, navigate down to Register Length
+        // Down 1: Station ID
+        // Down 2: Register Mode
+        // Down 3: Register Start Address
+        // Down 4: Register Length
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 4,
-        }, // Navigate to Register Length field
+        },
         CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_register_length").await?;
+
+    // Debug: Check cursor position before editing
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_edit_register_length".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_edit_length").await?;
+
+    // Enter edit mode and set value
+    let actions = vec![
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
         CursorAction::TypeString(REGISTER_LENGTH.to_string()),
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "set_register_length").await?;
 
