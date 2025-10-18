@@ -285,29 +285,61 @@ pub async fn configure_tui_master_common<T: Expect>(
         // For multi-station, cursor is already on Register Type field after the station_id logic above
         // IMPORTANT: New stations default to Holding (03) in TUI code
         //
-        // CRITICAL INSIGHT: After testing, we found that pressing Enter on Register Type causes the cursor
-        // to move to an unexpected location (possibly into the register grid). This causes subsequent
-        // field edits to go into the wrong fields.
-        //
-        // FIX: Since new stations default to Holding(03) and that's what we want (register_type==3),
-        // we DON'T need to press Enter on Register Type at all. We can just skip it and move directly
-        // to Start Address by pressing Down 1.
-        //
-        // If we ever need to support different register types in multi-station mode, we'll need to
-        // figure out the correct cursor position after Register Type confirmation.
+        // Register type selector positions:
+        // - Type 01 (Coils): position 0
+        // - Type 02 (Discrete): position 1
+        // - Type 03 (Holding): position 2 (DEFAULT)
+        // - Type 04 (Input): position 3
         
-        if register_type != 3 {
-            return Err(anyhow!(
-                "Multi-station mode currently only supports Holding Registers (type 03), got type {}",
-                register_type
-            ));
+        if register_type == 3 {
+            // Optimization: Skip selector for Holding (03) since it's the default
+            log::info!("✅ Register Type is already Holding (03) by default, skipping confirmation");
+        } else {
+            // Need to change register type
+            log::info!("📝 Setting register type to {:02} (from default Holding/03)", register_type);
+            
+            // Calculate navigation: default is position 2 (Holding)
+            let default_pos = 2;
+            let target_pos = register_type as usize - 1; // 01->0, 02->1, 03->2, 04->3
+            
+            let mut actions = vec![
+                CursorAction::PressEnter, // Open selector
+                CursorAction::Sleep { ms: 300 },
+            ];
+            
+            // Navigate to target position
+            if target_pos < default_pos {
+                // Navigate left
+                actions.push(CursorAction::PressArrow {
+                    direction: ArrowKey::Left,
+                    count: default_pos - target_pos,
+                });
+            } else if target_pos > default_pos {
+                // Navigate right
+                actions.push(CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: target_pos - default_pos,
+                });
+            }
+            
+            actions.extend_from_slice(&[
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter, // Confirm selection
+                CursorAction::Sleep { ms: 500 },
+            ]);
+            
+            execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("set_register_type_{:02}_multi", register_type),
+            )
+            .await?;
         }
         
-        // Register Type is already correct (defaults to Holding), so we just log and continue
-        log::info!("✅ Register Type is already Holding (03) by default, skipping confirmation");
-        
         // No need for explicit repositioning - we're already on Register Type field
-        // Just continue to Start Address which is Down 1 from here
+        // (or we just confirmed a selection which leaves us on Register Type field)
+        // Continue to Start Address which is Down 1 from here
     } else {
         log::info!("🔍 Single station mode: using standard navigation");
 

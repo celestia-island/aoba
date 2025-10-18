@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_master_common, setup_tui_port, test_station_with_retries};
+use crate::utils::{configure_tui_master_common, test_station_with_retries};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -9,7 +9,7 @@ use ci_utils::{
     ports::{port_exists, should_run_vcom_tests},
     snapshot::TerminalCapture,
     terminal::spawn_expect_process,
-    tui::update_tui_registers,
+    tui::{enter_modbus_panel, navigate_to_vcom, update_tui_registers},
 };
 
 /// Test Multiple TUI Masters on Single Port with Same Station ID but Different Register Types
@@ -77,14 +77,14 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 3 masters on {port1} with same station ID");
+    
+    // Navigate to port and enter ModBus panel (once for all masters)
+    navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+    
     for (i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {
-        // Setup port once for the first master, subsequent masters share the same port
-        if i == 0 {
-            setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
-        }
-
         // For second and subsequent masters, create a new station first
         if i > 0 {
             log::info!("➕ Creating new station entry for Master {}", i + 1);
@@ -136,8 +136,59 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
         update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
     }
 
-    // Wait for IPC updates to propagate
-    log::info!("🧪 Waiting for IPC propagation...");
+    // Save configuration and exit ModBus panel (triggers auto-enable)
+    log::info!("🔄 All Masters configured, saving configuration...");
+    log::info!("⌨️ Sending Esc to save and exit ModBus panel...");
+    tui_session.send("\x1b")?;
+    sleep_seconds(1).await;
+    sleep_seconds(1).await;
+    sleep_seconds(1).await; // Extra wait for auto-enable to complete
+
+    // Verify we're back at port details page
+    log::info!("⏳ Waiting for screen to update to ConfigPanel...");
+    let mut screen = String::new();
+    let max_attempts = 10;
+    let mut success = false;
+
+    for attempt in 1..=max_attempts {
+        sleep_seconds(1).await;
+        screen = tui_cap
+            .capture(
+                &mut tui_session,
+                &format!("after_save_modbus_attempt_{}", attempt),
+            )
+            .await?;
+
+        if screen.contains("Enable Port") || screen.contains("Disable Port") {
+            log::info!(
+                "✅ Screen updated correctly on attempt {}/{}",
+                attempt,
+                max_attempts
+            );
+            success = true;
+            break;
+        }
+
+        log::warn!(
+            "⏳ Attempt {}/{}: Screen not updated yet, waiting...",
+            attempt,
+            max_attempts
+        );
+    }
+
+    if !success {
+        return Err(anyhow!(
+            "Failed to return to port details page after saving Modbus configuration (tried {} times). Screen: {}",
+            max_attempts,
+            screen.lines().take(10).collect::<Vec<_>>().join("\n")
+        ));
+    }
+
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    log::info!("✅ Successfully returned to port details page");
+
+    // Wait for runtime to start and stabilize
+    log::info!("🧪 Waiting for runtime to start and stabilize...");
     tokio::time::sleep(Duration::from_millis(3000)).await;
 
     // Test all 3 register types from vcom2
