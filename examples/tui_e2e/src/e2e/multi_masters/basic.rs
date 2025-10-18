@@ -184,20 +184,12 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     log::info!("🔄 All Masters configured, saving configuration...");
 
     // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
-    log::info!("⌨️ Sending first Esc to trigger auto-enable...");
+    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
     tui_session.send("\x1b")?;
     ci_utils::sleep_a_while().await;
     ci_utils::sleep_a_while().await;
 
-    // Workaround for rendering bug: send another Esc to go to Entry, then Enter to return to ConfigPanel
-    log::info!("⌨️ Workaround: Esc to Entry, then Enter to ConfigPanel...");
-    tui_session.send("\x1b")?; // Go to Entry page
-    ci_utils::sleep_a_while().await;
-    tui_session.send("\r")?; // Enter (carriage return) on first port to go back to ConfigPanel
-    ci_utils::sleep_a_while().await;
-    ci_utils::sleep_a_while().await;
-
-    // Verify we're back at port details page with retry logic
+    // Verify we're at ConfigPanel (port details page) with retry logic
     log::info!("⏳ Waiting for screen to update to ConfigPanel...");
     let mut screen = String::new();
     let max_attempts = 10;
