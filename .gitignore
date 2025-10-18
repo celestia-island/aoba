@@ -13,3 +13,6 @@ Cargo.lock
 .env
 # TUI E2E debug scripts
 examples/tui_debug*.rs
+
+# TUI configuration cache (stored in working directory)
+aoba_tui_config.json

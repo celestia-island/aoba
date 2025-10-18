@@ -6,7 +6,7 @@ use expectrl::Expect;
 
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
-    key_input::{ArrowKey, ExpectKeyExt},
+    key_input::ArrowKey,
     snapshot::TerminalCapture,
     tui::{enable_port_carefully, enter_modbus_panel},
 };
