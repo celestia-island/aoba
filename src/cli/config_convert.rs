@@ -105,9 +105,7 @@ pub fn register_items_to_stations(
     let mut station_map: HashMap<u8, RegisterMap> = HashMap::new();
 
     for item in items {
-        let map = station_map
-            .entry(item.station_id)
-            .or_default();
+        let map = station_map.entry(item.station_id).or_default();
 
         let range = RegisterRange {
             address_start: item.register_address,
@@ -160,7 +158,6 @@ pub fn station_mode_to_modbus_connection_mode(mode: StationMode) -> ModbusConnec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::config::RegisterType;
 
     #[test]
     fn test_stations_to_register_items() {
