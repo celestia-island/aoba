@@ -1,7 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_slave_common, test_station_with_retries};
+use crate::utils::{
+    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -11,6 +13,7 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
+use expectrl::Expect;
 
 /// Test Multiple TUI Slaves on Single Port with Adjacent Registers
 ///
@@ -78,7 +81,19 @@ pub async fn test_tui_multi_slaves_adjacent_registers() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 3 slaves on {port2} with adjacent register addresses");
-    for &(station_id, register_type, register_mode, start_address) in &slaves {
+
+    // Navigate to port and enter Modbus panel (without enabling the port yet)
+    navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
+
+    // Generate register data for all slaves first (before configuration)
+    let slave_data: Vec<Vec<u16>> = (0..3)
+        .map(|_| generate_random_registers(REGISTER_LENGTH))
+        .collect();
+
+    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    {
+        log::info!("🔧 Configuring Slave {} (Station {})", i + 1, station_id);
+
         configure_tui_slave_common(
             &mut tui_session,
             &mut tui_cap,
@@ -89,25 +104,100 @@ pub async fn test_tui_multi_slaves_adjacent_registers() -> Result<()> {
             REGISTER_LENGTH,
         )
         .await?;
-    }
 
-    // Generate and update register data for all slaves
-    let slave_data: Vec<Vec<u16>> = (0..3)
-        .map(|_| generate_random_registers(REGISTER_LENGTH))
-        .collect();
-
-    log::info!("🧪 Updating all slave registers");
-    for (i, data) in slave_data.iter().enumerate() {
-        let (station_id, _, _, start_address) = slaves[i];
+        // Immediately update data for this slave
         log::info!(
-            "  Slave {} (Station {station_id}, Address 0x{start_address:04X}-0x{:04X}) data: {data:?}",
+            "📝 Updating Slave {} (Station {}, Address 0x{:04X}-0x{:04X}) data: {:?}",
             i + 1,
-            start_address + REGISTER_LENGTH as u16 - 1
+            station_id,
+            start_address,
+            start_address + REGISTER_LENGTH as u16 - 1,
+            slave_data[i]
         );
-        update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
+        update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
+
+        // Wait for register updates to be saved before configuring next slave
+        log::info!("⏱️ Waiting for register updates to be fully saved...");
+        ci_utils::sleep_a_while().await;
+        ci_utils::sleep_a_while().await;
     }
 
-    // Wait for IPC updates to propagate
+    // After configuring all Slaves, save and exit Modbus panel
+    log::info!("🔄 All Slaves configured, saving configuration...");
+
+    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
+    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
+    tui_session.send("\x1b")?;
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+
+    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
+    let mut screen;
+    let max_attempts = 3;
+    let mut at_config_panel = false;
+    let mut port_enabled = false;
+
+    for attempt in 1..=max_attempts {
+        ci_utils::sleep_a_while().await;
+        screen = tui_cap
+            .capture(
+                &mut tui_session,
+                &format!("after_save_modbus_attempt_{}", attempt),
+            )
+            .await?;
+
+        // Check if we're at ConfigPanel
+        if screen.contains("Enable Port") {
+            at_config_panel = true;
+
+            // Check if port is showing as Enabled
+            for line in screen.lines() {
+                if line.contains("Enable Port") && line.contains("Enabled") {
+                    port_enabled = true;
+                    break;
+                }
+            }
+
+            if port_enabled {
+                log::info!(
+                    "✅ Port enabled and shown in UI on attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+                break;
+            } else {
+                log::info!(
+                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
+                    attempt,
+                    max_attempts
+                );
+            }
+        } else {
+            log::warn!(
+                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
+                attempt,
+                max_attempts
+            );
+        }
+    }
+
+    if !at_config_panel {
+        return Err(anyhow!(
+            "Failed to return to port details page after saving Modbus configuration (tried {} times)",
+            max_attempts
+        ));
+    }
+
+    if !port_enabled {
+        return Err(anyhow!(
+            "Port not showing as Enabled after {} attempts",
+            max_attempts
+        ));
+    }
+
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    log::info!("✅ Successfully returned to port details page with port enabled");
     log::info!("🧪 Waiting for IPC propagation...");
     tokio::time::sleep(Duration::from_millis(3000)).await;
 
