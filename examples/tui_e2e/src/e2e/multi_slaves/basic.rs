@@ -11,7 +11,7 @@ use ci_utils::{
     ports::{port_exists, should_run_vcom_tests},
     snapshot::TerminalCapture,
     terminal::spawn_expect_process,
-    tui::{enter_modbus_panel, update_tui_registers},
+    tui::update_tui_registers,
 };
 use expectrl::Expect;
 
@@ -122,25 +122,6 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         log::info!("⏱️ Waiting for register updates to be fully saved...");
         ci_utils::sleep_a_while().await;
         ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
-
-        // Debug breakpoint: capture screen after configuring and updating each slave
-        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-        if std::env::var("DEBUG_MODE").is_ok() {
-            log::info!(
-                "🔴 DEBUG: Capturing screen after Slave {} configuration",
-                i + 1
-            );
-            let actions = vec![CursorAction::DebugBreakpoint {
-                description: format!("after_slave_{}_config", i + 1),
-            }];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &actions,
-                &format!("debug_slave_{}", i + 1),
-            )
-            .await?;
-        }
     }
 
     // After configuring all Slaves, save and exit Modbus panel
@@ -219,22 +200,6 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
 
     log::info!("💾 Saved Modbus configuration and auto-enabled port");
     log::info!("✅ Successfully returned to port details page with port enabled");
-
-    // Debug breakpoint: capture screen before starting polls
-    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-    if std::env::var("DEBUG_MODE").is_ok() {
-        log::info!("🔴 DEBUG: Capturing screen before starting polls");
-        let actions = vec![CursorAction::DebugBreakpoint {
-            description: "before_polling_slaves".to_string(),
-        }];
-        execute_cursor_actions(
-            &mut tui_session,
-            &mut tui_cap,
-            &actions,
-            "debug_before_poll_slaves",
-        )
-        .await?;
-    }
 
     // Test all 4 address ranges from vcom1
     let mut address_range_success = std::collections::HashMap::new();
