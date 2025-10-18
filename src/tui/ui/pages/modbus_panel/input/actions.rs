@@ -529,7 +529,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
 /// Helper function to save current port configurations to disk
 fn save_current_configs() -> Result<()> {
     use std::collections::HashMap;
-    
+
     let configs: HashMap<String, types::port::PortConfig> = read_status(|status| {
         let mut map = HashMap::new();
         for (name, port_arc) in &status.ports.map {
@@ -543,10 +543,10 @@ fn save_current_configs() -> Result<()> {
         }
         Ok(map)
     })?;
-    
+
     if !configs.is_empty() {
         crate::tui::persistence::save_port_configs(&configs)?;
     }
-    
+
     Ok(())
 }

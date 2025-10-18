@@ -789,7 +789,7 @@ fn update_storage_loop(
                             return Err(anyhow!("Failed to read line: {}", err));
                         }
                     };
-                    
+
                     if line.trim().is_empty() {
                         continue;
                     }
@@ -797,7 +797,11 @@ fn update_storage_loop(
                     line_count += 1;
                     match parse_data_line(&line) {
                         Ok(values) => {
-                            log::debug!("Updating storage with {} values from line {}", values.len(), line_count);
+                            log::debug!(
+                                "Updating storage with {} values from line {}",
+                                values.len(),
+                                line_count
+                            );
                             let mut context = storage.lock().unwrap();
                             match reg_mode {
                                 crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -835,7 +839,10 @@ fn update_storage_loop(
                 }
 
                 // After reading all lines, loop back to start of file
-                log::debug!("Reached end of data file ({} lines processed), looping back to start", line_count);
+                log::debug!(
+                    "Reached end of data file ({} lines processed), looping back to start",
+                    line_count
+                );
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it

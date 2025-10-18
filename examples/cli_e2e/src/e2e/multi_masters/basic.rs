@@ -5,8 +5,8 @@ use std::{
 };
 
 use _bin::cli::config::{
-    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterRange,
-    RegisterType, StationConfig, StationMode, RegisterMap,
+    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
+    StationConfig, StationMode,
 };
 
 /// Test multiple masters configuration
