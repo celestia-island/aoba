@@ -409,6 +409,11 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         }
     }
 
+    // Save configuration before leaving the page
+    if let Err(e) = save_current_configs() {
+        log::warn!("Failed to save port configurations: {}", e);
+    }
+
     write_status(|status| {
         status.page = types::Page::ConfigPanel {
             selected_port,
@@ -499,6 +504,11 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
             });
             log::info!("🟢 with_port_write completed");
 
+            // Save configuration to disk
+            if let Err(e) = save_current_configs() {
+                log::warn!("Failed to save port configurations: {}", e);
+            }
+
             // NOTE: Removed automatic restart when creating new station
             // Restart will be triggered when user saves configuration (presses Esc)
             // This allows users to configure multiple stations before restarting
@@ -513,5 +523,30 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
         log::error!("🟢 Port name is None at selected_port index: {selected_port}");
     }
     log::info!("🟢 create_new_modbus_entry completed");
+    Ok(())
+}
+
+/// Helper function to save current port configurations to disk
+fn save_current_configs() -> Result<()> {
+    use std::collections::HashMap;
+    
+    let configs: HashMap<String, types::port::PortConfig> = read_status(|status| {
+        let mut map = HashMap::new();
+        for (name, port_arc) in &status.ports.map {
+            let port = port_arc.read();
+            // Only save Modbus ports with stations
+            if let types::port::PortConfig::Modbus { stations, .. } = &port.config {
+                if !stations.is_empty() {
+                    map.insert(name.clone(), port.config.clone());
+                }
+            }
+        }
+        Ok(map)
+    })?;
+    
+    if !configs.is_empty() {
+        crate::tui::persistence::save_port_configs(&configs)?;
+    }
+    
     Ok(())
 }
