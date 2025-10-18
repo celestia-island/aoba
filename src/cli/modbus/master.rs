@@ -769,18 +769,35 @@ fn update_storage_loop(
     loop {
         match &data_source {
             DataSource::File(path) => {
-                let file = std::fs::File::open(path)?;
+                // Try to open the file with better error handling
+                let file = match std::fs::File::open(path) {
+                    Ok(f) => f,
+                    Err(err) => {
+                        log::error!("Failed to open data source file {}: {}", path, err);
+                        log::error!("Update thread will exit, causing main process to terminate");
+                        return Err(anyhow!("Failed to open data source file: {}", err));
+                    }
+                };
                 let reader = BufReader::new(file);
 
+                let mut line_count = 0;
                 for line in reader.lines() {
-                    let line = line?;
+                    let line = match line {
+                        Ok(l) => l,
+                        Err(err) => {
+                            log::error!("Failed to read line from data source: {}", err);
+                            return Err(anyhow!("Failed to read line: {}", err));
+                        }
+                    };
+                    
                     if line.trim().is_empty() {
                         continue;
                     }
 
+                    line_count += 1;
                     match parse_data_line(&line) {
                         Ok(values) => {
-                            log::info!("Updating storage with values: {values:?}");
+                            log::debug!("Updating storage with {} values from line {}", values.len(), line_count);
                             let mut context = storage.lock().unwrap();
                             match reg_mode {
                                 crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -812,13 +829,13 @@ fn update_storage_loop(
                             std::thread::sleep(Duration::from_millis(100));
                         }
                         Err(err) => {
-                            log::warn!("Error parsing data line: {err}");
+                            log::warn!("Error parsing data line {}: {}", line_count, err);
                         }
                     }
                 }
 
                 // After reading all lines, loop back to start of file
-                log::debug!("Reached end of data file, looping back to start");
+                log::debug!("Reached end of data file ({} lines processed), looping back to start", line_count);
             }
             DataSource::Pipe(path) => {
                 // Open named pipe (FIFO) and continuously read from it
