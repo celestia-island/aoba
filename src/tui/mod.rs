@@ -8,7 +8,6 @@ use chrono::Local;
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,
-    convert::TryFrom,
     fs,
     io::{self, Write},
     path::PathBuf,

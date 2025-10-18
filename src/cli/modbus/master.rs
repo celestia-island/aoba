@@ -366,16 +366,76 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                             stations_data, ..
                         } => {
                             log::info!("Received stations update, {} bytes", stations_data.len());
-                            // TODO: Deserialize stations_data using postcard and apply updates
-                            // For now, just log it
+
+                            // Deserialize stations using postcard
                             if let Ok(stations) = postcard::from_bytes::<
                                 Vec<crate::cli::config::StationConfig>,
                             >(&stations_data)
                             {
                                 log::info!("Deserialized {} stations", stations.len());
-                                for station in stations {
-                                    log::info!("  Station {}: mode={:?}", station.id, station.mode);
+
+                                // Apply the station updates to storage
+                                let mut context = storage.lock().unwrap();
+                                for station in &stations {
+                                    log::info!(
+                                        "  Applying Station {}: mode={:?}",
+                                        station.id,
+                                        station.mode
+                                    );
+
+                                    // Update holding registers
+                                    for range in &station.map.holding {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_holding(addr, val) {
+                                                log::warn!(
+                                                    "Failed to set holding register at {}: {}",
+                                                    addr,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // Update coils
+                                    for range in &station.map.coils {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_coil(addr, val != 0) {
+                                                log::warn!("Failed to set coil at {}: {}", addr, e);
+                                            }
+                                        }
+                                    }
+
+                                    // Update discrete inputs
+                                    for range in &station.map.discrete_inputs {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_discrete(addr, val != 0) {
+                                                log::warn!(
+                                                    "Failed to set discrete input at {}: {}",
+                                                    addr,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
+
+                                    // Update input registers
+                                    for range in &station.map.input {
+                                        for (i, &val) in range.initial_values.iter().enumerate() {
+                                            let addr = range.address_start + i as u16;
+                                            if let Err(e) = context.set_input(addr, val) {
+                                                log::warn!(
+                                                    "Failed to set input register at {}: {}",
+                                                    addr,
+                                                    e
+                                                );
+                                            }
+                                        }
+                                    }
                                 }
+                                log::info!("Applied all station updates to storage");
                             } else {
                                 log::warn!("Failed to deserialize stations data");
                             }
