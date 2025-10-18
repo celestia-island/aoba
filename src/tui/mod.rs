@@ -1,4 +1,5 @@
 pub mod input;
+pub mod persistence;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
@@ -578,6 +579,24 @@ pub fn start() -> Result<()> {
 
     // Initialize the global status
     init_status(app.clone())?;
+
+    // Load persisted port configurations
+    if let Ok(persisted_configs) = persistence::load_port_configs() {
+        if !persisted_configs.is_empty() {
+            let count = persisted_configs.len();
+            for (port_name, config) in persisted_configs {
+                write_status(|status| {
+                    if let Some(port_arc) = status.ports.map.get(&port_name) {
+                        let mut port = port_arc.write();
+                        port.config = config.clone();
+                        log::info!("✅ Restored configuration for port: {}", port_name);
+                    }
+                    Ok(())
+                })?;
+            }
+            log::info!("📂 Restored {} port configuration(s)", count);
+        }
+    }
 
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
         write_status(|g| {

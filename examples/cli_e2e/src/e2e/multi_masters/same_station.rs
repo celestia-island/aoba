@@ -5,8 +5,8 @@ use std::{
 };
 
 use _bin::cli::config::{
-    CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
-    PersistenceMode, RegisterType,
+    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
+    StationConfig, StationMode,
 };
 
 /// Test multiple masters with same station ID but different register types
@@ -17,7 +17,6 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
     let config = Config {
         port_name: "/tmp/vcom1".to_string(),
         baud_rate: 9600,
-        communication_mode: CommunicationMode::Master,
         communication_params: CommunicationParams {
             mode: CommunicationMethod::Stdio,
             dynamic_pull: false,
@@ -25,26 +24,28 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
             timeout: Some(3.0),
             persistence: PersistenceMode::Persistent,
         },
-        modbus_configs: vec![
-            ModbusRegister {
-                station_id: 1,
-                register_type: RegisterType::Holding,
-                start_address: 0,
-                length: 10,
+        stations: vec![StationConfig {
+            id: 1,
+            mode: StationMode::Master,
+            map: RegisterMap {
+                holding: vec![RegisterRange {
+                    address_start: 0,
+                    length: 10,
+                    initial_values: vec![],
+                }],
+                input: vec![RegisterRange {
+                    address_start: 100,
+                    length: 5,
+                    initial_values: vec![],
+                }],
+                coils: vec![RegisterRange {
+                    address_start: 200,
+                    length: 8,
+                    initial_values: vec![],
+                }],
+                ..Default::default()
             },
-            ModbusRegister {
-                station_id: 1,
-                register_type: RegisterType::Input,
-                start_address: 100,
-                length: 5,
-            },
-            ModbusRegister {
-                station_id: 1,
-                register_type: RegisterType::Coils,
-                start_address: 200,
-                length: 8,
-            },
-        ],
+        }],
     };
 
     // Convert configuration to a JSON string
