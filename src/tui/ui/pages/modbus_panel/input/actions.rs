@@ -535,10 +535,9 @@ fn save_current_configs() -> Result<()> {
         for (name, port_arc) in &status.ports.map {
             let port = port_arc.read();
             // Only save Modbus ports with stations
-            if let types::port::PortConfig::Modbus { stations, .. } = &port.config {
-                if !stations.is_empty() {
-                    map.insert(name.clone(), port.config.clone());
-                }
+            let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+            if !stations.is_empty() {
+                map.insert(name.clone(), port.config.clone());
             }
         }
         Ok(map)
