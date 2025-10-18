@@ -13,6 +13,7 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
+use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with Same Station ID but Different Register Types
 ///
@@ -154,7 +155,7 @@ pub async fn test_tui_multi_masters_same_station() -> Result<()> {
 
     // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
     log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
-    let mut screen = String::new();
+    let mut screen;
     let max_attempts = 20;
     let mut at_config_panel = false;
     let mut port_enabled = false;
