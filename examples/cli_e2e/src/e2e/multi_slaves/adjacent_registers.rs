@@ -5,8 +5,8 @@ use std::{
 };
 
 use _bin::cli::config::{
-    CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
-    PersistenceMode, RegisterType,
+    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterRange,
+    RegisterType, StationConfig, StationMode, RegisterMap,
 };
 
 /// Test multiple slaves with adjacent and non-adjacent register addresses
@@ -17,7 +17,6 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
     let config = Config {
         port_name: "/tmp/vcom2".to_string(),
         baud_rate: 9600,
-        communication_mode: CommunicationMode::Slave,
         communication_params: CommunicationParams {
             mode: CommunicationMethod::Stdio,
             dynamic_pull: false,
@@ -25,26 +24,30 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
             timeout: Some(3.0),
             persistence: PersistenceMode::Persistent,
         },
-        modbus_configs: vec![
-            ModbusRegister {
-                station_id: 1,
-                register_type: RegisterType::Holding,
-                start_address: 0,
-                length: 10,
+        stations: vec![StationConfig {
+            id: 1,
+            mode: StationMode::Slave,
+            map: RegisterMap {
+                holding: vec![
+                    RegisterRange {
+                        address_start: 0,
+                        length: 10,
+                        initial_values: vec![],
+                    },
+                    RegisterRange {
+                        address_start: 10,
+                        length: 5,
+                        initial_values: vec![],
+                    },
+                    RegisterRange {
+                        address_start: 50,
+                        length: 8,
+                        initial_values: vec![],
+                    },
+                ],
+                ..Default::default()
             },
-            ModbusRegister {
-                station_id: 1,
-                register_type: RegisterType::Holding,
-                start_address: 10,
-                length: 5,
-            },
-            ModbusRegister {
-                station_id: 1,
-                register_type: RegisterType::Holding,
-                start_address: 50,
-                length: 8,
-            },
-        ],
+        }],
     };
 
     // Convert configuration to a JSON string
