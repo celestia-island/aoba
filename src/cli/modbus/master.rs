@@ -13,7 +13,10 @@ use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
 use crate::cli::cleanup;
-use crate::protocol::modbus::{build_slave_coils_response, build_slave_holdings_response};
+use crate::protocol::modbus::{
+    build_slave_coils_response, build_slave_discrete_inputs_response,
+    build_slave_holdings_response, build_slave_inputs_response,
+};
 
 /// Handle master provide (temporary: output once and exit)
 pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
@@ -677,6 +680,36 @@ fn respond_to_request(
                 _ => {
                     log::error!("respond_to_request: Failed to build coils response");
                     return Err(anyhow!("Failed to build coils response"));
+                }
+            }
+        }
+        rmodbus::consts::ModbusFunction::GetInputs => {
+            match build_slave_inputs_response(&mut frame, &mut context) {
+                Ok(Some(resp)) => {
+                    log::debug!(
+                        "respond_to_request: Built inputs response ({} bytes)",
+                        resp.len()
+                    );
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build inputs response");
+                    return Err(anyhow!("Failed to build inputs response"));
+                }
+            }
+        }
+        rmodbus::consts::ModbusFunction::GetDiscretes => {
+            match build_slave_discrete_inputs_response(&mut frame, &mut context) {
+                Ok(Some(resp)) => {
+                    log::debug!(
+                        "respond_to_request: Built discretes response ({} bytes)",
+                        resp.len()
+                    );
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build discretes response");
+                    return Err(anyhow!("Failed to build discretes response"));
                 }
             }
         }
