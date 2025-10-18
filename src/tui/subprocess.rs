@@ -21,7 +21,12 @@ pub struct CliSubprocessConfig {
     pub register_length: u16,
     pub register_mode: String,
     pub baud_rate: u32,
-    pub data_source: Option<String>,
+    pub data_source: Option<String>, // Legacy single source
+    // New multi-source fields
+    pub data_source_coils: Option<String>,
+    pub data_source_discrete: Option<String>,
+    pub data_source_holding: Option<String>,
+    pub data_source_input: Option<String>,
 }
 
 /// CLI mode (master or slave)
@@ -92,12 +97,34 @@ impl ManagedSubprocess {
                 args.push("--master-provide-persist".to_string());
                 args.push(config.port_name.clone());
 
-                // Add data source if provided
+                // Add type-specific data sources (new multi-source approach)
+                if let Some(ref data_source) = config.data_source_coils {
+                    args.push("--data-source-coils".to_string());
+                    args.push(data_source.clone());
+                }
+                if let Some(ref data_source) = config.data_source_discrete {
+                    args.push("--data-source-discrete".to_string());
+                    args.push(data_source.clone());
+                }
+                if let Some(ref data_source) = config.data_source_holding {
+                    args.push("--data-source-holding".to_string());
+                    args.push(data_source.clone());
+                }
+                if let Some(ref data_source) = config.data_source_input {
+                    args.push("--data-source-input".to_string());
+                    args.push(data_source.clone());
+                }
+
+                // Legacy single data source (for backward compatibility)
                 if let Some(ref data_source) = config.data_source {
                     args.push("--data-source".to_string());
                     args.push(data_source.clone());
-                } else {
-                    return Err(anyhow!("Master mode requires data-source"));
+                } else if config.data_source_coils.is_none()
+                    && config.data_source_discrete.is_none()
+                    && config.data_source_holding.is_none()
+                    && config.data_source_input.is_none()
+                {
+                    return Err(anyhow!("Master mode requires at least one data source"));
                 }
             }
         }

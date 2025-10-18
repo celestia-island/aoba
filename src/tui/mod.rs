@@ -933,6 +933,10 @@ fn run_core_thread(
                                         .to_string(),
                                     baud_rate,
                                     data_source: None,
+                                    data_source_coils: None,
+                                    data_source_discrete: None,
+                                    data_source_holding: None,
+                                    data_source_input: None,
                                 };
 
                                 // Spawn subprocess WITHOUT holding any status locks
@@ -1011,13 +1015,79 @@ fn run_core_thread(
                                     stations.len()
                                 );
 
-                                // Initialize merged data source for all stations
-                                let (
-                                    data_source_path,
-                                    merged_station_id,
-                                    merged_start_addr,
-                                    merged_length,
-                                ) = initialize_cli_data_source(&port_name, &stations)?;
+                                // Group stations by register type to create separate data sources
+                                use std::collections::HashMap;
+                                let mut stations_by_type: HashMap<
+                                    RegisterMode,
+                                    Vec<types::modbus::ModbusRegisterItem>,
+                                > = HashMap::new();
+
+                                for station in &stations {
+                                    stations_by_type
+                                        .entry(station.register_mode)
+                                        .or_insert_with(Vec::new)
+                                        .push(station.clone());
+                                }
+
+                                log::info!(
+                                    "ToggleRuntime: found {} register type(s) to initialize",
+                                    stations_by_type.len()
+                                );
+
+                                // Initialize data sources for each register type
+                                let mut data_source_coils = None;
+                                let mut data_source_discrete = None;
+                                let mut data_source_holding = None;
+                                let mut data_source_input = None;
+                                let mut merged_station_id = stations[0].station_id;
+                                let mut merged_start_addr = stations[0].register_address;
+                                let mut merged_length = stations[0].register_length;
+
+                                for (reg_mode, type_stations) in &stations_by_type {
+                                    let (path, station_id, start_addr, length) =
+                                        initialize_cli_data_source(&port_name, type_stations)?;
+
+                                    // Update merged params (use from first type for CLI args)
+                                    if merged_station_id == stations[0].station_id
+                                        && merged_start_addr == stations[0].register_address
+                                    {
+                                        merged_station_id = station_id as u8;
+                                        merged_start_addr = start_addr;
+                                        merged_length = length;
+                                    }
+
+                                    let source_str = format!("file:{}", path.to_string_lossy());
+                                    match reg_mode {
+                                        RegisterMode::Coils => {
+                                            data_source_coils = Some(source_str);
+                                        }
+                                        RegisterMode::DiscreteInputs => {
+                                            data_source_discrete = Some(source_str);
+                                        }
+                                        RegisterMode::Holding => {
+                                            data_source_holding = Some(source_str);
+                                        }
+                                        RegisterMode::Input => {
+                                            data_source_input = Some(source_str);
+                                        }
+                                    }
+                                }
+
+                                // Build data sources summary for logging
+                                let data_sources_summary = vec![
+                                    data_source_coils.as_ref().map(|s| format!("coils:{}", s)),
+                                    data_source_discrete
+                                        .as_ref()
+                                        .map(|s| format!("discrete:{}", s)),
+                                    data_source_holding
+                                        .as_ref()
+                                        .map(|s| format!("holding:{}", s)),
+                                    data_source_input.as_ref().map(|s| format!("input:{}", s)),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect::<Vec<_>>()
+                                .join(", ");
 
                                 let cli_config = CliSubprocessConfig {
                                     port_name: port_name.clone(),
@@ -1030,10 +1100,11 @@ fn run_core_thread(
                                     )
                                     .to_string(),
                                     baud_rate,
-                                    data_source: Some(format!(
-                                        "file:{}",
-                                        data_source_path.to_string_lossy()
-                                    )),
+                                    data_source: None, // Using new multi-source approach
+                                    data_source_coils: data_source_coils.clone(),
+                                    data_source_discrete: data_source_discrete.clone(),
+                                    data_source_holding: data_source_holding.clone(),
+                                    data_source_input: data_source_input.clone(),
                                 };
 
                                 // Spawn subprocess WITHOUT holding any status locks
@@ -1043,10 +1114,10 @@ fn run_core_thread(
                                             subprocess_manager.snapshot(&port_name)
                                         {
                                             log::info!(
-                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
+                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, sources=[{}])",
                                                 snapshot.mode,
                                                 snapshot.pid,
-                                                data_source_path.display()
+                                                data_sources_summary
                                             );
                                             let owner =
                                                 PortOwner::CliSubprocess(PortSubprocessInfo {
@@ -1055,11 +1126,11 @@ fn run_core_thread(
                                                         .ipc_socket_name
                                                         .clone(),
                                                     pid: snapshot.pid,
-                                                    data_source_path: Some(
-                                                        data_source_path
-                                                            .to_string_lossy()
-                                                            .to_string(),
-                                                    ),
+                                                    data_source_path: data_source_holding
+                                                        .or(data_source_coils)
+                                                        .or(data_source_discrete)
+                                                        .or(data_source_input)
+                                                        .map(|s| s.replace("file:", "")),
                                                 });
 
                                             // Now update status with the result (short lock hold)
@@ -1108,13 +1179,11 @@ fn run_core_thread(
                                             Ok(())
                                         })?;
 
-                                        if let Err(remove_err) = fs::remove_file(&data_source_path)
-                                        {
-                                            log::debug!(
-                                                "Cleanup of data source {} failed: {remove_err}",
-                                                data_source_path.to_string_lossy()
-                                            );
-                                        }
+                                        // TODO: Clean up data source files in multi-source mode
+                                        // For now, files will remain in /tmp
+                                        log::debug!(
+                                            "Skipping data source cleanup in multi-source mode"
+                                        );
                                     }
                                 }
                             }

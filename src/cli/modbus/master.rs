@@ -143,17 +143,36 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-    let data_source_str = matches
-        .get_one::<String>("data-source")
-        .ok_or_else(|| anyhow!("--data-source is required for master mode"))?;
+
+    // Check for type-specific data sources (new multi-source approach)
+    let data_source_coils = matches.get_one::<String>("data-source-coils");
+    let data_source_discrete = matches.get_one::<String>("data-source-discrete");
+    let data_source_holding = matches.get_one::<String>("data-source-holding");
+    let data_source_input = matches.get_one::<String>("data-source-input");
+
+    // Legacy single data source
+    let data_source_legacy = matches.get_one::<String>("data-source");
+
+    // Determine if we have multi-source or single-source mode
+    let multi_source_mode = data_source_coils.is_some()
+        || data_source_discrete.is_some()
+        || data_source_holding.is_some()
+        || data_source_input.is_some();
+
+    if !multi_source_mode && data_source_legacy.is_none() {
+        return Err(anyhow!("--data-source or type-specific sources (--data-source-coils, etc.) required for master mode"));
+    }
 
     let reg_mode = parse_register_mode(register_mode)?;
-    let data_source = data_source_str.parse::<DataSource>()?;
 
     log::info!(
         "Starting persistent master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
     );
     log::info!("Master mode: acting as Modbus Slave/Server - listening for requests and responding with data");
+
+    if multi_source_mode {
+        log::info!("Multi-source mode enabled - will load data for all register types");
+    }
 
     // Setup IPC if requested
     let mut ipc_connections = crate::cli::actions::setup_ipc(matches);
@@ -198,30 +217,99 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         });
     }
 
-    // Initialize modbus storage with values from data source
+    // Initialize modbus storage with values from data source(s)
     use rmodbus::server::storage::ModbusStorageSmall;
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
 
-    // Load initial data into storage
-    let initial_values = read_one_data_update(&data_source)?;
-    log::info!("Loaded initial values: {initial_values:?}");
-    {
-        let mut context = storage.lock().unwrap();
-        match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                for (i, &val) in initial_values.iter().enumerate() {
-                    context.set_holding(register_address + i as u16, val)?;
-                }
+    // Load initial data into storage based on mode
+    if multi_source_mode {
+        // Multi-source mode: load each register type separately
+        log::info!("Loading data for multiple register types");
+
+        // Load coils if provided
+        if let Some(source_str) = data_source_coils {
+            let data_source = source_str.parse::<DataSource>()?;
+            let values = read_one_data_update(&data_source)?;
+            log::info!("Loaded {} coil values from {}", values.len(), source_str);
+            let mut context = storage.lock().unwrap();
+            for (i, &val) in values.iter().enumerate() {
+                context.set_coil(register_address + i as u16, val != 0)?;
             }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                for (i, &val) in initial_values.iter().enumerate() {
-                    context.set_coil(register_address + i as u16, val != 0)?;
-                }
+        }
+
+        // Load discrete inputs if provided
+        if let Some(source_str) = data_source_discrete {
+            let data_source = source_str.parse::<DataSource>()?;
+            let values = read_one_data_update(&data_source)?;
+            log::info!(
+                "Loaded {} discrete input values from {}",
+                values.len(),
+                source_str
+            );
+            let mut context = storage.lock().unwrap();
+            for (i, &val) in values.iter().enumerate() {
+                context.set_discrete(register_address + i as u16, val != 0)?;
             }
-            _ => {
-                return Err(anyhow!(
-                    "Master provide only supports holding registers and coils"
-                ));
+        }
+
+        // Load holding registers if provided
+        if let Some(source_str) = data_source_holding {
+            let data_source = source_str.parse::<DataSource>()?;
+            let values = read_one_data_update(&data_source)?;
+            log::info!(
+                "Loaded {} holding register values from {}",
+                values.len(),
+                source_str
+            );
+            let mut context = storage.lock().unwrap();
+            for (i, &val) in values.iter().enumerate() {
+                context.set_holding(register_address + i as u16, val)?;
+            }
+        }
+
+        // Load input registers if provided
+        if let Some(source_str) = data_source_input {
+            let data_source = source_str.parse::<DataSource>()?;
+            let values = read_one_data_update(&data_source)?;
+            log::info!(
+                "Loaded {} input register values from {}",
+                values.len(),
+                source_str
+            );
+            let mut context = storage.lock().unwrap();
+            for (i, &val) in values.iter().enumerate() {
+                context.set_input(register_address + i as u16, val)?;
+            }
+        }
+    } else {
+        // Legacy single-source mode
+        let data_source_str = data_source_legacy.unwrap();
+        let data_source = data_source_str.parse::<DataSource>()?;
+        let initial_values = read_one_data_update(&data_source)?;
+        log::info!("Loaded initial values: {initial_values:?}");
+        {
+            let mut context = storage.lock().unwrap();
+            match reg_mode {
+                crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                    for (i, &val) in initial_values.iter().enumerate() {
+                        context.set_holding(register_address + i as u16, val)?;
+                    }
+                }
+                crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                    for (i, &val) in initial_values.iter().enumerate() {
+                        context.set_coil(register_address + i as u16, val != 0)?;
+                    }
+                }
+                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                    for (i, &val) in initial_values.iter().enumerate() {
+                        context.set_input(register_address + i as u16, val)?;
+                    }
+                }
+                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                    for (i, &val) in initial_values.iter().enumerate() {
+                        context.set_discrete(register_address + i as u16, val != 0)?;
+                    }
+                }
             }
         }
     }
@@ -230,22 +318,35 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     // For pipe data sources we spawn the background updater; for file data sources
     // the updater will still be spawned but printing of JSON to stdout is
     // de-duplicated below to avoid repeated identical log lines when polled
+    //
+    // Note: In multi-source mode, we skip the background updater for now
+    // TODO: Implement multi-source background updates
     let storage_clone = storage.clone();
-    let data_source_clone = data_source.clone();
 
     // Track recent changed ranges so the main loop can bypass debounce when a
     // request overlaps a recently-updated register range.
     let changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
     let changed_ranges_clone = changed_ranges.clone();
-    let update_thread = std::thread::spawn(move || {
-        update_storage_loop(
-            storage_clone,
-            data_source_clone,
-            reg_mode,
-            register_address,
-            changed_ranges_clone,
-        )
-    });
+
+    let update_thread = if !multi_source_mode {
+        // Legacy single-source mode: spawn background updater
+        let data_source_str = data_source_legacy.unwrap();
+        let data_source = data_source_str.parse::<DataSource>()?;
+        let data_source_clone = data_source.clone();
+        Some(std::thread::spawn(move || {
+            update_storage_loop(
+                storage_clone,
+                data_source_clone,
+                reg_mode,
+                register_address,
+                changed_ranges_clone,
+            )
+        }))
+    } else {
+        // Multi-source mode: no background updates yet
+        log::warn!("Background updates not yet supported in multi-source mode");
+        None
+    };
 
     // Parse optional debounce seconds argument (floating seconds). Default 1.0s
     // Single-precision seconds argument
@@ -338,9 +439,11 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     log::info!("CLI Master: Entering main loop, listening for requests on {port}");
 
     loop {
-        // Check if update thread has panicked
-        if update_thread.is_finished() {
-            return Err(anyhow!("Data update thread terminated unexpectedly"));
+        // Check if update thread has panicked (only in single-source mode)
+        if let Some(ref thread) = update_thread {
+            if thread.is_finished() {
+                return Err(anyhow!("Data update thread terminated unexpectedly"));
+            }
         }
 
         // Accept command connection if not yet connected

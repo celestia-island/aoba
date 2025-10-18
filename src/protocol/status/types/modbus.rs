@@ -66,7 +66,7 @@ impl std::fmt::Display for ModbusConnectionMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumIter, FromRepr)]
 pub enum RegisterMode {
     Coils = 1,
     DiscreteInputs = 2,

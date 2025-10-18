@@ -120,12 +120,36 @@ pub fn parse_args() -> ArgMatches {
         .arg(
             Arg::new("data-source")
                 .long("data-source")
-                .help("Data source for master mode: file:<path> or pipe:<name>")
+                .help("Data source for master mode: file:<path> or pipe:<name> (legacy, use type-specific sources)")
                 .value_name("SOURCE")
                 .requires_ifs([
                     ("master-provide", "master-provide"),
                     ("master-provide-persist", "master-provide-persist"),
                 ]),
+        )
+        .arg(
+            Arg::new("data-source-coils")
+                .long("data-source-coils")
+                .help("Data source for coils (function code 01): file:<path> or pipe:<name>")
+                .value_name("SOURCE"),
+        )
+        .arg(
+            Arg::new("data-source-discrete")
+                .long("data-source-discrete")
+                .help("Data source for discrete inputs (function code 02): file:<path> or pipe:<name>")
+                .value_name("SOURCE"),
+        )
+        .arg(
+            Arg::new("data-source-holding")
+                .long("data-source-holding")
+                .help("Data source for holding registers (function code 03): file:<path> or pipe:<name>")
+                .value_name("SOURCE"),
+        )
+        .arg(
+            Arg::new("data-source-input")
+                .long("data-source-input")
+                .help("Data source for input registers (function code 04): file:<path> or pipe:<name>")
+                .value_name("SOURCE"),
         )
         .arg(
             Arg::new("output")
