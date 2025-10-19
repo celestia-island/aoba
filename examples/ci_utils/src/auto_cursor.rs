@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
+use serde_json::Value;
 
 use expectrl::Expect;
 
@@ -47,6 +48,21 @@ pub enum CursorAction {
     /// Debug breakpoint: capture screen, print it, reset ports, and exit
     /// Only active when debug mode is enabled
     DebugBreakpoint { description: String },
+    /// Check status from TUI/CLI status dump files
+    /// Verifies that a JSON path in the status equals the expected value
+    /// Uses status monitoring to read current state and compare
+    CheckStatus {
+        /// Description of what is being checked
+        description: String,
+        /// JSON path to check (e.g., "page", "ports[0].enabled", "ports[0].modbus_masters[0].station_id")
+        path: String,
+        /// Expected value as serde_json::Value (use json! macro to construct)
+        expected: Value,
+        /// Timeout in seconds (default: 10)
+        timeout_secs: Option<u64>,
+        /// Retry interval in milliseconds (default: 500)
+        retry_interval_ms: Option<u64>,
+    },
 }
 
 /// Execute a sequence of cursor actions on an expect session
@@ -275,6 +291,26 @@ pub async fn execute_cursor_actions<T: Expect>(
                     log::debug!("Debug breakpoint '{description}' skipped (DEBUG_MODE not set)");
                 }
             }
+            CursorAction::CheckStatus {
+                description,
+                path,
+                expected,
+                timeout_secs,
+                retry_interval_ms,
+            } => {
+                log::info!("🔍 Checking status: {description}");
+                log::debug!("   Path: {path}");
+                log::debug!("   Expected: {expected}");
+
+                let timeout = timeout_secs.unwrap_or(10);
+                let interval = retry_interval_ms.unwrap_or(500);
+                
+                check_status_path(path, expected, timeout, interval).await.map_err(|e| {
+                    anyhow!("Status check failed for '{description}': {e}")
+                })?;
+
+                log::info!("✅ Status check passed: {description}");
+            }
         }
 
         log::info!(
@@ -288,4 +324,151 @@ pub async fn execute_cursor_actions<T: Expect>(
 
     log::info!("✓ All cursor actions executed successfully for {session_name}");
     Ok(())
+}
+
+/// Check a JSON path in the TUI status and verify it matches the expected value
+/// Retries with timeout and interval until the path matches or timeout is reached
+async fn check_status_path(
+    path: &str,
+    expected: &Value,
+    timeout_secs: u64,
+    retry_interval_ms: u64,
+) -> Result<()> {
+    use tokio::time::{sleep, Duration};
+
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+    let interval = Duration::from_millis(retry_interval_ms);
+
+    loop {
+        if start.elapsed() > timeout.into() {
+            return Err(anyhow!(
+                "Timeout waiting for status path '{}' to equal {:?} (waited {}s)",
+                path,
+                expected,
+                timeout_secs
+            ));
+        }
+
+        // Read current TUI status
+        match crate::read_tui_status() {
+            Ok(status) => {
+                // Serialize status to JSON for path lookup
+                let status_json = serde_json::to_value(&status)
+                    .map_err(|e| anyhow!("Failed to serialize status: {}", e))?;
+
+                // Navigate the JSON path
+                match navigate_json_path(&status_json, path) {
+                    Ok(actual) => {
+                        if *actual == *expected {
+                            log::debug!(
+                                "✓ Status path '{}' matches expected value: {:?}",
+                                path,
+                                expected
+                            );
+                            return Ok(());
+                        } else {
+                            log::debug!(
+                                "Status path '{}' is {:?}, waiting for {:?}",
+                                path,
+                                actual,
+                                expected
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        log::debug!("Failed to navigate path '{}': {}", path, e);
+                    }
+                }
+            }
+            Err(e) => {
+                log::debug!("Failed to read TUI status: {}", e);
+            }
+        }
+
+        sleep(interval).await;
+    }
+}
+
+/// Navigate a JSON path like "page" or "ports[0].enabled" or "ports[0].modbus_masters[0].station_id"
+fn navigate_json_path<'a>(value: &'a Value, path: &str) -> Result<&'a Value> {
+    let mut current = value;
+
+    // Split path by dots, but handle array indices specially
+    let parts = parse_json_path(path);
+
+    for part in parts {
+        match part {
+            PathPart::Field(field) => {
+                current = current
+                    .get(&field)
+                    .ok_or_else(|| anyhow!("Field '{}' not found in JSON", field))?;
+            }
+            PathPart::Index(idx) => {
+                current = current
+                    .get(idx)
+                    .ok_or_else(|| anyhow!("Index {} not found in JSON array", idx))?;
+            }
+        }
+    }
+
+    Ok(current)
+}
+
+/// Parse a JSON path string into parts
+fn parse_json_path(path: &str) -> Vec<PathPart> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+
+    let chars: Vec<char> = path.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        match chars[i] {
+            '.' => {
+                if !current.is_empty() {
+                    parts.push(PathPart::Field(current.clone()));
+                    current.clear();
+                }
+                i += 1;
+            }
+            '[' => {
+                // Handle array index
+                if !current.is_empty() {
+                    parts.push(PathPart::Field(current.clone()));
+                    current.clear();
+                }
+
+                // Find closing bracket
+                i += 1;
+                let mut index_str = String::new();
+                while i < chars.len() && chars[i] != ']' {
+                    index_str.push(chars[i]);
+                    i += 1;
+                }
+
+                if let Ok(idx) = index_str.parse::<usize>() {
+                    parts.push(PathPart::Index(idx));
+                }
+
+                i += 1; // Skip closing bracket
+            }
+            c => {
+                current.push(c);
+                i += 1;
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        parts.push(PathPart::Field(current));
+    }
+
+    parts
+}
+
+#[derive(Debug)]
+enum PathPart {
+    Field(String),
+    Index(usize),
 }
