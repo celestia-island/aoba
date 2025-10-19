@@ -94,18 +94,30 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
 
     // Save configuration with Ctrl+S which will auto-enable the port
     log::info!("🧪 Step 5: Save configuration with Ctrl+S to auto-enable port");
-    
+
     // Debug: Check state before Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "before_ctrl_s".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_before_save").await?;
-    
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_before_save",
+    )
+    .await?;
+
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_config_ctrl_s",
+    )
+    .await?;
 
     // Debug: Check state immediately after Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -121,7 +133,10 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
         "verify_port_enabled_after_save",
     )
     .await?;
-    log::info!("✅ Configuration saved and port enabled with status: {}", status);
+    log::info!(
+        "✅ Configuration saved and port enabled with status: {}",
+        status
+    );
 
     // Check if debug mode is enabled for smoke testing
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();

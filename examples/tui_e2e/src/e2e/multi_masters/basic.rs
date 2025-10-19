@@ -162,13 +162,19 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
 
     // After configuring all Masters, save with Ctrl+S to auto-enable the port
     log::info!("💾 All Masters configured, pressing Ctrl+S to save and enable port...");
-    
+
     use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_config_ctrl_s",
+    )
+    .await?;
 
     // Verify port is enabled by checking the status indicator in the top-right corner
     log::info!("🔍 Verifying port is enabled after Ctrl+S");

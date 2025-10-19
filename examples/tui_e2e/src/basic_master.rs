@@ -91,18 +91,30 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
     // Save configuration with Ctrl+S which will auto-enable the port
     log::info!("🧪 Step 5: Save configuration with Ctrl+S to auto-enable port");
-    
+
     // Debug: Check state before Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "before_ctrl_s".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_before_save").await?;
-    
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_before_save",
+    )
+    .await?;
+
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_config_ctrl_s",
+    )
+    .await?;
 
     // Debug: Check state immediately after Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -118,7 +130,10 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         "verify_port_enabled_after_save",
     )
     .await?;
-    log::info!("✅ Configuration saved and port enabled with status: {}", status);
+    log::info!(
+        "✅ Configuration saved and port enabled with status: {}",
+        status
+    );
 
     // Wait for port to fully initialize and subprocess to be ready
     log::info!("🧪 Step 6.5: Waiting for subprocess to be fully ready...");
@@ -140,7 +155,13 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
             CursorAction::PressCtrlS,
             CursorAction::Sleep { ms: 500 }, // Wait for save operation
         ];
-        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, &format!("save_registers_round_{round}")).await?;
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            &format!("save_registers_round_{round}"),
+        )
+        .await?;
 
         // Wait for IPC updates to propagate to CLI subprocess
         // Increased wait time for CI environments which may have slower performance

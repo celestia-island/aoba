@@ -10,9 +10,9 @@ pub fn check_status_indicator(screen: &str) -> Result<String> {
     // The status indicator is in the top-right corner of the first line
     // Format: "AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Running ● "
     // or:     "AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Applied ✔ "
-    
+
     let first_line = screen.lines().next().unwrap_or("");
-    
+
     // Check for each status in priority order (most specific first)
     if Regex::new(r"Applied\s*✔")?.is_match(first_line) {
         return Ok("Applied".to_string());
@@ -35,8 +35,11 @@ pub fn check_status_indicator(screen: &str) -> Result<String> {
     if Regex::new(r"Not Started\s*×")?.is_match(first_line) {
         return Ok("NotStarted".to_string());
     }
-    
-    Err(anyhow!("No status indicator found in title bar: {}", first_line))
+
+    Err(anyhow!(
+        "No status indicator found in title bar: {}",
+        first_line
+    ))
 }
 
 /// Verify the port is enabled by checking the status indicator
@@ -50,63 +53,87 @@ pub async fn verify_port_enabled<T: Expect>(
 ) -> Result<String> {
     const MAX_ATTEMPTS: usize = 5;
     const RETRY_DELAY_MS: u64 = 1000;
-    
+
     for attempt in 1..=MAX_ATTEMPTS {
         let screen = cap
             .capture(session, &format!("{}_{}", capture_name, attempt))
             .await?;
-        
+
         match check_status_indicator(&screen) {
-            Ok(status) => {
-                match status.as_str() {
-                    "Applied" => {
-                        log::info!("✅ Port enabled - status: Applied ✔ (will transition to Running ● in 3s)");
-                        return Ok(status);
-                    }
-                    "Running" => {
-                        log::info!("✅ Port enabled - status: Running ●");
-                        return Ok(status);
-                    }
-                    "Modified" => {
-                        log::info!("✅ Port enabled - status: Modified ○ (running with unsaved changes)");
-                        return Ok(status);
-                    }
-                    "Saving" | "Syncing" => {
-                        log::info!("⏳ Port status: {} (transitioning...), attempt {}/{}", status, attempt, MAX_ATTEMPTS);
-                        if attempt < MAX_ATTEMPTS {
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-                            continue;
-                        }
-                        return Ok(status);
-                    }
-                    "Starting" => {
-                        log::info!("⏳ Port starting, attempt {}/{}", attempt, MAX_ATTEMPTS);
-                        if attempt < MAX_ATTEMPTS {
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-                            continue;
-                        }
-                        return Err(anyhow!("Port still starting after {} attempts", MAX_ATTEMPTS));
-                    }
-                    "NotStarted" => {
-                        log::warn!("⚠️ Port not started yet, attempt {}/{}", attempt, MAX_ATTEMPTS);
-                        if attempt < MAX_ATTEMPTS {
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-                            continue;
-                        }
-                        return Err(anyhow!("Port not started after {} attempts", MAX_ATTEMPTS));
-                    }
-                    _ => {
-                        log::warn!("⚠️ Unknown status: {}, attempt {}/{}", status, attempt, MAX_ATTEMPTS);
-                        if attempt < MAX_ATTEMPTS {
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
-                            continue;
-                        }
-                        return Err(anyhow!("Unknown status: {}", status));
-                    }
+            Ok(status) => match status.as_str() {
+                "Applied" => {
+                    log::info!(
+                        "✅ Port enabled - status: Applied ✔ (will transition to Running ● in 3s)"
+                    );
+                    return Ok(status);
                 }
-            }
+                "Running" => {
+                    log::info!("✅ Port enabled - status: Running ●");
+                    return Ok(status);
+                }
+                "Modified" => {
+                    log::info!(
+                        "✅ Port enabled - status: Modified ○ (running with unsaved changes)"
+                    );
+                    return Ok(status);
+                }
+                "Saving" | "Syncing" => {
+                    log::info!(
+                        "⏳ Port status: {} (transitioning...), attempt {}/{}",
+                        status,
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Ok(status);
+                }
+                "Starting" => {
+                    log::info!("⏳ Port starting, attempt {}/{}", attempt, MAX_ATTEMPTS);
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(anyhow!(
+                        "Port still starting after {} attempts",
+                        MAX_ATTEMPTS
+                    ));
+                }
+                "NotStarted" => {
+                    log::warn!(
+                        "⚠️ Port not started yet, attempt {}/{}",
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(anyhow!("Port not started after {} attempts", MAX_ATTEMPTS));
+                }
+                _ => {
+                    log::warn!(
+                        "⚠️ Unknown status: {}, attempt {}/{}",
+                        status,
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(anyhow!("Unknown status: {}", status));
+                }
+            },
             Err(e) => {
-                log::warn!("⚠️ Failed to check status indicator: {}, attempt {}/{}", e, attempt, MAX_ATTEMPTS);
+                log::warn!(
+                    "⚠️ Failed to check status indicator: {}, attempt {}/{}",
+                    e,
+                    attempt,
+                    MAX_ATTEMPTS
+                );
                 if attempt < MAX_ATTEMPTS {
                     tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                     continue;
@@ -115,8 +142,11 @@ pub async fn verify_port_enabled<T: Expect>(
             }
         }
     }
-    
-    Err(anyhow!("Failed to verify port enabled after {} attempts", MAX_ATTEMPTS))
+
+    Err(anyhow!(
+        "Failed to verify port enabled after {} attempts",
+        MAX_ATTEMPTS
+    ))
 }
 
 /// Navigate to port1 in TUI (shared helper).
