@@ -3,12 +3,159 @@ use regex::Regex;
 
 use expectrl::Expect;
 
+/// Check the top-right status indicator in the title bar
+/// Returns Ok(status) where status is one of: "NotStarted", "Starting", "Running", "Modified", "Saving", "Syncing", "Applied"
+/// This function handles the transient nature of "Applied" status (only shows for 3 seconds)
+pub fn check_status_indicator(screen: &str) -> Result<String> {
+    // The status indicator is in the top-right corner of the first line
+    // Format: "AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Running ● "
+    // or:     "AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Applied ✔ "
+
+    let first_line = screen.lines().next().unwrap_or("");
+
+    // Check for each status in priority order (most specific first)
+    if Regex::new(r"Applied\s*✔")?.is_match(first_line) {
+        return Ok("Applied".to_string());
+    }
+    if Regex::new(r"Saving\s*[⠏⠛⠹⠼⠶⠧]")?.is_match(first_line) {
+        return Ok("Saving".to_string());
+    }
+    if Regex::new(r"Syncing\s*[⠏⠛⠹⠼⠶⠧]")?.is_match(first_line) {
+        return Ok("Syncing".to_string());
+    }
+    if Regex::new(r"Starting\s*[⠏⠛⠹⠼⠶⠧]")?.is_match(first_line) {
+        return Ok("Starting".to_string());
+    }
+    if Regex::new(r"Running\s*●")?.is_match(first_line) {
+        return Ok("Running".to_string());
+    }
+    if Regex::new(r"Modified\s*○")?.is_match(first_line) {
+        return Ok("Modified".to_string());
+    }
+    if Regex::new(r"Not Started\s*×")?.is_match(first_line) {
+        return Ok("NotStarted".to_string());
+    }
+
+    Err(anyhow!(
+        "No status indicator found in title bar: {}",
+        first_line
+    ))
+}
+
+/// Verify the port is enabled by checking the status indicator
+/// This function is more flexible than just looking for "Running" or "Applied"
+/// It handles the timing issue where "Applied ✔" only shows for 3 seconds,
+/// then transitions to "Running ●" or "Modified ○"
+pub async fn verify_port_enabled<T: Expect>(
+    session: &mut T,
+    cap: &mut crate::snapshot::TerminalCapture,
+    capture_name: &str,
+) -> Result<String> {
+    const MAX_ATTEMPTS: usize = 5;
+    const RETRY_DELAY_MS: u64 = 1000;
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        let screen = cap
+            .capture(session, &format!("{}_{}", capture_name, attempt))
+            .await?;
+
+        match check_status_indicator(&screen) {
+            Ok(status) => match status.as_str() {
+                "Applied" => {
+                    log::info!(
+                        "✅ Port enabled - status: Applied ✔ (will transition to Running ● in 3s)"
+                    );
+                    return Ok(status);
+                }
+                "Running" => {
+                    log::info!("✅ Port enabled - status: Running ●");
+                    return Ok(status);
+                }
+                "Modified" => {
+                    log::info!(
+                        "✅ Port enabled - status: Modified ○ (running with unsaved changes)"
+                    );
+                    return Ok(status);
+                }
+                "Saving" | "Syncing" => {
+                    log::info!(
+                        "⏳ Port status: {} (transitioning...), attempt {}/{}",
+                        status,
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Ok(status);
+                }
+                "Starting" => {
+                    log::info!("⏳ Port starting, attempt {}/{}", attempt, MAX_ATTEMPTS);
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(anyhow!(
+                        "Port still starting after {} attempts",
+                        MAX_ATTEMPTS
+                    ));
+                }
+                "NotStarted" => {
+                    log::warn!(
+                        "⚠️ Port not started yet, attempt {}/{}",
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(anyhow!("Port not started after {} attempts", MAX_ATTEMPTS));
+                }
+                _ => {
+                    log::warn!(
+                        "⚠️ Unknown status: {}, attempt {}/{}",
+                        status,
+                        attempt,
+                        MAX_ATTEMPTS
+                    );
+                    if attempt < MAX_ATTEMPTS {
+                        tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                        continue;
+                    }
+                    return Err(anyhow!("Unknown status: {}", status));
+                }
+            },
+            Err(e) => {
+                log::warn!(
+                    "⚠️ Failed to check status indicator: {}, attempt {}/{}",
+                    e,
+                    attempt,
+                    MAX_ATTEMPTS
+                );
+                if attempt < MAX_ATTEMPTS {
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    Err(anyhow!(
+        "Failed to verify port enabled after {} attempts",
+        MAX_ATTEMPTS
+    ))
+}
+
 /// Navigate to port1 in TUI (shared helper).
 pub async fn navigate_to_vcom<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
+    port1: &str,
 ) -> Result<()> {
-    let ports = crate::ports::vcom_matchers();
+    let ports = crate::ports::vcom_matchers_with_ports(port1, crate::ports::DEFAULT_PORT2);
     log::info!(
         "navigate_to_vcom: port1 aliases = {:?}",
         ports.port1_aliases
@@ -234,7 +381,7 @@ pub async fn enable_port_carefully<T: Expect>(
     // Use a retry loop to wait for UI to update
     log::info!("Verifying port enabled status with retry logic");
     let mut verified = false;
-    for attempt in 1..=5 {
+    for attempt in 1..=3 {
         let screen = cap
             .capture(session, &format!("verify_port_toggle_attempt_{attempt}"))
             .await
@@ -246,8 +393,8 @@ pub async fn enable_port_carefully<T: Expect>(
             break;
         }
 
-        if attempt < 5 {
-            log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/5)");
+        if attempt < 3 {
+            log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/3)");
             crate::helpers::sleep_a_while().await;
         }
     }
@@ -255,7 +402,7 @@ pub async fn enable_port_carefully<T: Expect>(
     if !verified {
         let final_screen = cap.capture(session, "verify_port_toggle_failed").await?;
         return Err(anyhow!(
-            "Port toggle did not reflect as enabled after 5 attempts; latest screen:\n{final_screen}"
+            "Port toggle did not reflect as enabled after 3 attempts; latest screen:\n{final_screen}"
         ));
     }
 
@@ -270,7 +417,7 @@ pub async fn enter_modbus_panel<T: Expect>(
     // If we're already inside the Modbus panel, skip navigation to avoid bouncing back to the
     // port overview and keep the register table in view for monitoring.
     let screen = cap.capture(session, "check_modbus_panel").await?;
-    if screen.contains("ModBus Master/Slave Settings") {
+    if screen.contains("ModBus Master/Slave Set") {
         log::info!("Already in Modbus settings panel; skipping navigation");
         return Ok(());
     }
@@ -345,7 +492,7 @@ pub async fn enter_modbus_panel<T: Expect>(
         crate::auto_cursor::CursorAction::PressEnter,
         crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Give page time to load and stabilize rendering
         crate::auto_cursor::CursorAction::MatchPattern {
-            pattern: Regex::new(r"ModBus Master/Slave Settings")?,
+            pattern: Regex::new(r"ModBus Master/Slave Set")?,
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 10)), // Expanded range to catch the header even if scrolled
             col_range: None,
@@ -364,30 +511,128 @@ pub async fn enter_modbus_panel<T: Expect>(
 }
 
 /// Update TUI registers with new values (shared implementation)
-/// NOTE: Assumes you're already IN the Modbus panel at the register editing area
+/// NOTE: Assumes you're already IN the Modbus panel and cursor is on or near the target station
 pub async fn update_tui_registers<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // After configuration, cursor is on Register Length field (just saved it).
-    // The register grid is below. Based on iteration 9 data where Down 3 gave us
-    // registers 8-11 (row 3 of grid), we can infer:
-    // - Down 0 = stay on Register Length (wrong)
-    // - Down 1 = row 1 of grid (registers 0-3) - what we want!
-    // - Down 2 = row 2 of grid (registers 4-7)
-    // - Down 3 = row 3 of grid (registers 8-11) - confirmed by iter 9
+    // Strategy: First navigate to a known position (top of Modbus panel),
+    // then navigate down to find the first station's register grid.
+    // This ensures we always start from the same position regardless of where
+    // the cursor was after previous operations (like Ctrl+S).
 
+    log::info!("🔍 Resetting to top of Modbus panel...");
+
+    // Navigate up many times to ensure we reach the top
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Down,
-            count: 1, // Move from Register Length to first row of register grid
+            direction: crate::key_input::ArrowKey::Up,
+            count: 50, // Large count to ensure we reach top
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
     ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_first_register")
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
+
+    // Now search down for the register grid
+    log::info!("🔍 Searching down for register grid...");
+    let mut found_register = false;
+    let mut attempts = 0;
+    let max_attempts = 20;
+
+    while !found_register && attempts < max_attempts {
+        let screen = cap
+            .capture(session, &format!("search_attempt_{}", attempts))
+            .await?;
+
+        // Check if current screen shows register values
+        // Look for lines with multiple hex values (register display)
+        for line in screen.lines() {
+            // Register lines contain hex addresses and values like:
+            // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"
+            if line.contains("0x00") && line.matches("0x").count() >= 3 {
+                found_register = true;
+                log::info!("Found register grid at attempt {}", attempts);
+                break;
+            }
+        }
+
+        if !found_register {
+            // Navigate down to find registers
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction: crate::key_input::ArrowKey::Down,
+                    count: 1,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 100 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("search_down_{}", attempts),
+            )
+            .await?;
+
+            attempts += 1;
+        }
+    }
+
+    if !found_register {
+        return Err(anyhow!(
+            "Could not find register grid after {} attempts from top",
+            attempts
+        ));
+    }
+
+    log::info!("Found register grid, navigating to first register of first row...");
+
+    // We're now somewhere in the register grid. Navigate to the FIRST register.
+    // Go up until we can't go up anymore within the register section.
+    for attempt in 0..10 {
+        let before = cap
+            .capture(session, &format!("before_up_{}", attempt))
+            .await?;
+
+        let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 1,
+        }];
+        crate::auto_cursor::execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("up_{}", attempt),
+        )
         .await?;
+
+        let after = cap
+            .capture(session, &format!("after_up_{}", attempt))
+            .await?;
+
+        // Check if we're still in register grid (has multiple 0x patterns)
+        let still_in_grid = after
+            .lines()
+            .any(|l| l.contains("0x00") && l.matches("0x").count() >= 3);
+
+        // If we left the grid or screen didn't change, go back down one and stop
+        if !still_in_grid || before == after {
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction: crate::key_input::ArrowKey::Down,
+                    count: 1,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 200 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first_reg")
+                .await?;
+            log::info!("Positioned at first register after {} up attempts", attempt);
+            break;
+        }
+    }
+
+    log::info!("At first register row, starting updates...");
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers

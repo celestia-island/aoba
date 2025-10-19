@@ -14,6 +14,11 @@ use crate::{
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     const PAGE_SIZE: usize = 10;
 
+    // Check for Ctrl modifier
+    let has_ctrl = key
+        .modifiers
+        .contains(crossterm::event::KeyModifiers::CONTROL);
+
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             handle_scroll_up(1)?;
@@ -26,12 +31,31 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         KeyCode::PageUp => {
-            handle_scroll_up(PAGE_SIZE)?;
+            if has_ctrl {
+                // Ctrl+PageUp: Jump to first scroll position
+                write_status(|status| {
+                    if let types::Page::About { view_offset, .. } = &mut status.page {
+                        *view_offset = 0;
+                    }
+                    Ok(())
+                })?;
+            } else {
+                // PageUp: Scroll up by page size
+                handle_scroll_up(PAGE_SIZE)?;
+            }
             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }
         KeyCode::PageDown => {
-            handle_scroll_down(PAGE_SIZE)?;
+            if has_ctrl {
+                // Ctrl+PageDown: Jump to last scroll position
+                // We don't know the exact content height here, so just scroll down a lot
+                // The scroll handler will clamp to max position
+                handle_scroll_down(1000)?;
+            } else {
+                // PageDown: Scroll down by page size
+                handle_scroll_down(PAGE_SIZE)?;
+            }
             bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
             Ok(())
         }

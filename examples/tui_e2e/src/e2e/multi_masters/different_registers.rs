@@ -1,16 +1,19 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_master_common, setup_tui_port, test_station_with_retries};
+use crate::utils::{
+    configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
-    ports::{port_exists, should_run_vcom_tests},
+    ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::TerminalCapture,
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
+use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with Different Register Types
 ///
@@ -31,20 +34,20 @@ use ci_utils::{
 /// 2. IPC communication prevents port conflicts
 /// 3. All register types work correctly (Holding, Input, Coils, Discrete Inputs)
 /// 4. Communication reliability with retry logic
-pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
-    const REGISTER_LENGTH: usize = 6;
+pub async fn test_tui_multi_masters_different_registers(port1: &str, port2: &str) -> Result<()> {
+    const REGISTER_LENGTH: usize = 8;
     const MAX_RETRIES: usize = 10;
     const RETRY_INTERVAL_MS: u64 = 1000;
 
-    if !should_run_vcom_tests() {
+    if !should_run_vcom_tests_with_ports(port1, port2) {
         log::info!("Skipping TUI Multi-Masters Different Registers test on this platform");
         return Ok(());
     }
 
     log::info!("🧪 Starting TUI Multi-Masters Different Registers E2E test");
 
-    // Get platform-appropriate port names from ci_utils (handles env overrides and defaults)
-    let ports = ci_utils::ports::vcom_matchers();
+    // Get platform-appropriate port names
+    let ports = vcom_matchers_with_ports(port1, port2);
     let port1 = ports.port1_name.clone();
     let port2 = ports.port2_name.clone();
 
@@ -79,13 +82,24 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 4 masters on {port1} with different register types");
+
+    // Navigate to port and enter Modbus panel (without enabling the port yet)
+    navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
+
+    // Generate register data for all masters first (before configuration)
+    let master_data: Vec<Vec<u16>> = (0..4)
+        .map(|_| generate_random_registers(REGISTER_LENGTH))
+        .collect();
+
     for (i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {
-        // Setup port once for the first master, subsequent masters share the same port
-        if i == 0 {
-            setup_tui_port(&mut tui_session, &mut tui_cap, &port1).await?;
-        }
+        log::info!(
+            "🔧 Configuring Master {} (Station {}, Type {:02})",
+            i + 1,
+            station_id,
+            register_type
+        );
 
         // For second and subsequent masters, create a new station first
         if i > 0 {
@@ -121,26 +135,93 @@ pub async fn test_tui_multi_masters_different_registers() -> Result<()> {
             i == 0, // is_first_station
         )
         .await?;
+
+        // Immediately update data for this master
+        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
+        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
+
+        // Wait for register updates to be saved before configuring next master
+        log::info!("⏱️ Waiting for register updates to be fully saved...");
+        ci_utils::sleep_a_while().await;
+        ci_utils::sleep_a_while().await;
     }
 
-    // Generate and update register data for all masters
-    let master_data: Vec<Vec<u16>> = (0..4)
-        .map(|_| generate_random_registers(REGISTER_LENGTH))
-        .collect();
+    // After configuring all Masters, save and exit Modbus panel
+    log::info!("🔄 All Masters configured, saving configuration...");
 
-    log::info!("🧪 Updating all master registers");
-    for (i, data) in master_data.iter().enumerate() {
-        let (station_id, register_type, register_mode, _) = masters[i];
-        log::info!(
-            "  Master {} (Station {station_id}, Type {register_type}, {register_mode}) data: {data:?}",
-            i + 1
-        );
-        update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
+    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
+    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
+    tui_session.send("\x1b")?;
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+
+    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
+    let mut screen;
+    let max_attempts = 3;
+    let mut at_config_panel = false;
+    let mut port_enabled = false;
+
+    for attempt in 1..=max_attempts {
+        ci_utils::sleep_a_while().await;
+        screen = tui_cap
+            .capture(
+                &mut tui_session,
+                &format!("after_save_modbus_attempt_{}", attempt),
+            )
+            .await?;
+
+        // Check if we're at ConfigPanel
+        if screen.contains("Enable Port") {
+            at_config_panel = true;
+
+            // Check if port is showing as Enabled
+            for line in screen.lines() {
+                if line.contains("Enable Port") && line.contains("Enabled") {
+                    port_enabled = true;
+                    break;
+                }
+            }
+
+            if port_enabled {
+                log::info!(
+                    "✅ Port enabled and shown in UI on attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+                break;
+            } else {
+                log::info!(
+                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
+                    attempt,
+                    max_attempts
+                );
+            }
+        } else {
+            log::warn!(
+                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
+                attempt,
+                max_attempts
+            );
+        }
     }
 
-    // Wait for IPC updates to propagate
-    log::info!("🧪 Waiting for IPC propagation...");
-    tokio::time::sleep(Duration::from_millis(3000)).await;
+    if !at_config_panel {
+        return Err(anyhow!(
+            "Failed to return to port details page after saving Modbus configuration (tried {} times)",
+            max_attempts
+        ));
+    }
+
+    if !port_enabled {
+        return Err(anyhow!(
+            "Port not showing as Enabled after {} attempts",
+            max_attempts
+        ));
+    }
+
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Test all 4 stations from vcom2
     let mut station_success = std::collections::HashMap::new();

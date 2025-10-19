@@ -1,15 +1,17 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_slave_common, setup_tui_port, test_station_with_retries};
+use crate::utils::{
+    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
-    ports::{port_exists, should_run_vcom_tests},
+    ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::TerminalCapture,
     terminal::spawn_expect_process,
-    tui::{enter_modbus_panel, update_tui_registers},
+    tui::update_tui_registers,
 };
 
 /// Test Multiple TUI Slaves on Single Port with IPC Communication - Basic Scenario
@@ -33,20 +35,20 @@ use ci_utils::{
 /// 2. Different register address ranges are properly managed without conflicts
 /// 3. IPC communication prevents port conflicts
 /// 4. Communication reliability with retry logic
-pub async fn test_tui_multi_slaves_basic() -> Result<()> {
+pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()> {
     const REGISTER_LENGTH: usize = 8;
     const MAX_RETRIES: usize = 10;
     const RETRY_INTERVAL_MS: u64 = 1000;
 
-    if !should_run_vcom_tests() {
+    if !should_run_vcom_tests_with_ports(port1, port2) {
         log::info!("Skipping TUI Multi-Slaves Basic test on this platform");
         return Ok(());
     }
 
     log::info!("🧪 Starting TUI Multi-Slaves Basic E2E test");
 
-    // Get platform-appropriate port names from ci_utils (handles env overrides and defaults)
-    let ports = ci_utils::ports::vcom_matchers();
+    // Get platform-appropriate port names
+    let ports = vcom_matchers_with_ports(port1, port2);
     let port1 = ports.port1_name.clone();
     let port2 = ports.port2_name.clone();
 
@@ -68,7 +70,7 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
     log::info!("🧪 Step 1: Spawning TUI Slaves process");
     let mut tui_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn TUI Slaves process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
+    let mut tui_cap = TerminalCapture::new(60, 80); // Increased height to show all 4 stations
 
     sleep_seconds(3).await;
 
@@ -86,6 +88,10 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         .collect();
 
     log::info!("🧪 Step 2: Configuring and updating 4 slaves on {port2}");
+
+    // Navigate to port and enter Modbus panel (without enabling the port yet)
+    navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
+
     for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
     {
         log::info!(
@@ -95,15 +101,6 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
             register_type,
             start_address
         );
-
-        // Setup port once for the first slave, subsequent slaves share the same port
-        if i == 0 {
-            setup_tui_port(&mut tui_session, &mut tui_cap, &port2).await?;
-        } else {
-            // For subsequent slaves, navigate back to Modbus panel to add another station
-            log::info!("🔄 Navigating back to Modbus panel for Slave {}", i + 1);
-            enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-        }
 
         configure_tui_slave_common(
             &mut tui_session,
@@ -120,50 +117,41 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         log::info!("📝 Updating Slave {} data: {:?}", i + 1, slave_data[i]);
         update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
 
-        // Wait for register updates to be saved before configuring next slave
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
-
-        // Debug breakpoint: capture screen after configuring and updating each slave
+        // Save this slave's configuration with Ctrl+S to commit changes to IPC
+        log::info!("💾 Saving Slave {} configuration with Ctrl+S...", i + 1);
         use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-        if std::env::var("DEBUG_MODE").is_ok() {
-            log::info!(
-                "🔴 DEBUG: Capturing screen after Slave {} configuration",
-                i + 1
-            );
-            let actions = vec![CursorAction::DebugBreakpoint {
-                description: format!("after_slave_{}_config", i + 1),
-            }];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &actions,
-                &format!("debug_slave_{}", i + 1),
-            )
-            .await?;
-        }
-    }
-
-    // Wait for IPC updates to propagate
-    log::info!("🧪 Waiting for IPC propagation...");
-    tokio::time::sleep(Duration::from_millis(3000)).await;
-
-    // Debug breakpoint: capture screen before starting polls
-    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-    if std::env::var("DEBUG_MODE").is_ok() {
-        log::info!("🔴 DEBUG: Capturing screen before starting polls");
-        let actions = vec![CursorAction::DebugBreakpoint {
-            description: "before_polling_slaves".to_string(),
-        }];
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 1000 }, // Wait for save operation
+        ];
         execute_cursor_actions(
             &mut tui_session,
             &mut tui_cap,
             &actions,
-            "debug_before_poll_slaves",
+            &format!("save_slave_{}_config", i + 1),
         )
         .await?;
+
+        // Wait for register updates to be saved and IPC to propagate before configuring next slave
+        log::info!(
+            "⏱️ Waiting for Slave {} updates to be fully saved and propagated...",
+            i + 1
+        );
+        tokio::time::sleep(Duration::from_millis(1500)).await;
     }
+
+    // After configuring all Slaves, verify port is enabled
+    log::info!("✅ All Slaves configured and saved, verifying port is enabled...");
+
+    // Verify port is enabled by checking the status indicator
+    log::info!("🔍 Verifying port is enabled");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_multi_slaves",
+    )
+    .await?;
+    log::info!("✅ Port enabled with status: {}, ready for testing", status);
 
     // Test all 4 address ranges from vcom1
     let mut address_range_success = std::collections::HashMap::new();
