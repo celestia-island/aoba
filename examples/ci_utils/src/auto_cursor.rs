@@ -334,11 +334,22 @@ async fn check_status_path(
     timeout_secs: u64,
     retry_interval_ms: u64,
 ) -> Result<()> {
+    use serde_json_path::JsonPath;
     use tokio::time::{sleep, Duration};
 
     let start = std::time::Instant::now();
     let timeout = Duration::from_secs(timeout_secs);
     let interval = Duration::from_millis(retry_interval_ms);
+
+    // Compile the JSONPath once outside the loop
+    let json_path_str = if path.starts_with('$') {
+        path.to_string()
+    } else {
+        format!("$.{}", path)
+    };
+
+    let json_path = JsonPath::parse(&json_path_str)
+        .map_err(|e| anyhow!("Invalid JSONPath '{}': {}", json_path_str, e))?;
 
     loop {
         if start.elapsed() > timeout.into() {
@@ -357,10 +368,13 @@ async fn check_status_path(
                 let status_json = serde_json::to_value(&status)
                     .map_err(|e| anyhow!("Failed to serialize status: {}", e))?;
 
-                // Navigate the JSON path
-                match navigate_json_path(&status_json, path) {
+                // Query the JSON path using the library
+                let nodes = json_path.query(&status_json);
+
+                // Check if we got exactly one result
+                match nodes.exactly_one() {
                     Ok(actual) => {
-                        if *actual == *expected {
+                        if actual == expected {
                             log::debug!(
                                 "✓ Status path '{}' matches expected value: {:?}",
                                 path,
@@ -377,7 +391,7 @@ async fn check_status_path(
                         }
                     }
                     Err(e) => {
-                        log::debug!("Failed to navigate path '{}': {}", path, e);
+                        log::debug!("Failed to find unique value at path '{}': {}", path, e);
                     }
                 }
             }
@@ -388,87 +402,4 @@ async fn check_status_path(
 
         sleep(interval).await;
     }
-}
-
-/// Navigate a JSON path like "page" or "ports[0].enabled" or "ports[0].modbus_masters[0].station_id"
-fn navigate_json_path<'a>(value: &'a Value, path: &str) -> Result<&'a Value> {
-    let mut current = value;
-
-    // Split path by dots, but handle array indices specially
-    let parts = parse_json_path(path);
-
-    for part in parts {
-        match part {
-            PathPart::Field(field) => {
-                current = current
-                    .get(&field)
-                    .ok_or_else(|| anyhow!("Field '{}' not found in JSON", field))?;
-            }
-            PathPart::Index(idx) => {
-                current = current
-                    .get(idx)
-                    .ok_or_else(|| anyhow!("Index {} not found in JSON array", idx))?;
-            }
-        }
-    }
-
-    Ok(current)
-}
-
-/// Parse a JSON path string into parts
-fn parse_json_path(path: &str) -> Vec<PathPart> {
-    let mut parts = Vec::new();
-    let mut current = String::new();
-
-    let chars: Vec<char> = path.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        match chars[i] {
-            '.' => {
-                if !current.is_empty() {
-                    parts.push(PathPart::Field(current.clone()));
-                    current.clear();
-                }
-                i += 1;
-            }
-            '[' => {
-                // Handle array index
-                if !current.is_empty() {
-                    parts.push(PathPart::Field(current.clone()));
-                    current.clear();
-                }
-
-                // Find closing bracket
-                i += 1;
-                let mut index_str = String::new();
-                while i < chars.len() && chars[i] != ']' {
-                    index_str.push(chars[i]);
-                    i += 1;
-                }
-
-                if let Ok(idx) = index_str.parse::<usize>() {
-                    parts.push(PathPart::Index(idx));
-                }
-
-                i += 1; // Skip closing bracket
-            }
-            c => {
-                current.push(c);
-                i += 1;
-            }
-        }
-    }
-
-    if !current.is_empty() {
-        parts.push(PathPart::Field(current));
-    }
-
-    parts
-}
-
-#[derive(Debug)]
-enum PathPart {
-    Field(String),
-    Index(usize),
 }
