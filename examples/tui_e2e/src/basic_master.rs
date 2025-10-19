@@ -91,18 +91,30 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
     // Save configuration with Ctrl+S which will auto-enable the port
     log::info!("🧪 Step 5: Save configuration with Ctrl+S to auto-enable port");
-    
+
     // Debug: Check state before Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "before_ctrl_s".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_before_save").await?;
-    
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_before_save",
+    )
+    .await?;
+
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_config_ctrl_s",
+    )
+    .await?;
 
     // Debug: Check state immediately after Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -110,17 +122,18 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_save").await?;
 
-    // Verify port is enabled by checking for the green checkmark or Running status
+    // Verify port is enabled by checking the status indicator in the top-right corner
     log::info!("🧪 Step 6: Verify port is enabled after Ctrl+S");
-    let screen = tui_cap
-        .capture(&mut tui_session, "verify_port_enabled_after_save")
-        .await?;
-    // The status indicator should show either "Running" or "Applied" (green checkmark shown for 3 seconds)
-    if !screen.contains("Running") && !screen.contains("Applied") {
-        log::warn!("⚠️ Port status not showing as Running/Applied, checking for other indicators...");
-        // Continue anyway as the port might still be starting up
-    }
-    log::info!("✅ Configuration saved and port enabling");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_after_save",
+    )
+    .await?;
+    log::info!(
+        "✅ Configuration saved and port enabled with status: {}",
+        status
+    );
 
     // Wait for port to fully initialize and subprocess to be ready
     log::info!("🧪 Step 6.5: Waiting for subprocess to be fully ready...");
@@ -136,10 +149,24 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         log::info!("🧪 Round {round}/{ROUNDS}: Updating registers...");
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
+        // Save the updated register values with Ctrl+S to propagate to IPC subprocess
+        log::info!("🧪 Round {round}/{ROUNDS}: Saving register updates with Ctrl+S...");
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 500 }, // Wait for save operation
+        ];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            &format!("save_registers_round_{round}"),
+        )
+        .await?;
+
         // Wait for IPC updates to propagate to CLI subprocess
         // Increased wait time for CI environments which may have slower performance
         log::info!("🧪 Round {round}/{ROUNDS}: Waiting for IPC updates to propagate...");
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(2000)).await; // Increased from 1000ms
 
         // Poll CLI slave to verify data is accessible
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave for verification");

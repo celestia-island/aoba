@@ -13,7 +13,6 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
-use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with IPC Communication - Basic Scenario
 ///
@@ -71,7 +70,7 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     log::info!("🧪 Step 1: Spawning TUI Masters process");
     let mut tui_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn TUI Masters process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
+    let mut tui_cap = TerminalCapture::new(60, 80); // Increased height to show all 4 stations
 
     sleep_seconds(3).await;
 
@@ -155,33 +154,41 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
         update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
 
-        // Wait for register updates to be saved before configuring next master
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
-    }
-
-    // After configuring all Masters, save with Ctrl+S to auto-enable the port
-    log::info!("💾 All Masters configured, pressing Ctrl+S to save and enable port...");
-    
-    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
-
-    // Verify port is enabled by checking for the green checkmark or Running status
-    log::info!("🔍 Verifying port is enabled after Ctrl+S");
-    let screen = tui_cap
-        .capture(&mut tui_session, "verify_port_enabled_after_save")
+        // Save this master's configuration with Ctrl+S to commit changes to IPC
+        log::info!("💾 Saving Master {} configuration with Ctrl+S...", i + 1);
+        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 1000 }, // Wait for save operation
+        ];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            &format!("save_master_{}_config", i + 1),
+        )
         .await?;
-    // The status indicator should show either "Running" or "Applied" (green checkmark shown for 3 seconds)
-    if !screen.contains("Running") && !screen.contains("Applied") {
-        log::warn!("⚠️ Port status not showing as Running/Applied, checking for other indicators...");
-        // Continue anyway as the port might still be starting up
+
+        // Wait for register updates to be saved and IPC to propagate before configuring next master
+        log::info!(
+            "⏱️ Waiting for Master {} updates to be fully saved and propagated...",
+            i + 1
+        );
+        tokio::time::sleep(Duration::from_millis(1500)).await;
     }
-    log::info!("✅ Configuration saved and port enabled, staying in Modbus panel for monitoring");
+
+    // All Masters configured and saved individually, port should be enabled
+    log::info!("✅ All Masters configured and saved, verifying port is enabled...");
+
+    // Verify port is enabled by checking the status indicator in the top-right corner
+    log::info!("🔍 Verifying port is enabled");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_multi_masters",
+    )
+    .await?;
+    log::info!("✅ Port enabled with status: {}, ready for testing", status);
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();

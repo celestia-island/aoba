@@ -94,18 +94,30 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
 
     // Save configuration with Ctrl+S which will auto-enable the port
     log::info!("🧪 Step 5: Save configuration with Ctrl+S to auto-enable port");
-    
+
     // Debug: Check state before Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "before_ctrl_s".to_string(),
     }];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_before_save").await?;
-    
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_before_save",
+    )
+    .await?;
+
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_config_ctrl_s",
+    )
+    .await?;
 
     // Debug: Check state immediately after Ctrl+S
     let actions = vec![CursorAction::DebugBreakpoint {
@@ -113,17 +125,18 @@ pub async fn test_tui_slave_with_cli_master_continuous() -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_save").await?;
 
-    // Verify port is enabled by checking for the green checkmark or Running status
+    // Verify port is enabled by checking the status indicator in the top-right corner
     log::info!("🧪 Step 6: Verify port is enabled after Ctrl+S");
-    let screen = tui_cap
-        .capture(&mut tui_session, "verify_port_enabled_after_save")
-        .await?;
-    // The status indicator should show either "Running" or "Applied" (green checkmark shown for 3 seconds)
-    if !screen.contains("Running") && !screen.contains("Applied") {
-        log::warn!("⚠️ Port status not showing as Running/Applied, checking for other indicators...");
-        // Continue anyway as the port might still be starting up
-    }
-    log::info!("✅ Configuration saved and port enabling");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_after_save",
+    )
+    .await?;
+    log::info!(
+        "✅ Configuration saved and port enabled with status: {}",
+        status
+    );
 
     // Check if debug mode is enabled for smoke testing
     let debug_mode = std::env::var("DEBUG_MODE").is_ok();

@@ -13,7 +13,6 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
-use expectrl::Expect;
 
 /// Test Multiple TUI Slaves on Single Port with IPC Communication - Basic Scenario
 ///
@@ -71,7 +70,7 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
     log::info!("🧪 Step 1: Spawning TUI Slaves process");
     let mut tui_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn TUI Slaves process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
+    let mut tui_cap = TerminalCapture::new(60, 80); // Increased height to show all 4 stations
 
     sleep_seconds(3).await;
 
@@ -118,88 +117,41 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         log::info!("📝 Updating Slave {} data: {:?}", i + 1, slave_data[i]);
         update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
 
-        // Wait for register updates to be saved before configuring next slave
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
+        // Save this slave's configuration with Ctrl+S to commit changes to IPC
+        log::info!("💾 Saving Slave {} configuration with Ctrl+S...", i + 1);
+        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 1000 }, // Wait for save operation
+        ];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            &format!("save_slave_{}_config", i + 1),
+        )
+        .await?;
+
+        // Wait for register updates to be saved and IPC to propagate before configuring next slave
+        log::info!(
+            "⏱️ Waiting for Slave {} updates to be fully saved and propagated...",
+            i + 1
+        );
+        tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
-    // After configuring all Slaves, save and exit Modbus panel
-    log::info!("🔄 All Slaves configured, saving configuration...");
+    // After configuring all Slaves, verify port is enabled
+    log::info!("✅ All Slaves configured and saved, verifying port is enabled...");
 
-    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
-    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
-    tui_session.send("\x1b")?;
-    ci_utils::sleep_a_while().await;
-    ci_utils::sleep_a_while().await;
-
-    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
-    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
-    let mut screen;
-    let max_attempts = 3;
-    let mut at_config_panel = false;
-    let mut port_enabled = false;
-
-    for attempt in 1..=max_attempts {
-        ci_utils::sleep_a_while().await;
-        screen = tui_cap
-            .capture(
-                &mut tui_session,
-                &format!("after_save_modbus_attempt_{}", attempt),
-            )
-            .await?;
-
-        // Check if we're at ConfigPanel
-        if screen.contains("Enable Port") {
-            at_config_panel = true;
-
-            // Check if port is showing as Enabled
-            for line in screen.lines() {
-                if line.contains("Enable Port") && line.contains("Enabled") {
-                    port_enabled = true;
-                    break;
-                }
-            }
-
-            if port_enabled {
-                log::info!(
-                    "✅ Port enabled and shown in UI on attempt {}/{}",
-                    attempt,
-                    max_attempts
-                );
-                break;
-            } else {
-                log::info!(
-                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
-                    attempt,
-                    max_attempts
-                );
-            }
-        } else {
-            log::warn!(
-                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
-                attempt,
-                max_attempts
-            );
-        }
-    }
-
-    if !at_config_panel {
-        return Err(anyhow!(
-            "Failed to return to port details page after saving Modbus configuration (tried {} times)",
-            max_attempts
-        ));
-    }
-
-    if !port_enabled {
-        return Err(anyhow!(
-            "Port not showing as Enabled after {} attempts",
-            max_attempts
-        ));
-    }
-
-    log::info!("💾 Saved Modbus configuration and auto-enabled port");
-    log::info!("✅ Successfully returned to port details page with port enabled");
+    // Verify port is enabled by checking the status indicator
+    log::info!("🔍 Verifying port is enabled");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_multi_slaves",
+    )
+    .await?;
+    log::info!("✅ Port enabled with status: {}, ready for testing", status);
 
     // Test all 4 address ranges from vcom1
     let mut address_range_success = std::collections::HashMap::new();
