@@ -307,7 +307,7 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
 
     // Verify we are already inside the Modbus panel per enforced workflow.
     let screen = cap.capture(session, "verify_modbus_panel_slave").await?;
-    if !screen.contains("ModBus Master/Slave Settings") {
+    if !screen.contains("ModBus Master/Slave Set") {
         return Err(anyhow!(
             "Expected to be inside ModBus panel before configuring slave"
         ));

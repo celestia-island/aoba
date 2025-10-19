@@ -270,7 +270,7 @@ pub async fn enter_modbus_panel<T: Expect>(
     // If we're already inside the Modbus panel, skip navigation to avoid bouncing back to the
     // port overview and keep the register table in view for monitoring.
     let screen = cap.capture(session, "check_modbus_panel").await?;
-    if screen.contains("ModBus Master/Slave Settings") {
+    if screen.contains("ModBus Master/Slave Set") {
         log::info!("Already in Modbus settings panel; skipping navigation");
         return Ok(());
     }
@@ -345,7 +345,7 @@ pub async fn enter_modbus_panel<T: Expect>(
         crate::auto_cursor::CursorAction::PressEnter,
         crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Give page time to load and stabilize rendering
         crate::auto_cursor::CursorAction::MatchPattern {
-            pattern: Regex::new(r"ModBus Master/Slave Settings")?,
+            pattern: Regex::new(r"ModBus Master/Slave Set")?,
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 10)), // Expanded range to catch the header even if scrolled
             col_range: None,

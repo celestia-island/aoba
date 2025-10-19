@@ -295,7 +295,7 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
 
     // Verify we are already inside Modbus settings per workflow contract.
     let screen = cap.capture(session, "verify_modbus_panel_master").await?;
-    if !screen.contains("ModBus Master/Slave Settings") {
+    if !screen.contains("ModBus Master/Slave Set") {
         return Err(anyhow!(
             "Expected to be inside ModBus panel before configuring master"
         ));
