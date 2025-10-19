@@ -109,7 +109,7 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         if output.status.success() {
             // Don't use environment variables anymore, just log the ports being used
             log::info!("✅ Virtual serial ports reset successfully");
-            log::info!("🔗 Using ports: PORT1={port1}, PORT2={port2}");
+            log::info!("🔗 Using ports: PORT1=/tmp/vcom1, PORT2=/tmp/vcom2");
             Ok(true)
         } else {
             log::warn!("⚠️ Failed to setup virtual serial ports:");
