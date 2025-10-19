@@ -133,7 +133,10 @@ pub async fn test_tui_multi_slaves_basic() -> Result<()> {
         .await?;
 
         // Wait for register updates to be saved and IPC to propagate before configuring next slave
-        log::info!("⏱️ Waiting for Slave {} updates to be fully saved and propagated...", i + 1);
+        log::info!(
+            "⏱️ Waiting for Slave {} updates to be fully saved and propagated...",
+            i + 1
+        );
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
