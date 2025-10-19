@@ -10,6 +10,7 @@ pub mod log_parser;
 pub mod log_utils;
 pub mod ports;
 pub mod snapshot;
+pub mod status_monitor;
 pub mod terminal;
 pub mod tui;
 pub mod verify;
@@ -28,6 +29,11 @@ pub use ports::{
     DEFAULT_PORT1, DEFAULT_PORT2,
 };
 pub use snapshot::TerminalCapture;
+pub use status_monitor::{
+    get_port_log_count, port_exists_in_tui, read_cli_status, read_tui_status, wait_for_cli_status,
+    wait_for_modbus_config, wait_for_port_enabled, wait_for_tui_page, CliStatus, DebugModbusMaster,
+    DebugModbusSlave, DebugPort, TuiStatus,
+};
 pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
 pub use tui::{
     check_status_indicator, enable_port_carefully, enter_modbus_panel, navigate_to_vcom,
