@@ -517,80 +517,89 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // Capture screen to find current position relative to Register Length field
-    log::info!("🔍 Finding Register Length field in current station...");
-    let screen = cap
-        .capture(session, "before_nav_to_register_length")
-        .await?;
-    let lines: Vec<&str> = screen.lines().collect();
+    // More reliable approach: Navigate down until we find the register grid,
+    // then navigate to the first register
+    log::info!("🔍 Searching for register grid...");
 
-    // Find the line with "Register Length" that's closest to our current position
-    // Look for lines containing "> " to find cursor position, and "Register Length" for target
-    let mut cursor_line = None;
-    let mut register_length_line = None;
+    // First, take a capture to see where we are
+    let mut screen = cap.capture(session, "before_find_registers").await?;
 
-    for (idx, line) in lines.iter().enumerate() {
-        // Find cursor position (look for "> " at start of menu items)
-        if line.trim_start().starts_with("> ") || line.contains("> ") {
-            cursor_line = Some(idx);
+    // Look for register grid (lines with hex values like "0x0000 0xABCD")
+    let mut found_register = false;
+    let mut attempts = 0;
+
+    while !found_register && attempts < 15 {
+        // Check if current screen shows register values
+        for line in screen.lines() {
+            // Register lines contain hex addresses and values
+            if line.contains("0x00") && line.matches("0x").count() >= 2 {
+                found_register = true;
+                break;
+            }
         }
-        // Find Register Length field (should be in current station context)
-        if line.contains("Register Length") && !line.contains("Holding") {
-            register_length_line = Some(idx);
+
+        if !found_register {
+            // Navigate down to find registers
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction: crate::key_input::ArrowKey::Down,
+                    count: 1,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 100 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("search_down_{}", attempts),
+            )
+            .await?;
+
+            screen = cap.capture(session, &format!("check_{}", attempts)).await?;
+            attempts += 1;
         }
     }
 
-    let cursor_idx = cursor_line.unwrap_or(0);
-    let register_length_idx = register_length_line
-        .ok_or_else(|| anyhow!("Could not find Register Length field in current station"))?;
-
-    log::info!(
-        "📍 Cursor at line {}, Register Length at line {}, need to move {} lines {}",
-        cursor_idx,
-        register_length_idx,
-        cursor_idx.abs_diff(register_length_idx),
-        if register_length_idx > cursor_idx {
-            "down"
-        } else {
-            "up"
-        }
-    );
-
-    // Navigate to Register Length field
-    if cursor_idx != register_length_idx {
-        let delta = cursor_idx.abs_diff(register_length_idx);
-        let direction = if register_length_idx > cursor_idx {
-            crate::key_input::ArrowKey::Down
-        } else {
-            crate::key_input::ArrowKey::Up
-        };
-
-        let actions = vec![
-            crate::auto_cursor::CursorAction::PressArrow {
-                direction,
-                count: delta,
-            },
-            crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-        ];
-        crate::auto_cursor::execute_cursor_actions(
-            session,
-            cap,
-            &actions,
-            "nav_to_register_length",
-        )
-        .await?;
+    if !found_register {
+        return Err(anyhow!(
+            "Could not find register grid after {} attempts",
+            attempts
+        ));
     }
 
-    // Now we're on Register Length field, navigate Down 1 to first register row
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Down,
-            count: 1, // Move from Register Length to first row of register grid
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_first_register")
-        .await?;
+    log::info!("Found register grid, navigating to first register...");
+
+    // Now navigate to the FIRST register of the current station's register grid
+    // Go up until we find the first register row (can't go up anymore or hit non-register line)
+    for _i in 0..10 {
+        let before = cap.capture(session, "before_up_to_first").await?;
+
+        let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 1,
+        }];
+        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "up_to_first").await?;
+
+        let after = cap.capture(session, "after_up_to_first").await?;
+
+        // Check if we're still in register grid
+        let still_in_grid = after
+            .lines()
+            .any(|l| l.contains("0x00") && l.matches("0x").count() >= 2);
+
+        // If we left the grid or screen didn't change, go back down one and stop
+        if !still_in_grid || before == after {
+            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+                direction: crate::key_input::ArrowKey::Down,
+                count: 1,
+            }];
+            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first")
+                .await?;
+            break;
+        }
+    }
+
+    log::info!("At first register row, starting updates...");
 
     for (i, &val) in new_values.iter().enumerate() {
         // Format as hex since TUI expects hex input for registers
