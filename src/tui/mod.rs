@@ -568,7 +568,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     Ok(())
 }
 
-pub fn start() -> Result<()> {
+pub fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
     // Terminal is initialized inside the rendering thread to avoid sharing
@@ -581,7 +581,7 @@ pub fn start() -> Result<()> {
     init_status(app.clone())?;
 
     // Check if debug CI E2E test mode is enabled
-    let debug_ci_e2e_enabled = std::env::var("AOBA_DEBUG_CI_E2E_TEST").is_ok();
+    let debug_ci_e2e_enabled = matches.get_flag("debug-ci-e2e-test");
     let debug_dump_shutdown = if debug_ci_e2e_enabled {
         log::info!("🔍 Debug CI E2E test mode enabled - starting status dump thread");
         crate::protocol::status::debug_dump::enable_debug_dump();

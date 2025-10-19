@@ -5,6 +5,7 @@ pub mod i18n;
 pub mod protocol;
 
 use anyhow::Result;
+use clap::ArgMatches;
 
 #[cfg(debug_assertions)]
 use chrono::Local;
@@ -52,7 +53,7 @@ pub fn init_common() {
     crate::i18n::init_i18n();
 }
 
-pub fn start_tui() -> Result<()> {
-    crate::tui::start()?;
+pub fn start_tui(matches: &ArgMatches) -> Result<()> {
+    crate::tui::start(matches)?;
     Ok(())
 }

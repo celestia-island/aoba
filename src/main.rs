@@ -39,12 +39,12 @@ async fn main() -> Result<()> {
 
     // If TUI requested, run in this process so it inherits the terminal.
     if matches.get_flag("tui") {
-        aoba::start_tui()?;
+        aoba::start_tui(&matches)?;
         return Ok(());
     }
 
     // Default: always start TUI mode
-    aoba::start_tui()?;
+    aoba::start_tui(&matches)?;
 
     Ok(())
 }
