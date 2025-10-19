@@ -154,37 +154,38 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
         log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
         update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
 
-        // Wait for register updates to be saved before configuring next master
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await; // Extra delay to ensure last register is saved
+        // Save this master's configuration with Ctrl+S to commit changes to IPC
+        log::info!("💾 Saving Master {} configuration with Ctrl+S...", i + 1);
+        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 1000 }, // Wait for save operation
+        ];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            &format!("save_master_{}_config", i + 1),
+        )
+        .await?;
+
+        // Wait for register updates to be saved and IPC to propagate before configuring next master
+        log::info!("⏱️ Waiting for Master {} updates to be fully saved and propagated...", i + 1);
+        tokio::time::sleep(Duration::from_millis(1500)).await;
     }
 
-    // After configuring all Masters, save with Ctrl+S to auto-enable the port
-    log::info!("💾 All Masters configured, pressing Ctrl+S to save and enable port...");
-
-    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
-    ];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "save_config_ctrl_s",
-    )
-    .await?;
+    // All Masters configured and saved individually, port should be enabled
+    log::info!("✅ All Masters configured and saved, verifying port is enabled...");
 
     // Verify port is enabled by checking the status indicator in the top-right corner
-    log::info!("🔍 Verifying port is enabled after Ctrl+S");
+    log::info!("🔍 Verifying port is enabled");
     let status = ci_utils::verify_port_enabled(
         &mut tui_session,
         &mut tui_cap,
-        "verify_port_enabled_after_save",
+        "verify_port_enabled_multi_masters",
     )
     .await?;
-    log::info!("✅ Configuration saved and port enabled with status: {}, staying in Modbus panel for monitoring", status);
+    log::info!("✅ Port enabled with status: {}, ready for testing", status);
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();
