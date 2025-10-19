@@ -287,11 +287,14 @@ fn commit_selector_edit(
 
                         *mode = new_mode.clone();
                         log::info!("Updated global connection mode to {:?}", mode.is_master());
-                        
+
                         // Mark as modified after using mode
                         port.config_modified = true;
                         // Update status indicator if port is running
-                        if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                        if matches!(
+                            port.state,
+                            crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                        ) {
                             port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                         }
                     });
@@ -311,8 +314,11 @@ fn commit_selector_edit(
                         if let Some(item) = all_items.get_mut(index) {
                             item.register_mode = new_mode;
                             port.config_modified = true; // Mark as modified
-                            // Update status indicator if port is running
-                            if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                                         // Update status indicator if port is running
+                            if matches!(
+                                port.state,
+                                crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                            ) {
                                 port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                             }
                             log::info!("Updated register mode for index {index} to {new_mode:?}");
@@ -353,7 +359,7 @@ fn commit_text_edit(
                             if let Some(item) = all_items.get_mut(index) {
                                 item.station_id = station_id;
                                 port.config_modified = true; // Mark as modified
-                                // Update status indicator if port is running
+                                                             // Update status indicator if port is running
                                 if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
                                     port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                                 }
@@ -371,7 +377,7 @@ fn commit_text_edit(
                             if let Some(item) = all_items.get_mut(index) {
                                 item.register_address = start_address;
                                 port.config_modified = true; // Mark as modified
-                                // Update status indicator if port is running
+                                                             // Update status indicator if port is running
                                 if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
                                     port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                                 }
@@ -390,7 +396,7 @@ fn commit_text_edit(
                                 item.register_length = length;
                                 item.last_values.resize(length as usize, 0);
                                 port.config_modified = true; // Mark as modified
-                                // Update status indicator if port is running
+                                                             // Update status indicator if port is running
                                 if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
                                     port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                                 }

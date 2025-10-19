@@ -155,7 +155,7 @@ derive_struct! {
                 mode_tcp: String = "mode_tcp".to_string(),
                 mode_overlay_title: String = "mode_overlay_title".to_string(),
                 mode_overlay_hint: String = "mode_overlay_hint".to_string(),
-                
+
                 // Port status indicator messages (for title bar)
                 status_not_started: String = "status_not_started".to_string(),
                 status_starting: String = "status_starting".to_string(),

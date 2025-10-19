@@ -102,7 +102,7 @@ pub struct PortData {
     pub logs: Vec<PortLogEntry>,
     pub log_auto_scroll: bool,
     pub log_clear_pending: bool,
-    
+
     /// Status indicator for the title bar
     pub status_indicator: PortStatusIndicator,
     /// Whether the config has been modified since last save

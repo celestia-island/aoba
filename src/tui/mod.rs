@@ -812,7 +812,8 @@ fn run_core_thread(
                                         if with_port_write(port, |port| {
                                             port.state = PortState::Free;
                                             // Port is now stopped
-                                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
+                                            port.status_indicator =
+                                                types::port::PortStatusIndicator::NotStarted;
                                         })
                                         .is_none()
                                         {
@@ -878,7 +879,8 @@ fn run_core_thread(
                                         if with_port_write(port, |port| {
                                             port.state = PortState::Free;
                                             // Port is now stopped
-                                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
+                                            port.status_indicator =
+                                                types::port::PortStatusIndicator::NotStarted;
                                         })
                                         .is_none()
                                         {
@@ -1325,7 +1327,8 @@ fn run_core_thread(
                                     .insert(port_name.clone(), info.data_source_path.clone());
                                 port.state = PortState::Free;
                                 // Port is now stopped
-                                port.status_indicator = types::port::PortStatusIndicator::NotStarted;
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::NotStarted;
                             }
                         })
                         .is_none()

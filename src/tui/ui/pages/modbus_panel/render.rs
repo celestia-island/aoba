@@ -68,7 +68,11 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
                 vec![
                     lang().hotkeys.hint_master_delete.as_str().to_string(),
                     lang().hotkeys.press_ctrl_s_save_config.as_str().to_string(),
-                    lang().hotkeys.press_ctrl_esc_discard_return.as_str().to_string(),
+                    lang()
+                        .hotkeys
+                        .press_ctrl_esc_discard_return
+                        .as_str()
+                        .to_string(),
                 ],
             ])
         } else {
