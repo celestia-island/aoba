@@ -20,6 +20,14 @@ pub enum CursorAction {
     CtrlC,
     /// Press Ctrl+S to save configuration
     PressCtrlS,
+    /// Press PageUp key
+    PressPageUp,
+    /// Press PageDown key
+    PressPageDown,
+    /// Press Ctrl+PageUp key
+    PressCtrlPageUp,
+    /// Press Ctrl+PageDown key
+    PressCtrlPageDown,
     /// Type a character
     TypeChar(char),
     /// Type a string
@@ -220,6 +228,22 @@ pub async fn execute_cursor_actions<T: Expect>(
             CursorAction::PressCtrlS => {
                 log::info!("💾 Pressing Ctrl+S to save");
                 session.send_ctrl_s()?;
+            }
+            CursorAction::PressPageUp => {
+                log::info!("⬆️📄 Pressing PageUp");
+                session.send_page_up()?;
+            }
+            CursorAction::PressPageDown => {
+                log::info!("⬇️📄 Pressing PageDown");
+                session.send_page_down()?;
+            }
+            CursorAction::PressCtrlPageUp => {
+                log::info!("⬆️📄 Pressing Ctrl+PageUp");
+                session.send_ctrl_page_up()?;
+            }
+            CursorAction::PressCtrlPageDown => {
+                log::info!("⬇️📄 Pressing Ctrl+PageDown");
+                session.send_ctrl_page_down()?;
             }
             CursorAction::TypeChar(ch) => {
                 log::info!("⌨️ Typing character '{ch}'");

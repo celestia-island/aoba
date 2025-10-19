@@ -106,10 +106,7 @@ pub async fn navigate_to_port<T: Expect>(
     let retry_action = Some(vec![
         CursorAction::PressEscape,
         CursorAction::Sleep { ms: 500 },
-        CursorAction::PressArrow {
-            direction: ArrowKey::Up,
-            count: 20, // Go all the way up
-        },
+        CursorAction::PressPageUp, // Jump to first cursor position
         CursorAction::Sleep { ms: 300 },
     ]);
 
@@ -159,13 +156,10 @@ pub async fn configure_tui_master_common<T: Expect>(
     // For subsequent stations, TUI already created them and moved cursor there
     if is_first_station {
         // Navigate to "Create Station" button at the top of the Modbus panel
-        // Press Up many times to ensure we're at the top, then navigate to Create Station
-        log::info!("📍 Navigating to Create Station button");
+        // Use Ctrl+PageUp to jump to the first group (AddLine)
+        log::info!("📍 Navigating to Create Station button using Ctrl+PageUp");
         let actions = vec![
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 20, // Go to top
-            },
+            CursorAction::PressCtrlPageUp,
             CursorAction::Sleep { ms: 300 },
             CursorAction::MatchPattern {
                 pattern: Regex::new(r"(?i)create.*station|Create Station")?,
@@ -217,15 +211,14 @@ pub async fn configure_tui_master_common<T: Expect>(
     if station_id != 1 {
         log::info!("📝 Setting station ID to {station_id}");
         let actions = vec![
-            // Navigate to Station ID field (down 2 from top)
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 10,
-            },
+            // Navigate to Station ID field using Ctrl+PageUp + PageDown
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressPageDown, // Jump to first station
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
-                count: 2,
+                count: 1, // Move to Station ID field
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
@@ -313,18 +306,17 @@ pub async fn configure_tui_master_common<T: Expect>(
         log::info!("🔍 Single station mode: using standard navigation");
 
         // For single station, use standard navigation
-        // The issue: when we enter register type selection, it defaults to Holding(03)
-        // But we want Holding(03). We don't need to navigate, just press Enter to confirm.
+        // Navigate to Register Type field using Ctrl+PageUp + PageDown
+        // The selector defaults to Holding(03), so we just confirm it.
         let actions = vec![
             // Navigate to Register Type field
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 10,
-            },
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressPageDown, // Jump to first station
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
-                count: 3,
+                count: 2, // Move to Register Type field
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
@@ -444,15 +436,14 @@ pub async fn configure_tui_slave_common<T: Expect>(
     if station_id != 1 {
         log::info!("📝 Setting station ID to {station_id}");
         let actions = vec![
-            // Navigate to Station ID field (down 2 from top)
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 10,
-            },
+            // Navigate to Station ID field using Ctrl+PageUp + PageDown
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressPageDown, // Jump to first station
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
-                count: 2,
+                count: 1, // Move to Station ID field
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
@@ -488,18 +479,17 @@ pub async fn configure_tui_slave_common<T: Expect>(
     if is_multi_station {
         log::info!("🔍 Multi-station configuration detected, using precise navigation");
 
-        // For multi-station, navigate more carefully to the register type field
+        // For multi-station, navigate to register type field using Ctrl+PageUp + PageDown
         let actions = vec![
             // Navigate to top of the current station section
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 15,
-            },
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressPageDown, // Jump to first station
             CursorAction::Sleep { ms: 300 },
             // Navigate down to Register Type field (usually 3rd field in station)
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
-                count: 3,
+                count: 2,
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
@@ -544,23 +534,22 @@ pub async fn configure_tui_slave_common<T: Expect>(
         log::info!("🔍 Single station configuration, using standard navigation");
 
         // For single station, use standard navigation
-        // The issue: when we enter register type selection, it defaults to Coils(01)
-        // But we want Holding(03). We need to navigate from 01 to 03.
+        // Navigate to Register Type field using Ctrl+PageUp + PageDown
+        // The selector defaults to Holding(03), so we need to navigate to get to 03.
         let actions = vec![
             // Navigate to Register Type field
-            CursorAction::PressArrow {
-                direction: ArrowKey::Up,
-                count: 10,
-            },
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressPageDown, // Jump to first station
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
-                count: 3,
+                count: 2, // Move to Register Type field
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 300 },
-            // When we enter register type selection, it defaults to Coils(01)
+            // When we enter register type selection, it defaults to Holding(03)
             // We need to navigate to Holding(03) - press Right twice to go from 01 to 03
             CursorAction::PressArrow {
                 direction: ArrowKey::Right,
