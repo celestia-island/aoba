@@ -28,5 +28,8 @@ pub use ports::{
 };
 pub use snapshot::TerminalCapture;
 pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
-pub use tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers};
+pub use tui::{
+    check_status_indicator, enable_port_carefully, enter_modbus_panel, navigate_to_vcom,
+    update_tui_registers, verify_port_enabled,
+};
 pub use verify::{verify_cli_output, verify_continuous_data};

@@ -171,17 +171,15 @@ pub async fn test_tui_multi_masters_basic() -> Result<()> {
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config_ctrl_s").await?;
 
-    // Verify port is enabled by checking for the green checkmark or Running status
+    // Verify port is enabled by checking the status indicator in the top-right corner
     log::info!("🔍 Verifying port is enabled after Ctrl+S");
-    let screen = tui_cap
-        .capture(&mut tui_session, "verify_port_enabled_after_save")
-        .await?;
-    // The status indicator should show either "Running" or "Applied" (green checkmark shown for 3 seconds)
-    if !screen.contains("Running") && !screen.contains("Applied") {
-        log::warn!("⚠️ Port status not showing as Running/Applied, checking for other indicators...");
-        // Continue anyway as the port might still be starting up
-    }
-    log::info!("✅ Configuration saved and port enabled, staying in Modbus panel for monitoring");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_after_save",
+    )
+    .await?;
+    log::info!("✅ Configuration saved and port enabled with status: {}, staying in Modbus panel for monitoring", status);
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();

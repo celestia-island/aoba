@@ -3,6 +3,122 @@ use regex::Regex;
 
 use expectrl::Expect;
 
+/// Check the top-right status indicator in the title bar
+/// Returns Ok(status) where status is one of: "NotStarted", "Starting", "Running", "Modified", "Saving", "Syncing", "Applied"
+/// This function handles the transient nature of "Applied" status (only shows for 3 seconds)
+pub fn check_status_indicator(screen: &str) -> Result<String> {
+    // The status indicator is in the top-right corner of the first line
+    // Format: "AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Running ● "
+    // or:     "AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Applied ✔ "
+    
+    let first_line = screen.lines().next().unwrap_or("");
+    
+    // Check for each status in priority order (most specific first)
+    if Regex::new(r"Applied\s*✔")?.is_match(first_line) {
+        return Ok("Applied".to_string());
+    }
+    if Regex::new(r"Saving\s*[⠏⠛⠹⠼⠶⠧]")?.is_match(first_line) {
+        return Ok("Saving".to_string());
+    }
+    if Regex::new(r"Syncing\s*[⠏⠛⠹⠼⠶⠧]")?.is_match(first_line) {
+        return Ok("Syncing".to_string());
+    }
+    if Regex::new(r"Starting\s*[⠏⠛⠹⠼⠶⠧]")?.is_match(first_line) {
+        return Ok("Starting".to_string());
+    }
+    if Regex::new(r"Running\s*●")?.is_match(first_line) {
+        return Ok("Running".to_string());
+    }
+    if Regex::new(r"Modified\s*○")?.is_match(first_line) {
+        return Ok("Modified".to_string());
+    }
+    if Regex::new(r"Not Started\s*×")?.is_match(first_line) {
+        return Ok("NotStarted".to_string());
+    }
+    
+    Err(anyhow!("No status indicator found in title bar: {}", first_line))
+}
+
+/// Verify the port is enabled by checking the status indicator
+/// This function is more flexible than just looking for "Running" or "Applied"
+/// It handles the timing issue where "Applied ✔" only shows for 3 seconds,
+/// then transitions to "Running ●" or "Modified ○"
+pub async fn verify_port_enabled<T: Expect>(
+    session: &mut T,
+    cap: &mut crate::snapshot::TerminalCapture,
+    capture_name: &str,
+) -> Result<String> {
+    const MAX_ATTEMPTS: usize = 5;
+    const RETRY_DELAY_MS: u64 = 1000;
+    
+    for attempt in 1..=MAX_ATTEMPTS {
+        let screen = cap
+            .capture(session, &format!("{}_{}", capture_name, attempt))
+            .await?;
+        
+        match check_status_indicator(&screen) {
+            Ok(status) => {
+                match status.as_str() {
+                    "Applied" => {
+                        log::info!("✅ Port enabled - status: Applied ✔ (will transition to Running ● in 3s)");
+                        return Ok(status);
+                    }
+                    "Running" => {
+                        log::info!("✅ Port enabled - status: Running ●");
+                        return Ok(status);
+                    }
+                    "Modified" => {
+                        log::info!("✅ Port enabled - status: Modified ○ (running with unsaved changes)");
+                        return Ok(status);
+                    }
+                    "Saving" | "Syncing" => {
+                        log::info!("⏳ Port status: {} (transitioning...), attempt {}/{}", status, attempt, MAX_ATTEMPTS);
+                        if attempt < MAX_ATTEMPTS {
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                            continue;
+                        }
+                        return Ok(status);
+                    }
+                    "Starting" => {
+                        log::info!("⏳ Port starting, attempt {}/{}", attempt, MAX_ATTEMPTS);
+                        if attempt < MAX_ATTEMPTS {
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                            continue;
+                        }
+                        return Err(anyhow!("Port still starting after {} attempts", MAX_ATTEMPTS));
+                    }
+                    "NotStarted" => {
+                        log::warn!("⚠️ Port not started yet, attempt {}/{}", attempt, MAX_ATTEMPTS);
+                        if attempt < MAX_ATTEMPTS {
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                            continue;
+                        }
+                        return Err(anyhow!("Port not started after {} attempts", MAX_ATTEMPTS));
+                    }
+                    _ => {
+                        log::warn!("⚠️ Unknown status: {}, attempt {}/{}", status, attempt, MAX_ATTEMPTS);
+                        if attempt < MAX_ATTEMPTS {
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                            continue;
+                        }
+                        return Err(anyhow!("Unknown status: {}", status));
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("⚠️ Failed to check status indicator: {}, attempt {}/{}", e, attempt, MAX_ATTEMPTS);
+                if attempt < MAX_ATTEMPTS {
+                    tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    }
+    
+    Err(anyhow!("Failed to verify port enabled after {} attempts", MAX_ATTEMPTS))
+}
+
 /// Navigate to port1 in TUI (shared helper).
 pub async fn navigate_to_vcom<T: Expect>(
     session: &mut T,
