@@ -1,0 +1,24 @@
+[package]
+name = "tui_ui_e2e"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = { version = "^1", features = ["backtrace"] }
+clap = { version = "^4", features = ["derive"] }
+
+env_logger = "^0.11"
+log = "^0.4"
+
+regex = "^1"
+
+tokio = { version = "^1", features = ["rt-multi-thread", "macros"] }
+expectrl = "^0.8"
+
+[dependencies.ci_utils]
+path = "../ci_utils"
+
+[dependencies._bin]
+path = "../.."
+package = "aoba"

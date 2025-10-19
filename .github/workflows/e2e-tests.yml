@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [cli_e2e, tui_e2e]
+        package: [cli_e2e, tui_e2e, tui_ui_e2e]
 
     steps:
       - uses: actions/checkout@v5

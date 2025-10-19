@@ -304,10 +304,10 @@ pub async fn execute_cursor_actions<T: Expect>(
 
                 let timeout = timeout_secs.unwrap_or(10);
                 let interval = retry_interval_ms.unwrap_or(500);
-                
-                check_status_path(path, expected, timeout, interval).await.map_err(|e| {
-                    anyhow!("Status check failed for '{description}': {e}")
-                })?;
+
+                check_status_path(path, expected, timeout, interval)
+                    .await
+                    .map_err(|e| anyhow!("Status check failed for '{description}': {e}"))?;
 
                 log::info!("✅ Status check passed: {description}");
             }
