@@ -641,9 +641,11 @@ pub async fn update_tui_registers<T: Expect>(
         let hex_val = format!("{val:x}");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
+            crate::auto_cursor::CursorAction::Sleep { ms: 200 }, // Wait for edit mode to activate
             crate::auto_cursor::CursorAction::TypeString(hex_val),
+            crate::auto_cursor::CursorAction::Sleep { ms: 200 }, // Wait for typing to complete
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 50 },
+            crate::auto_cursor::CursorAction::Sleep { ms: 300 }, // Wait for value to be committed
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
@@ -652,6 +654,12 @@ pub async fn update_tui_registers<T: Expect>(
             &format!("update_reg_{i}"),
         )
         .await?;
+
+        // Verify the value was set (optional debug - only log for first few registers)
+        if i < 3 {
+            let screen = cap.capture(session, &format!("after_update_reg_{i}")).await?;
+            log::info!("Updated register {i} to {hex_val}, screen shows:\n{}", screen.lines().filter(|l| l.contains("0x")).take(5).collect::<Vec<_>>().join("\n"));
+        }
 
         if i < new_values.len() - 1 {
             let next_index = i + 1;
