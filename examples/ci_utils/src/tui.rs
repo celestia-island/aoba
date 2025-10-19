@@ -487,14 +487,28 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // After configuration, cursor is on Register Length field (just saved it).
-    // The register grid is below. Based on iteration 9 data where Down 3 gave us
-    // registers 8-11 (row 3 of grid), we can infer:
-    // - Down 0 = stay on Register Length (wrong)
-    // - Down 1 = row 1 of grid (registers 0-3) - what we want!
-    // - Down 2 = row 2 of grid (registers 4-7)
-    // - Down 3 = row 3 of grid (registers 8-11) - confirmed by iter 9
+    // Navigate to Register Length field reliably
+    // We may be at the top of the station list after previous round
+    // Strategy: Go Up 20 to ensure we're at the top, then navigate down to Register Length
+    log::info!("🔍 Navigating to Register Length field...");
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 20, // Go to top of Modbus panel
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        // Now navigate down to Register Length
+        // From top: Create Station (0), Connection Mode (1), Station ID (2), Register Type (3), Start Address (4), Register Length (5)
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Down,
+            count: 5,
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_register_length")
+        .await?;
 
+    // Now we're on Register Length field, navigate Down 1 to first register row
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Down,

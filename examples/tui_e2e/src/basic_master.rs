@@ -134,10 +134,18 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         log::info!("🧪 Round {round}/{ROUNDS}: Updating registers...");
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
+        // Save the updated register values with Ctrl+S to propagate to IPC subprocess
+        log::info!("🧪 Round {round}/{ROUNDS}: Saving register updates with Ctrl+S...");
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 500 }, // Wait for save operation
+        ];
+        execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, &format!("save_registers_round_{round}")).await?;
+
         // Wait for IPC updates to propagate to CLI subprocess
         // Increased wait time for CI environments which may have slower performance
         log::info!("🧪 Round {round}/{ROUNDS}: Waiting for IPC updates to propagate...");
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(2000)).await; // Increased from 1000ms
 
         // Poll CLI slave to verify data is accessible
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave for verification");
