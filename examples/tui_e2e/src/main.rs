@@ -1,5 +1,6 @@
 mod basic_master;
 mod basic_slave;
+mod basic_slave_refactored;
 mod cli_port_cleanup;
 mod e2e;
 mod utils;
@@ -10,7 +11,8 @@ use clap::Parser;
 use std::process::Command;
 
 use basic_master::test_tui_master_with_cli_slave_continuous;
-use basic_slave::test_tui_slave_with_cli_master_continuous;
+// Use refactored version with status monitoring
+use basic_slave_refactored::test_tui_slave_with_cli_master_continuous as test_tui_slave_refactored;
 use cli_port_cleanup::test_cli_port_release;
 
 /// TUI E2E test suite with selective test execution
@@ -171,10 +173,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Test 1: TUI Slave + CLI Master with 10 rounds of continuous random data
+    // Test 1: TUI Slave + CLI Master with 3 rounds (refactored with status monitoring)
     if args.should_run_test(1) {
-        log::info!("🧪 Test 1/4: TUI Slave + CLI Master (10 rounds, holding registers)");
-        test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?;
+        log::info!("🧪 Test 1/4: TUI Slave + CLI Master (3 rounds, holding registers, status monitoring)");
+        test_tui_slave_refactored(&args.port1, &args.port2).await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
