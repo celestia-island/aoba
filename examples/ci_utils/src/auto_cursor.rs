@@ -18,6 +18,16 @@ pub enum CursorAction {
     PressTab,
     /// Press Ctrl+C to exit program quickly
     CtrlC,
+    /// Press Ctrl+S to save configuration
+    PressCtrlS,
+    /// Press PageUp key
+    PressPageUp,
+    /// Press PageDown key
+    PressPageDown,
+    /// Press Ctrl+PageUp key
+    PressCtrlPageUp,
+    /// Press Ctrl+PageDown key
+    PressCtrlPageDown,
     /// Type a character
     TypeChar(char),
     /// Type a string
@@ -215,6 +225,26 @@ pub async fn execute_cursor_actions<T: Expect>(
                 log::info!("🛑 Pressing Ctrl+C to exit");
                 session.send_ctrl_c()?;
             }
+            CursorAction::PressCtrlS => {
+                log::info!("💾 Pressing Ctrl+S to save");
+                session.send_ctrl_s()?;
+            }
+            CursorAction::PressPageUp => {
+                log::info!("⬆️📄 Pressing PageUp");
+                session.send_page_up()?;
+            }
+            CursorAction::PressPageDown => {
+                log::info!("⬇️📄 Pressing PageDown");
+                session.send_page_down()?;
+            }
+            CursorAction::PressCtrlPageUp => {
+                log::info!("⬆️📄 Pressing Ctrl+PageUp");
+                session.send_ctrl_page_up()?;
+            }
+            CursorAction::PressCtrlPageDown => {
+                log::info!("⬇️📄 Pressing Ctrl+PageDown");
+                session.send_ctrl_page_down()?;
+            }
             CursorAction::TypeChar(ch) => {
                 log::info!("⌨️ Typing character '{ch}'");
                 session.send_char(*ch)?;
@@ -230,7 +260,7 @@ pub async fn execute_cursor_actions<T: Expect>(
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
             }
             CursorAction::DebugBreakpoint { description } => {
-                // Only active in debug mode
+                // Check if debug mode is enabled (set by main program based on --debug flag)
                 let debug_mode = std::env::var("DEBUG_MODE").is_ok();
                 if debug_mode {
                     log::info!("🔴 DEBUG BREAKPOINT: {description}");

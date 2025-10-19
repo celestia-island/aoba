@@ -1,16 +1,19 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{configure_tui_slave_common, test_station_with_retries};
+use crate::utils::{
+    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
-    ports::{port_exists, should_run_vcom_tests},
+    ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::TerminalCapture,
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
+use expectrl::Expect;
 
 /// Test Multiple TUI Slaves on Single Port with Same Station ID but Different Register Types
 ///
@@ -30,20 +33,20 @@ use ci_utils::{
 /// 2. IPC communication prevents port conflicts
 /// 3. Different register types work correctly within the same station
 /// 4. Communication reliability with retry logic
-pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
+pub async fn test_tui_multi_slaves_same_station(port1: &str, port2: &str) -> Result<()> {
     const REGISTER_LENGTH: usize = 8;
     const MAX_RETRIES: usize = 10;
     const RETRY_INTERVAL_MS: u64 = 1000;
 
-    if !should_run_vcom_tests() {
+    if !should_run_vcom_tests_with_ports(port1, port2) {
         log::info!("Skipping TUI Multi-Slaves Same Station test on this platform");
         return Ok(());
     }
 
     log::info!("🧪 Starting TUI Multi-Slaves Same Station E2E test");
 
-    // Get platform-appropriate port names from ci_utils (handles env overrides and defaults)
-    let ports = ci_utils::ports::vcom_matchers();
+    // Get platform-appropriate port names
+    let ports = vcom_matchers_with_ports(port1, port2);
     let port1 = ports.port1_name.clone();
     let port2 = ports.port2_name.clone();
 
@@ -77,7 +80,24 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
     ];
 
     log::info!("🧪 Step 2: Configuring 3 slaves on {port2} with same station ID");
-    for &(station_id, register_type, register_mode, start_address) in &slaves {
+
+    // Navigate to port and enter Modbus panel (without enabling the port yet)
+    navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
+
+    // Generate register data for all slaves first (before configuration)
+    let slave_data: Vec<Vec<u16>> = (0..3)
+        .map(|_| generate_random_registers(REGISTER_LENGTH))
+        .collect();
+
+    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    {
+        log::info!(
+            "🔧 Configuring Slave {} (Station {}, Type {:02})",
+            i + 1,
+            station_id,
+            register_type
+        );
+
         configure_tui_slave_common(
             &mut tui_session,
             &mut tui_cap,
@@ -88,26 +108,93 @@ pub async fn test_tui_multi_slaves_same_station() -> Result<()> {
             REGISTER_LENGTH,
         )
         .await?;
+
+        // Immediately update data for this slave
+        log::info!("📝 Updating Slave {} data: {:?}", i + 1, slave_data[i]);
+        update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
+
+        // Wait for register updates to be saved before configuring next slave
+        log::info!("⏱️ Waiting for register updates to be fully saved...");
+        ci_utils::sleep_a_while().await;
+        ci_utils::sleep_a_while().await;
     }
 
-    // Generate and update register data for all slaves
-    let slave_data: Vec<Vec<u16>> = (0..3)
-        .map(|_| generate_random_registers(REGISTER_LENGTH))
-        .collect();
+    // After configuring all Slaves, save and exit Modbus panel
+    log::info!("🔄 All Slaves configured, saving configuration...");
 
-    log::info!("🧪 Updating all slave registers");
-    for (i, data) in slave_data.iter().enumerate() {
-        let (_, register_type, register_mode, _) = slaves[i];
-        log::info!(
-            "  Slave {} (Type {register_type}, {register_mode}) data: {data:?}",
-            i + 1
-        );
-        update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
+    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
+    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
+    tui_session.send("\x1b")?;
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+
+    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
+    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
+    let mut screen;
+    let max_attempts = 3;
+    let mut at_config_panel = false;
+    let mut port_enabled = false;
+
+    for attempt in 1..=max_attempts {
+        ci_utils::sleep_a_while().await;
+        screen = tui_cap
+            .capture(
+                &mut tui_session,
+                &format!("after_save_modbus_attempt_{}", attempt),
+            )
+            .await?;
+
+        // Check if we're at ConfigPanel
+        if screen.contains("Enable Port") {
+            at_config_panel = true;
+
+            // Check if port is showing as Enabled
+            for line in screen.lines() {
+                if line.contains("Enable Port") && line.contains("Enabled") {
+                    port_enabled = true;
+                    break;
+                }
+            }
+
+            if port_enabled {
+                log::info!(
+                    "✅ Port enabled and shown in UI on attempt {}/{}",
+                    attempt,
+                    max_attempts
+                );
+                break;
+            } else {
+                log::info!(
+                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
+                    attempt,
+                    max_attempts
+                );
+            }
+        } else {
+            log::warn!(
+                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
+                attempt,
+                max_attempts
+            );
+        }
     }
 
-    // Wait for IPC updates to propagate
-    log::info!("🧪 Waiting for IPC propagation...");
-    tokio::time::sleep(Duration::from_millis(3000)).await;
+    if !at_config_panel {
+        return Err(anyhow!(
+            "Failed to return to port details page after saving Modbus configuration (tried {} times)",
+            max_attempts
+        ));
+    }
+
+    if !port_enabled {
+        return Err(anyhow!(
+            "Port not showing as Enabled after {} attempts",
+            max_attempts
+        ));
+    }
+
+    log::info!("💾 Saved Modbus configuration and auto-enabled port");
+    log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Test all 3 register types from vcom1
     let mut register_type_success = std::collections::HashMap::new();

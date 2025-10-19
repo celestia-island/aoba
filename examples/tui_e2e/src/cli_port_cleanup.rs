@@ -10,7 +10,9 @@ use std::{
 };
 
 #[cfg(unix)]
-use ci_utils::{ports::vcom_matchers, terminal::build_debug_bin};
+use ci_utils::{
+    ports::vcom_matchers_with_ports, terminal::build_debug_bin, DEFAULT_PORT1, DEFAULT_PORT2,
+};
 
 /// Test that CLI programs correctly release ports when they exit
 ///
@@ -43,7 +45,7 @@ pub async fn test_cli_port_release() -> Result<()> {
         log::info!("ℹ️  Note: This test verifies cleanup runs, not immediate reopen capability");
         log::info!("ℹ️  Virtual serial ports (pts) may need socat restart for reuse");
 
-        let ports = vcom_matchers();
+        let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
         let binary = build_debug_bin("aoba")?;
 
         // Verify ports exist

@@ -41,16 +41,53 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
             vec![lang().hotkeys.hint_hex_esc_exit.as_str().to_string()],
         ])
     } else {
-        Ok(vec![
-            vec![
-                lang().hotkeys.hint_move_vertical.as_str().to_string(),
-                lang().hotkeys.hint_master_enter_edit.as_str().to_string(),
-            ],
-            vec![
-                lang().hotkeys.hint_master_delete.as_str().to_string(),
-                lang().hotkeys.hint_esc_return_home.as_str().to_string(),
-            ],
-        ])
+        // Check if the port has modifications
+        let has_modifications = read_status(|status| {
+            let port_name_opt = match &status.page {
+                types::Page::ModbusDashboard { selected_port, .. } => {
+                    status.ports.order.get(*selected_port).cloned()
+                }
+                _ => None,
+            };
+            if let Some(port_name) = port_name_opt {
+                if let Some(port_entry) = status.ports.map.get(&port_name) {
+                    let port_guard = port_entry.read();
+                    return Ok(port_guard.config_modified);
+                }
+            }
+            Ok(false)
+        })?;
+
+        if has_modifications {
+            // Show Ctrl+S to save and Ctrl+Esc to discard
+            Ok(vec![
+                vec![
+                    lang().hotkeys.hint_move_vertical.as_str().to_string(),
+                    lang().hotkeys.hint_master_enter_edit.as_str().to_string(),
+                ],
+                vec![
+                    lang().hotkeys.hint_master_delete.as_str().to_string(),
+                    lang().hotkeys.press_ctrl_s_save_config.as_str().to_string(),
+                    lang()
+                        .hotkeys
+                        .press_ctrl_esc_discard_return
+                        .as_str()
+                        .to_string(),
+                ],
+            ])
+        } else {
+            // No modifications - just show Esc to return
+            Ok(vec![
+                vec![
+                    lang().hotkeys.hint_move_vertical.as_str().to_string(),
+                    lang().hotkeys.hint_master_enter_edit.as_str().to_string(),
+                ],
+                vec![
+                    lang().hotkeys.hint_master_delete.as_str().to_string(),
+                    lang().hotkeys.press_esc_return.as_str().to_string(),
+                ],
+            ])
+        }
     }
 }
 

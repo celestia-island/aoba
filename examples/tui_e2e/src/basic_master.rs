@@ -11,10 +11,10 @@ use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::{ArrowKey, ExpectKeyExt},
-    ports::{port_exists, should_run_vcom_tests, vcom_matchers},
+    ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::TerminalCapture,
     terminal::{build_debug_bin, spawn_expect_process},
-    tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers},
+    tui::{enter_modbus_panel, navigate_to_vcom, update_tui_registers},
 };
 
 const ROUNDS: usize = 3;
@@ -32,15 +32,15 @@ const REGISTER_LENGTH: usize = 12;
 /// TUI acts as Modbus Master (server providing data, responding to poll requests).
 /// CLI acts as Modbus Slave (client polling for data).
 /// This is a repeat of the first test for stability verification.
-pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
-    if !should_run_vcom_tests() {
+pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str) -> Result<()> {
+    if !should_run_vcom_tests_with_ports(port1, port2) {
         log::info!("Skipping TUI Master-Provide + CLI Slave-Poll test on this platform");
         return Ok(());
     }
 
     log::info!("🧪 Starting TUI Master-Provide + CLI Slave-Poll continuous test (10 rounds)");
 
-    let ports = vcom_matchers();
+    let ports = vcom_matchers_with_ports(port1, port2);
 
     // Verify vcom ports exist (platform-aware check)
     if !port_exists(&ports.port1_name) {
@@ -67,50 +67,77 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
 
     // Navigate to vcom1
     log::info!("🧪 Step 2: Navigate to vcom1 in port list");
-    navigate_to_vcom(&mut tui_session, &mut tui_cap).await?;
+    navigate_to_vcom(&mut tui_session, &mut tui_cap, port1).await?;
 
-    // Enable the port first to ensure runtime tasks spin up before we enter configuration.
-    log::info!("🧪 Step 3: Enable the port");
-    enable_port_carefully(&mut tui_session, &mut tui_cap).await?;
-
-    // Wait for port to fully initialize - critical for stability
-    log::info!("🧪 Step 3.5: Waiting for port to fully initialize...");
-    tokio::time::sleep(Duration::from_secs(5)).await;
-
-    // Debug: Verify port enable state
+    // Debug: Verify we're on the port details page
     let actions = vec![CursorAction::DebugBreakpoint {
-        description: "after_enable_port".to_string(),
+        description: "after_navigate_to_vcom".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_nav").await?;
+
+    // Enter Modbus configuration panel directly (new workflow: no enable_port before config)
+    log::info!("🧪 Step 3: Enter Modbus configuration panel");
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    // Debug: Verify we're in Modbus panel and check cursor position
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_enter_modbus_panel".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_in_modbus").await?;
+
+    // Configure the Modbus station while staying in the panel.
+    log::info!("🧪 Step 4: Configure TUI as Master");
+    configure_tui_master(&mut tui_session, &mut tui_cap).await?;
+
+    // Save configuration with Ctrl+S which will auto-enable the port
+    log::info!("🧪 Step 5: Save configuration with Ctrl+S to auto-enable port");
+
+    // Debug: Check state before Ctrl+S
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_ctrl_s".to_string(),
     }];
     execute_cursor_actions(
         &mut tui_session,
         &mut tui_cap,
         &actions,
-        "debug_enable_port",
+        "debug_before_save",
     )
     .await?;
 
-    // Verify port is actually enabled by checking the screen
-    let screen = tui_cap
-        .capture(&mut tui_session, "verify_port_enabled")
-        .await?;
-    if !screen.contains("Enabled") {
-        return Err(anyhow!(
-            "Port failed to enable - 'Enabled' status not found in UI"
-        ));
-    }
-    log::info!("✅ Port is fully enabled and ready");
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_config_ctrl_s",
+    )
+    .await?;
 
-    // Enter Modbus panel and remain there for the duration of the business loop.
-    log::info!("🧪 Step 4: Enter Modbus configuration panel");
-    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+    // Debug: Check state immediately after Ctrl+S
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_ctrl_s".to_string(),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "debug_after_save").await?;
 
-    // Configure the Modbus station while staying in the panel.
-    log::info!("🧪 Step 5: Configure TUI as Master");
-    configure_tui_master(&mut tui_session, &mut tui_cap).await?;
+    // Verify port is enabled by checking the status indicator in the top-right corner
+    log::info!("🧪 Step 6: Verify port is enabled after Ctrl+S");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_after_save",
+    )
+    .await?;
+    log::info!(
+        "✅ Configuration saved and port enabled with status: {}",
+        status
+    );
 
-    // Wait for configuration to stabilize and subprocess to be ready
-    log::info!("🧪 Step 5.5: Waiting for subprocess to be fully ready...");
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Wait for port to fully initialize and subprocess to be ready
+    log::info!("🧪 Step 6.5: Waiting for subprocess to be fully ready...");
+    tokio::time::sleep(Duration::from_secs(3)).await;
 
     // Run 10 rounds of continuous random data testing
     // Validate after each round and exit immediately on failure
@@ -122,10 +149,24 @@ pub async fn test_tui_master_with_cli_slave_continuous() -> Result<()> {
         log::info!("🧪 Round {round}/{ROUNDS}: Updating registers...");
         update_tui_registers(&mut tui_session, &mut tui_cap, &data, false).await?;
 
+        // Save the updated register values with Ctrl+S to propagate to IPC subprocess
+        log::info!("🧪 Round {round}/{ROUNDS}: Saving register updates with Ctrl+S...");
+        let actions = vec![
+            CursorAction::PressCtrlS,
+            CursorAction::Sleep { ms: 500 }, // Wait for save operation
+        ];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            &format!("save_registers_round_{round}"),
+        )
+        .await?;
+
         // Wait for IPC updates to propagate to CLI subprocess
         // Increased wait time for CI environments which may have slower performance
         log::info!("🧪 Round {round}/{ROUNDS}: Waiting for IPC updates to propagate...");
-        tokio::time::sleep(Duration::from_millis(1000)).await;
+        tokio::time::sleep(Duration::from_millis(2000)).await; // Increased from 1000ms
 
         // Poll CLI slave to verify data is accessible
         log::info!("🧪 Round {round}/{ROUNDS}: Polling CLI slave for verification");
@@ -281,16 +322,41 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
 
     // Verify we are already inside Modbus settings per workflow contract.
     let screen = cap.capture(session, "verify_modbus_panel_master").await?;
-    if !screen.contains("ModBus Master/Slave Settings") {
+    if !screen.contains("ModBus Master/Slave Set") {
         return Err(anyhow!(
             "Expected to be inside ModBus panel before configuring master"
         ));
     }
 
-    // Create station (should be on "Create Station" by default)
+    // Debug: Check initial cursor position
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_create_station".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_create").await?;
+
+    // Navigate to "Create Station" button first to ensure we're at the right position
+    log::info!("Navigate to Create Station button");
+    let actions = vec![
+        // Go all the way up to ensure we start from a known position
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 20,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
+
+    // Debug: Verify cursor is at top
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "at_top_before_create".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_at_top").await?;
+
+    // Create station (should be on "Create Station" by default after going to top)
     log::info!("Create new Modbus station");
     let actions = vec![
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 }, // Wait for station to be created
         CursorAction::MatchPattern {
             pattern: Regex::new(r"#1")?,
             description: "Station #1 created".to_string(),
@@ -301,14 +367,76 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
-    // Set Register Length to 12 (matching REGISTER_LENGTH constant)
-    log::info!("Navigate to Register Length and set to 12");
+    // Debug: Check cursor position after creating station
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_create_station".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_after_create").await?;
+
+    // After creating a station, cursor should be on the new station entry
+    // Navigate to Register Start Address field first to set it to 0
+    // The order is: Create Station, Connection Mode, Station ID, Register Mode, Register Start Address, Register Length
+    log::info!("Navigate to Register Start Address and set to 0");
     let actions = vec![
+        // From the station line, we need to navigate down to Register Start Address
+        // Go up first to ensure we're at the station header line
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 10,
+        },
+        CursorAction::Sleep { ms: 300 },
+        // Now navigate down to the fields
+        // Down 1: Create Station -> Connection Mode (skip, on station #1 line)
+        // Down 2: Station ID
+        // Down 3: Register Mode
+        // Down 4: Register Start Address
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 5,
-        }, // Navigate to Register Length field
+            count: 4,
+        },
         CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_register_start_address").await?;
+
+    // Debug: Check cursor position before editing start address
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_edit_register_start_address".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_edit_start_addr").await?;
+
+    // Enter edit mode and set start address to 0
+    log::info!("Set Register Start Address to 0");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 }, // Wait for edit mode to activate
+        CursorAction::TypeString("0".to_string()),
+        CursorAction::Sleep { ms: 300 }, // Wait before confirming with Enter
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 }, // Wait for value to be committed
+    ];
+    execute_cursor_actions(session, cap, &actions, "set_register_start_address").await?;
+
+    // Now navigate to Register Length field
+    log::info!("Navigate to Register Length and set to 12");
+    let actions = vec![
+        // Down 1 more from Register Start Address to Register Length
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_register_length").await?;
+
+    // Debug: Check cursor position before editing
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_edit_register_length".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_edit").await?;
+
+    // Enter edit mode and set value
+    log::info!("Set Register Length to 12");
+    let actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 300 }, // Wait for edit mode to activate
         CursorAction::TypeString("12".to_string()),

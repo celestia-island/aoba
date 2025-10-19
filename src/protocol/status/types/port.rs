@@ -1,5 +1,6 @@
-use crate::protocol::{runtime::PortRuntimeHandle, status::types, tty::PortExtra};
 use chrono::{DateTime, Local};
+
+use crate::protocol::{runtime::PortRuntimeHandle, status::types, tty::PortExtra};
 
 /// A single log entry associated with a specific port.
 #[derive(Debug, Clone)]
@@ -7,6 +8,25 @@ pub struct PortLogEntry {
     pub when: DateTime<Local>,
     pub raw: String,
     pub parsed: Option<String>,
+}
+
+/// Port status indicator shown in the title bar
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortStatusIndicator {
+    /// Port is not started (red × symbol)
+    NotStarted,
+    /// Port is starting/initializing (yellow spinner animation)
+    Starting,
+    /// Port is running and config is up-to-date (green ● solid dot)
+    Running,
+    /// Port is running but config has been modified (yellow ○ hollow circle)
+    RunningWithChanges,
+    /// Config is being saved/sent (green spinner animation, for slave 02/04)
+    Saving,
+    /// Config is being synced from CLI (yellow spinner animation)
+    Syncing,
+    /// Config was just successfully applied (green ✔ checkmark, shown for 3 seconds)
+    AppliedSuccess { timestamp: DateTime<Local> },
 }
 
 #[derive(Debug, Clone)]
@@ -82,6 +102,11 @@ pub struct PortData {
     pub logs: Vec<PortLogEntry>,
     pub log_auto_scroll: bool,
     pub log_clear_pending: bool,
+
+    /// Status indicator for the title bar
+    pub status_indicator: PortStatusIndicator,
+    /// Whether the config has been modified since last save
+    pub config_modified: bool,
 }
 
 impl Default for PortData {
@@ -95,6 +120,8 @@ impl Default for PortData {
             logs: Vec::new(),
             log_auto_scroll: true,
             log_clear_pending: false,
+            status_indicator: PortStatusIndicator::NotStarted,
+            config_modified: false,
         }
     }
 }

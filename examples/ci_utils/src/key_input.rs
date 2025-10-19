@@ -23,6 +23,21 @@ pub trait ExpectKeyExt {
     /// Send Ctrl+C to exit program quickly
     fn send_ctrl_c(&mut self) -> Result<()>;
 
+    /// Send Ctrl+S to save
+    fn send_ctrl_s(&mut self) -> Result<()>;
+
+    /// Send PageUp key
+    fn send_page_up(&mut self) -> Result<()>;
+
+    /// Send PageDown key
+    fn send_page_down(&mut self) -> Result<()>;
+
+    /// Send Ctrl+PageUp key
+    fn send_ctrl_page_up(&mut self) -> Result<()>;
+
+    /// Send Ctrl+PageDown key
+    fn send_ctrl_page_down(&mut self) -> Result<()>;
+
     /// Send a character key
     fn send_char(&mut self, ch: char) -> Result<()>;
 }
@@ -65,6 +80,35 @@ impl<T: Expect> ExpectKeyExt for T {
     fn send_ctrl_c(&mut self) -> Result<()> {
         self.send("\x03")
             .map_err(|err| anyhow!("Failed to send Ctrl+C: {err}"))
+    }
+
+    fn send_ctrl_s(&mut self) -> Result<()> {
+        self.send("\x13")
+            .map_err(|err| anyhow!("Failed to send Ctrl+S: {err}"))
+    }
+
+    fn send_page_up(&mut self) -> Result<()> {
+        // PageUp escape sequence
+        self.send("\x1b[5~")
+            .map_err(|err| anyhow!("Failed to send PageUp: {err}"))
+    }
+
+    fn send_page_down(&mut self) -> Result<()> {
+        // PageDown escape sequence
+        self.send("\x1b[6~")
+            .map_err(|err| anyhow!("Failed to send PageDown: {err}"))
+    }
+
+    fn send_ctrl_page_up(&mut self) -> Result<()> {
+        // Ctrl+PageUp escape sequence
+        self.send("\x1b[5;5~")
+            .map_err(|err| anyhow!("Failed to send Ctrl+PageUp: {err}"))
+    }
+
+    fn send_ctrl_page_down(&mut self) -> Result<()> {
+        // Ctrl+PageDown escape sequence
+        self.send("\x1b[6;5~")
+            .map_err(|err| anyhow!("Failed to send Ctrl+PageDown: {err}"))
     }
 
     fn send_char(&mut self, ch: char) -> Result<()> {

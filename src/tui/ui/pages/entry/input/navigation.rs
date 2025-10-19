@@ -5,7 +5,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::{
     protocol::status::{
         read_status,
-        types::{self, cursor, Page},
+        types::{self, cursor, cursor::Cursor, Page},
         write_status,
     },
     tui::{
@@ -20,6 +20,42 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Quit the application
             bus.ui_tx
                 .send(crate::tui::utils::bus::UiToCore::Quit)
+                .map_err(|err| anyhow!(err))?;
+        }
+        KeyCode::PageUp => {
+            // Jump to first cursor position
+            let ports_count = read_status(|status| Ok(status.ports.map.len()))?;
+            let new_cursor = if ports_count > 0 {
+                types::cursor::EntryCursor::Com { index: 0 }
+            } else {
+                types::cursor::EntryCursor::Refresh
+            };
+            let offset = new_cursor.view_offset();
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(new_cursor),
+                    view_offset: offset,
+                };
+                Ok(())
+            })?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+        }
+        KeyCode::PageDown => {
+            // Jump to last cursor position (About)
+            let new_cursor = types::cursor::EntryCursor::About;
+            let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
+            let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
+            write_status(|status| {
+                status.page = Page::Entry {
+                    cursor: Some(new_cursor),
+                    view_offset: offset,
+                };
+                Ok(())
+            })?;
+            bus.ui_tx
+                .send(crate::tui::utils::bus::UiToCore::Refresh)
                 .map_err(|err| anyhow!(err))?;
         }
         KeyCode::Up | KeyCode::Char('k') => {

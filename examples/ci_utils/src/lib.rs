@@ -24,9 +24,13 @@ pub use log_parser::{
     wait_for_port_state, ConfigEditState, PortState, StateDump,
 };
 pub use ports::{
-    port_exists, should_run_vcom_tests, vcom_matchers, VcomMatchers, DEFAULT_PORT1, DEFAULT_PORT2,
+    port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, VcomMatchers,
+    DEFAULT_PORT1, DEFAULT_PORT2,
 };
 pub use snapshot::TerminalCapture;
 pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
-pub use tui::{enable_port_carefully, enter_modbus_panel, navigate_to_vcom, update_tui_registers};
+pub use tui::{
+    check_status_indicator, enable_port_carefully, enter_modbus_panel, navigate_to_vcom,
+    update_tui_registers, verify_port_enabled,
+};
 pub use verify::{verify_cli_output, verify_continuous_data};

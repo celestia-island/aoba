@@ -3,10 +3,11 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
+    i18n::lang,
     protocol::status::{
         read_status,
         types::{self, cursor::Cursor},
-        write_status,
+        with_port_read, write_status,
     },
     tui::utils::bus::{Bus, UiToCore},
 };
@@ -15,7 +16,109 @@ use super::actions::{handle_enter_action, handle_leave_page};
 
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("🟠 ModbusDashboard navigation input: {:?}", key.code);
+
+    // Check for Ctrl modifier
+    let has_ctrl = key
+        .modifiers
+        .contains(crossterm::event::KeyModifiers::CONTROL);
+
+    // Handle Ctrl+S for saving configuration
+    if matches!(key.code, KeyCode::Char('s') | KeyCode::Char('S')) && has_ctrl {
+        log::info!("💾 Ctrl+S pressed - saving configuration and enabling port");
+        // This will trigger port enable with current configuration
+        handle_save_config(bus)?;
+        return Ok(());
+    }
+
     match key.code {
+        KeyCode::PageUp => {
+            if has_ctrl {
+                // Ctrl+PageUp: Jump to first group (AddLine)
+                let new_cursor = types::cursor::ModbusDashboardCursor::AddLine;
+                let new_offset = new_cursor.view_offset();
+                write_status(|status| {
+                    if let types::Page::ModbusDashboard {
+                        cursor,
+                        view_offset,
+                        ..
+                    } = &mut status.page
+                    {
+                        *cursor = new_cursor;
+                        *view_offset = new_offset;
+                    }
+                    Ok(())
+                })?;
+            } else {
+                // PageUp: Jump to previous station group
+                let current_cursor = read_status(|status| match &status.page {
+                    types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                })?;
+
+                let new_cursor = jump_to_prev_group(current_cursor)?;
+                let new_offset = new_cursor.view_offset();
+                write_status(|status| {
+                    if let types::Page::ModbusDashboard {
+                        cursor,
+                        view_offset,
+                        ..
+                    } = &mut status.page
+                    {
+                        *cursor = new_cursor;
+                        *view_offset = new_offset;
+                    }
+                    Ok(())
+                })?;
+            }
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
+        KeyCode::PageDown => {
+            if has_ctrl {
+                // Ctrl+PageDown: Jump to last group (first item of last station if exists)
+                let new_cursor = jump_to_last_group()?;
+                let new_offset = new_cursor.view_offset();
+                write_status(|status| {
+                    if let types::Page::ModbusDashboard {
+                        cursor,
+                        view_offset,
+                        ..
+                    } = &mut status.page
+                    {
+                        *cursor = new_cursor;
+                        *view_offset = new_offset;
+                    }
+                    Ok(())
+                })?;
+            } else {
+                // PageDown: Jump to next station group
+                let current_cursor = read_status(|status| match &status.page {
+                    types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                    _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
+                })?;
+
+                let new_cursor = jump_to_next_group(current_cursor)?;
+                let new_offset = new_cursor.view_offset();
+                write_status(|status| {
+                    if let types::Page::ModbusDashboard {
+                        cursor,
+                        view_offset,
+                        ..
+                    } = &mut status.page
+                    {
+                        *cursor = new_cursor;
+                        *view_offset = new_offset;
+                    }
+                    Ok(())
+                })?;
+            }
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+            Ok(())
+        }
         KeyCode::Left | KeyCode::Char('h') => {
             let current_cursor = read_status(|status| match &status.page {
                 types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
@@ -313,5 +416,219 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             Ok(())
         }
         _ => Ok(()),
+    }
+}
+
+/// Handle saving configuration with Ctrl+S
+/// This marks the config as saved and triggers port enable if not already enabled
+fn handle_save_config(bus: &Bus) -> Result<()> {
+    use crate::protocol::status::{with_port_write, write_status};
+    use chrono::Local;
+
+    let selected_port = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            Ok(*selected_port)
+        } else {
+            Ok(0)
+        }
+    })?;
+
+    let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
+
+    if let Some(port_name) = port_name_opt {
+        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+            // Check if port has any stations configured
+            let has_stations = with_port_read(&port, |port| match &port.config {
+                crate::protocol::status::types::port::PortConfig::Modbus { stations, .. } => {
+                    !stations.is_empty()
+                }
+            })
+            .unwrap_or(false);
+
+            if !has_stations {
+                // Show error if no stations configured
+                write_status(|status| {
+                    status.temporarily.error = Some(crate::protocol::status::types::ErrorInfo {
+                        message: lang().index.err_modbus_config_empty.clone(),
+                        timestamp: Local::now(),
+                    });
+                    Ok(())
+                })?;
+                bus.ui_tx
+                    .send(UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                return Ok(());
+            }
+
+            // Mark config as not modified
+            with_port_write(&port, |port| {
+                port.config_modified = false;
+                // Set status to AppliedSuccess for 3 seconds
+                port.status_indicator =
+                    crate::protocol::status::types::port::PortStatusIndicator::AppliedSuccess {
+                        timestamp: Local::now(),
+                    };
+            });
+
+            // Check if port is already enabled
+            let is_enabled = with_port_read(&port, |port| {
+                matches!(
+                    port.state,
+                    crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                )
+            })
+            .unwrap_or(false);
+
+            if !is_enabled {
+                // Enable the port if not already enabled
+                log::info!("Port not enabled, triggering enable via ToggleRuntime");
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!(err))?;
+            } else {
+                // Port already enabled, just restart it with new config
+                log::info!("Port already enabled, restarting with new config");
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .map_err(|err| anyhow!(err))?;
+                bus.ui_tx
+                    .send(UiToCore::ToggleRuntime(port_name))
+                    .map_err(|err| anyhow!(err))?;
+            }
+
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Jump to previous station group
+/// - If on AddLine or ModbusMode, stay at AddLine (first group)
+/// - If on a station's item, jump to previous station's first item (StationId)
+/// - If on first station, jump to ModbusMode
+fn jump_to_prev_group(
+    current_cursor: types::cursor::ModbusDashboardCursor,
+) -> Result<types::cursor::ModbusDashboardCursor> {
+    match current_cursor {
+        types::cursor::ModbusDashboardCursor::AddLine => {
+            // Already at first group
+            Ok(types::cursor::ModbusDashboardCursor::AddLine)
+        }
+        types::cursor::ModbusDashboardCursor::ModbusMode => {
+            // Jump to AddLine
+            Ok(types::cursor::ModbusDashboardCursor::AddLine)
+        }
+        types::cursor::ModbusDashboardCursor::StationId { index }
+        | types::cursor::ModbusDashboardCursor::RegisterMode { index }
+        | types::cursor::ModbusDashboardCursor::RegisterStartAddress { index }
+        | types::cursor::ModbusDashboardCursor::RegisterLength { index }
+        | types::cursor::ModbusDashboardCursor::Register {
+            slave_index: index, ..
+        } => {
+            if index == 0 {
+                // Jump to ModbusMode (second item in first group)
+                Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+            } else {
+                // Jump to previous station's first item
+                Ok(types::cursor::ModbusDashboardCursor::StationId { index: index - 1 })
+            }
+        }
+    }
+}
+
+/// Jump to next station group
+/// - If on AddLine, jump to ModbusMode
+/// - If on ModbusMode, jump to first station (if exists) or stay at ModbusMode
+/// - If on a station's item, jump to next station's first item (if exists) or stay
+fn jump_to_next_group(
+    current_cursor: types::cursor::ModbusDashboardCursor,
+) -> Result<types::cursor::ModbusDashboardCursor> {
+    match current_cursor {
+        types::cursor::ModbusDashboardCursor::AddLine => {
+            // Jump to ModbusMode
+            Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+        }
+        types::cursor::ModbusDashboardCursor::ModbusMode => {
+            // Jump to first station if exists
+            let has_stations = read_status(|status| {
+                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            let port_guard = port_entry.read();
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port_guard.config;
+                            return Ok(!stations.is_empty());
+                        }
+                    }
+                }
+                Ok(false)
+            })?;
+
+            if has_stations {
+                Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
+            } else {
+                // No stations, stay at ModbusMode
+                Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+            }
+        }
+        types::cursor::ModbusDashboardCursor::StationId { index }
+        | types::cursor::ModbusDashboardCursor::RegisterMode { index }
+        | types::cursor::ModbusDashboardCursor::RegisterStartAddress { index }
+        | types::cursor::ModbusDashboardCursor::RegisterLength { index }
+        | types::cursor::ModbusDashboardCursor::Register {
+            slave_index: index, ..
+        } => {
+            // Check if next station exists
+            let has_next = read_status(|status| {
+                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            let port_guard = port_entry.read();
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port_guard.config;
+                            let all_items: Vec<_> = stations.iter().collect();
+                            return Ok(index + 1 < all_items.len());
+                        }
+                    }
+                }
+                Ok(false)
+            })?;
+
+            if has_next {
+                Ok(types::cursor::ModbusDashboardCursor::StationId { index: index + 1 })
+            } else {
+                // Stay at current station's first item
+                Ok(types::cursor::ModbusDashboardCursor::StationId { index })
+            }
+        }
+    }
+}
+
+/// Jump to last station group (first item of last station if exists, otherwise ModbusMode)
+fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
+    let last_station_index = read_status(|status| {
+        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_entry) = status.ports.map.get(port_name) {
+                    let port_guard = port_entry.read();
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &port_guard.config;
+                    let all_items: Vec<_> = stations.iter().collect();
+                    if !all_items.is_empty() {
+                        return Ok(Some(all_items.len() - 1));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    })?;
+
+    if let Some(index) = last_station_index {
+        Ok(types::cursor::ModbusDashboardCursor::StationId { index })
+    } else {
+        // No stations, stay at ModbusMode
+        Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
     }
 }

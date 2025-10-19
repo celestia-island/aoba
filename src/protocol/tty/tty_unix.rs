@@ -120,7 +120,10 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
         }
     }
 
-    // Explicit environment overrides (set by test harness when socat fallback picks random names)
+    // Legacy fallback: Explicit environment variable overrides (for backward compatibility)
+    // NOTE: New code should use command-line arguments (--port1, --port2) instead.
+    // This is kept for compatibility with test harness that may set these variables
+    // when socat creates ports with non-standard names.
     for env_key in ["AOBATEST_PORT1", "AOBATEST_PORT2"] {
         if let Ok(value) = std::env::var(env_key) {
             let path = Path::new(&value);
