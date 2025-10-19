@@ -155,6 +155,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
                     status_icon,
                     Style::default().fg(status_color),
                 ));
+                status_spans.push(Span::raw(" ")); // Add trailing space before terminal edge
 
                 let status_para = Paragraph::new(vec![Line::from(status_spans)])
                     .alignment(Alignment::Right);

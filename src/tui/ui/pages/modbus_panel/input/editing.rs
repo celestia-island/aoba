@@ -290,6 +290,10 @@ fn commit_selector_edit(
                         
                         // Mark as modified after using mode
                         port.config_modified = true;
+                        // Update status indicator if port is running
+                        if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                            port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
+                        }
                     });
 
                     if should_restart {
@@ -307,6 +311,10 @@ fn commit_selector_edit(
                         if let Some(item) = all_items.get_mut(index) {
                             item.register_mode = new_mode;
                             port.config_modified = true; // Mark as modified
+                            // Update status indicator if port is running
+                            if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
+                            }
                             log::info!("Updated register mode for index {index} to {new_mode:?}");
                         }
                     });
@@ -345,6 +353,10 @@ fn commit_text_edit(
                             if let Some(item) = all_items.get_mut(index) {
                                 item.station_id = station_id;
                                 port.config_modified = true; // Mark as modified
+                                // Update status indicator if port is running
+                                if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                    port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
+                                }
                                 log::info!("Updated station ID for index {index} to {station_id}");
                             }
                         });
@@ -359,6 +371,10 @@ fn commit_text_edit(
                             if let Some(item) = all_items.get_mut(index) {
                                 item.register_address = start_address;
                                 port.config_modified = true; // Mark as modified
+                                // Update status indicator if port is running
+                                if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                    port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
+                                }
                                 log::info!("Updated register start address for index {index} to {start_address}");
                             }
                         });
@@ -374,6 +390,10 @@ fn commit_text_edit(
                                 item.register_length = length;
                                 item.last_values.resize(length as usize, 0);
                                 port.config_modified = true; // Mark as modified
+                                // Update status indicator if port is running
+                                if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                    port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
+                                }
                                 log::info!("Updated register length for index {index} to {length}");
                             }
                         });
