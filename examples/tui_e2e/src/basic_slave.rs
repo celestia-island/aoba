@@ -419,17 +419,46 @@ async fn configure_tui_slave<T: Expect>(session: &mut T, cap: &mut TerminalCaptu
     }];
     execute_cursor_actions(session, cap, &actions, "debug_after_conn_mode").await?;
 
-    // Navigate to Register Length field
-    log::info!("Navigate to Register Length and set to {REGISTER_LENGTH} registers for monitoring");
+    // Navigate to Register Start Address field first to set it to 0
+    log::info!("Navigate to Register Start Address and set to 0");
     let actions = vec![
-        // From Connection Mode, navigate down to Register Length
+        // From Connection Mode, navigate down to Register Start Address
         // Down 1: Station ID
         // Down 2: Register Mode
         // Down 3: Register Start Address
-        // Down 4: Register Length
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 4,
+            count: 3,
+        },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_register_start_address").await?;
+
+    // Debug: Check cursor position before editing start address
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_edit_register_start_address".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_edit_start_addr").await?;
+
+    // Enter edit mode and set start address to 0
+    log::info!("Set Register Start Address to 0");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString("0".to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "set_register_start_address").await?;
+
+    // Navigate to Register Length field
+    log::info!("Navigate to Register Length and set to {REGISTER_LENGTH} registers for monitoring");
+    let actions = vec![
+        // Down 1 more from Register Start Address to Register Length
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
         },
         CursorAction::Sleep { ms: 500 },
     ];

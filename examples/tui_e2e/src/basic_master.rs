@@ -347,11 +347,11 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
     execute_cursor_actions(session, cap, &actions, "debug_after_create").await?;
 
     // After creating a station, cursor should be on the new station entry
-    // Navigate to Register Length field
+    // Navigate to Register Start Address field first to set it to 0
     // The order is: Create Station, Connection Mode, Station ID, Register Mode, Register Start Address, Register Length
-    log::info!("Navigate to Register Length and set to 12");
+    log::info!("Navigate to Register Start Address and set to 0");
     let actions = vec![
-        // From the station line, we need to navigate down to Register Length
+        // From the station line, we need to navigate down to Register Start Address
         // Go up first to ensure we're at the station header line
         CursorAction::PressArrow {
             direction: ArrowKey::Up,
@@ -363,10 +363,39 @@ async fn configure_tui_master<T: Expect>(session: &mut T, cap: &mut TerminalCapt
         // Down 2: Station ID
         // Down 3: Register Mode
         // Down 4: Register Start Address
-        // Down 5: Register Length
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 5,
+            count: 4,
+        },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_register_start_address").await?;
+
+    // Debug: Check cursor position before editing start address
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "before_edit_register_start_address".to_string(),
+    }];
+    execute_cursor_actions(session, cap, &actions, "debug_before_edit_start_addr").await?;
+
+    // Enter edit mode and set start address to 0
+    log::info!("Set Register Start Address to 0");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 }, // Wait for edit mode to activate
+        CursorAction::TypeString("0".to_string()),
+        CursorAction::Sleep { ms: 300 }, // Wait before confirming with Enter
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 }, // Wait for value to be committed
+    ];
+    execute_cursor_actions(session, cap, &actions, "set_register_start_address").await?;
+
+    // Now navigate to Register Length field
+    log::info!("Navigate to Register Length and set to 12");
+    let actions = vec![
+        // Down 1 more from Register Start Address to Register Length
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
         },
         CursorAction::Sleep { ms: 500 },
     ];
