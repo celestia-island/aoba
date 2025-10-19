@@ -175,7 +175,9 @@ async fn main() -> Result<()> {
 
     // Test 1: TUI Slave + CLI Master with 3 rounds (refactored with status monitoring)
     if args.should_run_test(1) {
-        log::info!("🧪 Test 1/4: TUI Slave + CLI Master (3 rounds, holding registers, status monitoring)");
+        log::info!(
+            "🧪 Test 1/4: TUI Slave + CLI Master (3 rounds, holding registers, status monitoring)"
+        );
         test_tui_slave_refactored(&args.port1, &args.port2).await?;
 
         // Reset ports after test completes (Unix only)

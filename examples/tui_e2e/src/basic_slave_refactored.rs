@@ -117,7 +117,13 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
             retry_interval_ms: Some(500),
         },
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_modbus_panel").await?;
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "enter_modbus_panel",
+    )
+    .await?;
 
     // Configure as Slave - create station and configure
     log::info!("🧪 Step 5: Configure TUI as Slave (client/poll mode)");
