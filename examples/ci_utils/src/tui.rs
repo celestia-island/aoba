@@ -588,13 +588,39 @@ pub async fn update_tui_registers<T: Expect>(
 
     log::info!("Found register grid, navigating to first register of first row...");
 
-    // We're now somewhere in the register grid. Navigate to the FIRST register.
-    // Go up until we can't go up anymore within the register section.
-    for attempt in 0..10 {
-        let before = cap
-            .capture(session, &format!("before_up_{}", attempt))
+    // We're now somewhere in the register grid. But we need to be careful:
+    // The cursor order is: ... RegisterStartAddress -> RegisterLength -> Register0 -> Register1 -> ...
+    // If we navigate up from the register display, we might land on RegisterStartAddress or RegisterLength.
+    // 
+    // Strategy: Navigate up until we find the "Register Length" line, then go down once to reach the first register.
+    // This ensures we don't accidentally edit configuration fields.
+    
+    for attempt in 0..15 {
+        let screen = cap
+            .capture(session, &format!("search_for_reg_length_{}", attempt))
             .await?;
 
+        // Look for "Register Length" line which is immediately before the first register
+        let found_reg_length = screen
+            .lines()
+            .any(|l| l.contains("Register Length") || l.contains("register length"));
+
+        if found_reg_length {
+            log::info!("Found 'Register Length' field at attempt {}, navigating down to first register", attempt);
+            // Move down once to get to the first register value
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction: crate::key_input::ArrowKey::Down,
+                    count: 1,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "to_first_reg_from_length")
+                .await?;
+            break;
+        }
+
+        // Navigate up to find Register Length
         let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
             count: 1,
@@ -603,33 +629,9 @@ pub async fn update_tui_registers<T: Expect>(
             session,
             cap,
             &actions,
-            &format!("up_{}", attempt),
+            &format!("search_up_{}", attempt),
         )
         .await?;
-
-        let after = cap
-            .capture(session, &format!("after_up_{}", attempt))
-            .await?;
-
-        // Check if we're still in register grid (has multiple 0x patterns)
-        let still_in_grid = after
-            .lines()
-            .any(|l| l.contains("0x00") && l.matches("0x").count() >= 3);
-
-        // If we left the grid or screen didn't change, go back down one and stop
-        if !still_in_grid || before == after {
-            let actions = vec![
-                crate::auto_cursor::CursorAction::PressArrow {
-                    direction: crate::key_input::ArrowKey::Down,
-                    count: 1,
-                },
-                crate::auto_cursor::CursorAction::Sleep { ms: 200 },
-            ];
-            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first_reg")
-                .await?;
-            log::info!("Positioned at first register after {} up attempts", attempt);
-            break;
-        }
     }
 
     log::info!("At first register row, starting updates...");
