@@ -214,6 +214,43 @@ assert!(status.ports.iter().any(|p| p.name == "/tmp/vcom1" && p.enabled));
 4. **Debuggability**: JSON dumps can be inspected independently
 5. **Simplicity**: Clear assertions on structured data instead of text matching
 
+### Debugging TUI E2E Tests
+
+**Important Principle**: The separation of UI and Logic tests does NOT mean abandoning terminal simulation. The terminal is still essential for debugging.
+
+#### When to Use DebugBreakpoint
+
+While TUI E2E tests primarily use status monitoring (CheckStatus) for validation, terminal capture remains critical for debugging:
+
+1. **During Development**: Insert `DebugBreakpoint` actions to capture and inspect the current terminal state when something goes wrong
+2. **Troubleshooting Failures**: If a `CheckStatus` assertion fails, add a breakpoint before it to see what the UI actually shows
+3. **Verifying UI State**: Use breakpoints to confirm the TUI is in the expected state before performing actions
+
+**Example Usage:**
+```rust
+let actions = vec![
+    // Navigate to a port
+    CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+    CursorAction::Sleep { ms: 500 },
+    
+    // Debug: Check what the terminal shows
+    CursorAction::DebugBreakpoint {
+        description: "verify_port_selection".to_string(),
+    },
+    
+    // Then verify via status monitoring
+    CursorAction::CheckStatus {
+        description: "Port should be selected".to_string(),
+        path: "current_selection".to_string(),
+        expected: json!("/tmp/vcom1"),
+        timeout_secs: Some(5),
+        retry_interval_ms: Some(500),
+    },
+];
+```
+
+**Key Point**: Don't debug "blind" using only status checks. Use `DebugBreakpoint` to visually confirm UI behavior, then add appropriate `CheckStatus` assertions once you understand what's happening.
+
 ### Troubleshooting
 
 #### Status file not found
