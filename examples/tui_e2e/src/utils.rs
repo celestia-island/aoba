@@ -535,38 +535,74 @@ pub async fn configure_tui_slave_common<T: Expect>(
 
         // For single station, use standard navigation
         // Navigate to Register Type field using Ctrl+PageUp + PageDown
-        // The selector defaults to Holding(03), so we need to navigate to get to 03.
-        let actions = vec![
-            // Navigate to Register Type field
-            CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressPageDown, // Jump to first station
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 2, // Move to Register Type field
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            // When we enter register type selection, it defaults to Holding(03)
-            // We need to navigate to Holding(03) - press Right twice to go from 01 to 03
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: 2, // From Coils(01) to Discrete Inputs(02) to Holding(03)
-            },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
-            // Verify the register type was set correctly
-            CursorAction::MatchPattern {
-                pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
-                description: format!("Register type set to {register_type:02}"),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
-        ];
+        // The selector defaults to Holding(03)
+        let actions = if register_type == 3 {
+            // Target is Holding (03), which is the default - just confirm
+            vec![
+                // Navigate to Register Type field
+                CursorAction::PressCtrlPageUp,
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressPageDown, // Jump to first station
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 2, // Move to Register Type field
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                // When we enter register type selection, it defaults to Holding(03)
+                // Just press Enter to confirm the selection
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+                // Verify the register type was set correctly
+                CursorAction::MatchPattern {
+                    pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
+                    description: format!("Register type set to {register_type:02}"),
+                    line_range: None,
+                    col_range: None,
+                    retry_action: None,
+                },
+            ]
+        } else {
+            // Need to navigate from Holding (03) to target
+            // Navigate left to reset, then right to target
+            vec![
+                // Navigate to Register Type field
+                CursorAction::PressCtrlPageUp,
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressPageDown, // Jump to first station
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 2, // Move to Register Type field
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 300 },
+                // Navigate from Holding(03) to target type
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Left,
+                    count: 5, // Go all the way left to Coils(01)
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: (register_type as usize).saturating_sub(1),
+                },
+                CursorAction::Sleep { ms: 300 },
+                CursorAction::PressEnter,
+                CursorAction::Sleep { ms: 500 },
+                // Verify the register type was set correctly
+                CursorAction::MatchPattern {
+                    pattern: regex::Regex::new(&format!("Register Type.*{register_type:02}"))?,
+                    description: format!("Register type set to {register_type:02}"),
+                    line_range: None,
+                    col_range: None,
+                    retry_action: None,
+                },
+            ]
+        };
         execute_cursor_actions(
             session,
             cap,
