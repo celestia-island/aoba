@@ -5,7 +5,9 @@ use std::{
     process::Stdio,
 };
 
-use ci_utils::{create_modbus_command, sleep_a_while, vcom_matchers};
+use ci_utils::{
+    create_modbus_command, sleep_a_while, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
+};
 
 /// Test master-slave communication with virtual serial ports
 /// Server = Modbus Master (provides data, responds to requests) on port1
@@ -13,7 +15,7 @@ use ci_utils::{create_modbus_command, sleep_a_while, vcom_matchers};
 pub async fn test_master_slave_communication() -> Result<()> {
     log::info!("🧪 Testing master-slave communication with virtual serial ports...");
     let temp_dir = std::env::temp_dir();
-    let ports = vcom_matchers();
+    let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
 
     // Create a data file for the server to provide
     let data_file = temp_dir.join("test_modbus_e2e_data.json");

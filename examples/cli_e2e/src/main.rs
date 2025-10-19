@@ -9,6 +9,7 @@ mod modbus_cli;
 mod modbus_e2e;
 
 use anyhow::Result;
+use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
 
@@ -31,6 +32,62 @@ use modbus_cli::{
 use modbus_e2e::{
     test_master_provide_with_vcom, test_master_slave_communication, test_slave_listen_with_vcom,
 };
+
+/// CLI E2E test suite with selective test execution
+#[derive(Parser, Debug)]
+#[command(name = "cli_e2e")]
+#[command(about = "CLI E2E test suite", long_about = None)]
+struct Args {
+    /// Virtual serial port 1 path
+    #[arg(long, default_value = "/tmp/vcom1")]
+    port1: String,
+
+    /// Virtual serial port 2 path
+    #[arg(long, default_value = "/tmp/vcom2")]
+    port2: String,
+
+    /// Enable debug mode (show debug breakpoints and additional logging)
+    #[arg(long)]
+    debug: bool,
+
+    /// Number of test loop iterations
+    #[arg(long, default_value = "1")]
+    loop_count: usize,
+
+    /// Run only basic CLI tests (help, list-ports)
+    #[arg(long)]
+    basic: bool,
+
+    /// Run only Modbus CLI tests (temp/persist modes)
+    #[arg(long)]
+    modbus_cli: bool,
+
+    /// Run only E2E tests with virtual ports
+    #[arg(long)]
+    e2e: bool,
+}
+
+impl Args {
+    /// Check if any specific test category is selected
+    fn has_specific_tests(&self) -> bool {
+        self.basic || self.modbus_cli || self.e2e
+    }
+
+    /// Check if basic tests should run
+    fn should_run_basic(&self) -> bool {
+        !self.has_specific_tests() || self.basic
+    }
+
+    /// Check if modbus CLI tests should run
+    fn should_run_modbus_cli(&self) -> bool {
+        !self.has_specific_tests() || self.modbus_cli
+    }
+
+    /// Check if E2E tests should run
+    fn should_run_e2e(&self) -> bool {
+        !self.has_specific_tests() || self.e2e
+    }
+}
 
 /// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
@@ -64,8 +121,9 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
             .output()?;
 
         if output.status.success() {
-            apply_port_env_overrides(&output.stdout);
+            // Don't use environment variables anymore, just log the ports being used
             log::info!("✅ Virtual serial ports reset successfully");
+            log::info!("🔗 Using ports: PORT1={port1}, PORT2={port2}");
             Ok(true)
         } else {
             log::warn!("⚠️ Failed to setup virtual serial ports:");
@@ -79,65 +137,57 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     }
 }
 
-#[cfg(not(windows))]
-fn apply_port_env_overrides(stdout: &[u8]) {
-    let mut port1: Option<String> = None;
-    let mut port2: Option<String> = None;
-
-    for line in String::from_utf8_lossy(stdout).lines() {
-        if let Some(value) = line.strip_prefix("PORT1=") {
-            port1 = Some(value.trim().to_string());
-        } else if let Some(value) = line.strip_prefix("PORT2=") {
-            port2 = Some(value.trim().to_string());
-        }
-    }
-
-    if let Some(p1) = port1 {
-        std::env::set_var("AOBATEST_PORT1", &p1);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT1={p1}");
-    }
-    if let Some(p2) = port2 {
-        std::env::set_var("AOBATEST_PORT2", &p2);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT2={p2}");
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
+
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    // Check if we should loop the tests
-    let loop_count = std::env::var("TEST_LOOP")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1);
-
-    if loop_count > 1 {
-        log::info!("🧪 Running tests in loop mode: {loop_count} iterations");
+    // Set debug mode if requested
+    if args.debug {
+        std::env::set_var("DEBUG_MODE", "1");
+        log::info!("🐛 Debug mode enabled");
     }
 
-    for iteration in 1..=loop_count {
-        if loop_count > 1 {
-            log::info!("🧪 ===== Iteration {iteration}/{loop_count} =====");
+    log::info!(
+        "📍 Port configuration: port1={}, port2={}",
+        args.port1,
+        args.port2
+    );
+
+    if args.loop_count > 1 {
+        log::info!(
+            "🧪 Running tests in loop mode: {} iterations",
+            args.loop_count
+        );
+    }
+
+    for iteration in 1..=args.loop_count {
+        if args.loop_count > 1 {
+            log::info!("🧪 ===== Iteration {iteration}/{} =====", args.loop_count);
         }
 
         log::info!("🧪 Starting CLI E2E Tests...");
 
-        test_cli_help().await?;
-        test_cli_list_ports().await?;
-        test_cli_list_ports_json().await?;
-        test_cli_list_ports_json_with_status().await?;
+        if args.should_run_basic() {
+            test_cli_help().await?;
+            test_cli_list_ports().await?;
+            test_cli_list_ports_json().await?;
+            test_cli_list_ports_json_with_status().await?;
+        }
 
-        log::info!("🧪 Testing Modbus CLI features (basic)...");
-        test_slave_listen_temp().await?;
-        test_slave_listen_persist().await?;
-        test_master_provide_temp().await?;
-        test_master_provide_persist().await?;
+        if args.should_run_modbus_cli() {
+            log::info!("🧪 Testing Modbus CLI features (basic)...");
+            test_slave_listen_temp().await?;
+            test_slave_listen_persist().await?;
+            test_master_provide_temp().await?;
+            test_master_provide_persist().await?;
+        }
 
         // Check if we can setup virtual serial ports for E2E tests
-        if setup_virtual_serial_ports()? {
+        if args.should_run_e2e() && setup_virtual_serial_ports()? {
             log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
             // Run each E2E test with fresh port initialization
@@ -182,19 +232,25 @@ async fn main() -> Result<()> {
             log::info!("🧪 Test 10/7: Multi-slave adjacent registers configurations");
             setup_virtual_serial_ports()?;
             test_multi_slaves_adjacent_registers().await?;
-        } else {
+        } else if args.should_run_e2e() {
             log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
         }
 
-        if loop_count > 1 {
-            log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
+        if args.loop_count > 1 {
+            log::info!(
+                "✅ Iteration {iteration}/{} completed successfully!",
+                args.loop_count
+            );
         } else {
             log::info!("🧪 All CLI E2E tests passed!");
         }
     }
 
-    if loop_count > 1 {
-        log::info!("🎉 All {loop_count} iterations completed successfully!");
+    if args.loop_count > 1 {
+        log::info!(
+            "🎉 All {} iterations completed successfully!",
+            args.loop_count
+        );
     }
 
     Ok(())

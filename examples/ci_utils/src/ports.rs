@@ -24,7 +24,8 @@ pub struct VcomMatchers {
 }
 
 /// Build platform-appropriate Regex matchers for the two virtual ports.
-pub fn vcom_matchers() -> VcomMatchers {
+/// Accepts explicit port names instead of reading from environment variables.
+pub fn vcom_matchers_with_ports(port1: &str, port2: &str) -> VcomMatchers {
     use std::path::Path;
 
     #[cfg(not(windows))]
@@ -96,14 +97,8 @@ pub fn vcom_matchers() -> VcomMatchers {
         format!("(?:{escaped})")
     }
 
-    let env1 = std::env::var("AOBATEST_PORT1").ok();
-    let env2 = std::env::var("AOBATEST_PORT2").ok();
-
-    let (p1, p2) = if let (Some(a), Some(b)) = (env1, env2) {
-        (a, b)
-    } else {
-        (DEFAULT_PORT1.to_string(), DEFAULT_PORT2.to_string())
-    };
+    let p1 = port1.to_string();
+    let p2 = port2.to_string();
 
     #[cfg(not(windows))]
     let port1_aliases = {
@@ -152,6 +147,27 @@ pub fn vcom_matchers() -> VcomMatchers {
     }
 }
 
+/// Build platform-appropriate Regex matchers for the two virtual ports.
+///
+/// **COMPLETELY DEPRECATED AND DISABLED**: This function MUST NOT be used for any new code.
+/// All legacy uses must be replaced with `vcom_matchers_with_ports(port1, port2)`.
+///
+/// This function has been disabled because it relied on environment variables that are no longer
+/// supported. Use command-line arguments (`--port1`, `--port2`) instead.
+///
+/// # Panics
+/// This function will panic if called, to force migration to the new API.
+#[deprecated(
+    since = "0.0.1",
+    note = "COMPLETELY DISABLED - Use `vcom_matchers_with_ports(port1, port2)` instead. This function will panic if called."
+)]
+#[allow(dead_code)]
+pub fn vcom_matchers() -> VcomMatchers {
+    panic!(
+        "vcom_matchers() is completely disabled. Use vcom_matchers_with_ports(port1, port2) instead with command-line arguments."
+    )
+}
+
 /// Check if a serial port exists on the current platform
 pub fn port_exists(port_name: &str) -> bool {
     #[cfg(windows)]
@@ -176,7 +192,8 @@ pub fn port_exists(port_name: &str) -> bool {
 }
 
 /// Decide whether virtual serial port (vcom) tests should run on this platform.
-pub fn should_run_vcom_tests() -> bool {
+/// Accepts explicit port names instead of reading from environment variables.
+pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
     // Allow explicit override via environment variable
     if let Ok(val) = std::env::var("CI_FORCE_VCOM") {
         let should_run = val == "1" || val.eq_ignore_ascii_case("true");
@@ -187,30 +204,25 @@ pub fn should_run_vcom_tests() -> bool {
     // On Windows, check if the test ports are available
     #[cfg(windows)]
     {
-        let ports = vcom_matchers();
-        log::info!(
-            "Checking for ports: {} and {}",
-            ports.port1_name,
-            ports.port2_name
-        );
+        log::info!("Checking for ports: {} and {}", port1, port2);
 
-        let port1_exists = port_exists(&ports.port1_name);
-        let port2_exists = port_exists(&ports.port2_name);
+        let port1_exists = port_exists(port1);
+        let port2_exists = port_exists(port2);
 
         log::info!(
             "Port existence check: {} exists={}, {} exists={}",
-            ports.port1_name,
+            port1,
             port1_exists,
-            ports.port2_name,
+            port2,
             port2_exists
         );
 
         if !port1_exists || !port2_exists {
             log::info!(
                 "Virtual serial port tests disabled on Windows: {} exists={}, {} exists={}",
-                ports.port1_name,
+                port1,
                 port1_exists,
-                ports.port2_name,
+                port2,
                 port2_exists
             );
             return false;
@@ -222,6 +234,22 @@ pub fn should_run_vcom_tests() -> bool {
     // On Unix-like systems, always run tests (socat creates ports on demand)
     #[cfg(not(windows))]
     {
+        let _ = (port1, port2); // Suppress unused variable warning
         true
     }
+}
+
+/// Decide whether virtual serial port (vcom) tests should run on this platform.
+///
+/// **DEPRECATED**: This function is deprecated. Use `should_run_vcom_tests_with_ports()`
+/// instead and pass ports explicitly via command-line arguments.
+///
+/// NOTE: This function no longer reads AOBATEST_PORT1/AOBATEST_PORT2 environment variables.
+/// It maintains support for CI_FORCE_VCOM for legacy CI systems but uses default port values.
+#[deprecated(
+    since = "0.0.1",
+    note = "Use `should_run_vcom_tests_with_ports(port1, port2)` instead and pass port parameters explicitly"
+)]
+pub fn should_run_vcom_tests() -> bool {
+    should_run_vcom_tests_with_ports(DEFAULT_PORT1, DEFAULT_PORT2)
 }

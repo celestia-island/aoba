@@ -1,6 +1,9 @@
 use anyhow::{anyhow, Result};
 
-use ci_utils::{run_binary_sync, should_run_vcom_tests, vcom_matchers};
+use ci_utils::{
+    run_binary_sync, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, DEFAULT_PORT1,
+    DEFAULT_PORT2,
+};
 
 pub async fn test_cli_list_ports() -> Result<()> {
     let output = run_binary_sync(&["--list-ports"])?;
@@ -24,10 +27,10 @@ pub async fn test_cli_list_ports() -> Result<()> {
 
     log::info!("🧪 List ports command works correctly");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    if !should_run_vcom_tests() {
+    if !should_run_vcom_tests_with_ports(DEFAULT_PORT1, DEFAULT_PORT2) {
         log::info!("Skipping virtual serial port presence checks on this platform");
     } else {
-        let vmatch = vcom_matchers();
+        let vmatch = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
         if !stdout.contains(&vmatch.port1_name) || !stdout.contains(&vmatch.port2_name) {
             log::warn!(
                 "Expected {} and {} to be present in list-ports output; got: {stdout}",

@@ -5,12 +5,75 @@ mod e2e;
 mod utils;
 
 use anyhow::Result;
+use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
 
 use basic_master::test_tui_master_with_cli_slave_continuous;
 use basic_slave::test_tui_slave_with_cli_master_continuous;
 use cli_port_cleanup::test_cli_port_release;
+
+/// TUI E2E test suite with selective test execution
+#[derive(Parser, Debug)]
+#[command(name = "tui_e2e")]
+#[command(about = "TUI E2E test suite", long_about = None)]
+struct Args {
+    /// Virtual serial port 1 path
+    #[arg(long, default_value = "/tmp/vcom1")]
+    port1: String,
+
+    /// Virtual serial port 2 path
+    #[arg(long, default_value = "/tmp/vcom2")]
+    port2: String,
+
+    /// Enable debug mode (show debug breakpoints and additional logging)
+    #[arg(long)]
+    debug: bool,
+
+    /// Run only test 0: CLI port release verification
+    #[arg(long)]
+    test0: bool,
+
+    /// Run only test 1: TUI Slave + CLI Master
+    #[arg(long)]
+    test1: bool,
+
+    /// Run only test 2: TUI Master + CLI Slave
+    #[arg(long)]
+    test2: bool,
+
+    /// Run only test 3: Multiple TUI Masters
+    #[arg(long)]
+    test3: bool,
+
+    /// Run only test 4: Multiple TUI Slaves
+    #[arg(long)]
+    test4: bool,
+}
+
+impl Args {
+    /// Check if any specific test is selected
+    fn has_specific_tests(&self) -> bool {
+        self.test0 || self.test1 || self.test2 || self.test3 || self.test4
+    }
+
+    /// Check if a specific test should run
+    fn should_run_test(&self, test_num: usize) -> bool {
+        if !self.has_specific_tests() {
+            // If no specific tests selected, run all tests
+            return true;
+        }
+
+        match test_num {
+            0 => self.test0,
+            1 => self.test1,
+            2 => self.test2,
+            3 => self.test3,
+            4 => self.test4,
+            _ => false,
+        }
+    }
+}
 
 /// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
@@ -44,8 +107,9 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
             .output()?;
 
         if output.status.success() {
-            apply_port_env_overrides(&output.stdout);
+            // Don't use environment variables anymore, just log the ports being used
             log::info!("✅ Virtual serial ports reset successfully");
+            log::info!("🔗 Using ports: PORT1={port1}, PORT2={port2}");
             Ok(true)
         } else {
             log::warn!("⚠️ Failed to setup virtual serial ports:");
@@ -59,124 +123,85 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     }
 }
 
-#[cfg(not(windows))]
-fn apply_port_env_overrides(stdout: &[u8]) {
-    let mut port1: Option<String> = None;
-    let mut port2: Option<String> = None;
-
-    for line in String::from_utf8_lossy(stdout).lines() {
-        if let Some(value) = line.strip_prefix("PORT1=") {
-            port1 = Some(value.trim().to_string());
-        } else if let Some(value) = line.strip_prefix("PORT2=") {
-            port2 = Some(value.trim().to_string());
-        }
-    }
-
-    if let Some(p1) = port1 {
-        std::env::set_var("AOBATEST_PORT1", &p1);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT1={p1}");
-    }
-    if let Some(p2) = port2 {
-        std::env::set_var("AOBATEST_PORT2", &p2);
-        log::info!("🔗 Using virtual port override: AOBATEST_PORT2={p2}");
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args = Args::parse();
+
     env_logger::builder()
         .filter_level(log::LevelFilter::Info)
         .init();
 
-    // Check for debug mode argument
-    let args: Vec<String> = std::env::args().collect();
-    if args.contains(&"--debug".to_string()) || args.contains(&"debug".to_string()) {
+    // Set debug mode if requested
+    if args.debug {
         std::env::set_var("DEBUG_MODE", "1");
-        log::info!("🔴 DEBUG MODE ENABLED - DebugBreakpoint actions will be active");
-        log::info!("💡 Test will capture screen and exit at breakpoints");
+        log::info!("🐛 Debug mode enabled");
     }
 
-    // Check if we should skip basic tests and run only multi tests
-    let skip_basic =
-        args.contains(&"--skip-basic".to_string()) || std::env::var("SKIP_BASIC_TESTS").is_ok();
-    if skip_basic {
-        log::info!("⏭️  Skipping basic TUI tests, running only multi-masters/slaves");
+    log::info!("🧪 Starting TUI E2E Tests...");
+    log::info!(
+        "📍 Port configuration: port1={}, port2={}",
+        args.port1,
+        args.port2
+    );
+
+    // On Unix-like systems, try to setup virtual serial ports
+    #[cfg(not(windows))]
+    {
+        log::info!("🧪 Setting up virtual serial ports...");
+        setup_virtual_serial_ports()?;
     }
 
-    // Check if we should loop the tests
-    let loop_count = std::env::var("TEST_LOOP")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1);
-
-    if loop_count > 1 {
-        log::info!("🧪 Running tests in loop mode: {loop_count} iterations");
+    // Check if we should run virtual serial port tests
+    if !ci_utils::should_run_vcom_tests_with_ports(&args.port1, &args.port2) {
+        log::warn!("⚠️ Virtual serial ports not available, skipping E2E tests");
+        return Ok(());
     }
 
-    for iteration in 1..=loop_count {
-        if loop_count > 1 {
-            log::info!("🧪 ===== Iteration {iteration}/{loop_count} =====");
-        }
+    log::info!("🧪 Virtual serial ports available, running E2E tests...");
 
-        log::info!("🧪 Starting TUI E2E Tests...");
+    // Test 0: CLI port release test - verify CLI properly releases ports on exit
+    if args.should_run_test(0) {
+        log::info!("🧪 Test 0/4: CLI port release verification");
+        test_cli_port_release().await?;
 
-        // On Unix-like systems, try to setup virtual serial ports
+        // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
         #[cfg(not(windows))]
         {
-            log::info!("🧪 Setting up virtual serial ports...");
+            log::info!("🧪 Resetting virtual serial ports after Test 0...");
             setup_virtual_serial_ports()?;
         }
+    }
 
-        // Check if we should run virtual serial port tests
-        if !ci_utils::should_run_vcom_tests() {
-            log::warn!("⚠️ Virtual serial ports not available, skipping E2E tests");
-            break;
+    // Test 1: TUI Slave + CLI Master with 10 rounds of continuous random data
+    if args.should_run_test(1) {
+        log::info!("🧪 Test 1/4: TUI Slave + CLI Master (10 rounds, holding registers)");
+        test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?;
+
+        // Reset ports after test completes (Unix only)
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Resetting virtual serial ports after Test 1...");
+            setup_virtual_serial_ports()?;
         }
+    }
 
-        log::info!("🧪 Virtual serial ports available, running E2E tests...");
+    // Test 2: TUI Master + CLI Slave (repeat for stability)
+    if args.should_run_test(2) {
+        log::info!("🧪 Test 2/4: TUI Master + CLI Slave - Repeat (10 rounds, holding registers)");
+        test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?;
 
-        if !skip_basic {
-            // Test 0: CLI port release test - verify CLI properly releases ports on exit
-            log::info!("🧪 Test 0/2: CLI port release verification");
-            test_cli_port_release().await?;
-
-            // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
-            #[cfg(not(windows))]
-            {
-                log::info!("🧪 Resetting virtual serial ports after Test 0...");
-                setup_virtual_serial_ports()?;
-            }
-
-            // Test 1: TUI Master-Provide + CLI Slave-Poll with 10 rounds of continuous random data
-            log::info!(
-                "🧪 Test 1/2: TUI Master-Provide + CLI Slave-Poll (10 rounds, holding registers)"
-            );
-            test_tui_slave_with_cli_master_continuous().await?;
-
-            // Reset ports after test completes (Unix only)
-            #[cfg(not(windows))]
-            {
-                log::info!("🧪 Resetting virtual serial ports after Test 1...");
-                setup_virtual_serial_ports()?;
-            }
-
-            // Test 2: TUI Master-Provide + CLI Slave-Poll (repeat for stability)
-            log::info!("🧪 Test 2/4: TUI Master-Provide + CLI Slave-Poll - Repeat (10 rounds, holding registers)");
-            test_tui_master_with_cli_slave_continuous().await?;
-
-            // Reset ports after test completes (Unix only)
-            #[cfg(not(windows))]
-            {
-                log::info!("🧪 Resetting virtual serial ports after Test 2...");
-                setup_virtual_serial_ports()?;
-            }
-        } else {
-            log::info!("⏭️  Skipped Tests 0-2 (basic TUI tests)");
+        // Reset ports after test completes (Unix only)
+        #[cfg(not(windows))]
+        {
+            log::info!("🧪 Resetting virtual serial ports after Test 2...");
+            setup_virtual_serial_ports()?;
         }
+    }
 
-        // Test 3: Multiple TUI Masters on vcom1
+    // Test 3: Multiple TUI Masters on vcom1
+    if args.should_run_test(3) {
         log::info!("🧪 Test 3/4: Multiple TUI Masters on vcom1 (E2E test suite)");
-        e2e::test_tui_multi_masters().await?;
+        e2e::test_tui_multi_masters(&args.port1, &args.port2).await?;
 
         // Reset ports after test completes (Unix only)
         #[cfg(not(windows))]
@@ -184,21 +209,15 @@ async fn main() -> Result<()> {
             log::info!("🧪 Resetting virtual serial ports after Test 3...");
             setup_virtual_serial_ports()?;
         }
+    }
 
-        // Test 4: Multiple TUI Slaves on vcom2
+    // Test 4: Multiple TUI Slaves on vcom2
+    if args.should_run_test(4) {
         log::info!("🧪 Test 4/4: Multiple TUI Slaves on vcom2 (E2E test suite)");
-        e2e::test_tui_multi_slaves().await?;
-
-        if loop_count > 1 {
-            log::info!("✅ Iteration {iteration}/{loop_count} completed successfully!");
-        } else {
-            log::info!("🧪 All TUI E2E tests passed!");
-        }
+        e2e::test_tui_multi_slaves(&args.port1, &args.port2).await?;
     }
 
-    if loop_count > 1 {
-        log::info!("🎉 All {loop_count} iterations completed successfully!");
-    }
+    log::info!("🧪 All selected TUI E2E tests passed!");
 
     Ok(())
 }
