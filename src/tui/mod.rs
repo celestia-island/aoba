@@ -811,6 +811,8 @@ fn run_core_thread(
                                     if let Some(port) = status.ports.map.get(&port_name) {
                                         if with_port_write(port, |port| {
                                             port.state = PortState::Free;
+                                            // Port is now stopped
+                                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
                                         })
                                         .is_none()
                                         {
@@ -875,6 +877,8 @@ fn run_core_thread(
                                     if let Some(port) = status.ports.map.get(&port_name) {
                                         if with_port_write(port, |port| {
                                             port.state = PortState::Free;
+                                            // Port is now stopped
+                                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
                                         })
                                         .is_none()
                                         {
@@ -992,6 +996,12 @@ fn run_core_thread(
                                                         port.state = PortState::OccupiedByThis {
                                                             owner: owner.clone(),
                                                         };
+                                                        // Port is now running
+                                                        port.status_indicator = if port.config_modified {
+                                                            types::port::PortStatusIndicator::RunningWithChanges
+                                                        } else {
+                                                            types::port::PortStatusIndicator::Running
+                                                        };
                                                     })
                                                     .is_none()
                                                     {
@@ -1097,6 +1107,12 @@ fn run_core_thread(
                                                     if with_port_write(port, |port| {
                                                         port.state = PortState::OccupiedByThis {
                                                             owner: owner.clone(),
+                                                        };
+                                                        // Port is now running
+                                                        port.status_indicator = if port.config_modified {
+                                                            types::port::PortStatusIndicator::RunningWithChanges
+                                                        } else {
+                                                            types::port::PortStatusIndicator::Running
                                                         };
                                                     })
                                                     .is_none()
@@ -1211,6 +1227,12 @@ fn run_core_thread(
                                         port.state = PortState::OccupiedByThis {
                                             owner: PortOwner::Runtime(handle_for_write.clone()),
                                         };
+                                        // Port is now running
+                                        port.status_indicator = if port.config_modified {
+                                            types::port::PortStatusIndicator::RunningWithChanges
+                                        } else {
+                                            types::port::PortStatusIndicator::Running
+                                        };
                                     })
                                     .is_none()
                                     {
@@ -1302,6 +1324,8 @@ fn run_core_thread(
                                 cleanup_paths
                                     .insert(port_name.clone(), info.data_source_path.clone());
                                 port.state = PortState::Free;
+                                // Port is now stopped
+                                port.status_indicator = types::port::PortStatusIndicator::NotStarted;
                             }
                         })
                         .is_none()

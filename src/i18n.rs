@@ -59,6 +59,9 @@ derive_struct! {
             press_esc_cancel: String = "press_esc_cancel".to_string(),
             press_esc_save_and_return: String = "press_esc_save_and_return".to_string(),
             press_ctrl_esc_return_no_save: String = "press_ctrl_esc_return_no_save".to_string(),
+            press_ctrl_s_save_config: String = "press_ctrl_s_save_config".to_string(),
+            press_esc_return: String = "press_esc_return".to_string(),
+            press_ctrl_esc_discard_return: String = "press_ctrl_esc_discard_return".to_string(),
             press_q_quit: String = "press_q_quit".to_string(),
 
             hint_enter_subpage: String = "hint_enter_subpage".to_string(),
@@ -152,6 +155,15 @@ derive_struct! {
                 mode_tcp: String = "mode_tcp".to_string(),
                 mode_overlay_title: String = "mode_overlay_title".to_string(),
                 mode_overlay_hint: String = "mode_overlay_hint".to_string(),
+                
+                // Port status indicator messages (for title bar)
+                status_not_started: String = "status_not_started".to_string(),
+                status_starting: String = "status_starting".to_string(),
+                status_running: String = "status_running".to_string(),
+                status_running_with_changes: String = "status_running_with_changes".to_string(),
+                status_saving: String = "status_saving".to_string(),
+                status_syncing: String = "status_syncing".to_string(),
+                status_applied_success: String = "status_applied_success".to_string(),
             },
             modbus: {
                 edit_suffix: String = "edit_suffix".to_string(),

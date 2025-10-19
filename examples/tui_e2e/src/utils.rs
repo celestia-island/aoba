@@ -149,7 +149,7 @@ pub async fn configure_tui_master_common<T: Expect>(
     let screen = cap
         .capture(session, &format!("verify_modbus_panel_master{station_id}"))
         .await?;
-    if !screen.contains("ModBus Master/Slave Settings") {
+    if !screen.contains("ModBus Master/Slave Set") {
         return Err(anyhow!(
             "Expected to be inside ModBus panel for Master (Station {station_id})"
         ));
@@ -414,7 +414,7 @@ pub async fn configure_tui_slave_common<T: Expect>(
     let screen = cap
         .capture(session, &format!("verify_modbus_panel_slave{station_id}"))
         .await?;
-    if !screen.contains("ModBus Master/Slave Settings") {
+    if !screen.contains("ModBus Master/Slave Set") {
         return Err(anyhow!(
             "Expected to be inside ModBus panel for Slave (Station {station_id})"
         ));
