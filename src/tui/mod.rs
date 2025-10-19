@@ -580,6 +580,26 @@ pub fn start() -> Result<()> {
     // Initialize the global status
     init_status(app.clone())?;
 
+    // Check if debug CI E2E test mode is enabled
+    let debug_ci_e2e_enabled = std::env::var("AOBA_DEBUG_CI_E2E_TEST").is_ok();
+    let debug_dump_shutdown = if debug_ci_e2e_enabled {
+        log::info!("🔍 Debug CI E2E test mode enabled - starting status dump thread");
+        crate::protocol::status::debug_dump::enable_debug_dump();
+
+        let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let dump_path = std::path::PathBuf::from("/tmp/tui_e2e.log");
+        let shutdown_signal_clone = shutdown_signal.clone();
+
+        crate::protocol::status::debug_dump::start_status_dump_thread(
+            dump_path,
+            Some(shutdown_signal_clone),
+        );
+
+        Some(shutdown_signal)
+    } else {
+        None
+    };
+
     // Load persisted port configurations
     if let Ok(persisted_configs) = persistence::load_port_configs() {
         if !persisted_configs.is_empty() {
@@ -652,6 +672,13 @@ pub fn start() -> Result<()> {
     input_handle
         .join()
         .map_err(|err| anyhow!("Failed to join input thread: {err:?}"))??;
+
+    // Stop debug dump thread if it was started
+    if let Some(shutdown_signal) = debug_dump_shutdown {
+        shutdown_signal.store(true, std::sync::atomic::Ordering::SeqCst);
+        log::info!("🔍 Debug dump thread shutdown signal sent");
+    }
+
     Ok(())
 }
 

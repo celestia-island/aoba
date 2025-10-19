@@ -173,5 +173,12 @@ pub fn parse_args() -> ArgMatches {
                 .value_name("IPC_CHANNEL")
                 .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon"]),
         )
+        .arg(
+            Arg::new("debug-ci-e2e-test")
+                .long("debug-ci-e2e-test")
+                .help("Enable CI E2E test mode: periodically dump global status to /tmp/cli_e2e_{port}.log")
+                .action(clap::ArgAction::SetTrue)
+                .hide(true), // Hidden from normal help output
+        )
         .get_matches()
 }

@@ -118,6 +118,12 @@ impl ManagedSubprocess {
         args.push("--ipc-channel".to_string());
         args.push(ipc_socket_name.clone());
 
+        // If TUI is in debug CI E2E test mode, propagate to CLI subprocess
+        if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+            args.push("--debug-ci-e2e-test".to_string());
+            log::debug!("Injecting --debug-ci-e2e-test flag to CLI subprocess");
+        }
+
         log::debug!("CLI subprocess command: {exe_path:?} {args:?}");
 
         // Spawn the subprocess

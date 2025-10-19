@@ -155,6 +155,71 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     // Setup IPC if requested
     let mut ipc_connections = crate::cli::actions::setup_ipc(matches);
 
+    // Check if debug CI E2E test mode is enabled
+    let _debug_dump_thread = if matches.get_flag("debug-ci-e2e-test") {
+        log::info!("🔍 Debug CI E2E test mode enabled for CLI subprocess");
+
+        // Create a simple status snapshot function for CLI
+        let port_name = port.to_string();
+        let station_id_copy = station_id;
+        let reg_mode_copy = reg_mode;
+        let register_address_copy = register_address;
+        let register_length_copy = register_length;
+
+        let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let shutdown_clone = shutdown_signal.clone();
+
+        // Sanitize port name for filename
+        let sanitized_port: String = port_name
+            .chars()
+            .map(|c| match c {
+                'a'..='z' | 'A'..='Z' | '0'..='9' => c,
+                _ => '_',
+            })
+            .collect();
+
+        let dump_path = std::path::PathBuf::from(format!("/tmp/cli_e2e_{}.log", sanitized_port));
+
+        let handle = std::thread::spawn(move || {
+            use std::io::Write;
+            log::info!(
+                "CLI status dump thread started, writing to {}",
+                dump_path.display()
+            );
+
+            loop {
+                if shutdown_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                    log::info!("CLI status dump thread shutting down");
+                    break;
+                }
+
+                // Create a simple JSON status
+                let status = serde_json::json!({
+                    "port_name": port_name,
+                    "station_id": station_id_copy,
+                    "register_mode": format!("{:?}", reg_mode_copy),
+                    "register_address": register_address_copy,
+                    "register_length": register_length_copy,
+                    "mode": "MasterProvide",
+                    "timestamp": chrono::Local::now().to_rfc3339(),
+                });
+
+                if let Ok(json) = serde_json::to_string_pretty(&status) {
+                    if let Ok(mut file) = std::fs::File::create(&dump_path) {
+                        let _ = file.write_all(json.as_bytes());
+                        let _ = file.flush();
+                    }
+                }
+
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        });
+
+        Some((shutdown_signal, handle))
+    } else {
+        None
+    };
+
     // Open serial port with longer timeout for reading requests
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(50))

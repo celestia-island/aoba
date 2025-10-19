@@ -3,6 +3,8 @@ pub mod types;
 mod util;
 pub use util::*;
 
+pub mod debug_dump;
+
 use anyhow::{anyhow, Result};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
