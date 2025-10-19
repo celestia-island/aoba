@@ -510,33 +510,76 @@ pub async fn enter_modbus_panel<T: Expect>(
 }
 
 /// Update TUI registers with new values (shared implementation)
-/// NOTE: Assumes you're already IN the Modbus panel at the register editing area
+/// NOTE: Assumes you're already IN the Modbus panel and cursor is on or near the target station
 pub async fn update_tui_registers<T: Expect>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // Navigate to Register Length field reliably
-    // We may be at the top of the station list after previous round
-    // Strategy: Go Up 20 to ensure we're at the top, then navigate down to Register Length
-    log::info!("🔍 Navigating to Register Length field...");
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 20, // Go to top of Modbus panel
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-        // Now navigate down to Register Length
-        // From top: Create Station (0), Connection Mode (1), Station ID (2), Register Type (3), Start Address (4), Register Length (5)
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Down,
-            count: 5,
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_register_length")
+    // Capture screen to find current position relative to Register Length field
+    log::info!("🔍 Finding Register Length field in current station...");
+    let screen = cap
+        .capture(session, "before_nav_to_register_length")
         .await?;
+    let lines: Vec<&str> = screen.lines().collect();
+
+    // Find the line with "Register Length" that's closest to our current position
+    // Look for lines containing "> " to find cursor position, and "Register Length" for target
+    let mut cursor_line = None;
+    let mut register_length_line = None;
+
+    for (idx, line) in lines.iter().enumerate() {
+        // Find cursor position (look for "> " at start of menu items)
+        if line.trim_start().starts_with("> ") || line.contains("> ") {
+            cursor_line = Some(idx);
+        }
+        // Find Register Length field (should be in current station context)
+        if line.contains("Register Length") && !line.contains("Holding") {
+            register_length_line = Some(idx);
+        }
+    }
+
+    let cursor_idx = cursor_line.unwrap_or(0);
+    let register_length_idx = register_length_line
+        .ok_or_else(|| anyhow!("Could not find Register Length field in current station"))?;
+
+    log::info!(
+        "📍 Cursor at line {}, Register Length at line {}, need to move {} lines {}",
+        cursor_idx,
+        register_length_idx,
+        cursor_idx.abs_diff(register_length_idx),
+        if register_length_idx > cursor_idx {
+            "down"
+        } else {
+            "up"
+        }
+    );
+
+    // Navigate to Register Length field
+    if cursor_idx != register_length_idx {
+        let delta = cursor_idx.abs_diff(register_length_idx);
+        let direction = if register_length_idx > cursor_idx {
+            crate::key_input::ArrowKey::Down
+        } else {
+            crate::key_input::ArrowKey::Up
+        };
+
+        let actions = vec![
+            crate::auto_cursor::CursorAction::PressArrow {
+                direction,
+                count: delta,
+            },
+            crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        ];
+        crate::auto_cursor::execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            "nav_to_register_length",
+        )
+        .await?;
+    }
 
     // Now we're on Register Length field, navigate Down 1 to first register row
     let actions = vec![
