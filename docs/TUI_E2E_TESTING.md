@@ -35,7 +35,7 @@ Manual CLI invocation:
 cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-test
 ```
 
-This will create `/tmp/cli_e2e__tmp_vcom1.log` with periodic status dumps.
+This will create `/tmp/cli_e2e__tmp_vcom1.log` with periodic status dumps (note: all non-alphanumeric characters in the port name are converted to underscores for the filename).
 
 ## Status File Format
 
@@ -100,7 +100,8 @@ async fn test_tui_master_configuration() -> Result<()> {
     // Spawn TUI
     let mut tui_session = spawn_expect_process(&["--tui"])?;
     
-    // Wait for TUI to initialize
+    // Wait for TUI to initialize and start writing status
+    // Note: In production tests, prefer using wait_for_tui_page() instead of sleep
     tokio::time::sleep(Duration::from_secs(2)).await;
     
     // Wait for TUI to reach Entry page
