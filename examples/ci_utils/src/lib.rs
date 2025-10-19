@@ -24,7 +24,8 @@ pub use log_parser::{
     wait_for_port_state, ConfigEditState, PortState, StateDump,
 };
 pub use ports::{
-    port_exists, should_run_vcom_tests, vcom_matchers, VcomMatchers, DEFAULT_PORT1, DEFAULT_PORT2,
+    port_exists, should_run_vcom_tests, should_run_vcom_tests_with_ports, vcom_matchers,
+    vcom_matchers_with_ports, VcomMatchers, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 pub use snapshot::TerminalCapture;
 pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
