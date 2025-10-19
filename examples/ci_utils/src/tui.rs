@@ -517,27 +517,44 @@ pub async fn update_tui_registers<T: Expect>(
     new_values: &[u16],
     _is_coil: bool,
 ) -> Result<()> {
-    // More reliable approach: Navigate down until we find the register grid,
-    // then navigate to the first register
-    log::info!("🔍 Searching for register grid...");
-
-    // First, take a capture to see where we are
-    let mut screen = cap.capture(session, "before_find_registers").await?;
-
-    // Look for register grid (lines with hex values like "0x0000 0xABCD")
+    // Strategy: First navigate to a known position (top of Modbus panel),
+    // then navigate down to find the first station's register grid.
+    // This ensures we always start from the same position regardless of where
+    // the cursor was after previous operations (like Ctrl+S).
+    
+    log::info!("🔍 Resetting to top of Modbus panel...");
+    
+    // Navigate up many times to ensure we reach the top
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Up,
+            count: 50, // Large count to ensure we reach top
+        },
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
+    
+    // Now search down for the register grid
+    log::info!("🔍 Searching down for register grid...");
     let mut found_register = false;
     let mut attempts = 0;
-
-    while !found_register && attempts < 15 {
+    let max_attempts = 20;
+    
+    while !found_register && attempts < max_attempts {
+        let screen = cap.capture(session, &format!("search_attempt_{}", attempts)).await?;
+        
         // Check if current screen shows register values
+        // Look for lines with multiple hex values (register display)
         for line in screen.lines() {
-            // Register lines contain hex addresses and values
-            if line.contains("0x00") && line.matches("0x").count() >= 2 {
+            // Register lines contain hex addresses and values like:
+            // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"
+            if line.contains("0x00") && line.matches("0x").count() >= 3 {
                 found_register = true;
+                log::info!("Found register grid at attempt {}", attempts);
                 break;
             }
         }
-
+        
         if !found_register {
             // Navigate down to find registers
             let actions = vec![
@@ -554,51 +571,51 @@ pub async fn update_tui_registers<T: Expect>(
                 &format!("search_down_{}", attempts),
             )
             .await?;
-
-            screen = cap.capture(session, &format!("check_{}", attempts)).await?;
+            
             attempts += 1;
         }
     }
-
+    
     if !found_register {
         return Err(anyhow!(
-            "Could not find register grid after {} attempts",
+            "Could not find register grid after {} attempts from top",
             attempts
         ));
     }
-
-    log::info!("Found register grid, navigating to first register...");
-
-    // Now navigate to the FIRST register of the current station's register grid
-    // Go up until we find the first register row (can't go up anymore or hit non-register line)
-    for _i in 0..10 {
-        let before = cap.capture(session, "before_up_to_first").await?;
-
+    
+    log::info!("Found register grid, navigating to first register of first row...");
+    
+    // We're now somewhere in the register grid. Navigate to the FIRST register.
+    // Go up until we can't go up anymore within the register section.
+    for attempt in 0..10 {
+        let before = cap.capture(session, &format!("before_up_{}", attempt)).await?;
+        
         let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
             count: 1,
         }];
-        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "up_to_first").await?;
-
-        let after = cap.capture(session, "after_up_to_first").await?;
-
-        // Check if we're still in register grid
-        let still_in_grid = after
-            .lines()
-            .any(|l| l.contains("0x00") && l.matches("0x").count() >= 2);
-
+        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("up_{}", attempt)).await?;
+        
+        let after = cap.capture(session, &format!("after_up_{}", attempt)).await?;
+        
+        // Check if we're still in register grid (has multiple 0x patterns)
+        let still_in_grid = after.lines().any(|l| l.contains("0x00") && l.matches("0x").count() >= 3);
+        
         // If we left the grid or screen didn't change, go back down one and stop
         if !still_in_grid || before == after {
-            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
-                direction: crate::key_input::ArrowKey::Down,
-                count: 1,
-            }];
-            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first")
-                .await?;
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction: crate::key_input::ArrowKey::Down,
+                    count: 1,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 200 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first_reg").await?;
+            log::info!("Positioned at first register after {} up attempts", attempt);
             break;
         }
     }
-
+    
     log::info!("At first register row, starting updates...");
 
     for (i, &val) in new_values.iter().enumerate() {
