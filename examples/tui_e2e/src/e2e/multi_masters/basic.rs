@@ -13,7 +13,6 @@ use ci_utils::{
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
-use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with IPC Communication - Basic Scenario
 ///
