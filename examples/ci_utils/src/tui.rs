@@ -642,7 +642,7 @@ pub async fn update_tui_registers<T: Expect>(
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::Sleep { ms: 200 }, // Wait for edit mode to activate
-            crate::auto_cursor::CursorAction::TypeString(hex_val),
+            crate::auto_cursor::CursorAction::TypeString(hex_val.clone()),
             crate::auto_cursor::CursorAction::Sleep { ms: 200 }, // Wait for typing to complete
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::Sleep { ms: 300 }, // Wait for value to be committed
