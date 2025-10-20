@@ -68,7 +68,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     log::info!("🧪 Step 2: Wait for TUI to reach Entry page");
     let actions = vec![CursorAction::CheckStatus {
         description: "TUI should be on Entry page".to_string(),
-        path: "page".to_string(),
+        path: "page.type".to_string(),
         expected: json!("Entry"),
         timeout_secs: Some(10),
         retry_interval_ms: Some(500),
@@ -93,7 +93,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
         // Check that we reached ConfigPanel
         CursorAction::CheckStatus {
             description: "Should be on ConfigPanel".to_string(),
-            path: "page".to_string(),
+            path: "page.type".to_string(),
             expected: json!("ConfigPanel"),
             timeout_secs: Some(10),
             retry_interval_ms: Some(500),
@@ -118,7 +118,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
         // Verify we're now on ModbusDashboard
         CursorAction::CheckStatus {
             description: "Should be on ModbusDashboard".to_string(),
-            path: "page".to_string(),
+            path: "page.type".to_string(),
             expected: json!("ModbusDashboard"),
             timeout_secs: Some(10),
             retry_interval_ms: Some(500),

@@ -3,6 +3,7 @@ pub mod cleanup;
 pub mod config;
 pub mod config_convert;
 pub mod modbus;
+pub mod status;
 
 use clap::{Arg, ArgMatches, Command};
 

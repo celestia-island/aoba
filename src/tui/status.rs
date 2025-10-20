@@ -7,7 +7,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub struct TuiStatus {
     pub ports: Vec<TuiPort>,
-    pub page: String,
+    pub page: TuiPage,
     pub timestamp: String,
 }
 
@@ -15,10 +15,28 @@ pub struct TuiStatus {
 pub struct TuiPort {
     pub name: String,
     pub enabled: bool,
-    pub state: String,
+    pub state: PortState,
     pub modbus_masters: Vec<TuiModbusMaster>,
     pub modbus_slaves: Vec<TuiModbusSlave>,
     pub log_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum PortState {
+    Free,
+    OccupiedByThis,
+    OccupiedByOther,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+pub enum TuiPage {
+    Entry,
+    ConfigPanel,
+    ModbusDashboard,
+    LogPanel,
+    About,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,9 +72,13 @@ impl TuiStatus {
                     if let Some(Ok(port_data)) = with_port_read(port_arc, |port| {
                         let enabled = matches!(port.state, PortState::OccupiedByThis { .. });
                         let state = match &port.state {
-                            PortState::Free => "Free".to_string(),
-                            PortState::OccupiedByThis { .. } => "OccupiedByThis".to_string(),
-                            PortState::OccupiedByOther => "OccupiedByOther".to_string(),
+                            PortState::Free => crate::tui::status::PortState::Free,
+                            PortState::OccupiedByThis { .. } => {
+                                crate::tui::status::PortState::OccupiedByThis
+                            }
+                            PortState::OccupiedByOther => {
+                                crate::tui::status::PortState::OccupiedByOther
+                            }
                         };
 
                         let mut modbus_masters = Vec::new();
@@ -97,16 +119,16 @@ impl TuiStatus {
             }
 
             let page = match &status.page {
-                Page::Entry { .. } => "Entry",
-                Page::ConfigPanel { .. } => "ConfigPanel",
-                Page::ModbusDashboard { .. } => "ModbusDashboard",
-                Page::LogPanel { .. } => "LogPanel",
-                Page::About { .. } => "About",
+                Page::Entry { .. } => TuiPage::Entry,
+                Page::ConfigPanel { .. } => TuiPage::ConfigPanel,
+                Page::ModbusDashboard { .. } => TuiPage::ModbusDashboard,
+                Page::LogPanel { .. } => TuiPage::LogPanel,
+                Page::About { .. } => TuiPage::About,
             };
 
             Ok(TuiStatus {
                 ports,
-                page: page.to_string(),
+                page,
                 timestamp: chrono::Local::now().to_rfc3339(),
             })
         })
