@@ -10,7 +10,7 @@ use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-use crate::protocol::status::types::Status;
+use crate::tui::global_status::Status;
 
 /// Global status instance accessible via read_status and write_status
 static STATUS: OnceCell<Arc<RwLock<Status>>> = OnceCell::new();

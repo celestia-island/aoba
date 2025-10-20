@@ -1,9 +1,13 @@
+pub mod global_status;
 pub mod input;
 pub mod persistence;
 pub mod status;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
+
+// Re-export Page for convenience since it's used throughout TUI code
+pub use global_status::Page;
 
 use anyhow::{anyhow, Result};
 use chrono::Local;
@@ -31,12 +35,12 @@ use crate::{
                 port::{
                     PortLogEntry, PortOwner, PortState, PortSubprocessInfo, PortSubprocessMode,
                 },
-                Status,
             },
             with_port_read, with_port_write, write_status,
         },
     },
     tui::{
+        global_status::Status,
         subprocess::{CliMode, CliSubprocessConfig, SubprocessManager},
         ui::components::error_msg::ui_error_set,
         utils::bus::{Bus, CoreToUi, UiToCore},
