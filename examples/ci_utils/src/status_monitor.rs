@@ -7,11 +7,39 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
+/// Tagged enum type for page (matches #[serde(tag = "type")])
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageType {
+    #[serde(rename = "type")]
+    pub page_type: String,
+}
+
+/// Tagged enum type for port state (matches #[serde(tag = "type")])
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PortStateType {
+    #[serde(rename = "type")]
+    pub state_type: String,
+}
+
+/// Tagged enum type for CLI mode (matches #[serde(tag = "type")])
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModeType {
+    #[serde(rename = "type")]
+    pub mode_type: String,
+}
+
+/// Tagged enum type for register mode (matches #[serde(tag = "type")])
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterModeType {
+    #[serde(rename = "type")]
+    pub register_mode_type: String,
+}
+
 /// Status dump structure for TUI processes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiStatus {
     pub ports: Vec<DebugPort>,
-    pub page: String,
+    pub page: PageType,
     pub timestamp: String,
 }
 
@@ -20,10 +48,10 @@ pub struct TuiStatus {
 pub struct CliStatus {
     pub port_name: String,
     pub station_id: u8,
-    pub register_mode: String,
+    pub register_mode: RegisterModeType,
     pub register_address: u16,
     pub register_length: u16,
-    pub mode: String,
+    pub mode: ModeType,
     pub timestamp: String,
 }
 
@@ -31,7 +59,7 @@ pub struct CliStatus {
 pub struct DebugPort {
     pub name: String,
     pub enabled: bool,
-    pub state: String,
+    pub state: PortStateType,
     pub modbus_masters: Vec<DebugModbusMaster>,
     pub modbus_slaves: Vec<DebugModbusSlave>,
     pub log_count: usize,
@@ -108,13 +136,13 @@ pub async fn wait_for_tui_page(
         }
 
         if let Ok(status) = read_tui_status() {
-            if status.page == expected_page {
+            if status.page.page_type == expected_page {
                 log::info!("✅ TUI reached page '{}'", expected_page);
                 return Ok(status);
             }
             log::debug!(
                 "TUI currently on page '{}', waiting for '{}'",
-                status.page,
+                status.page.page_type,
                 expected_page
             );
         }
