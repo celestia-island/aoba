@@ -138,11 +138,8 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         // Press Enter to confirm the change
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
-        // Navigate back to AddLine (Create Station)
-        CursorAction::PressArrow {
-            direction: ArrowKey::Up,
-            count: 1,
-        },
+        // Use Ctrl+PageUp to reliably navigate back to top (AddLine/Create Station)
+        CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
     ];
     execute_cursor_actions(
@@ -150,6 +147,18 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         &mut tui_cap,
         &actions,
         "set_slave_mode",
+    )
+    .await?;
+    
+    // Add debug breakpoint to verify mode change
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_mode_change_to_slave".to_string(),
+    }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_after_mode_change",
     )
     .await?;
 
