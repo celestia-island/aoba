@@ -182,12 +182,12 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                 if let Some(port) = read_status(|status| {
                                     Ok(status.ports.map.get(&port_name).cloned())
                                 })? {
-                                    let mut owner_snapshot: Option<PortOwner> = None;
+                                    let mut subprocess_info_snapshot: Option<PortSubprocessInfo> = None;
                                     let mut register_update: Option<(String, u8, u16, Vec<u16>)> =
                                         None;
 
                                     with_port_write(&port, |port| {
-                                        owner_snapshot = port.state.owner().cloned();
+                                        subprocess_info_snapshot = port.state.owner().cloned();
 
                                         let types::port::PortConfig::Modbus { mode, stations } =
                                             &mut port.config;
@@ -219,8 +219,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     ..
                                                 } => {
                                                     let should_queue = !matches!(
-                                                        owner_snapshot.as_ref(),
-                                                        Some(PortOwner::CliSubprocess(info))
+                                                        subprocess_info_snapshot.as_ref(),
+                                                        Some(info)
                                                             if info.mode == PortSubprocessMode::MasterProvide
                                                     );
 
@@ -272,8 +272,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                         }
                                     });
 
-                                    if let (Some(PortOwner::CliSubprocess(_)), Some(update)) =
-                                        (owner_snapshot, register_update)
+                                    if let (Some(_), Some(update)) =
+                                        (subprocess_info_snapshot, register_update)
                                     {
                                         if let Err(err) =
                                             bus.ui_tx.send(UiToCore::SendRegisterUpdate {

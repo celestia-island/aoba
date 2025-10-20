@@ -418,7 +418,7 @@ fn commit_text_edit(
                     };
 
                     if let Ok(mut register_value) = parsed_value {
-                        let mut owner_snapshot: Option<PortOwner> = None;
+                        let mut subprocess_info_snapshot: Option<PortSubprocessInfo> = None;
                         let mut payload: Option<(String, u8, u16, Vec<u16>)> = None;
 
                         with_port_write(&port, |port| {
@@ -461,7 +461,7 @@ fn commit_text_edit(
                                 if matches!(mode, ModbusConnectionMode::Slave { .. }) {
                                     let needs_enqueue = !matches!(
                                         owner_info.as_ref(),
-                                        Some(PortOwner::CliSubprocess(info))
+                                        Some(info)
                                             if info.mode == PortSubprocessMode::MasterProvide
                                     );
 
@@ -471,13 +471,13 @@ fn commit_text_edit(
                                 }
                             }
 
-                            owner_snapshot = owner_info;
+                            subprocess_info_snapshot = owner_info;
                         });
 
                         if let (
-                            Some(PortOwner::CliSubprocess(cli_info)),
+                            Some(cli_info),
                             Some((register_type, station_id, start_address, values)),
-                        ) = (&owner_snapshot, &payload)
+                        ) = (&subprocess_info_snapshot, &payload)
                         {
                             log::info!(
                                 "📤 Sending RegisterUpdate to core: port={port_name}, station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
@@ -520,8 +520,8 @@ fn commit_text_edit(
                             }
                         } else {
                             log::debug!(
-                                "🚫 Not sending RegisterUpdate: owner_snapshot={:?}, payload={:?}",
-                                owner_snapshot.as_ref().map(|o| match o {
+                                "🚫 Not sending RegisterUpdate: subprocess_info_snapshot={:?}, payload={:?}",
+                                subprocess_info_snapshot.as_ref().map(|o| match o {
                                     PortOwner::CliSubprocess(info) =>
                                         format!("CliSubprocess(mode={:?})", info.mode),
                                     PortOwner::Runtime(_) => "Runtime".to_string(),
