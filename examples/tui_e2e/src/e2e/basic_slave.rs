@@ -160,10 +160,11 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
         // Configure station (station_id=1, holding registers, address=0, length=12)
-        // These settings will be verified through status monitoring later
+        // After pressing Enter on "Create Station", cursor is on Station ID field
+        // Navigate: Down 1 = Register Type, Down 2 = Start Address, Down 3 = Register Length
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 4, // Navigate to register length field
+            count: 3, // Navigate to register length field (from Station ID)
         },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter, // Enter edit mode
