@@ -466,12 +466,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                 log::info!("🟢 Inside with_port_write closure");
                 // Check if port is currently occupied before adding station
                 // TUI only uses CLI subprocesses
-                if matches!(
-                    port.state,
-                    PortState::OccupiedByThis {
-                        owner: PortOwner::CliSubprocess(_)
-                    }
-                ) {
+                if matches!(port.state, PortState::OccupiedByThis) {
                     log::info!(
                         "🟢 Port {port_name} is occupied by CLI subprocess - scheduling restart"
                     );
