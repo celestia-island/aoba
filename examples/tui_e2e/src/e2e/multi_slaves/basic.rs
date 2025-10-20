@@ -201,10 +201,6 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
         update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
         log::info!("✅ Slave {} data updated", i + 1);
     }
-        "verify_port_enabled_multi_slaves",
-    )
-    .await?;
-    log::info!("✅ Port enabled with status: {}, ready for testing", status);
 
     // Test all 4 address ranges from vcom1
     let mut address_range_success = std::collections::HashMap::new();
