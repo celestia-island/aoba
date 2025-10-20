@@ -6,7 +6,6 @@ use crate::{
     i18n::lang,
     protocol::status::{
         types::{self, cursor::Cursor},
-        with_port_read,
     },
     tui::{
         status::{read_status, write_status},
@@ -424,7 +423,6 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 /// Handle saving configuration with Ctrl+S
 /// This marks the config as saved and triggers port enable if not already enabled
 fn handle_save_config(bus: &Bus) -> Result<()> {
-    use crate::protocol::status::with_port_write;
     use chrono::Local;
 
     let selected_port = read_status(|status| {
