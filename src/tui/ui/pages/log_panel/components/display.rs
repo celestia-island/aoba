@@ -9,13 +9,13 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types, with_port_read},
+    protocol::status::{ types, with_port_read},
 };
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Option<usize>)>> {
     let res = read_status(|status| match &status.page {
-        types::Page::LogPanel {
+        crate::tui::status::Page::LogPanel {
             selected_port,
             selected_item,
             ..

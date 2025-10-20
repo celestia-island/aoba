@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use super::scroll::{handle_scroll_down, handle_scroll_up};
 use crate::{
-    protocol::status::{read_status, types, write_status},
+    protocol::status::{ types},
     tui::{
         ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
         utils::bus::Bus,
@@ -34,7 +34,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if has_ctrl {
                 // Ctrl+PageUp: Jump to first scroll position
                 write_status(|status| {
-                    if let types::Page::About { view_offset, .. } = &mut status.page {
+                    if let crate::tui::status::Page::About { view_offset, .. } = &mut status.page {
                         *view_offset = 0;
                     }
                     Ok(())
@@ -64,7 +64,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             let ports_count = read_status(|status| Ok(status.ports.order.len()))?;
             let offset = calculate_special_items_offset(ports_count, CONSERVATIVE_VIEWPORT_HEIGHT);
             write_status(|status| {
-                status.page = types::Page::Entry {
+                status.page = crate::tui::status::Page::Entry {
                     cursor: Some(new_cursor),
                     view_offset: offset,
                 };

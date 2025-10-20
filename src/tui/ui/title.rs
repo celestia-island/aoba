@@ -69,16 +69,16 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
     // Add breadcrumb path based on current page
     let page_breadcrumb = match read_status(|status| Ok(status.page.clone()))? {
         // Entry page: AOBA title
-        types::Page::Entry { .. } => lang().index.title.as_str().to_string(),
+        crate::tui::status::Page::Entry { .. } => lang().index.title.as_str().to_string(),
 
         // Port configuration page: AOBA title > COMx
-        types::Page::ConfigPanel { selected_port, .. } => {
+        crate::tui::status::Page::ConfigPanel { selected_port, .. } => {
             let port_name = get_port_name(selected_port)?;
             format!("{} > {}", lang().index.title.as_str(), port_name)
         }
 
         // Modbus master/slave configuration: AOBA title > COMx > Modbus
-        types::Page::ModbusDashboard { selected_port, .. } => {
+        crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
             let port_name = get_port_name(selected_port)?;
             format!(
                 "{} > {} > {}",
@@ -89,7 +89,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         }
 
         // Manual debug log: AOBA title > COMx > Communication Log
-        types::Page::LogPanel { selected_port, .. } => {
+        crate::tui::status::Page::LogPanel { selected_port, .. } => {
             let port_name = get_port_name(selected_port)?;
             format!(
                 "{} > {} > {}",
@@ -100,7 +100,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         }
 
         // About page: AOBA title > About
-        types::Page::About { .. } => {
+        crate::tui::status::Page::About { .. } => {
             format!(
                 "{} > {}",
                 lang().index.title.as_str(),
@@ -122,9 +122,9 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
 
     // Render status indicator on the right side (only for port-related pages)
     let selected_port_opt = match read_status(|status| Ok(status.page.clone()))? {
-        types::Page::ConfigPanel { selected_port, .. }
-        | types::Page::ModbusDashboard { selected_port, .. }
-        | types::Page::LogPanel { selected_port, .. } => Some(selected_port),
+        crate::tui::status::Page::ConfigPanel { selected_port, .. }
+        | crate::tui::status::Page::ModbusDashboard { selected_port, .. }
+        | crate::tui::status::Page::LogPanel { selected_port, .. } => Some(selected_port),
         _ => None,
     };
 

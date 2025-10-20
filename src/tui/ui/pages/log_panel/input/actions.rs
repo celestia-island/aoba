@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Result};
 
 use crate::{
-    protocol::status::{read_status, types, write_status},
+    protocol::status::{ types},
     tui::utils::bus::{Bus, UiToCore},
 };
 
 pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     let selected_port = read_status(|status| {
-        if let types::Page::LogPanel { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::LogPanel { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
@@ -15,7 +15,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     })?;
 
     write_status(|status| {
-        status.page = types::Page::ConfigPanel {
+        status.page = crate::tui::status::Page::ConfigPanel {
             cursor: types::cursor::ConfigPanelCursor::ViewCommunicationLog,
             selected_port,
             view_offset: 0,
@@ -31,7 +31,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
     // Toggle auto-follow by switching selected_item between None and Some
     write_status(|status| {
-        if let types::Page::LogPanel {
+        if let crate::tui::status::Page::LogPanel {
             selected_item,
             selected_port,
             ..
@@ -68,7 +68,7 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
 pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
     // Clear logs functionality - actually clear the logs for the current port
     write_status(|status| {
-        if let types::Page::LogPanel { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::LogPanel { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
                     let mut port_data = port.write();

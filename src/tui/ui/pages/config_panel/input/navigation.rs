@@ -13,7 +13,7 @@ use crate::{
 /// to a visible default (`EnablePort`) and updates `view_offset` when needed.
 pub fn sanitize_configpanel_cursor() -> Result<()> {
     write_status(|status| {
-        if let types::Page::ConfigPanel {
+        if let crate::tui::status::Page::ConfigPanel {
             cursor,
             selected_port,
             view_offset,

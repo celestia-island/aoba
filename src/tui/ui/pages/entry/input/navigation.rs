@@ -60,7 +60,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Up | KeyCode::Char('k') => {
             handle_move_prev(read_status(|status| {
-                if let types::Page::Entry { cursor, .. } = &status.page {
+                if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
                     Ok(cursor.unwrap_or(cursor::EntryCursor::Refresh))
                 } else {
                     Ok(cursor::EntryCursor::Refresh)
@@ -72,7 +72,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             let cursor_opt = read_status(|status| {
-                if let types::Page::Entry { cursor, .. } = &status.page {
+                if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(None)
@@ -113,7 +113,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Enter => {
             let cursor = read_status(|status| {
-                if let types::Page::Entry { cursor, .. } = &status.page {
+                if let crate::tui::status::Page::Entry { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(None)
@@ -178,7 +178,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Esc => {
             write_status(|status| {
-                status.page = types::Page::Entry {
+                status.page = crate::tui::status::Page::Entry {
                     cursor: None,
                     view_offset: 0,
                 };

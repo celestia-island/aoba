@@ -4,7 +4,7 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
+    protocol::status::{ types},
     tui::ui::{
         components::boxed_paragraph::render_boxed_paragraph,
         pages::modbus_panel::components::render_modbus_status_lines,
@@ -20,7 +20,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
         );
         let is_register = matches!(
             status.page,
-            types::Page::ModbusDashboard {
+            crate::tui::status::Page::ModbusDashboard {
                 cursor: types::cursor::ModbusDashboardCursor::Register { .. },
                 ..
             }
@@ -44,7 +44,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
         // Check if the port has modifications
         let has_modifications = read_status(|status| {
             let port_name_opt = match &status.page {
-                types::Page::ModbusDashboard { selected_port, .. } => {
+                crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     status.ports.order.get(*selected_port).cloned()
                 }
                 _ => None,
@@ -94,7 +94,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 /// Render the ModBus panel. Only reads from Status, does not mutate.
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let view_offset = read_status(|status| {
-        if let types::Page::ModbusDashboard { view_offset, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { view_offset, .. } = &status.page {
             Ok(*view_offset)
         } else {
             Ok(0)

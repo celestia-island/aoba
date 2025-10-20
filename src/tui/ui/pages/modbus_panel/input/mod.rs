@@ -7,7 +7,7 @@ use anyhow::Result;
 use crossterm::event::KeyEvent;
 
 use crate::{
-    protocol::status::{read_status, types},
+    protocol::status::{ types},
     tui::utils::bus::Bus,
 };
 

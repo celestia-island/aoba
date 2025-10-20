@@ -21,7 +21,7 @@ use crate::{
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {
     read_status(|status| {
-        if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
             Ok(*cursor)
         } else {
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -65,7 +65,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     }
 
     let port_data = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(status
                 .ports
                 .order
@@ -173,7 +173,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
     // reuse sep_len from above and helper for separator
     let has_any = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
                     let port_guard = port_entry.read();
@@ -445,7 +445,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 /// Generate status lines for modbus panel display
 pub fn render_modbus_status_lines() -> Result<Vec<Line<'static>>> {
     let sel_index = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
