@@ -53,9 +53,9 @@ pub struct DebugModbusSlave {
     pub register_count: usize,
 }
 
-/// Read and parse TUI status from /tmp/tui_e2e.log
+/// Read and parse TUI status from /tmp/tui_e2e_status.json
 pub fn read_tui_status() -> Result<TuiStatus> {
-    let path = PathBuf::from("/tmp/tui_e2e.log");
+    let path = PathBuf::from("/tmp/tui_e2e_status.json");
     let content = std::fs::read_to_string(&path)
         .map_err(|err| anyhow!("Failed to read TUI status file {}: {}", path.display(), err))?;
 

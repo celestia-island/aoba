@@ -56,7 +56,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
 
     // Spawn TUI process (will be master/server on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
-    let mut tui_session = spawn_expect_process(&["--tui"])
+    let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])
         .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
     let mut tui_cap = TerminalCapture::new(24, 80);
 

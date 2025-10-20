@@ -26,7 +26,7 @@ export AOBA_DEBUG_CI_E2E_TEST=1
 cargo run --package aoba -- --tui
 ```
 
-This will create `/tmp/tui_e2e.log` with periodic status dumps (every 500ms).
+This will create `/tmp/tui_e2e_status.json` with periodic status dumps (every 500ms).
 
 #### For CLI Subprocesses
 
@@ -41,7 +41,7 @@ This will create `/tmp/cli_e2e__tmp_vcom1.log` with periodic status dumps (note:
 
 ### Status File Format
 
-#### TUI Status (`/tmp/tui_e2e.log`)
+#### TUI Status (`/tmp/tui_e2e_status.json`)
 
 ```json
 {
@@ -137,7 +137,7 @@ async fn test_tui_master_configuration() -> Result<()> {
 
 ##### Direct Read Functions
 
-- `read_tui_status()` - Read current TUI status from `/tmp/tui_e2e.log`
+- `read_tui_status()` - Read current TUI status from `/tmp/tui_e2e_status.json`
 - `read_cli_status(port)` - Read current CLI status from `/tmp/cli_e2e_{port}.log`
 - `port_exists_in_tui(port_name)` - Check if port exists in TUI
 - `get_port_log_count(port_name)` - Get number of logs for a port
@@ -264,7 +264,7 @@ std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
 
 Check that the status dump thread is running. Look for log messages:
 ```
-Started status dump thread, writing to /tmp/tui_e2e.log
+Started status dump thread, writing to /tmp/tui_e2e_status.json
 ```
 
 #### Timeout waiting for status
@@ -272,7 +272,7 @@ Started status dump thread, writing to /tmp/tui_e2e.log
 - Increase timeout value
 - Increase retry interval if file I/O is slow
 - Check if the expected state is actually reachable
-- Inspect `/tmp/tui_e2e.log` manually to see current state
+- Inspect `/tmp/tui_e2e_status.json` manually to see current state
 
 ### Examples
 

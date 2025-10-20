@@ -1,5 +1,6 @@
 pub mod input;
 pub mod persistence;
+pub mod status;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
@@ -587,12 +588,18 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
         crate::protocol::status::debug_dump::enable_debug_dump();
 
         let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let dump_path = std::path::PathBuf::from("/tmp/tui_e2e.log");
+        let dump_path = std::path::PathBuf::from("/tmp/tui_e2e_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
         crate::protocol::status::debug_dump::start_status_dump_thread(
             dump_path,
             Some(shutdown_signal_clone),
+            || {
+                crate::tui::status::TuiStatus::from_global_status().and_then(|status| {
+                    serde_json::to_string_pretty(&status)
+                        .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {}", e))
+                })
+            },
         );
 
         Some(shutdown_signal)
