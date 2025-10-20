@@ -78,12 +78,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     // Navigate to port1 using keyboard
     log::info!("🧪 Step 3: Navigate to {} in port list", port1);
     let actions = vec![
-        // Navigate down to find the port (simplified - assumes port is near top)
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
+        // Port list starts with cursor on first port (vcom1), so just press Enter
         // Debug: Check terminal to see if port is highlighted
         CursorAction::DebugBreakpoint {
             description: "port_selection".to_string(),
@@ -106,7 +101,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 3, // Navigate to ModBus Master/Slave Set
+            count: 2, // Navigate to ProtocolConfig (ModBus Master/Slave Set)
         },
         CursorAction::Sleep { ms: 300 },
         // Debug: Verify cursor position before entering panel

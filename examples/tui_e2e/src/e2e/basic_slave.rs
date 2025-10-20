@@ -82,12 +82,7 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     // Navigate to port1 using keyboard and enter its config panel
     log::info!("🧪 Step 3: Navigate to {} in port list and enter config", port1);
     let actions = vec![
-        // Navigate down to find the port (simplified - assumes port is near top)
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
+        // Port list starts with cursor on first port (vcom1), so just press Enter
         CursorAction::PressEnter, // Enter port details
         CursorAction::Sleep { ms: 1000 },
         // Check that we reached ConfigPanel
@@ -122,6 +117,51 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     )
     .await?;
 
+    // Step 4.5: Change Connection Mode from Master to Slave
+    log::info!("🧪 Step 4.5: Change Connection Mode to Slave");
+    let actions = vec![
+        // Navigate to ModbusMode (Connection Mode)
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        // Press Enter to enter edit mode
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        // Press Right to change from Master to Slave
+        CursorAction::PressArrow {
+            direction: ArrowKey::Right,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        // Press Enter to confirm the change
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+        // Use Ctrl+PageUp to reliably navigate back to top (AddLine/Create Station)
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "set_slave_mode",
+    )
+    .await?;
+    
+    // Add debug breakpoint to verify mode change
+    let actions = vec![CursorAction::DebugBreakpoint {
+        description: "after_mode_change_to_slave".to_string(),
+    }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "debug_after_mode_change",
+    )
+    .await?;
+
     // Configure as Slave - create station and configure
     log::info!("🧪 Step 5: Configure TUI as Slave (client/poll mode)");
     let actions = vec![
@@ -129,10 +169,11 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
         // Configure station (station_id=1, holding registers, address=0, length=12)
-        // These settings will be verified through status monitoring later
+        // After pressing Enter on "Create Station", cursor is on Station ID field
+        // Navigate: Down 1 = Register Type, Down 2 = Start Address, Down 3 = Register Length
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 4, // Navigate to register length field
+            count: 3, // Navigate to register length field (from Station ID)
         },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter, // Enter edit mode
@@ -183,7 +224,12 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         log::info!("   Generated test data: {:?}", random_data);
 
         // Write data to CLI master's data source file
-        let data_file = format!("/tmp/master_data_slave_test_{}.jsonl", port1);
+        // Extract port basename to avoid path issues (e.g., "/tmp/vcom1" -> "vcom1")
+        let port_basename = std::path::Path::new(port1)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("port");
+        let data_file = format!("/tmp/master_data_slave_test_{}.jsonl", port_basename);
         let mut file = File::create(&data_file)?;
         writeln!(
             file,

@@ -150,34 +150,39 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         )
         .await?;
 
-        // Immediately update data for this master
-        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
-        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
-
-        // Save this master's configuration with Ctrl+S to commit changes to IPC
-        log::info!("💾 Saving Master {} configuration with Ctrl+S...", i + 1);
-        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-        let actions = vec![
-            CursorAction::PressCtrlS,
-            CursorAction::Sleep { ms: 1000 }, // Wait for save operation
-        ];
-        execute_cursor_actions(
-            &mut tui_session,
-            &mut tui_cap,
-            &actions,
-            &format!("save_master_{}_config", i + 1),
-        )
-        .await?;
-
-        // Wait for register updates to be saved and IPC to propagate before configuring next master
-        log::info!(
-            "⏱️ Waiting for Master {} updates to be fully saved and propagated...",
-            i + 1
-        );
-        tokio::time::sleep(Duration::from_millis(1500)).await;
+        log::info!("✅ Master {} configured (data will be updated after port is enabled)", i + 1);
     }
 
-    // All Masters configured and saved individually, port should be enabled
+    // All Masters configured, now save once with Ctrl+S to enable port and commit all changes
+    // First, navigate to the top of the panel to ensure we're not in edit mode
+    log::info!("📍 Navigating to top of panel before saving...");
+    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+    use ci_utils::key_input::ArrowKey;
+    let nav_actions = vec![
+        CursorAction::PressCtrlPageUp, // Jump to top (AddLine / Create Station)
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &nav_actions,
+        "nav_to_top_before_save",
+    )
+    .await?;
+    
+    log::info!("💾 Saving all master configurations with Ctrl+S to enable port...");
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 5000 }, // Increased wait time for port to enable and stabilize
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_all_masters_and_enable",
+    )
+    .await?;
+
     log::info!("✅ All Masters configured and saved, verifying port is enabled...");
 
     // Verify port is enabled by checking the status indicator in the top-right corner
@@ -189,6 +194,52 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     )
     .await?;
     log::info!("✅ Port enabled with status: {}, ready for testing", status);
+    
+    // Now update register data for all masters after port is enabled
+    for (i, &(_station_id, _register_type, _register_mode, start_address)) in masters.iter().enumerate() {
+        log::info!("📝 Updating Master {} data at address 0x{:04X}: {:?}", i + 1, start_address, master_data[i]);
+        
+        // Navigate to the specific station before updating its registers
+        // This ensures we're editing the right station
+        let nav_to_station_actions = vec![
+            CursorAction::PressCtrlPageUp, // Jump to top first
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressPageDown, // Jump to first station
+            CursorAction::Sleep { ms: 300 },
+        ];
+        
+        // If not the first station, navigate down to the target station
+        if i > 0 {
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &[
+                    CursorAction::PressCtrlPageUp,
+                    CursorAction::Sleep { ms: 300 },
+                    CursorAction::PressPageDown,
+                    CursorAction::Sleep { ms: 300 },
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Down,
+                        count: i * 5, // Each station takes ~5 cursor positions (ID, Type, Addr, Length, registers)
+                    },
+                    CursorAction::Sleep { ms: 300 },
+                ],
+                &format!("nav_to_station_{}_for_update", i + 1),
+            )
+            .await?;
+        } else {
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &nav_to_station_actions,
+                "nav_to_first_station_for_update",
+            )
+            .await?;
+        }
+        
+        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
+        log::info!("✅ Master {} data updated", i + 1);
+    }
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();
