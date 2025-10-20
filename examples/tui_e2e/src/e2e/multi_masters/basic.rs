@@ -161,6 +161,9 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     let nav_actions = vec![
         CursorAction::PressCtrlPageUp, // Jump to top (AddLine / Create Station)
         CursorAction::Sleep { ms: 500 },
+        CursorAction::DebugBreakpoint {
+            description: "before_ctrl_s_save".to_string(),
+        },
     ];
     execute_cursor_actions(
         &mut tui_session,
@@ -173,7 +176,11 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     log::info!("💾 Saving all master configurations with Ctrl+S to enable port...");
     let actions = vec![
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 }, // Increased wait time for port to enable and stabilize
+        CursorAction::Sleep { ms: 2000 }, // Wait for UI to update
+        CursorAction::DebugBreakpoint {
+            description: "after_ctrl_s_save".to_string(),
+        },
+        CursorAction::Sleep { ms: 3000 }, // Additional wait for port to enable and stabilize
     ];
     execute_cursor_actions(
         &mut tui_session,
