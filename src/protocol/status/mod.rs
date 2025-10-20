@@ -4,7 +4,6 @@ mod util;
 pub use util::*;
 
 pub mod debug_dump;
-pub mod e2e;
 
 use anyhow::{anyhow, Result};
 use once_cell::sync::OnceCell;
