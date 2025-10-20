@@ -5,6 +5,38 @@ use vt100::Parser;
 
 use crate::helpers::sleep_a_while;
 
+/// Standard terminal sizes for E2E tests
+#[derive(Debug, Clone, Copy)]
+pub enum TerminalSize {
+    /// Small terminal: 24 rows x 80 columns (for basic tests with few stations)
+    Small,
+    /// Large terminal: 60 rows x 80 columns (for multi-station tests)
+    Large,
+    /// Extra large terminal: 80 rows x 80 columns (for extensive multi-station tests)
+    ExtraLarge,
+}
+
+impl TerminalSize {
+    /// Get the (rows, cols) dimensions for this terminal size
+    pub fn dimensions(self) -> (u16, u16) {
+        match self {
+            TerminalSize::Small => (24, 80),
+            TerminalSize::Large => (60, 80),
+            TerminalSize::ExtraLarge => (80, 80),
+        }
+    }
+
+    /// Get the number of rows for this terminal size
+    pub fn rows(self) -> u16 {
+        self.dimensions().0
+    }
+
+    /// Get the number of columns for this terminal size
+    pub fn cols(self) -> u16 {
+        self.dimensions().1
+    }
+}
+
 /// TerminalCapture maintains a vt100 Parser to apply incremental updates from
 /// a pty session and expose the current rendered screen as a String. This
 /// centralizes consumption of the session output so callers can repeatedly
@@ -15,7 +47,15 @@ pub struct TerminalCapture {
 }
 
 impl TerminalCapture {
-    /// Create a new TerminalCapture with given rows/cols
+    /// Create a new TerminalCapture with standard terminal size
+    pub fn with_size(size: TerminalSize) -> Self {
+        let (rows, cols) = size.dimensions();
+        Self {
+            parser: Parser::new(rows, cols, 0),
+        }
+    }
+
+    /// Create a new TerminalCapture with given rows/cols (legacy method)
     pub fn new(rows: u16, cols: u16) -> Self {
         Self {
             parser: Parser::new(rows, cols, 0),

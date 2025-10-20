@@ -59,7 +59,9 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])
         .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
-    let mut tui_cap = ci_utils::snapshot::TerminalCapture::new(24, 80);
+    let mut tui_cap = ci_utils::snapshot::TerminalCapture::with_size(
+        ci_utils::snapshot::TerminalSize::Small,
+    );
 
     // Wait for TUI to initialize and start writing status
     log::info!("⏳ Waiting for TUI to initialize...");
@@ -76,8 +78,8 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "wait_entry_page").await?;
 
-    // Navigate to port1 using keyboard
-    log::info!("🧪 Step 3: Navigate to {} in port list", port1);
+    // Navigate to port1 using keyboard and enter its config panel
+    log::info!("🧪 Step 3: Navigate to {} in port list and enter config", port1);
     let actions = vec![
         // Navigate down to find the port (simplified - assumes port is near top)
         CursorAction::PressArrow {
@@ -98,30 +100,24 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "navigate_to_port").await?;
 
-    // Enter Modbus configuration panel
+    // Enter Modbus configuration panel from ConfigPanel
+    // We need to navigate to "Enter Business Configuration" option
     log::info!("🧪 Step 4: Enter Modbus configuration panel");
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 3, // Navigate to ModBus Master/Slave Set
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-        // Verify we're now on ModbusDashboard
-        CursorAction::CheckStatus {
-            description: "Should be on ModbusDashboard".to_string(),
-            path: "page.type".to_string(),
-            expected: json!("ModbusDashboard"),
-            timeout_secs: Some(10),
-            retry_interval_ms: Some(500),
-        },
-    ];
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+    
+    // Verify we're now on ModbusDashboard
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Should be on ModbusDashboard".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("ModbusDashboard"),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
     execute_cursor_actions(
         &mut tui_session,
         &mut tui_cap,
         &actions,
-        "enter_modbus_panel",
+        "verify_modbus_panel",
     )
     .await?;
 

@@ -70,7 +70,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     log::info!("🧪 Step 1: Spawning TUI Masters process");
     let mut tui_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn TUI Masters process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(60, 80); // Increased height to show all 4 stations
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Large); // Increased height to show all 4 stations
 
     sleep_seconds(3).await;
 

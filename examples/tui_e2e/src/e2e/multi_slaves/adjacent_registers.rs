@@ -69,7 +69,7 @@ pub async fn test_tui_multi_slaves_adjacent_registers(port1: &str, port2: &str) 
     log::info!("🧪 Step 1: Spawning TUI Slaves process");
     let mut tui_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn TUI Slaves process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
 
     sleep_seconds(3).await;
 
