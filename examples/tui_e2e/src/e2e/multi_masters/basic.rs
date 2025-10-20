@@ -151,6 +151,22 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         .await?;
 
         log::info!("✅ Master {} configured (data will be updated after port is enabled)", i + 1);
+        
+        // Add a debug breakpoint after each station configuration to verify cursor position
+        if std::env::var("DEBUG_MODE").is_ok() {
+            let actions = vec![
+                CursorAction::DebugBreakpoint {
+                    description: format!("after_configuring_master_{}", i + 1),
+                },
+            ];
+            execute_cursor_actions(
+                &mut tui_session,
+                &mut tui_cap,
+                &actions,
+                &format!("debug_after_master_{}", i + 1),
+            )
+            .await?;
+        }
     }
 
     // All Masters configured, now save once with Ctrl+S to enable port and commit all changes
