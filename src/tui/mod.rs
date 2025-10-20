@@ -1182,7 +1182,24 @@ fn run_core_thread(
                                             "Failed to start CLI subprocess for {port_name}: {err}"
                                         );
                                         append_port_log(&port_name, msg.clone());
+                                        
+                                        // Update port status indicator to show failure
                                         self::status::write_status(|status| {
+                                            if let Some(port) = status.ports.map.get(&port_name) {
+                                                if with_port_write(port, |port| {
+                                                    port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
+                                                        error_message: err.to_string(),
+                                                        timestamp: chrono::Local::now(),
+                                                    };
+                                                })
+                                                .is_none()
+                                                {
+                                                    log::warn!(
+                                                        "ToggleRuntime: failed to acquire write lock for {port_name} when setting failure status"
+                                                    );
+                                                }
+                                            }
+                                            
                                             status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                                 message: msg.clone(),
                                                 timestamp: chrono::Local::now(),
@@ -1286,7 +1303,24 @@ fn run_core_thread(
                                 "Spawned native runtime for port".to_string(),
                             );
                         } else if let Some(err) = spawn_err {
+                            let err_msg = err.to_string();
                             self::status::write_status(|status| {
+                                // Update port status indicator to show failure
+                                if let Some(port) = status.ports.map.get(&port_name) {
+                                    if with_port_write(port, |port| {
+                                        port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
+                                            error_message: err_msg.clone(),
+                                            timestamp: chrono::Local::now(),
+                                        };
+                                    })
+                                    .is_none()
+                                    {
+                                        log::warn!(
+                                            "ToggleRuntime: failed to acquire write lock for {port_name} when setting failure status"
+                                        );
+                                    }
+                                }
+                                
                                 status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                     message: format!("Failed to start runtime: {err}"),
                                     timestamp: chrono::Local::now(),

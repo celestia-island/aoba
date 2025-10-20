@@ -38,7 +38,7 @@ fn get_port_status_indicator(selected_port: usize) -> Result<Option<PortStatusIn
         let port_name_opt = status.ports.order.get(selected_port).cloned();
         if let Some(port_name) = port_name_opt {
             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                return Ok(with_port_read(port_entry, |port| port.status_indicator));
+                return Ok(with_port_read(port_entry, |port| port.status_indicator.clone()));
             }
         }
         Ok(None)
@@ -132,17 +132,24 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         if let Some(indicator) = get_port_status_indicator(selected_port)? {
             let (status_text, status_icon, status_color) = get_status_display(&indicator)?;
 
-            // Check if we need to show AppliedSuccess for only 3 seconds
-            let should_show_applied =
-                if let PortStatusIndicator::AppliedSuccess { timestamp } = indicator {
-                    use chrono::Local;
-                    let elapsed = Local::now().signed_duration_since(timestamp);
-                    elapsed.num_seconds() < 3
-                } else {
-                    true
+            // Check if we need to show time-limited statuses
+            let should_show_status =
+                match indicator {
+                    PortStatusIndicator::AppliedSuccess { timestamp } => {
+                        use chrono::Local;
+                        let elapsed = Local::now().signed_duration_since(timestamp);
+                        elapsed.num_seconds() < 3
+                    }
+                    PortStatusIndicator::StartupFailed { timestamp, .. } => {
+                        // Show startup failure for 10 seconds
+                        use chrono::Local;
+                        let elapsed = Local::now().signed_duration_since(timestamp);
+                        elapsed.num_seconds() < 10
+                    }
+                    _ => true,
                 };
 
-            if should_show_applied {
+            if should_show_status {
                 let mut status_spans = Vec::new();
                 status_spans.push(Span::styled(status_text, Style::default().fg(status_color)));
                 status_spans.push(Span::raw(" "));
@@ -223,5 +230,18 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             "✔".to_string(),
             Color::Green,
         )),
+        PortStatusIndicator::StartupFailed { error_message, .. } => {
+            // Show truncated error message in red
+            let truncated_msg = if error_message.len() > 30 {
+                format!("{}...", &error_message[..27])
+            } else {
+                error_message.clone()
+            };
+            Ok((
+                format!("{}: {}", lang.protocol.common.status_startup_failed, truncated_msg),
+                "✘".to_string(),
+                Color::Red,
+            ))
+        }
     }
 }
