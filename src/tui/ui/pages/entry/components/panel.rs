@@ -8,13 +8,15 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     i18n::lang,
     protocol::status::{
-        read_status,
         types::{self, cursor::EntryCursor},
         with_port_read,
     },
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph,
-        pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+        },
     },
 };
 
@@ -25,7 +27,7 @@ pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {
     if let Ok(content_lines) = read_status(|app| {
         if app.ports.order.is_empty() {
             Ok(vec![Line::from(lang().index.no_com_ports.as_str())])
-        } else if let types::Page::Entry { cursor, .. } = &app.page {
+        } else if let crate::tui::status::Page::Entry { cursor, .. } = &app.page {
             match cursor {
                 Some(EntryCursor::Com { index }) => {
                     if *index < app.ports.order.len() {

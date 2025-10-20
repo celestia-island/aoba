@@ -108,11 +108,12 @@ pub async fn execute_cursor_actions<T: Expect>(
                     for inner_attempt in 1..=INNER_RETRIES {
                         total_attempts += 1;
 
-                        // Capture current screen
+                        // Capture current screen (without logging content to reduce verbosity)
                         let screen = cap
-                            .capture(
+                            .capture_with_logging(
                                 session,
                                 &format!("{session_name} - match {description} (outer {outer_attempt}/{OUTER_RETRIES}, inner {inner_attempt}/{INNER_RETRIES})"),
+                                false, // Don't log content on every attempt
                             )
                             .await?;
                         last_screen = screen.clone();
@@ -366,8 +367,8 @@ fn dump_all_status_files() {
         }
     }
 
-    // CLI status files - check for common port names
-    let common_ports = vec!["vcom1", "vcom2", "vcom3", "vcom4"];
+    // CLI status files - check for common port names (only vcom1/vcom2 in CI)
+    let common_ports = vec!["vcom1", "vcom2"];
     for port in common_ports {
         let cli_path = format!("/tmp/ci_cli_{}_status.json", port);
         log::error!("📄 {}:", cli_path);

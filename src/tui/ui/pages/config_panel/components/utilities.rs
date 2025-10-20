@@ -2,12 +2,15 @@ use anyhow::Result;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-use crate::protocol::status::{read_status, types, with_port_read};
+use crate::{
+    protocol::status::{types, with_port_read},
+    tui::status::read_status,
+};
 
 /// Derive selection index for config panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
     match read_status(|status| Ok(status.page.clone()))? {
-        types::Page::ConfigPanel { cursor, .. } => Ok(cursor),
+        crate::tui::status::Page::ConfigPanel { cursor, .. } => Ok(cursor),
         _ => Ok(types::cursor::ConfigPanelCursor::EnablePort),
     }
 }

@@ -2,20 +2,22 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     protocol::status::{
-        read_status,
         types::{
             self,
             port::{PortOwner, PortState, PortSubprocessMode},
         },
-        with_port_write, write_status,
+        with_port_write,
     },
-    tui::utils::bus::{Bus, UiToCore},
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::{Bus, UiToCore},
+    },
 };
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");
     let current_cursor = read_status(|status| {
-        if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
             log::info!("🔵 Current cursor in ModbusDashboard: {cursor:?}");
             Ok(*cursor)
         } else {
@@ -33,7 +35,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
 
             // Move cursor to the new station's StationId field
             let new_station_index = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port_guard = port_entry.read();
@@ -47,7 +49,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             write_status(|status| {
-                if let types::Page::ModbusDashboard { cursor, .. } = &mut status.page {
+                if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &mut status.page {
                     *cursor = types::cursor::ModbusDashboardCursor::StationId {
                         index: new_station_index,
                     };
@@ -68,7 +70,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
         types::cursor::ModbusDashboardCursor::ModbusMode => {
             // Toggle global mode for this port between Master and Slave
             let current_mode = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port_guard = port_entry.read();
@@ -93,7 +95,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
             // Get the current register mode value from port config
             let current_value = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port_guard = port_entry.read();
@@ -137,7 +139,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             register_index,
         } => {
             let port_name_opt = read_status(|status| match &status.page {
-                types::Page::ModbusDashboard { selected_port, .. } => {
+                crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     Ok(status.ports.order.get(*selected_port).cloned())
                 }
                 _ => Ok(None),
@@ -164,7 +166,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         | types::modbus::RegisterMode::DiscreteInputs => {
                             // Toggle coil value
                             let selected_port = read_status(|status| {
-                                if let types::Page::ModbusDashboard { selected_port, .. } =
+                                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
                                     &status.page
                                 {
                                     Ok(*selected_port)
@@ -322,7 +324,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     log::info!("🟦 handle_leave_page called");
 
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
@@ -415,7 +417,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     }
 
     write_status(|status| {
-        status.page = types::Page::ConfigPanel {
+        status.page = crate::tui::status::Page::ConfigPanel {
             selected_port,
             view_offset: 0,
             cursor: types::cursor::ConfigPanelCursor::EnablePort,
@@ -431,7 +433,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
     log::info!("🟢 create_new_modbus_entry called");
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             log::info!("🟢 Selected port index: {selected_port}");
             Ok(*selected_port)
         } else {

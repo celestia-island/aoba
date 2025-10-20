@@ -9,7 +9,7 @@ use ci_utils::{
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
-    snapshot::TerminalCapture,
+    snapshot::{TerminalCapture, TerminalSize},
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };
@@ -68,7 +68,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     log::info!("🧪 Step 1: Spawning TUI Masters process");
     let mut tui_session = spawn_expect_process(&["--tui"])
         .map_err(|err| anyhow!("Failed to spawn TUI Masters process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
 
     sleep_seconds(3).await;
 

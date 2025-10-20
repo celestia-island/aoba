@@ -1,13 +1,12 @@
-pub mod global_status;
+pub mod status;
 pub mod input;
 pub mod persistence;
-pub mod status;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
 
 // Re-export Page for convenience since it's used throughout TUI code
-pub use global_status::Page;
+pub use status::Page;
 
 use anyhow::{anyhow, Result};
 use chrono::Local;
@@ -28,7 +27,6 @@ use crate::{
     protocol::{
         ipc::IpcMessage,
         status::{
-            init_status, read_status,
             types::{
                 self,
                 modbus::RegisterMode,
@@ -36,11 +34,11 @@ use crate::{
                     PortLogEntry, PortOwner, PortState, PortSubprocessInfo, PortSubprocessMode,
                 },
             },
-            with_port_read, with_port_write, write_status,
+            with_port_read, with_port_write,
         },
     },
     tui::{
-        global_status::Status,
+        status::Status,
         subprocess::{CliMode, CliSubprocessConfig, SubprocessManager},
         ui::components::error_msg::ui_error_set,
         utils::bus::{Bus, CoreToUi, UiToCore},
@@ -95,7 +93,7 @@ fn append_port_log(port_name: &str, raw: String) {
         parsed: None,
     };
 
-    if let Err(err) = write_status(|status| {
+    if let Err(err) = self::status::write_status(|status| {
         if let Some(port) = status.ports.map.get(port_name) {
             if with_port_write(port, |port| {
                 port.logs.push(entry.clone());
@@ -283,7 +281,7 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
 #[allow(dead_code)]
 fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
     // Read current station values and rebuild the merged data file
-    let merged_data = read_status(|status| {
+    let merged_data = self::status::read_status(|status| {
         if let Some(port_entry) = status.ports.map.get(port_name) {
             if let Some(port) = with_port_read(port_entry, |port| {
                 let types::port::PortConfig::Modbus { stations, .. } = &port.config;
@@ -374,7 +372,7 @@ fn apply_register_update_from_ipc(
     let mut handled = false;
     let mut data_source_path: Option<PathBuf> = None;
 
-    write_status(|status| {
+    self::status::write_status(|status| {
         if let Some(port_entry) = status.ports.map.get(port_name) {
             if with_port_write(port_entry, |port| {
                 let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
@@ -493,8 +491,8 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             let msg = format!("CLI subprocess error: {error}");
             log::warn!("CLI[{port_name}]: {msg}");
             append_port_log(port_name, msg.clone());
-            write_status(|status| {
-                status.temporarily.error = Some(types::ErrorInfo {
+            self::status::write_status(|status| {
+                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                     message: msg.clone(),
                     timestamp: chrono::Local::now(),
                 });
@@ -583,7 +581,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
     let app = Arc::new(RwLock::new(Status::default()));
 
     // Initialize the global status
-    init_status(app.clone())?;
+    self::status::init_status(app.clone())?;
 
     // Check if debug CI E2E test mode is enabled
     let debug_ci_e2e_enabled = matches.get_flag("debug-ci-e2e-test");
@@ -616,7 +614,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
         if !persisted_configs.is_empty() {
             let count = persisted_configs.len();
             for (port_name, config) in persisted_configs {
-                write_status(|status| {
+                self::status::write_status(|status| {
                     if let Some(port_arc) = status.ports.map.get(&port_name) {
                         let mut port = port_arc.write();
                         port.config = config.clone();
@@ -630,7 +628,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
     }
 
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
-        write_status(|g| {
+        self::status::write_status(|g| {
             ui_error_set(
                 g,
                 Some((
@@ -831,7 +829,7 @@ fn run_core_thread(
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
 
-                    let existing_owner = read_status(|status| {
+                    let existing_owner = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
                             if let Some(owner) =
                                 with_port_read(port, |port| port.state.owner().cloned())
@@ -845,7 +843,7 @@ fn run_core_thread(
                     if let Some(owner) = existing_owner {
                         match owner {
                             PortOwner::Runtime(rt) => {
-                                write_status(|status| {
+                                self::status::write_status(|status| {
                                     if let Some(port) = status.ports.map.get(&port_name) {
                                         if with_port_write(port, |port| {
                                             port.state = PortState::Free;
@@ -912,7 +910,7 @@ fn run_core_thread(
                                     }
                                 }
 
-                                write_status(|status| {
+                                self::status::write_status(|status| {
                                     if let Some(port) = status.ports.map.get(&port_name) {
                                         if with_port_write(port, |port| {
                                             port.state = PortState::Free;
@@ -947,7 +945,7 @@ fn run_core_thread(
                     }
 
                     // Extract CLI inputs WITHOUT holding any locks during subprocess operations
-                    let cli_inputs = read_status(|status| {
+                    let cli_inputs = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
                             if let Some(result) = with_port_read(port, |port| {
                                 let types::port::PortConfig::Modbus { mode, stations } =
@@ -1029,7 +1027,7 @@ fn run_core_thread(
                                                 });
 
                                             // Now update status with the result (short lock hold)
-                                            write_status(|status| {
+                                            self::status::write_status(|status| {
                                                 if let Some(port) = status.ports.map.get(&port_name)
                                                 {
                                                     if with_port_write(port, |port| {
@@ -1072,8 +1070,8 @@ fn run_core_thread(
                                             "Failed to start CLI subprocess for {port_name}: {err}"
                                         );
                                         append_port_log(&port_name, msg.clone());
-                                        write_status(|status| {
-                                            status.temporarily.error = Some(types::ErrorInfo {
+                                        self::status::write_status(|status| {
+                                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                                 message: msg.clone(),
                                                 timestamp: chrono::Local::now(),
                                             });
@@ -1141,7 +1139,7 @@ fn run_core_thread(
                                                 });
 
                                             // Now update status with the result (short lock hold)
-                                            write_status(|status| {
+                                            self::status::write_status(|status| {
                                                 if let Some(port) = status.ports.map.get(&port_name)
                                                 {
                                                     if with_port_write(port, |port| {
@@ -1184,8 +1182,25 @@ fn run_core_thread(
                                             "Failed to start CLI subprocess for {port_name}: {err}"
                                         );
                                         append_port_log(&port_name, msg.clone());
-                                        write_status(|status| {
-                                            status.temporarily.error = Some(types::ErrorInfo {
+                                        
+                                        // Update port status indicator to show failure
+                                        self::status::write_status(|status| {
+                                            if let Some(port) = status.ports.map.get(&port_name) {
+                                                if with_port_write(port, |port| {
+                                                    port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
+                                                        error_message: err.to_string(),
+                                                        timestamp: chrono::Local::now(),
+                                                    };
+                                                })
+                                                .is_none()
+                                                {
+                                                    log::warn!(
+                                                        "ToggleRuntime: failed to acquire write lock for {port_name} when setting failure status"
+                                                    );
+                                                }
+                                            }
+                                            
+                                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                                 message: msg.clone(),
                                                 timestamp: chrono::Local::now(),
                                             });
@@ -1261,7 +1276,7 @@ fn run_core_thread(
 
                         if let Some(handle) = handle_opt {
                             let handle_for_write = handle.clone();
-                            write_status(|status| {
+                            self::status::write_status(|status| {
                                 if let Some(port) = status.ports.map.get(&port_name) {
                                     if with_port_write(port, |port| {
                                         port.state = PortState::OccupiedByThis {
@@ -1288,8 +1303,25 @@ fn run_core_thread(
                                 "Spawned native runtime for port".to_string(),
                             );
                         } else if let Some(err) = spawn_err {
-                            write_status(|status| {
-                                status.temporarily.error = Some(types::ErrorInfo {
+                            let err_msg = err.to_string();
+                            self::status::write_status(|status| {
+                                // Update port status indicator to show failure
+                                if let Some(port) = status.ports.map.get(&port_name) {
+                                    if with_port_write(port, |port| {
+                                        port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
+                                            error_message: err_msg.clone(),
+                                            timestamp: chrono::Local::now(),
+                                        };
+                                    })
+                                    .is_none()
+                                    {
+                                        log::warn!(
+                                            "ToggleRuntime: failed to acquire write lock for {port_name} when setting failure status"
+                                        );
+                                    }
+                                }
+                                
+                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                     message: format!("Failed to start runtime: {err}"),
                                     timestamp: chrono::Local::now(),
                                 });
@@ -1353,7 +1385,7 @@ fn run_core_thread(
         let dead_processes = subprocess_manager.reap_dead_processes();
         if !dead_processes.is_empty() {
             let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
-            write_status(|status| {
+            self::status::write_status(|status| {
                 for (port_name, _) in &dead_processes {
                     if let Some(port) = status.ports.map.get(port_name) {
                         if with_port_write(port, |port| {
@@ -1412,7 +1444,7 @@ fn run_core_thread(
         }
 
         // Update spinner frame for busy indicator animation
-        write_status(|status| {
+        self::status::write_status(|status| {
             status.temporarily.busy.spinner_frame =
                 status.temporarily.busy.spinner_frame.wrapping_add(1);
             Ok(())
@@ -1437,7 +1469,7 @@ fn run_core_thread(
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
 
-    let bottom_height = read_status(|status| {
+    let bottom_height = self::status::read_status(|status| {
         let err_lines = if status.temporarily.error.is_some() {
             1
         } else {
@@ -1472,31 +1504,31 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
 /// This function is called after each Refreshed event to allow log-based
 /// verification of state transitions.
 pub fn log_state_snapshot() -> Result<()> {
-    use crate::protocol::status::{read_status, types::port::PortState};
+    use crate::protocol::status::types::port::PortState;
     use serde_json::json;
 
-    read_status(|status| {
+    self::status::read_status(|status| {
         // Extract page info
         let page_name = match &status.page {
-            crate::protocol::status::types::Page::Entry { .. } => "Entry",
-            crate::protocol::status::types::Page::ConfigPanel { .. } => "ConfigPanel",
-            crate::protocol::status::types::Page::ModbusDashboard { .. } => "ModbusDashboard",
-            crate::protocol::status::types::Page::LogPanel { .. } => "LogPanel",
-            crate::protocol::status::types::Page::About { .. } => "About",
+            crate::tui::status::Page::Entry { .. } => "Entry",
+            crate::tui::status::Page::ConfigPanel { .. } => "ConfigPanel",
+            crate::tui::status::Page::ModbusDashboard { .. } => "ModbusDashboard",
+            crate::tui::status::Page::LogPanel { .. } => "LogPanel",
+            crate::tui::status::Page::About { .. } => "About",
         };
 
         let cursor_info = match &status.page {
-            crate::protocol::status::types::Page::Entry { cursor, .. } => {
+            crate::tui::status::Page::Entry { cursor, .. } => {
                 if let Some(c) = cursor {
                     format!("{c:?}")
                 } else {
                     "None".to_string()
                 }
             }
-            crate::protocol::status::types::Page::ConfigPanel { cursor, .. } => {
+            crate::tui::status::Page::ConfigPanel { cursor, .. } => {
                 format!("{cursor:?}")
             }
-            crate::protocol::status::types::Page::ModbusDashboard { cursor, .. } => {
+            crate::tui::status::Page::ModbusDashboard { cursor, .. } => {
                 format!("{cursor:?}")
             }
             _ => "N/A".to_string(),

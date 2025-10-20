@@ -11,7 +11,7 @@ pub struct PortLogEntry {
 }
 
 /// Port status indicator shown in the title bar
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortStatusIndicator {
     /// Port is not started (red × symbol)
     NotStarted,
@@ -23,10 +23,15 @@ pub enum PortStatusIndicator {
     RunningWithChanges,
     /// Config is being saved/sent (green spinner animation, for slave 02/04)
     Saving,
-    /// Config is being synced from CLI (yellow spinner animation)
+    /// Config is being syncing from CLI (yellow spinner animation)
     Syncing,
     /// Config was just successfully applied (green ✔ checkmark, shown for 3 seconds)
     AppliedSuccess { timestamp: DateTime<Local> },
+    /// Port failed to start (red text with error message)
+    StartupFailed { 
+        error_message: String,
+        timestamp: DateTime<Local>,
+    },
 }
 
 #[derive(Debug, Clone)]

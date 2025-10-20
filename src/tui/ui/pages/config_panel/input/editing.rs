@@ -10,16 +10,19 @@ use crate::{
     protocol::{
         runtime::RuntimeCommand,
         status::{
-            read_status,
             types::{
                 self,
                 cursor::{Cursor, ModbusDashboardCursor},
                 port::PortData,
             },
-            with_port_read, with_port_write, write_status,
+            with_port_read, with_port_write,
         },
     },
-    tui::{utils::bus::Bus, UiToCore},
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::Bus,
+        UiToCore,
+    },
 };
 
 use super::navigation::sanitize_configpanel_cursor;
@@ -75,7 +78,7 @@ fn handle_editing_input(
         |_| true,
         |maybe_string| -> Result<()> {
             let port_name_opt = read_status(|status| {
-                if let types::Page::ConfigPanel { selected_port, .. } = status.page {
+                if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = status.page {
                     Ok(status.ports.order.get(selected_port).cloned())
                 } else {
                     Ok(None)
@@ -156,7 +159,7 @@ fn handle_navigation_input(
             let new_cursor = types::cursor::ConfigPanelCursor::EnablePort;
             let new_offset = new_cursor.view_offset();
             write_status(|status| {
-                if let types::Page::ConfigPanel {
+                if let crate::tui::status::Page::ConfigPanel {
                     cursor,
                     view_offset,
                     ..
@@ -177,7 +180,7 @@ fn handle_navigation_input(
             let new_cursor = types::cursor::ConfigPanelCursor::StopBits;
             let new_offset = new_cursor.view_offset();
             write_status(|status| {
-                if let types::Page::ConfigPanel {
+                if let crate::tui::status::Page::ConfigPanel {
                     cursor,
                     view_offset,
                     ..
@@ -195,7 +198,7 @@ fn handle_navigation_input(
         }
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
             write_status(|status| {
-                if let types::Page::ConfigPanel {
+                if let crate::tui::status::Page::ConfigPanel {
                     cursor,
                     view_offset,
                     ..
@@ -234,7 +237,7 @@ fn handle_navigation_input(
             // First, get the selected_port and ports_count outside the write lock
             let (selected_port_opt, _ports_count) = read_status(|status| {
                 let selected_port =
-                    if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
+                    if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = &status.page {
                         Some(*selected_port)
                     } else {
                         None
@@ -247,12 +250,12 @@ fn handle_navigation_input(
                     let new_cursor = types::cursor::EntryCursor::Com {
                         index: selected_port,
                     };
-                    status.page = types::Page::Entry {
+                    status.page = crate::tui::status::Page::Entry {
                         cursor: Some(new_cursor),
                         view_offset: selected_port, // For Com cursor, offset equals index
                     };
                 } else {
-                    status.page = types::Page::Entry {
+                    status.page = crate::tui::status::Page::Entry {
                         cursor: None,
                         view_offset: 0,
                     };
@@ -275,7 +278,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
             log::info!("EnablePort case matched");
             log::info!("🔘 User pressed Enter on EnablePort in ConfigPanel");
             if let Some(port_name) = read_status(|status| {
-                if let types::Page::ConfigPanel { selected_port, .. } = status.page {
+                if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = status.page {
                     Ok(status.ports.order.get(selected_port).cloned())
                 } else {
                     Ok(None)
@@ -299,7 +302,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 if is_modbus_empty {
                     log::warn!("⚠️  Cannot enable Modbus port with empty configuration");
                     write_status(|status| {
-                        status.temporarily.error = Some(types::ErrorInfo {
+                        status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                             message: lang().index.err_modbus_config_empty.clone(),
                             timestamp: chrono::Local::now(),
                         });
@@ -327,8 +330,8 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
         }
         types::cursor::ConfigPanelCursor::ProtocolConfig => {
             write_status(|status| {
-                if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
-                    status.page = types::Page::ModbusDashboard {
+                if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = &status.page {
+                    status.page = crate::tui::status::Page::ModbusDashboard {
                         selected_port: *selected_port,
                         view_offset: 0,
                         cursor: ModbusDashboardCursor::AddLine,
@@ -343,8 +346,8 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
             write_status(|status| {
-                if let types::Page::ConfigPanel { selected_port, .. } = &status.page {
-                    status.page = types::Page::LogPanel {
+                if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = &status.page {
+                    status.page = crate::tui::status::Page::LogPanel {
                         selected_port: *selected_port,
                         input_mode: types::ui::InputMode::Ascii,
                         selected_item: None,
@@ -375,7 +378,7 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
     })?;
 
     write_status(|status| {
-        if let types::Page::ConfigPanel {
+        if let crate::tui::status::Page::ConfigPanel {
             selected_port,
             cursor,
             ..

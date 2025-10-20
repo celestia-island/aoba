@@ -4,15 +4,15 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     protocol::status::{
-        read_status,
         types::{
             self,
             modbus::{ModbusConnectionMode, RegisterMode},
             port::{PortOwner, PortState, PortSubprocessMode},
         },
-        with_port_write, write_status,
+        with_port_write,
     },
     tui::{
+        status::{read_status, write_status},
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{Bus, UiToCore},
     },
@@ -22,7 +22,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Enter => {
             let current_cursor = read_status(|status| {
-                if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -110,7 +110,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 log::info!("💾 Esc: Saving pending changes before returning");
 
                 let current_cursor = read_status(|status| {
-                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                         Ok(*cursor)
                     } else {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -169,7 +169,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if let types::ui::InputRawBuffer::Index(current_index) = input_raw_buffer {
                 // Handle selector navigation with proper wrapping
                 let current_cursor = read_status(|status| {
-                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                         Ok(*cursor)
                     } else {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -206,7 +206,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if let types::ui::InputRawBuffer::Index(current_index) = input_raw_buffer {
                 // Handle selector navigation with proper wrapping
                 let current_cursor = read_status(|status| {
-                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                         Ok(*cursor)
                     } else {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -250,7 +250,7 @@ fn commit_selector_edit(
     selected_index: usize,
 ) -> Result<Option<String>> {
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
@@ -338,7 +338,7 @@ fn commit_text_edit(
     bus: &Bus,
 ) -> Result<()> {
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)

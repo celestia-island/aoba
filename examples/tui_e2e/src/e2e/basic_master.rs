@@ -10,7 +10,7 @@ use ci_utils::{
     helpers::sleep_seconds,
     key_input::ArrowKey,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
-    snapshot::TerminalCapture,
+    snapshot::{TerminalCapture, TerminalSize},
     terminal::{build_debug_bin, spawn_expect_process},
 };
 use serde_json::json;
@@ -58,7 +58,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])
         .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
-    let mut tui_cap = TerminalCapture::new(24, 80);
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
 
     // Wait for TUI to initialize and start writing status
     log::info!("⏳ Waiting for TUI to initialize...");

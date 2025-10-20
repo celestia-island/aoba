@@ -4,10 +4,13 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph,
-        pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+    protocol::status::types,
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+        },
     },
 };
 
@@ -27,7 +30,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
             Err(_) => vec![Line::from("About (failed to render)")],
         };
         let offset = read_status(|status| {
-            if let types::Page::About { view_offset } = &status.page {
+            if let crate::tui::status::Page::About { view_offset } = &status.page {
                 Ok(*view_offset)
             } else {
                 Ok(0)

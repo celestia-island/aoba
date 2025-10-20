@@ -5,13 +5,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::protocol::{
-    modbus::*,
-    status::{
-        crc16_modbus, read_status,
-        types::{self, port::PortLogEntry},
-        with_port_read, with_port_write,
+use crate::{
+    protocol::{
+        modbus::*,
+        status::{
+            crc16_modbus,
+            types::{self, port::PortLogEntry},
+            with_port_read, with_port_write,
+        },
     },
+    tui::status::read_status,
 };
 
 /// Handle modbus communication for all active ports

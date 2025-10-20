@@ -567,7 +567,7 @@ impl SubprocessManager {
     /// This sends the complete station configuration for the port
     pub fn send_stations_update_for_port(&mut self, port_name: &str) -> Result<()> {
         use crate::protocol::status::port_stations_to_config;
-        use crate::protocol::status::read_status;
+        use crate::tui::status::read_status;
 
         // Get current stations configuration from the port
         let stations: Vec<crate::cli::config::StationConfig> = read_status(|status| {

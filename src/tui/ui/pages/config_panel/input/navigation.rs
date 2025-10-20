@@ -1,8 +1,11 @@
 use anyhow::Result;
 
-use crate::protocol::status::{
-    types::{self, cursor::Cursor},
-    with_port_read, write_status,
+use crate::{
+    protocol::status::{
+        types::{self, cursor::Cursor},
+        with_port_read,
+    },
+    tui::status::write_status,
 };
 
 /// Ensure current cursor for ConfigPanel does not point to hidden items when
@@ -10,7 +13,7 @@ use crate::protocol::status::{
 /// to a visible default (`EnablePort`) and updates `view_offset` when needed.
 pub fn sanitize_configpanel_cursor() -> Result<()> {
     write_status(|status| {
-        if let types::Page::ConfigPanel {
+        if let crate::tui::status::Page::ConfigPanel {
             cursor,
             selected_port,
             view_offset,

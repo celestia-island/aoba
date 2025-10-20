@@ -59,25 +59,24 @@ pub struct TuiModbusSlave {
 impl TuiStatus {
     pub fn from_global_status() -> anyhow::Result<Self> {
         use crate::protocol::status::{
-            read_status,
-            types::{port::PortState, Page},
+            types::port::PortState as ProtocolPortState,
             with_port_read,
         };
 
-        read_status(|status| {
+        super::read_status(|status| {
             let mut ports = Vec::new();
 
             for port_name in &status.ports.order {
                 if let Some(port_arc) = status.ports.map.get(port_name) {
                     if let Some(Ok(port_data)) = with_port_read(port_arc, |port| {
-                        let enabled = matches!(port.state, PortState::OccupiedByThis { .. });
+                        let enabled = matches!(port.state, ProtocolPortState::OccupiedByThis { .. });
                         let state = match &port.state {
-                            PortState::Free => crate::tui::status::PortState::Free,
-                            PortState::OccupiedByThis { .. } => {
-                                crate::tui::status::PortState::OccupiedByThis
+                            ProtocolPortState::Free => crate::tui::status::serializable::PortState::Free,
+                            ProtocolPortState::OccupiedByThis { .. } => {
+                                crate::tui::status::serializable::PortState::OccupiedByThis
                             }
-                            PortState::OccupiedByOther => {
-                                crate::tui::status::PortState::OccupiedByOther
+                            ProtocolPortState::OccupiedByOther => {
+                                crate::tui::status::serializable::PortState::OccupiedByOther
                             }
                         };
 
@@ -119,11 +118,11 @@ impl TuiStatus {
             }
 
             let page = match &status.page {
-                Page::Entry { .. } => TuiPage::Entry,
-                Page::ConfigPanel { .. } => TuiPage::ConfigPanel,
-                Page::ModbusDashboard { .. } => TuiPage::ModbusDashboard,
-                Page::LogPanel { .. } => TuiPage::LogPanel,
-                Page::About { .. } => TuiPage::About,
+                super::Page::Entry { .. } => TuiPage::Entry,
+                super::Page::ConfigPanel { .. } => TuiPage::ConfigPanel,
+                super::Page::ModbusDashboard { .. } => TuiPage::ModbusDashboard,
+                super::Page::LogPanel { .. } => TuiPage::LogPanel,
+                super::Page::About { .. } => TuiPage::About,
             };
 
             Ok(TuiStatus {

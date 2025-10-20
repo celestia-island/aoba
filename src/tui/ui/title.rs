@@ -9,10 +9,10 @@ use ratatui::{
 use crate::{
     i18n::lang,
     protocol::status::{
-        read_status,
         types::{self, port::PortStatusIndicator},
         with_port_read,
     },
+    tui::status::read_status,
 };
 
 fn get_port_name(selected_port: usize) -> Result<String> {
@@ -38,7 +38,7 @@ fn get_port_status_indicator(selected_port: usize) -> Result<Option<PortStatusIn
         let port_name_opt = status.ports.order.get(selected_port).cloned();
         if let Some(port_name) = port_name_opt {
             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                return Ok(with_port_read(port_entry, |port| port.status_indicator));
+                return Ok(with_port_read(port_entry, |port| port.status_indicator.clone()));
             }
         }
         Ok(None)
@@ -69,16 +69,16 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
     // Add breadcrumb path based on current page
     let page_breadcrumb = match read_status(|status| Ok(status.page.clone()))? {
         // Entry page: AOBA title
-        types::Page::Entry { .. } => lang().index.title.as_str().to_string(),
+        crate::tui::status::Page::Entry { .. } => lang().index.title.as_str().to_string(),
 
         // Port configuration page: AOBA title > COMx
-        types::Page::ConfigPanel { selected_port, .. } => {
+        crate::tui::status::Page::ConfigPanel { selected_port, .. } => {
             let port_name = get_port_name(selected_port)?;
             format!("{} > {}", lang().index.title.as_str(), port_name)
         }
 
         // Modbus master/slave configuration: AOBA title > COMx > Modbus
-        types::Page::ModbusDashboard { selected_port, .. } => {
+        crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
             let port_name = get_port_name(selected_port)?;
             format!(
                 "{} > {} > {}",
@@ -89,7 +89,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         }
 
         // Manual debug log: AOBA title > COMx > Communication Log
-        types::Page::LogPanel { selected_port, .. } => {
+        crate::tui::status::Page::LogPanel { selected_port, .. } => {
             let port_name = get_port_name(selected_port)?;
             format!(
                 "{} > {} > {}",
@@ -100,7 +100,7 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         }
 
         // About page: AOBA title > About
-        types::Page::About { .. } => {
+        crate::tui::status::Page::About { .. } => {
             format!(
                 "{} > {}",
                 lang().index.title.as_str(),
@@ -122,9 +122,9 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
 
     // Render status indicator on the right side (only for port-related pages)
     let selected_port_opt = match read_status(|status| Ok(status.page.clone()))? {
-        types::Page::ConfigPanel { selected_port, .. }
-        | types::Page::ModbusDashboard { selected_port, .. }
-        | types::Page::LogPanel { selected_port, .. } => Some(selected_port),
+        crate::tui::status::Page::ConfigPanel { selected_port, .. }
+        | crate::tui::status::Page::ModbusDashboard { selected_port, .. }
+        | crate::tui::status::Page::LogPanel { selected_port, .. } => Some(selected_port),
         _ => None,
     };
 
@@ -132,17 +132,24 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
         if let Some(indicator) = get_port_status_indicator(selected_port)? {
             let (status_text, status_icon, status_color) = get_status_display(&indicator)?;
 
-            // Check if we need to show AppliedSuccess for only 3 seconds
-            let should_show_applied =
-                if let PortStatusIndicator::AppliedSuccess { timestamp } = indicator {
-                    use chrono::Local;
-                    let elapsed = Local::now().signed_duration_since(timestamp);
-                    elapsed.num_seconds() < 3
-                } else {
-                    true
+            // Check if we need to show time-limited statuses
+            let should_show_status =
+                match indicator {
+                    PortStatusIndicator::AppliedSuccess { timestamp } => {
+                        use chrono::Local;
+                        let elapsed = Local::now().signed_duration_since(timestamp);
+                        elapsed.num_seconds() < 3
+                    }
+                    PortStatusIndicator::StartupFailed { timestamp, .. } => {
+                        // Show startup failure for 10 seconds
+                        use chrono::Local;
+                        let elapsed = Local::now().signed_duration_since(timestamp);
+                        elapsed.num_seconds() < 10
+                    }
+                    _ => true,
                 };
 
-            if should_show_applied {
+            if should_show_status {
                 let mut status_spans = Vec::new();
                 status_spans.push(Span::styled(status_text, Style::default().fg(status_color)));
                 status_spans.push(Span::raw(" "));
@@ -223,5 +230,18 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             "✔".to_string(),
             Color::Green,
         )),
+        PortStatusIndicator::StartupFailed { error_message, .. } => {
+            // Show truncated error message in red
+            let truncated_msg = if error_message.len() > 30 {
+                format!("{}...", &error_message[..27])
+            } else {
+                error_message.clone()
+            };
+            Ok((
+                format!("{}: {}", lang.protocol.common.status_startup_failed, truncated_msg),
+                "✘".to_string(),
+                Color::Red,
+            ))
+        }
     }
 }
