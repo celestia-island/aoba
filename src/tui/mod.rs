@@ -366,90 +366,77 @@ fn apply_register_update_from_ipc(
     let mut data_source_path: Option<PathBuf> = None;
 
     self::status::write_status(|status| {
-        if let Some(port_entry) = status.ports.map.get(port_name) {
-            if with_port_write(port_entry, |port| {
-                let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
-                // Find the station that matches station_id, register_mode AND address range
-                if let Some(item) = stations.iter_mut().find(|item| {
-                    if item.station_id != station_id || item.register_mode != register_mode {
-                        return false;
+        if let Some(port) = status.ports.map.get_mut(port_name) {
+            let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
+            // Find the station that matches station_id, register_mode AND address range
+            if let Some(item) = stations.iter_mut().find(|item| {
+                if item.station_id != station_id || item.register_mode != register_mode {
+                    return false;
+                }
+                // Check if start_address falls within this station's address range
+                let item_start = item.register_address;
+                let item_end = item_start + item.register_length;
+                start_address >= item_start && start_address < item_end
+            }) {
+                item.req_total = item.req_total.saturating_add(1);
+                item.req_success = item.req_success.saturating_add(1);
+                item.last_response_time = Some(std::time::Instant::now());
+
+                let configured_len = item.register_length as usize;
+                if configured_len > 0 {
+                    if item.last_values.len() != configured_len {
+                        item.last_values.resize(configured_len, 0);
                     }
-                    // Check if start_address falls within this station's address range
-                    let item_start = item.register_address;
-                    let item_end = item_start + item.register_length;
-                    start_address >= item_start && start_address < item_end
-                }) {
-                        item.req_total = item.req_total.saturating_add(1);
-                        item.req_success = item.req_success.saturating_add(1);
-                        item.last_response_time = Some(std::time::Instant::now());
 
-                        let configured_len = item.register_length as usize;
-                        if configured_len == 0 {
-                            return;
-                        }
-
-                        if item.last_values.len() != configured_len {
-                            item.last_values.resize(configured_len, 0);
-                        }
-
-                        if start_address < item.register_address {
-                            log::warn!(
-                                "Register update for {port_name}: start address 0x{start_address:04X} is before configured base 0x{:04X}",
-                                item.register_address
-                            );
-                            return;
-                        }
-
+                    if start_address >= item.register_address {
                         let base_index = (start_address - item.register_address) as usize;
-                        if base_index >= configured_len {
+                        if base_index < configured_len {
+                            let capacity = configured_len - base_index;
+                            let limit = std::cmp::min(values.len(), capacity);
+                            if values.len() > capacity {
+                                log::debug!(
+                                    "Register update for {port_name}: truncating values from {} to configured capacity {}",
+                                    values.len(),
+                                    capacity
+                                );
+                            }
+
+                            for (offset, value) in values.iter().take(limit).enumerate() {
+                                item.last_values[base_index + offset] = *value;
+                            }
+
+                            handled = true;
+                        } else {
                             log::warn!(
                                 "Register update for {port_name}: start address 0x{start_address:04X} outside configured range base=0x{:04X} len=0x{:04X}",
                                 item.register_address,
                                 item.register_length
                             );
-                            return;
                         }
-
-                        let capacity = configured_len - base_index;
-                        let limit = std::cmp::min(values.len(), capacity);
-                        if values.len() > capacity {
-                            log::debug!(
-                                "Register update for {port_name}: truncating values from {} to configured capacity {}",
-                                values.len(),
-                                capacity
-                            );
-                        }
-
-                        for (offset, value) in values.iter().take(limit).enumerate() {
-                            item.last_values[base_index + offset] = *value;
-                        }
-
-                        handled = true;
-                } else {
-                    log::debug!(
-                        "Register update for {port_name}: station {station_id} in mode {register_mode:?} not found"
-                    );
+                    } else {
+                        log::warn!(
+                            "Register update for {port_name}: start address 0x{start_address:04X} is before configured base 0x{:04X}",
+                            item.register_address
+                        );
+                    }
                 }
-            })
-            .is_none()
-            {
-                log::warn!(
-                    "Register update for {port_name}: failed to acquire port write lock"
+            } else {
+                log::debug!(
+                    "Register update for {port_name}: station {station_id} in mode {register_mode:?} not found"
                 );
             }
 
             // Get data source path if available for this port
-            if let Some(port) = status.ports.map.get(port_name) {
-                if port.state.is_occupied_by_this() {
-                    if let Some(info) = &port.subprocess_info {
-                        if let Some(path_str) = &info.data_source_path {
-                            data_source_path = Some(PathBuf::from(path_str));
-                        }
+            if port.state.is_occupied_by_this() {
+                if let Some(info) = &port.subprocess_info {
+                    if let Some(path_str) = &info.data_source_path {
+                        data_source_path = Some(PathBuf::from(path_str));
                     }
                 }
-            } else {
-                log::debug!("Register update for {port_name}: port not found in status map");
             }
+        } else {
+            log::debug!("Register update for {port_name}: port not found in status map");
+        }
         Ok(())
     })?;
 
@@ -816,84 +803,52 @@ fn run_core_thread(
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
 
-                    let existing_owner = self::status::read_status(|status| {
+                    let subprocess_info_opt = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
-                            // with_port_read wraps the return value in Some, so we flatten the nested Option
-                            return Ok(with_port_read(port, |port| port.state.owner().cloned())
-                                .flatten());
+                            return Ok(port.subprocess_info.clone());
                         }
                         Ok(None)
                     })?;
 
-                    if let Some(owner) = existing_owner {
-                        match owner {
-                            PortOwner::Runtime(_) => {
-                                // TUI should never create Runtime owners, but if one exists
-                                // (from legacy code or other components), we cannot stop it here.
-                                // Log a warning and continue.
-                                log::warn!(
-                                    "ToggleRuntime: Port {port_name} is owned by Runtime (not CLI subprocess). \
-                                     TUI can only manage CLI subprocesses. Ignoring toggle request."
+                    if let Some(info) = subprocess_info_opt {
+                        // TUI only manages CLI subprocesses, stop it
+                        if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
+                            log::warn!(
+                                "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
+                            );
+                        }
+
+                        if let Some(path) = info.data_source_path.clone() {
+                            if let Err(err) = fs::remove_file(&path) {
+                                log::debug!(
+                                    "ToggleRuntime: failed to remove data source {path}: {err}"
                                 );
-                                self::status::write_status(|status| {
-                                    status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                                        message: format!(
-                                            "Port {port_name} is managed by legacy runtime, cannot toggle from TUI"
-                                        ),
-                                        timestamp: chrono::Local::now(),
-                                    });
-                                    Ok(())
-                                })?;
-                                continue;
-                            }
-                            PortOwner::CliSubprocess(info) => {
-                                // TUI only manages CLI subprocesses, stop it
-                                if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
-                                    log::warn!(
-                                        "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
-                                    );
-                                }
-
-                                if let Some(path) = info.data_source_path.clone() {
-                                    if let Err(err) = fs::remove_file(&path) {
-                                        log::debug!(
-                                            "ToggleRuntime: failed to remove data source {path}: {err}"
-                                        );
-                                    }
-                                }
-
-                                self::status::write_status(|status| {
-                                    if let Some(port) = status.ports.map.get(&port_name) {
-                                        if with_port_write(port, |port| {
-                                            port.state = PortState::Free;
-                                            // Port is now stopped
-                                            port.status_indicator =
-                                                types::port::PortStatusIndicator::NotStarted;
-                                        })
-                                        .is_none()
-                                        {
-                                            log::warn!(
-                                                "ToggleRuntime: failed to acquire write lock for {port_name} when clearing CLI owner"
-                                            );
-                                        }
-                                    }
-                                    Ok(())
-                                })?;
-
-                                append_port_log(
-                                    &port_name,
-                                    "Stopped CLI subprocess managed by TUI".to_string(),
-                                );
-
-                                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
-                                    log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
-                                }
-                                if let Err(err) = log_state_snapshot() {
-                                    log::warn!("Failed to log state snapshot: {err}");
-                                }
-                                continue;
                             }
                         }
+
+                        self::status::write_status(|status| {
+                            if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                port.state = PortState::Free;
+                                port.subprocess_info = None;
+                                // Port is now stopped
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::NotStarted;
+                            }
+                            Ok(())
+                        })?;
+
+                        append_port_log(
+                            &port_name,
+                            "Stopped CLI subprocess managed by TUI".to_string(),
+                        );
+
+                        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                            log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
+                        }
+                        if let Err(err) = log_state_snapshot() {
+                            log::warn!("Failed to log state snapshot: {err}");
+                        }
+                        continue;
                     }
 
                     // Extract CLI inputs WITHOUT holding any locks during subprocess operations
@@ -968,37 +923,24 @@ fn run_core_thread(
                                                 snapshot.mode,
                                                 snapshot.pid
                                             );
-                                            let owner =
-                                                PortOwner::CliSubprocess(PortSubprocessInfo {
-                                                    mode: cli_mode_to_port_mode(&snapshot.mode),
-                                                    ipc_socket_name: snapshot
-                                                        .ipc_socket_name
-                                                        .clone(),
-                                                    pid: snapshot.pid,
-                                                    data_source_path: None, // SlavePoll doesn't use data source
-                                                });
+                                            let subprocess_info = PortSubprocessInfo {
+                                                mode: cli_mode_to_port_mode(&snapshot.mode),
+                                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
+                                                pid: snapshot.pid,
+                                                data_source_path: None, // SlavePoll doesn't use data source
+                                            };
 
                                             // Now update status with the result (short lock hold)
                                             self::status::write_status(|status| {
-                                                if let Some(port) = status.ports.map.get(&port_name)
-                                                {
-                                                    if with_port_write(port, |port| {
-                                                        port.state = PortState::OccupiedByThis {
-                                                            owner: owner.clone(),
-                                                        };
-                                                        // Port is now running
-                                                        port.status_indicator = if port.config_modified {
-                                                            types::port::PortStatusIndicator::RunningWithChanges
-                                                        } else {
-                                                            types::port::PortStatusIndicator::Running
-                                                        };
-                                                    })
-                                                    .is_none()
-                                                    {
-                                                        log::warn!(
-                                                            "ToggleRuntime: failed to acquire write lock for {port_name} when marking CLI owner"
-                                                        );
-                                                    }
+                                                if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                                    port.state = PortState::OccupiedByThis;
+                                                    port.subprocess_info = Some(subprocess_info.clone());
+                                                    // Port is now running
+                                                    port.status_indicator = if port.config_modified {
+                                                        types::port::PortStatusIndicator::RunningWithChanges
+                                                    } else {
+                                                        types::port::PortStatusIndicator::Running
+                                                    };
                                                 }
                                                 Ok(())
                                             })?;
@@ -1076,41 +1018,28 @@ fn run_core_thread(
                                                 snapshot.pid,
                                                 data_source_path.display()
                                             );
-                                            let owner =
-                                                PortOwner::CliSubprocess(PortSubprocessInfo {
-                                                    mode: cli_mode_to_port_mode(&snapshot.mode),
-                                                    ipc_socket_name: snapshot
-                                                        .ipc_socket_name
-                                                        .clone(),
-                                                    pid: snapshot.pid,
-                                                    data_source_path: Some(
-                                                        data_source_path
-                                                            .to_string_lossy()
-                                                            .to_string(),
-                                                    ),
-                                                });
+                                            let subprocess_info = PortSubprocessInfo {
+                                                mode: cli_mode_to_port_mode(&snapshot.mode),
+                                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
+                                                pid: snapshot.pid,
+                                                data_source_path: Some(
+                                                    data_source_path
+                                                        .to_string_lossy()
+                                                        .to_string(),
+                                                ),
+                                            };
 
                                             // Now update status with the result (short lock hold)
                                             self::status::write_status(|status| {
-                                                if let Some(port) = status.ports.map.get(&port_name)
-                                                {
-                                                    if with_port_write(port, |port| {
-                                                        port.state = PortState::OccupiedByThis {
-                                                            owner: owner.clone(),
-                                                        };
-                                                        // Port is now running
-                                                        port.status_indicator = if port.config_modified {
-                                                            types::port::PortStatusIndicator::RunningWithChanges
-                                                        } else {
-                                                            types::port::PortStatusIndicator::Running
-                                                        };
-                                                    })
-                                                    .is_none()
-                                                    {
-                                                        log::warn!(
-                                                            "ToggleRuntime: failed to acquire write lock for {port_name} when marking CLI owner"
-                                                        );
-                                                    }
+                                                if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                                    port.state = PortState::OccupiedByThis;
+                                                    port.subprocess_info = Some(subprocess_info.clone());
+                                                    // Port is now running
+                                                    port.status_indicator = if port.config_modified {
+                                                        types::port::PortStatusIndicator::RunningWithChanges
+                                                    } else {
+                                                        types::port::PortStatusIndicator::Running
+                                                    };
                                                 }
                                                 Ok(())
                                             })?;
@@ -1237,25 +1166,17 @@ fn run_core_thread(
             let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
             self::status::write_status(|status| {
                 for (port_name, _) in &dead_processes {
-                    if let Some(port) = status.ports.map.get(port_name) {
-                        if with_port_write(port, |port| {
-                            if let PortState::OccupiedByThis {
-                                owner: PortOwner::CliSubprocess(info),
-                            } = &mut port.state
-                            {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        if port.state.is_occupied_by_this() {
+                            if let Some(info) = &port.subprocess_info {
                                 cleanup_paths
                                     .insert(port_name.clone(), info.data_source_path.clone());
-                                port.state = PortState::Free;
-                                // Port is now stopped
-                                port.status_indicator =
-                                    types::port::PortStatusIndicator::NotStarted;
                             }
-                        })
-                        .is_none()
-                        {
-                            log::warn!(
-                                "Subprocess cleanup: failed to acquire write lock for {port_name}"
-                            );
+                            port.state = PortState::Free;
+                            port.subprocess_info = None;
+                            // Port is now stopped
+                            port.status_indicator =
+                                types::port::PortStatusIndicator::NotStarted;
                         }
                     }
                 }
