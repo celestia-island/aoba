@@ -4,10 +4,13 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph,
-        pages::config_panel::components::render_kv_lines_with_indicators,
+    protocol::status::types,
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::config_panel::components::render_kv_lines_with_indicators,
+        },
     },
 };
 

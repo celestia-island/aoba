@@ -10,16 +10,19 @@ use crate::{
     protocol::{
         runtime::RuntimeCommand,
         status::{
-            read_status,
             types::{
                 self,
                 cursor::{Cursor, ModbusDashboardCursor},
                 port::PortData,
             },
-            with_port_read, with_port_write, write_status,
+            with_port_read, with_port_write,
         },
     },
-    tui::{utils::bus::Bus, UiToCore},
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::Bus,
+        UiToCore,
+    },
 };
 
 use super::navigation::sanitize_configpanel_cursor;

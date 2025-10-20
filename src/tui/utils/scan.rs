@@ -5,11 +5,14 @@ use crate::{
     protocol::{
         status::{
             types::port::{PortData, PortState},
-            with_port_read, with_port_write, write_status,
+            with_port_read, with_port_write,
         },
         tty::available_ports_enriched,
     },
-    tui::utils::bus::CoreToUi,
+    tui::{
+        status::write_status,
+        utils::bus::CoreToUi,
+    },
 };
 
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
