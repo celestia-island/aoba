@@ -7,9 +7,8 @@ use crate::{
         types::{
             self,
             modbus::{ModbusConnectionMode, RegisterMode},
-            port::{PortOwner, PortState, PortSubprocessMode},
+            port::{PortState, PortSubprocessMode},
         },
-        with_port_write,
     },
     tui::{
         status::{read_status, write_status},

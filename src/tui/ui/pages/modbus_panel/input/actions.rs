@@ -4,9 +4,8 @@ use crate::{
     protocol::status::{
         types::{
             self,
-            port::{PortOwner, PortState, PortSubprocessMode},
+            port::{PortState, PortSubprocessMode},
         },
-        with_port_write,
     },
     tui::{
         status::{read_status, write_status},

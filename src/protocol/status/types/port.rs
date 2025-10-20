@@ -35,14 +35,6 @@ pub enum PortStatusIndicator {
 }
 
 #[derive(Debug, Clone)]
-pub enum PortOwner {
-    /// Runtime handle for direct port access (NOT USED BY TUI - legacy support only)
-    Runtime(PortRuntimeHandle),
-    /// CLI subprocess managed by TUI (TUI ONLY USES THIS VARIANT)
-    CliSubprocess(PortSubprocessInfo),
-}
-
-#[derive(Debug, Clone)]
 pub struct PortSubprocessInfo {
     pub mode: PortSubprocessMode,
     pub ipc_socket_name: String,
@@ -60,63 +52,21 @@ pub enum PortSubprocessMode {
 #[derive(Debug, Clone)]
 pub enum PortState {
     Free,
-    OccupiedByThis { owner: PortOwner },
+    OccupiedByThis,
     OccupiedByOther,
 }
 
 impl PortState {
-    pub fn owner(&self) -> Option<&PortOwner> {
-        match self {
-            PortState::OccupiedByThis { owner } => Some(owner),
-            _ => None,
-        }
+    pub fn is_occupied_by_this(&self) -> bool {
+        matches!(self, PortState::OccupiedByThis)
     }
 
-    pub fn owner_mut(&mut self) -> Option<&mut PortOwner> {
-        match self {
-            PortState::OccupiedByThis { owner } => Some(owner),
-            _ => None,
-        }
+    pub fn is_free(&self) -> bool {
+        matches!(self, PortState::Free)
     }
 
-    pub fn runtime_handle(&self) -> Option<&PortRuntimeHandle> {
-        match self {
-            PortState::OccupiedByThis {
-                owner: PortOwner::Runtime(handle),
-            } => Some(handle),
-            _ => None,
-        }
-    }
-
-    pub fn runtime_handle_mut(&mut self) -> Option<&mut PortRuntimeHandle> {
-        match self {
-            PortState::OccupiedByThis {
-                owner: PortOwner::Runtime(handle),
-            } => Some(handle),
-            _ => None,
-        }
-    }
-
-    /// Get CLI subprocess info if this port is owned by a CLI subprocess
-    /// (This is the method TUI should use to access subprocess info)
-    pub fn subprocess_info(&self) -> Option<&PortSubprocessInfo> {
-        match self {
-            PortState::OccupiedByThis {
-                owner: PortOwner::CliSubprocess(info),
-            } => Some(info),
-            _ => None,
-        }
-    }
-
-    /// Get mutable CLI subprocess info if this port is owned by a CLI subprocess
-    /// (This is the method TUI should use to access subprocess info)
-    pub fn subprocess_info_mut(&mut self) -> Option<&mut PortSubprocessInfo> {
-        match self {
-            PortState::OccupiedByThis {
-                owner: PortOwner::CliSubprocess(info),
-            } => Some(info),
-            _ => None,
-        }
+    pub fn is_occupied_by_other(&self) -> bool {
+        matches!(self, PortState::OccupiedByOther)
     }
 }
 
@@ -126,6 +76,10 @@ pub struct PortData {
     pub port_type: String,
     pub extra: PortExtra,
     pub state: PortState,
+    
+    /// CLI subprocess info (only present when state is OccupiedByThis)
+    pub subprocess_info: Option<PortSubprocessInfo>,
+    
     pub config: PortConfig,
 
     pub logs: Vec<PortLogEntry>,
@@ -145,6 +99,7 @@ impl Default for PortData {
             port_type: String::new(),
             extra: Default::default(),
             state: PortState::Free,
+            subprocess_info: None,
             config: PortConfig::default(),
             logs: Vec::new(),
             log_auto_scroll: true,

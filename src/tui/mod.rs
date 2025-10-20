@@ -31,10 +31,9 @@ use crate::{
                 self,
                 modbus::RegisterMode,
                 port::{
-                    PortLogEntry, PortOwner, PortState, PortSubprocessInfo, PortSubprocessMode,
+                    PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode,
                 },
             },
-            with_port_read, with_port_write,
         },
     },
     tui::{
@@ -94,17 +93,11 @@ fn append_port_log(port_name: &str, raw: String) {
     };
 
     if let Err(err) = self::status::write_status(|status| {
-        if let Some(port) = status.ports.map.get(port_name) {
-            if with_port_write(port, |port| {
-                port.logs.push(entry.clone());
-                if port.logs.len() > 1000 {
-                    let excess = port.logs.len() - 1000;
-                    port.logs.drain(0..excess);
-                }
-            })
-            .is_none()
-            {
-                log::warn!("append_port_log: failed to acquire write lock for port {port_name}");
+        if let Some(port) = status.ports.map.get_mut(port_name) {
+            port.logs.push(entry.clone());
+            if port.logs.len() > 1000 {
+                let excess = port.logs.len() - 1000;
+                port.logs.drain(0..excess);
             }
         }
         Ok(())
@@ -446,23 +439,17 @@ fn apply_register_update_from_ipc(
             }
 
             // Get data source path if available for this port
-            if with_port_read(port_entry, |port| {
-                if let PortState::OccupiedByThis {
-                    owner: PortOwner::CliSubprocess(info),
-                } = &port.state
-                {
-                    if let Some(path_str) = &info.data_source_path {
-                        data_source_path = Some(PathBuf::from(path_str));
+            if let Some(port) = status.ports.map.get(port_name) {
+                if port.state.is_occupied_by_this() {
+                    if let Some(info) = &port.subprocess_info {
+                        if let Some(path_str) = &info.data_source_path {
+                            data_source_path = Some(PathBuf::from(path_str));
+                        }
                     }
                 }
-            })
-            .is_none()
-            {
-                log::debug!("Register update for {port_name}: failed to acquire port read lock for data path");
+            } else {
+                log::debug!("Register update for {port_name}: port not found in status map");
             }
-        } else {
-            log::debug!("Register update for {port_name}: port not found in status map");
-        }
         Ok(())
     })?;
 
