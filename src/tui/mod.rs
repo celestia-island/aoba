@@ -831,71 +831,36 @@ fn run_core_thread(
 
                     let existing_owner = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
-                            if let Some(owner) =
-                                with_port_read(port, |port| port.state.owner().cloned())
-                            {
-                                return Ok(owner);
-                            }
+                            // with_port_read wraps the return value in Some, so we flatten the nested Option
+                            return Ok(with_port_read(port, |port| port.state.owner().cloned())
+                                .flatten());
                         }
                         Ok(None)
                     })?;
 
                     if let Some(owner) = existing_owner {
                         match owner {
-                            PortOwner::Runtime(rt) => {
+                            PortOwner::Runtime(_) => {
+                                // TUI should never create Runtime owners, but if one exists
+                                // (from legacy code or other components), we cannot stop it here.
+                                // Log a warning and continue.
+                                log::warn!(
+                                    "ToggleRuntime: Port {port_name} is owned by Runtime (not CLI subprocess). \
+                                     TUI can only manage CLI subprocesses. Ignoring toggle request."
+                                );
                                 self::status::write_status(|status| {
-                                    if let Some(port) = status.ports.map.get(&port_name) {
-                                        if with_port_write(port, |port| {
-                                            port.state = PortState::Free;
-                                            // Port is now stopped
-                                            port.status_indicator =
-                                                types::port::PortStatusIndicator::NotStarted;
-                                        })
-                                        .is_none()
-                                        {
-                                            log::warn!(
-                                                "ToggleRuntime: failed to acquire write lock for {port_name} when clearing runtime"
-                                            );
-                                        }
-                                    }
+                                    status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                        message: format!(
+                                            "Port {port_name} is managed by legacy runtime, cannot toggle from TUI"
+                                        ),
+                                        timestamp: chrono::Local::now(),
+                                    });
                                     Ok(())
                                 })?;
-
-                                if let Err(err) = rt
-                                    .cmd_tx
-                                    .send(crate::protocol::runtime::RuntimeCommand::Stop)
-                                {
-                                    let warn_msg =
-                                        format!("ToggleRuntime: failed to send Stop: {err}");
-                                    log::warn!("{warn_msg}");
-                                    append_port_log(&port_name, warn_msg);
-                                }
-
-                                match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
-                                    Ok(evt) => {
-                                        if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
-                                            log::warn!(
-                                                "ToggleRuntime: received unexpected event while stopping {port_name}: {evt:?}"
-                                            );
-                                        }
-                                    }
-                                    Err(flume::RecvTimeoutError::Timeout) => {
-                                        log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
-                                    }
-                                    Err(err) => {
-                                        log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {err}");
-                                    }
-                                }
-
-                                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
-                                    log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
-                                }
-                                if let Err(err) = log_state_snapshot() {
-                                    log::warn!("Failed to log state snapshot: {err}");
-                                }
                                 continue;
                             }
                             PortOwner::CliSubprocess(info) => {
+                                // TUI only manages CLI subprocesses, stop it
                                 if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
                                     log::warn!(
                                         "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
@@ -1220,114 +1185,12 @@ fn run_core_thread(
                         }
                     }
 
+                    // TUI no longer falls back to native runtime.
+                    // If CLI subprocess fails to start, the port remains Free.
                     if !cli_started {
-                        log::info!(
-                            "ToggleRuntime: falling back to native runtime spawn for {port_name}"
+                        log::warn!(
+                            "ToggleRuntime: CLI subprocess failed to start for {port_name}, port remains Free"
                         );
-                        let cfg = crate::protocol::runtime::SerialConfig::default();
-                        let mut spawn_err: Option<anyhow::Error> = None;
-                        let mut handle_opt: Option<crate::protocol::runtime::PortRuntimeHandle> =
-                            None;
-                        const MAX_RETRIES: usize = 12;
-                        for attempt in 0..MAX_RETRIES {
-                            match crate::protocol::runtime::PortRuntimeHandle::spawn(
-                                port_name.clone(),
-                                cfg.clone(),
-                            ) {
-                                Ok(h) => {
-                                    handle_opt = Some(h);
-                                    log::info!(
-                                        "ToggleRuntime: Successfully spawned runtime for {port_name} on attempt {}",
-                                        attempt + 1
-                                    );
-                                    break;
-                                }
-                                Err(err) => {
-                                    let attempt_number = attempt + 1;
-                                    let err_display = err.to_string();
-                                    let busy_retry = err_display
-                                        .contains("Device or resource busy")
-                                        || err_display.contains("Resource busy");
-
-                                    let wait_ms = if busy_retry {
-                                        // Allow extra time for the previous holder to release the virtual port.
-                                        750
-                                    } else {
-                                        250
-                                    };
-
-                                    spawn_err = Some(err);
-                                    log::warn!(
-                                        "ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {attempt_number}: {err_display}"
-                                    );
-
-                                    if attempt_number < MAX_RETRIES {
-                                        log::debug!(
-                                            "ToggleRuntime: retrying runtime spawn for {port_name} in {wait_ms}ms (busy_retry={busy_retry})"
-                                        );
-                                        std::thread::sleep(std::time::Duration::from_millis(
-                                            wait_ms,
-                                        ));
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-
-                        if let Some(handle) = handle_opt {
-                            let handle_for_write = handle.clone();
-                            self::status::write_status(|status| {
-                                if let Some(port) = status.ports.map.get(&port_name) {
-                                    if with_port_write(port, |port| {
-                                        port.state = PortState::OccupiedByThis {
-                                            owner: PortOwner::Runtime(handle_for_write.clone()),
-                                        };
-                                        // Port is now running
-                                        port.status_indicator = if port.config_modified {
-                                            types::port::PortStatusIndicator::RunningWithChanges
-                                        } else {
-                                            types::port::PortStatusIndicator::Running
-                                        };
-                                    })
-                                    .is_none()
-                                    {
-                                        log::warn!(
-                                            "ToggleRuntime: failed to acquire write lock for {port_name} when storing runtime handle"
-                                        );
-                                    }
-                                }
-                                Ok(())
-                            })?;
-                            append_port_log(
-                                &port_name,
-                                "Spawned native runtime for port".to_string(),
-                            );
-                        } else if let Some(err) = spawn_err {
-                            let err_msg = err.to_string();
-                            self::status::write_status(|status| {
-                                // Update port status indicator to show failure
-                                if let Some(port) = status.ports.map.get(&port_name) {
-                                    if with_port_write(port, |port| {
-                                        port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
-                                            error_message: err_msg.clone(),
-                                            timestamp: chrono::Local::now(),
-                                        };
-                                    })
-                                    .is_none()
-                                    {
-                                        log::warn!(
-                                            "ToggleRuntime: failed to acquire write lock for {port_name} when setting failure status"
-                                        );
-                                    }
-                                }
-                                
-                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                                    message: format!("Failed to start runtime: {err}"),
-                                    timestamp: chrono::Local::now(),
-                                });
-                                Ok(())
-                            })?;
-                        }
                     }
 
                     core_tx
@@ -1452,6 +1315,8 @@ fn run_core_thread(
 
         // Handle modbus communication at most once per 10ms to ensure very responsive behavior
         // This high frequency is critical for TUI Master mode to respond quickly to CLI slave requests
+        // NOTE: The daemon handles Runtime-owned ports (legacy). TUI-spawned CLI subprocesses
+        // communicate via IPC instead, but the daemon is still needed for backward compatibility.
         if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_millis(10) {
             // Update the timestamp first to ensure we don't re-enter while still running
             last_modbus_run = std::time::Instant::now();

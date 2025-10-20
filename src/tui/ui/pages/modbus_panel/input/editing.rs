@@ -525,7 +525,7 @@ fn commit_text_edit(
                                 owner_snapshot.as_ref().map(|o| match o {
                                     PortOwner::CliSubprocess(info) =>
                                         format!("CliSubprocess(mode={:?})", info.mode),
-                                    _ => "Other".to_string(),
+                                    PortOwner::Runtime(_) => "Runtime".to_string(),
                                 }),
                                 payload.is_some()
                             );

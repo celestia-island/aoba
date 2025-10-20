@@ -36,7 +36,9 @@ pub enum PortStatusIndicator {
 
 #[derive(Debug, Clone)]
 pub enum PortOwner {
+    /// Runtime handle for direct port access (NOT USED BY TUI - legacy support only)
     Runtime(PortRuntimeHandle),
+    /// CLI subprocess managed by TUI (TUI ONLY USES THIS VARIANT)
     CliSubprocess(PortSubprocessInfo),
 }
 
@@ -91,6 +93,28 @@ impl PortState {
             PortState::OccupiedByThis {
                 owner: PortOwner::Runtime(handle),
             } => Some(handle),
+            _ => None,
+        }
+    }
+
+    /// Get CLI subprocess info if this port is owned by a CLI subprocess
+    /// (This is the method TUI should use to access subprocess info)
+    pub fn subprocess_info(&self) -> Option<&PortSubprocessInfo> {
+        match self {
+            PortState::OccupiedByThis {
+                owner: PortOwner::CliSubprocess(info),
+            } => Some(info),
+            _ => None,
+        }
+    }
+
+    /// Get mutable CLI subprocess info if this port is owned by a CLI subprocess
+    /// (This is the method TUI should use to access subprocess info)
+    pub fn subprocess_info_mut(&mut self) -> Option<&mut PortSubprocessInfo> {
+        match self {
+            PortState::OccupiedByThis {
+                owner: PortOwner::CliSubprocess(info),
+            } => Some(info),
             _ => None,
         }
     }

@@ -358,10 +358,12 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 })
                 .unwrap_or(false);
 
+            // TUI only uses CLI subprocesses. If port is occupied by Runtime (legacy),
+            // we don't restart. Only restart if occupied by CLI subprocess.
             let should_restart = matches!(
                 port_state,
                 Some(types::port::PortState::OccupiedByThis {
-                    owner: types::port::PortOwner::Runtime(_)
+                    owner: types::port::PortOwner::CliSubprocess(_)
                 })
             );
 
@@ -464,14 +466,15 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
             with_port_write(&port, |port| {
                 log::info!("🟢 Inside with_port_write closure");
                 // Check if port is currently occupied before adding station
+                // TUI only uses CLI subprocesses
                 if matches!(
                     port.state,
                     PortState::OccupiedByThis {
-                        owner: PortOwner::Runtime(_)
+                        owner: PortOwner::CliSubprocess(_)
                     }
                 ) {
                     log::info!(
-                        "🟢 Port {port_name} is occupied by native runtime - scheduling restart"
+                        "🟢 Port {port_name} is occupied by CLI subprocess - scheduling restart"
                     );
                     should_restart_runtime = true;
                 }
