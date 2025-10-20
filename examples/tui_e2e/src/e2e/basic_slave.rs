@@ -82,12 +82,7 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     // Navigate to port1 using keyboard and enter its config panel
     log::info!("🧪 Step 3: Navigate to {} in port list and enter config", port1);
     let actions = vec![
-        // Navigate down to find the port (simplified - assumes port is near top)
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
+        // Port list starts with cursor on first port (vcom1), so just press Enter
         CursorAction::PressEnter, // Enter port details
         CursorAction::Sleep { ms: 1000 },
         // Check that we reached ConfigPanel
