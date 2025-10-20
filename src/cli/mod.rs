@@ -177,7 +177,7 @@ pub fn parse_args() -> ArgMatches {
         .arg(
             Arg::new("debug-ci-e2e-test")
                 .long("debug-ci-e2e-test")
-                .help("Enable CI E2E test mode: periodically dump global status to /tmp/cli_e2e_{port}.log")
+                .help("Enable CI E2E test mode: periodically dump global status to /tmp/ci_cli_{port}_status.json")
                 .action(clap::ArgAction::SetTrue)
                 .hide(true), // Hidden from normal help output
         )

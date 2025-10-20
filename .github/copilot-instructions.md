@@ -26,7 +26,7 @@ export AOBA_DEBUG_CI_E2E_TEST=1
 cargo run --package aoba -- --tui
 ```
 
-This will create `/tmp/tui_e2e_status.json` with periodic status dumps (every 500ms).
+This will create `/tmp/ci_tui_status.json` with periodic status dumps (every 500ms).
 
 #### For CLI Subprocesses
 
@@ -37,11 +37,11 @@ Manual CLI invocation:
 cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-test
 ```
 
-This will create `/tmp/cli_e2e__tmp_vcom1.log` with periodic status dumps (note: all non-alphanumeric characters in the port name are converted to underscores for the filename).
+This will create `/tmp/ci_cli_vcom1_status.json` with periodic status dumps (uses port basename, e.g., "/tmp/vcom1" -> "vcom1").
 
 ### Status File Format
 
-#### TUI Status (`/tmp/tui_e2e_status.json`)
+#### TUI Status (`/tmp/ci_tui_status.json`)
 
 ```json
 {
@@ -67,7 +67,7 @@ This will create `/tmp/cli_e2e__tmp_vcom1.log` with periodic status dumps (note:
 }
 ```
 
-#### CLI Status (`/tmp/cli_e2e_{port}.log`)
+#### CLI Status (`/tmp/ci_cli_{port}_status.json`)
 
 ```json
 {

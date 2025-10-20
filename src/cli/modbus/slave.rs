@@ -102,16 +102,14 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         let register_address_copy = register_address;
         let register_length_copy = register_length;
 
-        // Sanitize port name for filename
-        let sanitized_port: String = port_name
-            .chars()
-            .map(|c| match c {
-                'a'..='z' | 'A'..='Z' | '0'..='9' => c,
-                _ => '_',
-            })
-            .collect();
+        // Extract basename from port path (e.g., "/tmp/vcom1" -> "vcom1")
+        let port_basename = std::path::Path::new(&port_name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&port_name);
 
-        let dump_path = std::path::PathBuf::from(format!("/tmp/cli_e2e_{}.log", sanitized_port));
+        let dump_path =
+            std::path::PathBuf::from(format!("/tmp/ci_cli_{}_status.json", port_basename));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -547,15 +545,14 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
         let register_length_copy = register_length;
 
         // Sanitize port name for filename
-        let sanitized_port: String = port_name
-            .chars()
-            .map(|c| match c {
-                'a'..='z' | 'A'..='Z' | '0'..='9' => c,
-                _ => '_',
-            })
-            .collect();
+        // Extract basename from port path (e.g., "/tmp/vcom1" -> "vcom1")
+        let port_basename = std::path::Path::new(&port_name)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&port_name);
 
-        let dump_path = std::path::PathBuf::from(format!("/tmp/cli_e2e_{}.log", sanitized_port));
+        let dump_path =
+            std::path::PathBuf::from(format!("/tmp/ci_cli_{}_status.json", port_basename));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(

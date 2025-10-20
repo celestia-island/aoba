@@ -305,11 +305,38 @@ pub async fn execute_cursor_actions<T: Expect>(
                 let timeout = timeout_secs.unwrap_or(10);
                 let interval = retry_interval_ms.unwrap_or(500);
 
-                check_status_path(path, expected, timeout, interval)
-                    .await
-                    .map_err(|e| anyhow!("Status check failed for '{description}': {e}"))?;
+                match check_status_path(path, expected, timeout, interval).await {
+                    Ok(_) => {
+                        log::info!("✅ Status check passed: {description}");
+                    }
+                    Err(e) => {
+                        log::error!("❌ Status check FAILED for '{description}': {e}");
 
-                log::info!("✅ Status check passed: {description}");
+                        // Capture terminal screen for debugging
+                        log::error!("📺 Capturing terminal screen for debugging...");
+                        match cap
+                            .capture(
+                                session,
+                                &format!("status_check_failed_{}", description.replace(' ', "_")),
+                            )
+                            .await
+                        {
+                            Ok(screen) => {
+                                log::error!("Current terminal content:");
+                                log::error!("\n{}\n", screen);
+                            }
+                            Err(cap_err) => {
+                                log::error!("Failed to capture terminal: {}", cap_err);
+                            }
+                        }
+
+                        // Dump all available status files
+                        log::error!("📋 Dumping all available status files:");
+                        dump_all_status_files();
+
+                        return Err(anyhow!("Status check failed for '{description}': {e}"));
+                    }
+                }
             }
         }
 
@@ -324,6 +351,55 @@ pub async fn execute_cursor_actions<T: Expect>(
 
     log::info!("✓ All cursor actions executed successfully for {session_name}");
     Ok(())
+}
+
+/// Dump all available status files for debugging
+fn dump_all_status_files() {
+    // TUI status
+    log::error!("📄 /tmp/ci_tui_status.json:");
+    match std::fs::read_to_string("/tmp/ci_tui_status.json") {
+        Ok(content) => {
+            log::error!("{}", content);
+        }
+        Err(e) => {
+            log::error!("  (not available: {})", e);
+        }
+    }
+
+    // CLI status files - check for common port names
+    let common_ports = vec!["vcom1", "vcom2", "vcom3", "vcom4"];
+    for port in common_ports {
+        let cli_path = format!("/tmp/ci_cli_{}_status.json", port);
+        log::error!("📄 {}:", cli_path);
+        match std::fs::read_to_string(&cli_path) {
+            Ok(content) => {
+                log::error!("{}", content);
+            }
+            Err(_) => {
+                // Silently skip if file doesn't exist (expected for unused ports)
+            }
+        }
+    }
+
+    // Also try to list all ci_cli_*_status.json files in /tmp
+    match std::fs::read_dir("/tmp") {
+        Ok(entries) => {
+            for entry in entries.flatten() {
+                if let Ok(name) = entry.file_name().into_string() {
+                    if name.starts_with("ci_cli_") && name.ends_with("_status.json") {
+                        let path = entry.path();
+                        log::error!("📄 {}:", path.display());
+                        if let Ok(content) = std::fs::read_to_string(&path) {
+                            log::error!("{}", content);
+                        }
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to read /tmp directory: {}", e);
+        }
+    }
 }
 
 /// Check a JSON path in the TUI status and verify it matches the expected value

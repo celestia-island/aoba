@@ -53,9 +53,9 @@ pub struct DebugModbusSlave {
     pub register_count: usize,
 }
 
-/// Read and parse TUI status from /tmp/tui_e2e_status.json
+/// Read and parse TUI status from /tmp/ci_tui_status.json
 pub fn read_tui_status() -> Result<TuiStatus> {
-    let path = PathBuf::from("/tmp/tui_e2e_status.json");
+    let path = PathBuf::from("/tmp/ci_tui_status.json");
     let content = std::fs::read_to_string(&path)
         .map_err(|err| anyhow!("Failed to read TUI status file {}: {}", path.display(), err))?;
 
@@ -63,18 +63,16 @@ pub fn read_tui_status() -> Result<TuiStatus> {
         .map_err(|err| anyhow!("Failed to parse TUI status JSON: {}", err))
 }
 
-/// Read and parse CLI status from /tmp/cli_e2e_{port}.log
+/// Read and parse CLI status from /tmp/ci_cli_{port}_status.json
+/// Port is the base filename (e.g., "/tmp/vcom1" -> "vcom1")
 pub fn read_cli_status(port: &str) -> Result<CliStatus> {
-    // Sanitize port name for filename
-    let sanitized_port: String = port
-        .chars()
-        .map(|c| match c {
-            'a'..='z' | 'A'..='Z' | '0'..='9' => c,
-            _ => '_',
-        })
-        .collect();
+    // Extract basename from port path (e.g., "/tmp/vcom1" -> "vcom1")
+    let port_basename = std::path::Path::new(port)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(port);
 
-    let path = PathBuf::from(format!("/tmp/cli_e2e_{}.log", sanitized_port));
+    let path = PathBuf::from(format!("/tmp/ci_cli_{}_status.json", port_basename));
     let content = std::fs::read_to_string(&path)
         .map_err(|err| anyhow!("Failed to read CLI status file {}: {}", path.display(), err))?;
 

@@ -35,7 +35,7 @@ pub fn is_debug_dump_enabled() -> bool {
 /// Dumps occur every 500ms.
 ///
 /// # Arguments
-/// * `output_path` - Path to the output file (e.g., "/tmp/tui_e2e.log" or "/tmp/cli_e2e_vcom1.log")
+/// * `output_path` - Path to the output file (e.g., "/tmp/ci_tui_status.json" or "/tmp/ci_cli_vcom1_status.json")
 /// * `shutdown_signal` - Optional Arc<AtomicBool> to signal thread shutdown
 /// * `status_fn` - Function to call to get the status to dump
 ///

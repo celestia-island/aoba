@@ -588,7 +588,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
         crate::protocol::status::debug_dump::enable_debug_dump();
 
         let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let dump_path = std::path::PathBuf::from("/tmp/tui_e2e_status.json");
+        let dump_path = std::path::PathBuf::from("/tmp/ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
         crate::protocol::status::debug_dump::start_status_dump_thread(
