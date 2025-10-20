@@ -178,7 +178,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                 dump_path,
                 None,
                 move || {
-                    crate::cli::status::CliStatus::new_master_provide(
+                    crate::protocol::status::e2e::CliStatus::new_master_provide(
                         port_name.clone(),
                         station_id_copy,
                         reg_mode_copy,

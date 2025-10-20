@@ -31,8 +31,9 @@ pub use ports::{
 pub use snapshot::TerminalCapture;
 pub use status_monitor::{
     get_port_log_count, port_exists_in_tui, read_cli_status, read_tui_status, wait_for_cli_status,
-    wait_for_modbus_config, wait_for_port_enabled, wait_for_tui_page, CliStatus, DebugModbusMaster,
-    DebugModbusSlave, DebugPort, TuiStatus,
+    wait_for_modbus_config, wait_for_port_enabled, wait_for_tui_page, CliMode, CliStatus,
+    PortState as E2EPortState, RegisterMode, TuiModbusMaster, TuiModbusSlave, TuiPage, TuiPort,
+    TuiStatus,
 };
 pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process};
 pub use tui::{

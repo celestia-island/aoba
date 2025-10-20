@@ -2,71 +2,55 @@
 ///
 /// This module provides functions to read and parse status dump JSON files
 /// written by TUI and CLI processes when running in debug CI E2E test mode.
+///
+/// These type definitions match the canonical definitions in src/protocol/status/e2e.rs
+/// to ensure consistency between dumping and parsing.
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
-/// Tagged enum type for page (matches #[serde(tag = "type")])
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PageType {
-    #[serde(rename = "type")]
-    pub page_type: String,
-}
+// ============================================================================
+// TUI Status Structures (matching src/protocol/status/e2e.rs)
+// ============================================================================
 
-/// Tagged enum type for port state (matches #[serde(tag = "type")])
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PortStateType {
-    #[serde(rename = "type")]
-    pub state_type: String,
-}
-
-/// Tagged enum type for CLI mode (matches #[serde(tag = "type")])
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModeType {
-    #[serde(rename = "type")]
-    pub mode_type: String,
-}
-
-/// Tagged enum type for register mode (matches #[serde(tag = "type")])
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterModeType {
-    #[serde(rename = "type")]
-    pub register_mode_type: String,
-}
-
-/// Status dump structure for TUI processes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiStatus {
-    pub ports: Vec<DebugPort>,
-    pub page: PageType,
-    pub timestamp: String,
-}
-
-/// Status dump structure for CLI subprocess
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CliStatus {
-    pub port_name: String,
-    pub station_id: u8,
-    pub register_mode: RegisterModeType,
-    pub register_address: u16,
-    pub register_length: u16,
-    pub mode: ModeType,
+    pub ports: Vec<TuiPort>,
+    pub page: TuiPage,
     pub timestamp: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DebugPort {
+pub struct TuiPort {
     pub name: String,
     pub enabled: bool,
-    pub state: PortStateType,
-    pub modbus_masters: Vec<DebugModbusMaster>,
-    pub modbus_slaves: Vec<DebugModbusSlave>,
+    pub state: PortState,
+    pub modbus_masters: Vec<TuiModbusMaster>,
+    pub modbus_slaves: Vec<TuiModbusSlave>,
     pub log_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DebugModbusMaster {
+#[serde(tag = "type")]
+pub enum PortState {
+    Free,
+    OccupiedByThis,
+    OccupiedByOther,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum TuiPage {
+    Entry,
+    ConfigPanel,
+    ModbusDashboard,
+    LogPanel,
+    About,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TuiModbusMaster {
     pub station_id: u8,
     pub register_type: String,
     pub start_address: u16,
@@ -74,11 +58,43 @@ pub struct DebugModbusMaster {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DebugModbusSlave {
+pub struct TuiModbusSlave {
     pub station_id: u8,
     pub register_type: String,
     pub start_address: u16,
     pub register_count: usize,
+}
+
+// ============================================================================
+// CLI Status Structures (matching src/protocol/status/e2e.rs)
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CliStatus {
+    pub port_name: String,
+    pub station_id: u8,
+    pub register_mode: RegisterMode,
+    pub register_address: u16,
+    pub register_length: u16,
+    pub mode: CliMode,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum CliMode {
+    SlaveListen,
+    SlavePoll,
+    MasterProvide,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum RegisterMode {
+    Coil,
+    Discrete,
+    Input,
+    Holding,
 }
 
 /// Read and parse TUI status from /tmp/ci_tui_status.json
@@ -136,13 +152,14 @@ pub async fn wait_for_tui_page(
         }
 
         if let Ok(status) = read_tui_status() {
-            if status.page.page_type == expected_page {
+            let current_page = format!("{:?}", status.page);
+            if current_page == expected_page {
                 log::info!("✅ TUI reached page '{}'", expected_page);
                 return Ok(status);
             }
             log::debug!(
-                "TUI currently on page '{}', waiting for '{}'",
-                status.page.page_type,
+                "TUI currently on page '{:?}', waiting for '{}'",
+                status.page,
                 expected_page
             );
         }

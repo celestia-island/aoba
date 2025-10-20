@@ -116,7 +116,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
                 dump_path,
                 None,
                 move || {
-                    crate::cli::status::CliStatus::new_slave_listen(
+                    crate::protocol::status::e2e::CliStatus::new_slave_listen(
                         port_name.clone(),
                         station_id_copy,
                         reg_mode_copy,
@@ -559,7 +559,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 dump_path,
                 None,
                 move || {
-                    crate::cli::status::CliStatus::new_slave_poll(
+                    crate::protocol::status::e2e::CliStatus::new_slave_poll(
                         port_name.clone(),
                         station_id_copy,
                         reg_mode_copy,

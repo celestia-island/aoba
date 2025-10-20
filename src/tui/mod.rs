@@ -1,6 +1,5 @@
 pub mod input;
 pub mod persistence;
-pub mod status;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
@@ -595,7 +594,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
             dump_path,
             Some(shutdown_signal_clone),
             || {
-                crate::tui::status::TuiStatus::from_global_status().and_then(|status| {
+                crate::protocol::status::e2e::TuiStatus::from_global_status().and_then(|status| {
                     serde_json::to_string_pretty(&status)
                         .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {}", e))
                 })
