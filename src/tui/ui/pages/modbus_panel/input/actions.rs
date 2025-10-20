@@ -37,7 +37,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port_guard.config;
                             return Ok(stations.len().saturating_sub(1));
@@ -72,7 +72,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode, stations: _ } =
                                 &port_guard.config;
                             return Ok(if mode.is_master() { 0 } else { 1 });
@@ -97,7 +97,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port_guard.config;
                             let all_items: Vec<_> = stations.iter().collect();
@@ -148,7 +148,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 // Get the register mode to determine behavior
                 let register_mode = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        let port_guard = port_entry.read();
+                        let port = port_entry;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_guard.config;
                         let all_items: Vec<_> = stations.iter().collect();
@@ -340,7 +340,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         let (should_restart, should_auto_enable, has_stations) = if let Some(name) = &port_name {
             let port_data = status.ports.map.get(name);
             let port_state = port_data.as_ref().map(|p| {
-                let port = p.read();
+                let port = p;
                 log::info!("🟦 Port state: {:?}", port.state);
                 port.state.clone()
             });
@@ -349,7 +349,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
             let has_stations = port_data
                 .as_ref()
                 .map(|p| {
-                    let port = p.read();
+                    let port = p;
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
                     let count = stations.len();
                     log::debug!("🟦 Port {} has {} stations", name, count);
@@ -532,7 +532,7 @@ fn save_current_configs() -> Result<()> {
     let configs: HashMap<String, types::port::PortConfig> = read_status(|status| {
         let mut map = HashMap::new();
         for (name, port_arc) in &status.ports.map {
-            let port = port_arc.read();
+            let port = port_arc;
             // Only save Modbus ports with stations
             let types::port::PortConfig::Modbus { stations, .. } = &port.config;
             if !stations.is_empty() {

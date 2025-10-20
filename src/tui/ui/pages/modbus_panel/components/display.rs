@@ -178,7 +178,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
         if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
-                    let port_guard = port_entry.read();
+                    let port = port_entry;
                     match &port_guard.config {
                         types::port::PortConfig::Modbus { mode: _, stations } => {
                             return Ok(!stations.is_empty());
@@ -194,7 +194,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     }
 
     if let Some(port_entry) = &port_data {
-        let port_data_guard = port_entry.read();
+        let port_data = port_entry;
         let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
         let all_items = stations.clone();
 

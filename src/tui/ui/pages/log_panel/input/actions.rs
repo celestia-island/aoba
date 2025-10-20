@@ -46,7 +46,7 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
                     // Get the current log count and set to last item
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port) = status.ports.map.get(port_name) {
-                            let port_data = port.read();
+                            let port_data = port;
                             let log_count = port_data.logs.len();
                             if log_count > 0 {
                                 *selected_item = Some(log_count - 1);

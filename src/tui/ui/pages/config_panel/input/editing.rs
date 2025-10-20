@@ -287,7 +287,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 // Check if this is a Modbus port with empty configuration
                 let is_modbus_empty = read_status(|status| {
                     if let Some(port) = status.ports.map.get(&port_name) {
-                        let port_data = port.read();
+                        let port_data = port;
                         let types::port::PortConfig::Modbus { stations, .. } = &port_data.config;
                         log::debug!(
                             "🔍 Checking port {}: {} stations configured",

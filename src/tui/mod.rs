@@ -1221,15 +1221,10 @@ fn run_core_thread(
             Ok(())
         })?;
 
-        // Handle modbus communication at most once per 10ms to ensure very responsive behavior
-        // This high frequency is critical for TUI Master mode to respond quickly to CLI slave requests
-        // NOTE: The daemon handles Runtime-owned ports (legacy). TUI-spawned CLI subprocesses
-        // communicate via IPC instead, but the daemon is still needed for backward compatibility.
-        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_millis(10) {
-            // Update the timestamp first to ensure we don't re-enter while still running
-            last_modbus_run = std::time::Instant::now();
-            crate::protocol::daemon::handle_modbus_communication()?;
-        }
+        // Modbus communication is now handled entirely by CLI subprocesses via IPC.
+        // The daemon is no longer used by TUI since we removed PortOwner::Runtime support.
+        // TUI spawns CLI subprocesses which handle all port communication independently.
+        // The IPC messages are polled above in poll_ipc_messages().
 
         core_tx
             .send(CoreToUi::Tick)
@@ -1311,7 +1306,7 @@ pub fn log_state_snapshot() -> Result<()> {
         let mut port_states = vec![];
         for port_name in &status.ports.order {
             if let Some(port_arc) = status.ports.map.get(port_name) {
-                let port = port_arc.read();
+                let port = port_arc;
                 let state_str = match &port.state {
                     PortState::Free => "Free",
                     PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",

@@ -54,7 +54,7 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
             };
             if let Some(port_name) = port_name_opt {
                 if let Some(port_entry) = status.ports.map.get(&port_name) {
-                    let port_guard = port_entry.read();
+                    let port = port_entry;
                     return Ok(port_guard.config_modified);
                 }
             }
