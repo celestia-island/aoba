@@ -101,7 +101,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     let actions = vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 3, // Navigate to ModBus Master/Slave Set
+            count: 2, // Navigate to ProtocolConfig (ModBus Master/Slave Set)
         },
         CursorAction::Sleep { ms: 300 },
         // Debug: Verify cursor position before entering panel

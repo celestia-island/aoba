@@ -117,6 +117,42 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     )
     .await?;
 
+    // Step 4.5: Change Connection Mode from Master to Slave
+    log::info!("🧪 Step 4.5: Change Connection Mode to Slave");
+    let actions = vec![
+        // Navigate to ModbusMode (Connection Mode)
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        // Press Enter to enter edit mode
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        // Press Right to change from Master to Slave
+        CursorAction::PressArrow {
+            direction: ArrowKey::Right,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        // Press Enter to confirm the change
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 500 },
+        // Navigate back to AddLine (Create Station)
+        CursorAction::PressArrow {
+            direction: ArrowKey::Up,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "set_slave_mode",
+    )
+    .await?;
+
     // Configure as Slave - create station and configure
     log::info!("🧪 Step 5: Configure TUI as Slave (client/poll mode)");
     let actions = vec![
@@ -178,7 +214,12 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         log::info!("   Generated test data: {:?}", random_data);
 
         // Write data to CLI master's data source file
-        let data_file = format!("/tmp/master_data_slave_test_{}.jsonl", port1);
+        // Extract port basename to avoid path issues (e.g., "/tmp/vcom1" -> "vcom1")
+        let port_basename = std::path::Path::new(port1)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("port");
+        let data_file = format!("/tmp/master_data_slave_test_{}.jsonl", port_basename);
         let mut file = File::create(&data_file)?;
         writeln!(
             file,
