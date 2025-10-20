@@ -19,6 +19,62 @@ use crate::{
 };
 
 pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
+    // Check for Ctrl+S first (before other handlers)
+    // This allows saving configuration even when in edit mode
+    if matches!(key.code, KeyCode::Char('s') | KeyCode::Char('S'))
+        && key
+            .modifiers
+            .contains(crossterm::event::KeyModifiers::CONTROL)
+    {
+        log::info!("💾 Ctrl+S pressed in edit mode - committing changes and saving configuration");
+        
+        // First, commit any pending edits
+        let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
+        let has_pending_data = !matches!(input_raw_buffer, types::ui::InputRawBuffer::None);
+        
+        if has_pending_data {
+            log::info!("💾 Committing pending edits before save");
+            let current_cursor = read_status(|status| {
+                if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    Ok(*cursor)
+                } else {
+                    Ok(types::cursor::ModbusDashboardCursor::AddLine)
+                }
+            })?;
+            
+            let mut maybe_restart: Option<String> = None;
+            match &input_raw_buffer {
+                types::ui::InputRawBuffer::Index(selected_index) => {
+                    log::info!("💾 Committing selector edit, index={selected_index}");
+                    maybe_restart = commit_selector_edit(current_cursor, *selected_index)?;
+                }
+                types::ui::InputRawBuffer::String { bytes, .. } => {
+                    let value = String::from_utf8_lossy(bytes).to_string();
+                    log::info!("💾 Committing text edit, value='{value}'");
+                    commit_text_edit(current_cursor, value, bus)?;
+                }
+                _ => {}
+            }
+            
+            // If a restart is needed, cancel it - the save will handle the restart
+            if let Some(_port_name) = maybe_restart {
+                log::info!("💾 Deferred port restart until after save");
+            }
+        }
+        
+        // Clear edit mode
+        write_status(|status| {
+            status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
+            Ok(())
+        })?;
+        
+        // Delegate to navigation handler's save config function
+        // We need to call the same save logic as non-edit mode Ctrl+S
+        super::navigation::handle_navigation_input(key, bus)?;
+        
+        return Ok(());
+    }
+    
     match key.code {
         KeyCode::Enter => {
             let current_cursor = read_status(|status| {
