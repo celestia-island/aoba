@@ -9,7 +9,7 @@ use ci_utils::{
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
-    snapshot::TerminalCapture,
+    snapshot::{TerminalCapture, TerminalSize},
     terminal::spawn_expect_process,
     tui::update_tui_registers,
 };

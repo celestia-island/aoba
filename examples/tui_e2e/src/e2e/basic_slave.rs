@@ -13,6 +13,7 @@ use ci_utils::{
     key_input::ArrowKey,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     terminal::{build_debug_bin, spawn_expect_process},
+    tui::enter_modbus_panel,
 };
 use serde_json::json;
 

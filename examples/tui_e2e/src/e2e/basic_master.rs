@@ -10,7 +10,7 @@ use ci_utils::{
     helpers::sleep_seconds,
     key_input::ArrowKey,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
-    snapshot::TerminalCapture,
+    snapshot::{TerminalCapture, TerminalSize},
     terminal::{build_debug_bin, spawn_expect_process},
 };
 use serde_json::json;
