@@ -492,7 +492,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             log::warn!("CLI[{port_name}]: {msg}");
             append_port_log(port_name, msg.clone());
             self::status::write_status(|status| {
-                status.temporarily.error = Some(types::ErrorInfo {
+                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                     message: msg.clone(),
                     timestamp: chrono::Local::now(),
                 });
@@ -1071,7 +1071,7 @@ fn run_core_thread(
                                         );
                                         append_port_log(&port_name, msg.clone());
                                         self::status::write_status(|status| {
-                                            status.temporarily.error = Some(types::ErrorInfo {
+                                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                                 message: msg.clone(),
                                                 timestamp: chrono::Local::now(),
                                             });
@@ -1183,7 +1183,7 @@ fn run_core_thread(
                                         );
                                         append_port_log(&port_name, msg.clone());
                                         self::status::write_status(|status| {
-                                            status.temporarily.error = Some(types::ErrorInfo {
+                                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                                 message: msg.clone(),
                                                 timestamp: chrono::Local::now(),
                                             });
@@ -1287,7 +1287,7 @@ fn run_core_thread(
                             );
                         } else if let Some(err) = spawn_err {
                             self::status::write_status(|status| {
-                                status.temporarily.error = Some(types::ErrorInfo {
+                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                                     message: format!("Failed to start runtime: {err}"),
                                     timestamp: chrono::Local::now(),
                                 });
@@ -1484,17 +1484,17 @@ pub fn log_state_snapshot() -> Result<()> {
         };
 
         let cursor_info = match &status.page {
-            crate::protocol::status::types::Page::Entry { cursor, .. } => {
+            crate::tui::status::Page::Entry { cursor, .. } => {
                 if let Some(c) = cursor {
                     format!("{c:?}")
                 } else {
                     "None".to_string()
                 }
             }
-            crate::protocol::status::types::Page::ConfigPanel { cursor, .. } => {
+            crate::tui::status::Page::ConfigPanel { cursor, .. } => {
                 format!("{cursor:?}")
             }
-            crate::protocol::status::types::Page::ModbusDashboard { cursor, .. } => {
+            crate::tui::status::Page::ModbusDashboard { cursor, .. } => {
                 format!("{cursor:?}")
             }
             _ => "N/A".to_string(),

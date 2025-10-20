@@ -450,7 +450,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             if !has_stations {
                 // Show error if no stations configured
                 write_status(|status| {
-                    status.temporarily.error = Some(crate::protocol::status::types::ErrorInfo {
+                    status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                         message: lang().index.err_modbus_config_empty.clone(),
                         timestamp: Local::now(),
                     });

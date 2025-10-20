@@ -8,22 +8,24 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     i18n::lang,
     protocol::status::{
-        read_status,
         types::{
             self,
             port::{PortData, PortState},
         },
         with_port_read,
     },
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
+        },
     },
 };
 
 use anyhow::Result;
 
 /// Helper function to derive selection from page state (entry page specific)
-pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> Result<usize> {
+pub fn derive_selection_from_page(page: &crate::tui::status::Page, ports_order: &[String]) -> Result<usize> {
     let res = match page {
         crate::tui::status::Page::Entry { cursor, .. } => match cursor {
             Some(types::cursor::EntryCursor::Com { index }) => *index,

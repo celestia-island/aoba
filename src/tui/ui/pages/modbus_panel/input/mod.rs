@@ -7,8 +7,11 @@ use anyhow::Result;
 use crossterm::event::KeyEvent;
 
 use crate::{
-    protocol::status::{ types},
-    tui::utils::bus::Bus,
+    protocol::status::types,
+    tui::{
+        status::read_status,
+        utils::bus::Bus,
+    },
 };
 
 use editing::handle_editing_input;

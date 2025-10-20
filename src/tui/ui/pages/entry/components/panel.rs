@@ -8,13 +8,15 @@ use unicode_width::UnicodeWidthStr;
 use crate::{
     i18n::lang,
     protocol::status::{
-        read_status,
         types::{self, cursor::EntryCursor},
         with_port_read,
     },
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph,
-        pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+        },
     },
 };
 

@@ -4,8 +4,9 @@ use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use super::scroll::{handle_scroll_down, handle_scroll_up};
 use crate::{
-    protocol::status::{ types},
+    protocol::status::types,
     tui::{
+        status::{read_status, write_status},
         ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
         utils::bus::Bus,
     },

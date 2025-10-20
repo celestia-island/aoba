@@ -302,7 +302,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 if is_modbus_empty {
                     log::warn!("⚠️  Cannot enable Modbus port with empty configuration");
                     write_status(|status| {
-                        status.temporarily.error = Some(types::ErrorInfo {
+                        status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                             message: lang().index.err_modbus_config_empty.clone(),
                             timestamp: chrono::Local::now(),
                         });

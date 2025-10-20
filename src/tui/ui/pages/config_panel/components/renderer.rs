@@ -5,10 +5,13 @@ use ratatui::{prelude::*, text::Line};
 
 use crate::{
     i18n::lang,
-    protocol::status::{ types, with_port_read},
-    tui::ui::components::kv_line::render_kv_line,
-    tui::ui::components::styled_label::{
-        input_spans, link_spans, selector_spans, switch_spans, TextState,
+    protocol::status::{types, with_port_read},
+    tui::{
+        status::read_status,
+        ui::components::{
+            kv_line::render_kv_line,
+            styled_label::{input_spans, link_spans, selector_spans, switch_spans, TextState},
+        },
     },
 };
 

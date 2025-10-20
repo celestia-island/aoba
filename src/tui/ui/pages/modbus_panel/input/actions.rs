@@ -2,14 +2,16 @@ use anyhow::{anyhow, Result};
 
 use crate::{
     protocol::status::{
-        read_status,
         types::{
             self,
             port::{PortOwner, PortState, PortSubprocessMode},
         },
         with_port_write,
     },
-    tui::utils::bus::{Bus, UiToCore},
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::{Bus, UiToCore},
+    },
 };
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {

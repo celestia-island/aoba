@@ -4,7 +4,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     protocol::status::{
-        read_status,
         types::{
             self,
             modbus::{ModbusConnectionMode, RegisterMode},
@@ -13,6 +12,7 @@ use crate::{
         with_port_write,
     },
     tui::{
+        status::{read_status, write_status},
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{Bus, UiToCore},
     },

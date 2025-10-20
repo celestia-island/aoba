@@ -5,16 +5,18 @@ use super::table::render_register_row_line;
 use crate::{
     i18n::lang,
     protocol::status::{
-        read_status,
         types::{
             self,
             modbus::{ModbusConnectionMode, RegisterMode},
         },
         with_port_read,
     },
-    tui::ui::components::{
-        kv_line::render_kv_line,
-        styled_label::{input_spans, selector_spans, TextState},
+    tui::{
+        status::read_status,
+        ui::components::{
+            kv_line::render_kv_line,
+            styled_label::{input_spans, selector_spans, TextState},
+        },
     },
 };
 

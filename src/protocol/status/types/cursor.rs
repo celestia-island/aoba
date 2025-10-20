@@ -342,7 +342,7 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
     let mut items_vec: Vec<crate::protocol::status::types::modbus::ModbusRegisterItem> = Vec::new();
 
     let items_opt = crate::tui::status::read_status(|status| {
-        if let crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. } =
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
             &status.page
         {
             let port_name = status.ports.order.get(*selected_port).cloned();

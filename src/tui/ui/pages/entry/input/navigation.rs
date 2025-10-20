@@ -3,12 +3,9 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{
-        read_status,
-        types::{self, cursor, cursor::Cursor, Page},
-        write_status,
-    },
+    protocol::status::types::{self, cursor, cursor::Cursor},
     tui::{
+        status::{read_status, write_status, Page},
         ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
         utils::bus::Bus,
     },

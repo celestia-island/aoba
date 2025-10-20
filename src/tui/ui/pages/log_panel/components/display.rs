@@ -9,7 +9,8 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{ types, with_port_read},
+    protocol::status::{types, with_port_read},
+    tui::status::read_status,
 };
 
 /// Extract log data from current page state
