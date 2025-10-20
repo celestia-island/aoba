@@ -65,12 +65,30 @@ impl TerminalCapture {
     /// Read available bytes from the expectrl session, feed them to the
     /// internal vt100 parser (so cursor moves / clears are applied), log a
     /// snapshot, and return the current rendered screen contents.
+    /// 
+    /// If `log_content` is false, only logs the capture point but not the screen content.
+    /// This reduces log verbosity during successful test runs.
     pub async fn capture(
         &mut self,
         session: &mut impl Expect,
         step_description: &str,
     ) -> Result<String> {
-        log::info!("📺 Screen capture point: {step_description}");
+        self.capture_with_logging(session, step_description, true).await
+    }
+
+    /// Capture screen content with optional logging of the content itself.
+    /// Set `log_content` to false to reduce log verbosity during successful operations.
+    pub async fn capture_with_logging(
+        &mut self,
+        session: &mut impl Expect,
+        step_description: &str,
+        log_content: bool,
+    ) -> Result<String> {
+        if log_content {
+            log::info!("📺 Screen capture point: {step_description}");
+        } else {
+            log::debug!("📺 Screen capture point: {step_description}");
+        }
 
         // Capture the most recent frame we have; this may be empty on the first call.
         let mut out = self.parser.screen().contents();
@@ -119,8 +137,10 @@ impl TerminalCapture {
             }
         }
 
-        // Log as a single multi-line string to preserve CI log formatting
-        log::info!("\n{out}\n");
+        // Log as a single multi-line string to preserve CI log formatting (only if requested)
+        if log_content {
+            log::info!("\n{out}\n");
+        }
 
         // Add a small delay after capture to let the terminal stabilize
         sleep_a_while().await;
