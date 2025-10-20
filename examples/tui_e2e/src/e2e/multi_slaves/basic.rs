@@ -117,28 +117,38 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
         log::info!("📝 Updating Slave {} data: {:?}", i + 1, slave_data[i]);
         update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
 
-        // Save this slave's configuration with Ctrl+S to commit changes to IPC
-        log::info!("💾 Saving Slave {} configuration with Ctrl+S...", i + 1);
-        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-        let actions = vec![
-            CursorAction::PressCtrlS,
-            CursorAction::Sleep { ms: 1000 }, // Wait for save operation
-        ];
-        execute_cursor_actions(
-            &mut tui_session,
-            &mut tui_cap,
-            &actions,
-            &format!("save_slave_{}_config", i + 1),
-        )
-        .await?;
-
-        // Wait for register updates to be saved and IPC to propagate before configuring next slave
-        log::info!(
-            "⏱️ Waiting for Slave {} updates to be fully saved and propagated...",
-            i + 1
-        );
-        tokio::time::sleep(Duration::from_millis(1500)).await;
+        log::info!("✅ Slave {} configured", i + 1);
     }
+
+    // All Slaves configured, now save once with Ctrl+S to enable port and commit all changes
+    // First, navigate to the top of the panel to ensure we're not in edit mode
+    log::info!("📍 Navigating to top of panel before saving...");
+    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+    use ci_utils::key_input::ArrowKey;
+    let nav_actions = vec![
+        CursorAction::PressCtrlPageUp, // Jump to top (AddLine / Create Station)
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &nav_actions,
+        "nav_to_top_before_save",
+    )
+    .await?;
+    
+    log::info!("💾 Saving all slave configurations with Ctrl+S to enable port...");
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 5000 }, // Increased wait time for port to enable and stabilize
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_all_slaves_and_enable",
+    )
+    .await?;
 
     // After configuring all Slaves, verify port is enabled
     log::info!("✅ All Slaves configured and saved, verifying port is enabled...");
