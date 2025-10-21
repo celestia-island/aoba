@@ -3,7 +3,6 @@ use anyhow::Result;
 use crate::{
     protocol::status::{
         types::{self, cursor::Cursor},
-        with_port_read,
     },
     tui::status::write_status,
 };
@@ -22,12 +21,7 @@ pub fn sanitize_configpanel_cursor() -> Result<()> {
         {
             let occupied = if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(val) = with_port_read(port, |port| port.state.owner().is_some()) {
-                        val
-                    } else {
-                        log::warn!("Failed to acquire read lock for port {port_name} while sanitizing the config panel cursor");
-                        false
-                    }
+                    port.state.is_occupied_by_this()
                 } else {
                     false
                 }
