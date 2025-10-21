@@ -1,24 +1,8 @@
 use crate::protocol::status::types::port::PortData;
-use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::sync::Arc;
 
-/// Helper to read port data with a read lock
-pub fn with_port_read<T, F>(port: &Arc<RwLock<PortData>>, f: F) -> Option<T>
-where
-    F: FnOnce(&RwLockReadGuard<PortData>) -> T,
-{
-    let guard = port.read();
-    Some(f(&guard))
-}
-
-/// Helper to write port data with a write lock
-pub fn with_port_write<T, F>(port: &Arc<RwLock<PortData>>, f: F) -> Option<T>
-where
-    F: FnOnce(&mut RwLockWriteGuard<PortData>) -> T,
-{
-    let mut guard = port.write();
-    Some(f(&mut guard))
-}
+// Note: with_port_read and with_port_write have been removed since PortData
+// is now stored directly in the TUI status tree without Arc<RwLock<>>.
+// Direct access to PortData is now possible through the status tree.
 
 /// Convert current port stations to StationConfig format for IPC
 /// This is useful when TUI needs to send the current configuration to CLI

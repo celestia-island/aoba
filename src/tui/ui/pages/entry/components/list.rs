@@ -12,7 +12,6 @@ use crate::{
             self,
             port::{PortData, PortState},
         },
-        with_port_read,
     },
     tui::{
         status::read_status,
@@ -51,23 +50,13 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
 
         for (i, name) in status.ports.order.iter().enumerate() {
             let (name, state) = if let Some(port) = status.ports.map.get(name) {
-                if let Some((pn, st)) =
-                    with_port_read(port, |port| (port.port_name.clone(), port.state.clone()))
-                {
-                    (pn, st)
-                } else {
-                    log::warn!("Failed to acquire read lock for port {name} while rendering the ports list");
-                    (
-                        PortData::default().port_name.clone(),
-                        PortData::default().state.clone(),
-                    )
-                }
+                (port.port_name.clone(), port.state.clone())
             } else {
                 (default_pd.port_name.clone(), default_pd.state.clone())
             };
             let (state_text, state_style) = match state {
                 PortState::Free => (lang().index.port_state_free.clone(), Style::default()),
-                PortState::OccupiedByThis { owner: _ } => (
+                PortState::OccupiedByThis => (
                     lang().index.port_state_owned.clone(),
                     Style::default().fg(Color::Green),
                 ),

@@ -53,9 +53,8 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
                 _ => None,
             };
             if let Some(port_name) = port_name_opt {
-                if let Some(port_entry) = status.ports.map.get(&port_name) {
-                    let port_guard = port_entry.read();
-                    return Ok(port_guard.config_modified);
+                if let Some(port) = status.ports.map.get(&port_name) {
+                    return Ok(port.config_modified);
                 }
             }
             Ok(false)

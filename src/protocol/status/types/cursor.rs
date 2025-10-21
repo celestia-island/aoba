@@ -355,10 +355,9 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
     .flatten();
 
     if let Some(port_name) = items_opt {
-        if let Ok(Some(port_entry)) =
+        if let Ok(Some(port_data)) =
             crate::tui::status::read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
-            let port_data = port_entry.read();
             let crate::protocol::status::types::port::PortConfig::Modbus { mode: _, stations } =
                 &port_data.config;
             for it in stations.iter() {

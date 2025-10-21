@@ -9,7 +9,6 @@ use crate::{
     i18n::lang,
     protocol::status::{
         types::{self, cursor::EntryCursor},
-        with_port_read,
     },
     tui::{
         status::read_status,
@@ -138,7 +137,7 @@ fn get_refresh_content() -> Vec<Line<'static>> {
 /// serial parameters in a compact layout.
 fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     // Fetch the port Arc once under the status read lock to minimize lock churn
-    let port_arc_opt: Option<std::sync::Arc<parking_lot::RwLock<types::port::PortData>>> =
+    let port_opt =
         read_status(|s| {
             Ok(s.ports
                 .order
@@ -147,28 +146,21 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
         })
         .unwrap_or(None);
 
-    if let Some(port_arc) = port_arc_opt {
-        if let Some((_pn, state, cfg_opt)) = with_port_read(&port_arc, |port| {
-            let pn = port.port_name.clone();
-            let st = port.state.clone();
-            let cfg = match &port.config {
-                types::port::PortConfig::Modbus { .. } => port
-                    .state
-                    .runtime_handle()
-                    .map(|runtime| runtime.current_cfg.clone()),
-            };
-            (pn, st, cfg)
-        }) {
-            let mut lines: Vec<Line<'static>> = Vec::new();
+    if let Some(port) = port_opt {
+        let pn = port.port_name.clone();
+        let st = port.state.clone();
+        let cfg = &port.serial_config;
+        
+        let mut lines: Vec<Line<'static>> = Vec::new();
 
-            let enabled = matches!(state, types::port::PortState::OccupiedByThis { owner: _ });
-            let val_enabled = lang().protocol.common.port_enabled.clone();
-            let val_disabled = lang().protocol.common.port_disabled.clone();
-            let enable_text = if enabled { val_enabled } else { val_disabled };
-            lines.push(Line::from(Span::raw(format!("{} {}", "", enable_text))));
+        let enabled = matches!(st, types::port::PortState::OccupiedByThis);
+        let val_enabled = lang().protocol.common.port_enabled.clone();
+        let val_disabled = lang().protocol.common.port_disabled.clone();
+        let enable_text = if enabled { val_enabled } else { val_disabled };
+        lines.push(Line::from(Span::raw(format!("{} {}", "", enable_text))));
 
-            if let Some(cfg) = cfg_opt {
-                let sep_len = 48usize;
+        {
+            let sep_len = 48usize;
                 let sep_str: String = "─".repeat(sep_len);
                 lines.push(Line::from(Span::styled(
                     sep_str,
@@ -188,7 +180,11 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
                     ),
                     (
                         lang().protocol.common.label_parity.as_str().to_string(),
-                        format!("{:?}", cfg.parity),
+                        match cfg.parity {
+                            types::port::SerialParity::None => "None".to_string(),
+                            types::port::SerialParity::Odd => "Odd".to_string(),
+                            types::port::SerialParity::Even => "Even".to_string(),
+                        },
                     ),
                     (
                         lang().protocol.common.label_stop_bits.as_str().to_string(),
@@ -215,7 +211,6 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
             }
 
             return lines;
-        }
     }
 
     vec![Line::from(lang().index.invalid_port_selection.as_str())]

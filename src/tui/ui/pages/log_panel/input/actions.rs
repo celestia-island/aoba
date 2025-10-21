@@ -46,7 +46,7 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
                     // Get the current log count and set to last item
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port) = status.ports.map.get(port_name) {
-                            let port_data = port.read();
+                            let port_data = port;
                             let log_count = port_data.logs.len();
                             if log_count > 0 {
                                 *selected_item = Some(log_count - 1);
@@ -73,9 +73,8 @@ pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
     write_status(|status| {
         if let crate::tui::status::Page::LogPanel { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
-                if let Some(port) = status.ports.map.get(port_name) {
-                    let mut port_data = port.write();
-                    port_data.logs.clear();
+                if let Some(port) = status.ports.map.get_mut(port_name) {
+                    port.logs.clear();
                     log::info!("Cleared logs for port: {port_name}");
                 }
             }

@@ -10,7 +10,6 @@ use crate::{
     i18n::lang,
     protocol::status::{
         types::{self, port::PortStatusIndicator},
-        with_port_read,
     },
     tui::status::read_status,
 };
@@ -23,7 +22,7 @@ fn get_port_name(selected_port: usize) -> Result<String> {
                 .ports
                 .map
                 .get(&name)
-                .and_then(|port| with_port_read(port, |port| port.port_name.clone()))
+                .map(|port| port.port_name.clone())
                 .unwrap_or_else(|| format!("COM{selected_port}")))
         })?
     } else {
@@ -37,8 +36,8 @@ fn get_port_status_indicator(selected_port: usize) -> Result<Option<PortStatusIn
     read_status(|status| {
         let port_name_opt = status.ports.order.get(selected_port).cloned();
         if let Some(port_name) = port_name_opt {
-            if let Some(port_entry) = status.ports.map.get(&port_name) {
-                return Ok(with_port_read(port_entry, |port| port.status_indicator.clone()));
+            if let Some(port) = status.ports.map.get(&port_name) {
+                return Ok(Some(port.status_indicator.clone()));
             }
         }
         Ok(None)

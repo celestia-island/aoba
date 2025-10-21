@@ -1,9 +1,7 @@
 use anyhow::Result;
-use parking_lot::RwLock;
-use std::sync::Arc;
 
 use crate::{
-    protocol::status::{types, with_port_read},
+    protocol::status::types,
     tui::status::read_status,
 };
 
@@ -16,46 +14,33 @@ pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {
 }
 
 /// Helper: whether a port is occupied by this instance
-pub fn is_port_occupied_by_this(port_data: Option<&Arc<RwLock<types::port::PortData>>>) -> bool {
+pub fn is_port_occupied_by_this(port_data: Option<&types::port::PortData>) -> bool {
     if let Some(port) = port_data {
-        if let Some(v) = with_port_read(port, |port| port.state.owner().is_some()) {
-            return v;
-        }
+        return port.state.is_occupied_by_this();
     }
     false
 }
 
 /// Get serial parameter value by cursor type
 pub fn get_serial_param_value_by_cursor(
-    port_data: Option<&Arc<RwLock<types::port::PortData>>>,
+    port_data: Option<&types::port::PortData>,
     cursor_type: types::cursor::ConfigPanelCursor,
 ) -> String {
     if let Some(port) = port_data {
-        if let Some(s) = with_port_read(port, |port| {
-            if let Some(runtime) = port.state.runtime_handle() {
-                match cursor_type {
-                    types::cursor::ConfigPanelCursor::BaudRate => {
-                        return runtime.current_cfg.baud.to_string()
-                    }
-                    types::cursor::ConfigPanelCursor::DataBits { .. } => {
-                        return runtime.current_cfg.data_bits.to_string()
-                    }
-                    types::cursor::ConfigPanelCursor::Parity => {
-                        return format!("{:?}", runtime.current_cfg.parity)
-                    }
-                    types::cursor::ConfigPanelCursor::StopBits => {
-                        return runtime.current_cfg.stop_bits.to_string()
-                    }
-                    _ => return "??".to_string(),
-                }
+        match cursor_type {
+            types::cursor::ConfigPanelCursor::BaudRate => {
+                return port.serial_config.baud.to_string()
             }
-            "??".to_string()
-        }) {
-            return s;
-        } else {
-            log::warn!(
-                "Failed to acquire read lock for port while getting serial parameter by cursor"
-            );
+            types::cursor::ConfigPanelCursor::DataBits { .. } => {
+                return port.serial_config.data_bits.to_string()
+            }
+            types::cursor::ConfigPanelCursor::Parity => {
+                return format!("{:?}", port.serial_config.parity)
+            }
+            types::cursor::ConfigPanelCursor::StopBits => {
+                return port.serial_config.stop_bits.to_string()
+            }
+            _ => return "??".to_string(),
         }
     }
 

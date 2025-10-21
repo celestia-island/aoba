@@ -1,6 +1,34 @@
 use chrono::{DateTime, Local};
 
-use crate::protocol::{runtime::PortRuntimeHandle, status::types, tty::PortExtra};
+use crate::protocol::{status::types, tty::PortExtra};
+
+/// Serial port configuration (baud rate, data bits, stop bits, parity)
+/// This replaces the runtime SerialConfig that was in the disabled runtime module
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerialConfig {
+    pub baud: u32,
+    pub data_bits: u8,
+    pub stop_bits: u8,
+    pub parity: SerialParity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialParity {
+    None,
+    Odd,
+    Even,
+}
+
+impl Default for SerialConfig {
+    fn default() -> Self {
+        Self {
+            baud: 9600,
+            data_bits: 8,
+            stop_bits: 1,
+            parity: SerialParity::None,
+        }
+    }
+}
 
 /// A single log entry associated with a specific port.
 #[derive(Debug, Clone)]
@@ -35,12 +63,6 @@ pub enum PortStatusIndicator {
 }
 
 #[derive(Debug, Clone)]
-pub enum PortOwner {
-    Runtime(PortRuntimeHandle),
-    CliSubprocess(PortSubprocessInfo),
-}
-
-#[derive(Debug, Clone)]
 pub struct PortSubprocessInfo {
     pub mode: PortSubprocessMode,
     pub ipc_socket_name: String,
@@ -58,41 +80,21 @@ pub enum PortSubprocessMode {
 #[derive(Debug, Clone)]
 pub enum PortState {
     Free,
-    OccupiedByThis { owner: PortOwner },
+    OccupiedByThis,
     OccupiedByOther,
 }
 
 impl PortState {
-    pub fn owner(&self) -> Option<&PortOwner> {
-        match self {
-            PortState::OccupiedByThis { owner } => Some(owner),
-            _ => None,
-        }
+    pub fn is_occupied_by_this(&self) -> bool {
+        matches!(self, PortState::OccupiedByThis)
     }
 
-    pub fn owner_mut(&mut self) -> Option<&mut PortOwner> {
-        match self {
-            PortState::OccupiedByThis { owner } => Some(owner),
-            _ => None,
-        }
+    pub fn is_free(&self) -> bool {
+        matches!(self, PortState::Free)
     }
 
-    pub fn runtime_handle(&self) -> Option<&PortRuntimeHandle> {
-        match self {
-            PortState::OccupiedByThis {
-                owner: PortOwner::Runtime(handle),
-            } => Some(handle),
-            _ => None,
-        }
-    }
-
-    pub fn runtime_handle_mut(&mut self) -> Option<&mut PortRuntimeHandle> {
-        match self {
-            PortState::OccupiedByThis {
-                owner: PortOwner::Runtime(handle),
-            } => Some(handle),
-            _ => None,
-        }
+    pub fn is_occupied_by_other(&self) -> bool {
+        matches!(self, PortState::OccupiedByOther)
     }
 }
 
@@ -102,6 +104,13 @@ pub struct PortData {
     pub port_type: String,
     pub extra: PortExtra,
     pub state: PortState,
+    
+    /// CLI subprocess info (only present when state is OccupiedByThis)
+    pub subprocess_info: Option<PortSubprocessInfo>,
+    
+    /// Serial port configuration (baud rate, data bits, stop bits, parity)
+    pub serial_config: SerialConfig,
+    
     pub config: PortConfig,
 
     pub logs: Vec<PortLogEntry>,
@@ -121,6 +130,8 @@ impl Default for PortData {
             port_type: String::new(),
             extra: Default::default(),
             state: PortState::Free,
+            subprocess_info: None,
+            serial_config: SerialConfig::default(),
             config: PortConfig::default(),
             logs: Vec::new(),
             log_auto_scroll: true,
