@@ -60,60 +60,55 @@ impl TuiStatus {
     pub fn from_global_status() -> anyhow::Result<Self> {
         use crate::protocol::status::{
             types::port::PortState as ProtocolPortState,
-            with_port_read,
         };
 
         super::read_status(|status| {
             let mut ports = Vec::new();
 
             for port_name in &status.ports.order {
-                if let Some(port_arc) = status.ports.map.get(port_name) {
-                    if let Some(Ok(port_data)) = with_port_read(port_arc, |port| {
-                        let enabled = matches!(port.state, ProtocolPortState::OccupiedByThis { .. });
-                        let state = match &port.state {
-                            ProtocolPortState::Free => crate::tui::status::serializable::PortState::Free,
-                            ProtocolPortState::OccupiedByThis { .. } => {
-                                crate::tui::status::serializable::PortState::OccupiedByThis
-                            }
-                            ProtocolPortState::OccupiedByOther => {
-                                crate::tui::status::serializable::PortState::OccupiedByOther
-                            }
+                if let Some(port) = status.ports.map.get(port_name) {
+                    let enabled = matches!(port.state, ProtocolPortState::OccupiedByThis);
+                    let state = match &port.state {
+                        ProtocolPortState::Free => crate::tui::status::serializable::PortState::Free,
+                        ProtocolPortState::OccupiedByThis => {
+                            crate::tui::status::serializable::PortState::OccupiedByThis
+                        }
+                        ProtocolPortState::OccupiedByOther => {
+                            crate::tui::status::serializable::PortState::OccupiedByOther
+                        }
                         };
 
-                        let mut modbus_masters = Vec::new();
-                        let mut modbus_slaves = Vec::new();
+                    let mut modbus_masters = Vec::new();
+                    let mut modbus_slaves = Vec::new();
 
-                        use crate::protocol::status::types::port::PortConfig;
-                        let PortConfig::Modbus { mode, stations } = &port.config;
-                        for station in stations {
-                            if mode.is_master() {
-                                modbus_masters.push(TuiModbusMaster {
-                                    station_id: station.station_id,
-                                    register_type: format!("{:?}", station.register_mode),
-                                    start_address: station.register_address,
-                                    register_count: station.register_length as usize,
-                                });
-                            } else {
-                                modbus_slaves.push(TuiModbusSlave {
-                                    station_id: station.station_id,
-                                    register_type: format!("{:?}", station.register_mode),
-                                    start_address: station.register_address,
-                                    register_count: station.register_length as usize,
-                                });
-                            }
+                    use crate::protocol::status::types::port::PortConfig;
+                    let PortConfig::Modbus { mode, stations } = &port.config;
+                    for station in stations {
+                        if mode.is_master() {
+                            modbus_masters.push(TuiModbusMaster {
+                                station_id: station.station_id,
+                                register_type: format!("{:?}", station.register_mode),
+                                start_address: station.register_address,
+                                register_count: station.register_length as usize,
+                            });
+                        } else {
+                            modbus_slaves.push(TuiModbusSlave {
+                                station_id: station.station_id,
+                                register_type: format!("{:?}", station.register_mode),
+                                start_address: station.register_address,
+                                register_count: station.register_length as usize,
+                            });
                         }
-
-                        Ok::<_, anyhow::Error>(TuiPort {
-                            name: port.port_name.clone(),
-                            enabled,
-                            state,
-                            modbus_masters,
-                            modbus_slaves,
-                            log_count: port.logs.len(),
-                        })
-                    }) {
-                        ports.push(port_data);
                     }
+
+                    ports.push(TuiPort {
+                        name: port.port_name.clone(),
+                        enabled,
+                        state,
+                        modbus_masters,
+                        modbus_slaves,
+                        log_count: port.logs.len(),
+                    });
                 }
             }
 
