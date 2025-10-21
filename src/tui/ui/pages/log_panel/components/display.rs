@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    protocol::status::{types, with_port_read},
+    protocol::status::types,
     tui::status::read_status,
 };
 
@@ -23,14 +23,7 @@ pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Opti
         } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(tuple) =
-                        with_port_read(port, |pd| Some((pd.logs.clone(), *selected_item)))
-                    {
-                        Ok(tuple)
-                    } else {
-                        log::warn!("Failed to acquire read lock for port {port_name} while extracting log data");
-                        Ok(None)
-                    }
+                    Ok(Some((port.logs.clone(), *selected_item)))
                 } else {
                     Ok(None)
                 }

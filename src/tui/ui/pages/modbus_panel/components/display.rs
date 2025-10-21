@@ -9,7 +9,6 @@ use crate::{
             self,
             modbus::{ModbusConnectionMode, RegisterMode},
         },
-        with_port_read,
     },
     tui::{
         status::read_status,
@@ -96,11 +95,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
         if let Some(port) = port_data.as_ref() {
-            let (current_mode, mode_obj) = with_port_read(port, |port| {
-                let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
-                (mode.to_index(), mode.clone())
-            })
-            .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
+            let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
+            let (current_mode, mode_obj) = (mode.to_index(), mode.clone());
 
             let selected = matches!(
                 current_selection,
@@ -216,16 +212,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
-                            let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    item.station_id.to_string()
-                                } else {
-                                    "?".to_string()
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for StationId"))?;
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port.config;
+                            let current_value = if let Some(item) = stations.get(index) {
+                                item.station_id.to_string()
+                            } else {
+                                "?".to_string()
+                            };
 
                             let selected = matches!(
                                 current_selection,
@@ -265,16 +258,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
-                            let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    (item.register_mode as u8 - 1u8) as usize
-                                } else {
-                                    2usize // default to Holding
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for RegisterMode"))?;
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port.config;
+                            let current_mode = if let Some(item) = stations.get(index) {
+                                (item.register_mode as u8 - 1u8) as usize
+                            } else {
+                                2usize // default to Holding
+                            };
 
                             let selected = matches!(
                                 current_selection,
@@ -317,16 +307,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
-                            let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    item.register_address.to_string()
-                                } else {
-                                    "0".to_string()
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for RegisterStartAddress"))?;
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port.config;
+                            let current_value = if let Some(item) = stations.get(index) {
+                                item.register_address.to_string()
+                            } else {
+                                "0".to_string()
+                            };
 
                             let selected = matches!(
                                 current_selection,
@@ -366,16 +353,13 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
                         if let Some(port) = port_data.as_ref() {
-                            let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    item.register_length.to_string()
-                                } else {
-                                    "1".to_string()
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for RegisterLength"))?;
+                            let types::port::PortConfig::Modbus { mode: _, stations } =
+                                &port.config;
+                            let current_value = if let Some(item) = stations.get(index) {
+                                item.register_length.to_string()
+                            } else {
+                                "1".to_string()
+                            };
 
                             let selected = matches!(
                                 current_selection,
