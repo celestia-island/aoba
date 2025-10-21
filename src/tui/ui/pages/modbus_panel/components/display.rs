@@ -94,7 +94,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     // Add global mode selector using proper selector_spans
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
-        if let Some(port) = port_data.as_ref() {
+        if let Some(ref port) = port_data {
             let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
             let (current_mode, mode_obj) = (mode.to_index(), mode.clone());
 
@@ -175,7 +175,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
                     let port = port_entry;
-                    match &port_guard.config {
+                    match &port.config {
                         types::port::PortConfig::Modbus { mode: _, stations } => {
                             return Ok(!stations.is_empty());
                         }
@@ -191,7 +191,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
     if let Some(port_entry) = &port_data {
         let port_data = port_entry;
-        let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
+        let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
         let all_items = stations.clone();
 
         for (index, item) in all_items.iter().enumerate() {
@@ -211,7 +211,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     ),
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
+                        if let Some(ref port) = port_data {
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port.config;
                             let current_value = if let Some(item) = stations.get(index) {
@@ -257,7 +257,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     ),
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
+                        if let Some(ref port) = port_data {
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port.config;
                             let current_mode = if let Some(item) = stations.get(index) {
@@ -306,7 +306,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     ),
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
+                        if let Some(ref port) = port_data {
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port.config;
                             let current_value = if let Some(item) = stations.get(index) {
@@ -352,7 +352,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     ),
                     || -> Result<Vec<Span<'static>>> {
                         let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
+                        if let Some(ref port) = port_data {
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &port.config;
                             let current_value = if let Some(item) = stations.get(index) {

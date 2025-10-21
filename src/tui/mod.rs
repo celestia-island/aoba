@@ -585,8 +585,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
             let count = persisted_configs.len();
             for (port_name, config) in persisted_configs {
                 self::status::write_status(|status| {
-                    if let Some(port_arc) = status.ports.map.get(&port_name) {
-                        let mut port = port_arc.write();
+                    if let Some(port) = status.ports.map.get_mut(&port_name) {
                         port.config = config.clone();
                         log::info!("✅ Restored configuration for port: {}", port_name);
                     }

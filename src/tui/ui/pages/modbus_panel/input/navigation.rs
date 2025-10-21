@@ -438,12 +438,11 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             // Check if port has any stations configured
-            let has_stations = with_port_read(&port, |port| match &port.config {
+            let has_stations = match &port.config {
                 crate::protocol::status::types::port::PortConfig::Modbus { stations, .. } => {
                     !stations.is_empty()
                 }
-            })
-            .unwrap_or(false);
+            };
 
             if !has_stations {
                 // Show error if no stations configured
@@ -461,23 +460,23 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             }
 
             // Mark config as not modified
-            with_port_write(&port, |port| {
+            write_status(|status| {
+                let port = status.ports.map.get_mut(&port_name)
+                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                 port.config_modified = false;
                 // Set status to AppliedSuccess for 3 seconds
                 port.status_indicator =
                     crate::protocol::status::types::port::PortStatusIndicator::AppliedSuccess {
                         timestamp: Local::now(),
                     };
-            });
+                Ok(())
+            })?;
 
             // Check if port is already enabled
-            let is_enabled = with_port_read(&port, |port| {
-                matches!(
+            let is_enabled = matches!(
                     port.state,
-                    crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
-                )
-            })
-            .unwrap_or(false);
+                    crate::protocol::status::types::port::PortState::OccupiedByThis
+                );
 
             if !is_enabled {
                 // Enable the port if not already enabled

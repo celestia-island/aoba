@@ -4,7 +4,7 @@ use crate::{
     protocol::status::{
         types::{
             self,
-            port::{PortState, PortSubprocessMode},
+            port::{PortState, PortSubprocessInfo, PortSubprocessMode},
         },
     },
     tui::{
@@ -186,8 +186,10 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     let mut register_update: Option<(String, u8, u16, Vec<u16>)> =
                                         None;
 
-                                    with_port_write(&port, |port| {
-                                        subprocess_info_snapshot = port.state.owner().cloned();
+                                    write_status(|status| {
+                                        let port = status.ports.map.get_mut(&port_name)
+                                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                        subprocess_info_snapshot = port.subprocess_info.clone();
 
                                         let types::port::PortConfig::Modbus { mode, stations } =
                                             &mut port.config;
@@ -270,7 +272,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                 }
                                             }
                                         }
-                                    });
+                                        Ok(())
+                                    })?;
 
                                     if let (Some(_), Some(update)) =
                                         (subprocess_info_snapshot, register_update)
@@ -345,6 +348,12 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 port.state.clone()
             });
 
+            // Check if port has subprocess info (CLI subprocess)
+            let has_subprocess_info = port_data
+                .as_ref()
+                .map(|p| p.subprocess_info.is_some())
+                .unwrap_or(false);
+
             // Check if port has any stations configured
             let has_stations = port_data
                 .as_ref()
@@ -357,14 +366,11 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 })
                 .unwrap_or(false);
 
-            // TUI only uses CLI subprocesses. If port is occupied by Runtime (legacy),
-            // we don't restart. Only restart if occupied by CLI subprocess.
+            // TUI only uses CLI subprocesses. Check if port has subprocess info.
             let should_restart = matches!(
                 port_state,
-                Some(types::port::PortState::OccupiedByThis {
-                    owner: types::port::PortOwner::CliSubprocess(_)
-                })
-            );
+                Some(types::port::PortState::OccupiedByThis)
+            ) && has_subprocess_info;
 
             // Auto-enable if: port is Free AND has stations configured
             let should_auto_enable =
@@ -461,9 +467,11 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
             }
             Ok(port)
         })? {
-            log::info!("🟢 Calling with_port_write for: {port_name}");
-            with_port_write(&port, |port| {
-                log::info!("🟢 Inside with_port_write closure");
+            log::info!("🟢 Calling write_status for: {port_name}");
+            write_status(|status| {
+                let port = status.ports.map.get_mut(&port_name)
+                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                log::info!("🟢 Inside write_status closure");
                 // Check if port is currently occupied before adding station
                 // TUI only uses CLI subprocesses
                 if matches!(port.state, PortState::OccupiedByThis) {
@@ -500,8 +508,9 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     if mode.is_master() { "Master" } else { "Slave" },
                     stations.len()
                 );
-            });
-            log::info!("🟢 with_port_write completed");
+                Ok(())
+            })?;
+            log::info!("🟢 write_status completed");
 
             // Save configuration to disk
             if let Err(e) = save_current_configs() {
