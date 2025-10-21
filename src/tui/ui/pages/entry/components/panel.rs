@@ -149,13 +149,7 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     if let Some(port) = port_opt {
         let pn = port.port_name.clone();
         let st = port.state.clone();
-        let cfg = match &port.config {
-            types::port::PortConfig::Modbus { .. } => {
-                // TUI no longer uses runtime handles directly
-                // Config would come from subprocess info if needed
-                None
-            }
-        };
+        let cfg = &port.serial_config;
         
         let mut lines: Vec<Line<'static>> = Vec::new();
 
@@ -165,7 +159,7 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
         let enable_text = if enabled { val_enabled } else { val_disabled };
         lines.push(Line::from(Span::raw(format!("{} {}", "", enable_text))));
 
-        if let Some(cfg) = cfg {
+        {
             let sep_len = 48usize;
                 let sep_str: String = "─".repeat(sep_len);
                 lines.push(Line::from(Span::styled(
@@ -186,7 +180,11 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
                     ),
                     (
                         lang().protocol.common.label_parity.as_str().to_string(),
-                        format!("{:?}", cfg.parity),
+                        match cfg.parity {
+                            types::port::SerialParity::None => "None".to_string(),
+                            types::port::SerialParity::Odd => "Odd".to_string(),
+                            types::port::SerialParity::Even => "Even".to_string(),
+                        },
                     ),
                     (
                         lang().protocol.common.label_stop_bits.as_str().to_string(),

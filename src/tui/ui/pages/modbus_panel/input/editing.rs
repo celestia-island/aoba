@@ -271,7 +271,7 @@ fn commit_selector_edit(
 
                     let mut should_restart = false;
                     write_status(|status| {
-                        let port = status.ports.map.get_mut(port_name)
+                        let port = status.ports.map.get_mut(&port_name)
                             .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                         // evaluate occupancy before taking a mutable borrow of port.config
                         let was_occupied_by_this =
@@ -310,7 +310,7 @@ fn commit_selector_edit(
                     let new_mode = RegisterMode::from_u8((selected_index as u8) + 1);
 
                     write_status(|status| {
-                        let port = status.ports.map.get_mut(port_name)
+                        let port = status.ports.map.get_mut(&port_name)
                             .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &mut port.config;
