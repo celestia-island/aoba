@@ -190,7 +190,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
                                 let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
+                                    &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
@@ -265,7 +265,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
                                 let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
+                                    &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     return Ok(item.register_length as usize);
@@ -341,7 +341,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
                                 let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
+                                    &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
@@ -559,7 +559,7 @@ fn jump_to_next_group(
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             return Ok(!stations.is_empty());
                         }
                     }
@@ -588,7 +588,7 @@ fn jump_to_next_group(
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             let all_items: Vec<_> = stations.iter().collect();
                             return Ok(index + 1 < all_items.len());
                         }
@@ -614,7 +614,7 @@ fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
                     let port = port_entry;
-                    let types::port::PortConfig::Modbus { mode: _, stations } = &port_guard.config;
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &port.config;
                     let all_items: Vec<_> = stations.iter().collect();
                     if !all_items.is_empty() {
                         return Ok(Some(all_items.len() - 1));

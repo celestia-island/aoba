@@ -39,7 +39,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             return Ok(stations.len().saturating_sub(1));
                         }
                     }
@@ -74,7 +74,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode, stations: _ } =
-                                &port_guard.config;
+                                &port.config;
                             return Ok(if mode.is_master() { 0 } else { 1 });
                         }
                     }
@@ -99,7 +99,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             let all_items: Vec<_> = stations.iter().collect();
                             if let Some(item) = all_items.get(index) {
                                 return Ok((item.register_mode as u8 - 1) as usize);
@@ -150,7 +150,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
                         let port = port_entry;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
-                            &port_guard.config;
+                            &port.config;
                         let all_items: Vec<_> = stations.iter().collect();
                         if let Some(item) = all_items.get(slave_index) {
                             return Ok(Some(item.register_mode));
