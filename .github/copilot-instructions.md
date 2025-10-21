@@ -39,6 +39,22 @@ cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-tes
 
 This will create `/tmp/ci_cli_vcom1_status.json` with periodic status dumps (uses port basename, e.g., "/tmp/vcom1" -> "vcom1").
 
+### Note: Running commands on Windows (non-CI)
+
+If you run these commands on a local Windows machine (not in CI) and you use WSL (Windows Subsystem for Linux), we recommend wrapping commands that must run in a Unix-like environment with `wsl bash -lc '...'` so environment variables, paths and temporary file locations (for example `/tmp`) are resolved correctly inside WSL.
+
+For example:
+
+```bash
+# Start TUI in debug mode inside WSL
+wsl bash -lc 'export AOBA_DEBUG_CI_E2E_TEST=1; cargo run --package aoba -- --tui'
+
+# Manually start CLI subprocess (debug mode) inside WSL
+wsl bash -lc 'cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-test'
+```
+
+If you run the above commands in native Windows shells (PowerShell / cmd) you may encounter path or permission issues because debug status files are written to Unix-style temporary directories (e.g., `/tmp`). Using `wsl bash -lc '...'` runs the command explicitly in WSL and avoids these problems.
+
 ### Status File Format
 
 #### TUI Status (`/tmp/ci_tui_status.json`)
