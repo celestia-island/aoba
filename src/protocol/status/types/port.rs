@@ -1,6 +1,34 @@
 use chrono::{DateTime, Local};
 
-use crate::protocol::{runtime::PortRuntimeHandle, status::types, tty::PortExtra};
+use crate::protocol::{status::types, tty::PortExtra};
+
+/// Serial port configuration (baud rate, data bits, stop bits, parity)
+/// This replaces the runtime SerialConfig that was in the disabled runtime module
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerialConfig {
+    pub baud: u32,
+    pub data_bits: u8,
+    pub stop_bits: u8,
+    pub parity: SerialParity,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SerialParity {
+    None,
+    Odd,
+    Even,
+}
+
+impl Default for SerialConfig {
+    fn default() -> Self {
+        Self {
+            baud: 9600,
+            data_bits: 8,
+            stop_bits: 1,
+            parity: SerialParity::None,
+        }
+    }
+}
 
 /// A single log entry associated with a specific port.
 #[derive(Debug, Clone)]
@@ -80,6 +108,9 @@ pub struct PortData {
     /// CLI subprocess info (only present when state is OccupiedByThis)
     pub subprocess_info: Option<PortSubprocessInfo>,
     
+    /// Serial port configuration (baud rate, data bits, stop bits, parity)
+    pub serial_config: SerialConfig,
+    
     pub config: PortConfig,
 
     pub logs: Vec<PortLogEntry>,
@@ -100,6 +131,7 @@ impl Default for PortData {
             extra: Default::default(),
             state: PortState::Free,
             subprocess_info: None,
+            serial_config: SerialConfig::default(),
             config: PortConfig::default(),
             logs: Vec::new(),
             log_auto_scroll: true,

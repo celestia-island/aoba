@@ -91,28 +91,14 @@ fn handle_editing_input(
                         if selected_cursor == types::cursor::ConfigPanelCursor::BaudRate {
                             if let Ok(parsed) = s.trim().parse::<u32>() {
                                 if (1000..=2_000_000).contains(&parsed) {
-                                    // Prepare command inside lock and send outside to avoid holding write lock during send
-                                    let maybe_cmd = with_port_write(&port, |port| {
-                                        if let Some(runtime) = port.state.runtime_handle_mut() {
-                                            runtime.current_cfg.baud = parsed;
-                                            return Some((
-                                                runtime.cmd_tx.clone(),
-                                                RuntimeCommand::Reconfigure(
-                                                    runtime.current_cfg.clone(),
-                                                ),
-                                            ));
+                                    // Update serial config directly in status
+                                    write_status(|status| {
+                                        if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                            port.serial_config.baud = parsed;
+                                            port.config_modified = true;
                                         }
-                                        None
-                                    })
-                                    .and_then(|x| x);
-
-                                    if let Some((sender, cmd)) = maybe_cmd {
-                                        sender.send(cmd).map_err(|err| {
-                                            anyhow!("Failed to send Reconfigure: {err}")
-                                        })?;
-                                    } else {
-                                        log::warn!("Failed to apply custom baud: could not acquire write lock for the port");
-                                    }
+                                        Ok(())
+                                    })?;
                                 } else {
                                     log::warn!("Custom baud is out of allowed range: {parsed}");
                                 }
