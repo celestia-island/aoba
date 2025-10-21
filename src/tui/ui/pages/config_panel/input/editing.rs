@@ -113,7 +113,7 @@ fn handle_editing_input(
                         })?;
                     } else {
                         // Handle selector edits
-                        handle_selector_commit(&port, selected_cursor)?;
+                        handle_selector_commit(&port_name, selected_cursor)?;
                     }
                 }
             }
@@ -372,68 +372,40 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                 if let Some(port) = status.ports.map.get(port_name) {
                     match cursor {
                         types::cursor::ConfigPanelCursor::BaudRate => {
-                            let index = with_port_read(port, |port| {
-                                if let Some(runtime) = port.state.runtime_handle() {
-                                    types::modbus::BaudRateSelector::from_u32(
-                                        runtime.current_cfg.baud,
-                                    )
-                                    .to_index()
-                                } else {
-                                    types::modbus::BaudRateSelector::B9600.to_index()
-                                }
-                            })
-                            .unwrap_or_default();
+                            let index = types::modbus::BaudRateSelector::from_u32(
+                                port.serial_config.baud,
+                            )
+                            .to_index();
 
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::DataBits { .. } => {
-                            let index = with_port_read(port, |port| {
-                                if let Some(runtime) = port.state.runtime_handle() {
-                                    match runtime.current_cfg.data_bits {
-                                        5 => 0usize,
-                                        6 => 1usize,
-                                        7 => 2usize,
-                                        _ => 3usize,
-                                    }
-                                } else {
-                                    3usize
-                                }
-                            })
-                            .unwrap_or_default();
+                            let index = match port.serial_config.data_bits {
+                                5 => 0usize,
+                                6 => 1usize,
+                                7 => 2usize,
+                                _ => 3usize,
+                            };
 
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::StopBits => {
-                            let index = with_port_read(port, |port| {
-                                if let Some(runtime) = port.state.runtime_handle() {
-                                    match runtime.current_cfg.stop_bits {
-                                        1 => 0usize,
-                                        _ => 1usize,
-                                    }
-                                } else {
-                                    0usize
-                                }
-                            })
-                            .unwrap_or_default();
+                            let index = match port.serial_config.stop_bits {
+                                1 => 0usize,
+                                _ => 1usize,
+                            };
 
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
                         }
                         types::cursor::ConfigPanelCursor::Parity => {
-                            let index = with_port_read(port, |port| {
-                                if let Some(runtime) = port.state.runtime_handle() {
-                                    match runtime.current_cfg.parity {
-                                        serialport::Parity::None => 0usize,
-                                        serialport::Parity::Odd => 1usize,
-                                        serialport::Parity::Even => 2usize,
-                                    }
-                                } else {
-                                    0usize
-                                }
-                            })
-                            .unwrap_or_default();
+                            let index = match port.serial_config.parity {
+                                types::port::SerialParity::None => 0usize,
+                                types::port::SerialParity::Odd => 1usize,
+                                types::port::SerialParity::Even => 2usize,
+                            };
 
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
@@ -454,7 +426,7 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
 }
 
 fn handle_selector_commit(
-    port: &Arc<RwLock<PortData>>,
+    port_name: &str,
     selected_cursor: types::cursor::ConfigPanelCursor,
 ) -> Result<()> {
     let idx = read_status(|status| Ok(status.temporarily.input_raw_buffer.clone()))?;
@@ -465,14 +437,11 @@ fn handle_selector_commit(
                 let sel = types::modbus::BaudRateSelector::from_index(i);
                 if matches!(sel, types::modbus::BaudRateSelector::Custom { .. }) {
                     // Switch to string input mode for custom baud rate
-                    let current_baud = with_port_read(port, |port| {
-                        if let Some(runtime) = port.state.runtime_handle() {
-                            runtime.current_cfg.baud
-                        } else {
-                            9600
-                        }
-                    })
-                    .unwrap_or(9600);
+                    let current_baud = read_status(|status| {
+                        Ok(status.ports.map.get(port_name)
+                            .map(|port| port.serial_config.baud)
+                            .unwrap_or(9600))
+                    })?;
 
                     write_status(|status| {
                         status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
@@ -483,23 +452,14 @@ fn handle_selector_commit(
                     })?;
                     return Ok(()); // Don't commit yet, wait for string input
                 } else {
-                    let maybe_cmd = with_port_write(port, |port| {
-                        if let Some(runtime) = port.state.runtime_handle_mut() {
-                            runtime.current_cfg.baud = sel.as_u32();
-                            return Some((
-                                runtime.cmd_tx.clone(),
-                                RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
-                            ));
+                    // Update serial config directly
+                    write_status(|status| {
+                        if let Some(port) = status.ports.map.get_mut(port_name) {
+                            port.serial_config.baud = sel.as_u32();
+                            port.config_modified = true;
                         }
-                        None
-                    })
-                    .and_then(|x| x);
-
-                    if let Some((sender, cmd)) = maybe_cmd {
-                        sender
-                            .send(cmd)
-                            .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
-                    }
+                        Ok(())
+                    })?;
                 }
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
@@ -509,70 +469,40 @@ fn handle_selector_commit(
                     2 => 7,
                     _ => 8,
                 };
-                let maybe_cmd = with_port_write(port, |port| {
-                    if let Some(runtime) = port.state.runtime_handle_mut() {
-                        runtime.current_cfg.data_bits = data_bits;
-                        return Some((
-                            runtime.cmd_tx.clone(),
-                            RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
-                        ));
+                write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        port.serial_config.data_bits = data_bits;
+                        port.config_modified = true;
                     }
-                    None
-                })
-                .and_then(|x| x);
-
-                if let Some((sender, cmd)) = maybe_cmd {
-                    sender
-                        .send(cmd)
-                        .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
-                }
+                    Ok(())
+                })?;
             }
             types::cursor::ConfigPanelCursor::StopBits => {
                 let stop_bits = match i {
                     0 => 1u8,
                     _ => 2u8,
                 };
-                let maybe_cmd = with_port_write(port, |port| {
-                    if let Some(runtime) = port.state.runtime_handle_mut() {
-                        runtime.current_cfg.stop_bits = stop_bits;
-                        return Some((
-                            runtime.cmd_tx.clone(),
-                            RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
-                        ));
+                write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        port.serial_config.stop_bits = stop_bits;
+                        port.config_modified = true;
                     }
-                    None
-                })
-                .and_then(|x| x);
-
-                if let Some((sender, cmd)) = maybe_cmd {
-                    sender
-                        .send(cmd)
-                        .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
-                }
+                    Ok(())
+                })?;
             }
             types::cursor::ConfigPanelCursor::Parity => {
                 let parity = match i {
-                    0 => serialport::Parity::None,
-                    1 => serialport::Parity::Odd,
-                    _ => serialport::Parity::Even,
+                    0 => types::port::SerialParity::None,
+                    1 => types::port::SerialParity::Odd,
+                    _ => types::port::SerialParity::Even,
                 };
-                let maybe_cmd = with_port_write(port, |port| {
-                    if let Some(runtime) = port.state.runtime_handle_mut() {
-                        runtime.current_cfg.parity = parity;
-                        return Some((
-                            runtime.cmd_tx.clone(),
-                            RuntimeCommand::Reconfigure(runtime.current_cfg.clone()),
-                        ));
+                write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        port.serial_config.parity = parity;
+                        port.config_modified = true;
                     }
-                    None
-                })
-                .and_then(|x| x);
-
-                if let Some((sender, cmd)) = maybe_cmd {
-                    sender
-                        .send(cmd)
-                        .map_err(|err| anyhow!("Failed to send Reconfigure: {err}"))?;
-                }
+                    Ok(())
+                })?;
             }
             types::cursor::ConfigPanelCursor::ProtocolMode => {
                 // For now only Modbus RTU option - no action needed
