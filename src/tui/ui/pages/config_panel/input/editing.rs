@@ -8,14 +8,12 @@ use crossterm::event::{KeyCode, KeyEvent};
 use crate::{
     i18n::lang,
     protocol::{
-        runtime::RuntimeCommand,
         status::{
             types::{
                 self,
                 cursor::{Cursor, ModbusDashboardCursor},
                 port::PortData,
             },
-            with_port_read, with_port_write,
         },
     },
     tui::{

@@ -3,8 +3,11 @@
 // TODO: Refactor daemon to work with new structure or remove it entirely
 // pub mod daemon;
 
+// Runtime module disabled - depends on daemon module
+// TUI now uses CLI subprocesses instead of direct runtime handles
+// pub mod runtime;
+
 pub mod ipc;
 pub mod modbus;
-pub mod runtime;
 pub mod status;
 pub mod tty;

@@ -1,179 +1,21 @@
 use anyhow::{anyhow, Result};
-use chrono::Local;
 
-use crate::{
-    protocol::{
-        status::{
-            types::port::{PortData, PortState},
-            with_port_read, with_port_write,
-        },
-        tty::available_ports_enriched,
-    },
-    tui::{
-        status::write_status,
-        utils::bus::CoreToUi,
-    },
-};
+use crate::tui::utils::bus::CoreToUi;
 
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
 /// because another scan was already in progress.
+///
+/// NOTE: Port scanning with runtime handles disabled after PortOwner removal.
+/// TUI now uses CLI subprocesses exclusively, and ports are managed differently.
+/// Scan functionality needs to be refactored to work with new architecture.
+///
+/// For now, this function is stubbed out and just sends a refresh signal.
 pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool) -> Result<bool> {
-    // Return early if scan already in progress, but still send Refreshed to update UI
-    if *scan_in_progress {
-        core_tx
-            .send(CoreToUi::Refreshed)
-            .map_err(|err| anyhow!("failed to send Refreshed (scan in progress): {err}"))?;
-        return Ok(false);
-    }
-
-    *scan_in_progress = true;
-
-    // Set busy indicator
-    // We'll collect runtime handles for removed ports while holding the write lock,
-    // but perform the potentially-blocking Stop+wait operations after releasing it.
-    let mut to_stop: Vec<(String, crate::protocol::runtime::PortRuntimeHandle)> = Vec::new();
-    let mut to_remove_names: Vec<String> = Vec::new();
-
-    write_status(|status| {
-        status.temporarily.busy.busy = true;
-        Ok(())
-    })?;
-
-    let ports = available_ports_enriched();
-    let scan_text = ports
-        .iter()
-        .map(|(info, extra)| format!("{} {:?}", info.port_name, extra))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    write_status(|status| {
-        // Update existing s.ports.map in-place to preserve PortData instances
-        // (notably any PortState::OccupiedByThis runtime handles). Insert new
-        // entries for newly discovered ports and remove entries for ports no
-        // longer present.
-        let mut new_order: Vec<String> = Vec::new();
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
-
-        for (info, extra) in ports.iter() {
-            let name = info.port_name.clone();
-            // Update existing PortData in-place if present
-            if let Some(port) = status.ports.map.get(&name) {
-                // update in-place using helper to avoid unwrap panics
-                if with_port_write(port, |port| {
-                    port.extra = extra.clone();
-                    port.port_type = format!("{:?}", info.port_type);
-                    port.port_name = name.clone();
-                })
-                .is_some()
-                {
-                    // updated
-                } else {
-                    log::warn!("Scan_ports: failed to acquire write lock for port {name}");
-                }
-            } else {
-                // Insert a new PortData for newly discovered port (wrap in Arc<RwLock<>>)
-                let pd = PortData {
-                    port_name: name.clone(),
-                    port_type: format!("{:?}", info.port_type),
-                    extra: extra.clone(),
-                    state: PortState::Free,
-                    ..Default::default()
-                };
-                status.ports.map.insert(
-                    name.clone(),
-                    std::sync::Arc::new(parking_lot::RwLock::new(pd)),
-                );
-            }
-
-            new_order.push(name.clone());
-            seen.insert(name);
-        }
-
-        // Determine ports that disappeared since last scan. We'll collect their
-        // names and any runtime handles that need stopping, then perform stop
-        // outside of this write lock to avoid blocking other writers.
-        let to_remove: Vec<String> = status
-            .ports
-            .map
-            .keys()
-            .filter(|k| !seen.contains(*k))
-            .cloned()
-            .collect();
-
-        for key in to_remove.iter() {
-            if let Some(port) = status.ports.map.get(key) {
-                if let Some(opt_rt) =
-                    with_port_read(port, |port| port.state.runtime_handle().cloned())
-                {
-                    if let Some(rt) = opt_rt {
-                        // Clone runtime handle for stopping later outside the write lock
-                        to_stop.push((key.clone(), rt));
-                    }
-                } else {
-                    log::warn!("Scan_ports: failed to acquire read lock for port {key}");
-                }
-            }
-            to_remove_names.push(key.clone());
-        }
-
-        // Update order for now (may be trimmed again after removals)
-        status.ports.order = new_order;
-
-        status.temporarily.scan.last_scan_time = Some(Local::now());
-        status.temporarily.scan.last_scan_info = scan_text.clone();
-        // Clear busy indicator after scan completes
-        status.temporarily.busy.busy = false;
-        Ok(())
-    })?;
-
-    // Now perform Stop + wait for each runtime outside the write lock to avoid
-    // blocking other status writers. We still collected the runtime handles
-    // while holding the write lock above.
-    for (name, rt) in to_stop.into_iter() {
-        rt.cmd_tx
-            .send(crate::protocol::runtime::RuntimeCommand::Stop)
-            .map_err(|err| anyhow!("failed to send Stop to runtime {name}: {err}"))?;
-        // Wait for the runtime to emit a Stopped event. Use blocking recv so
-        // that if the channel is disconnected we surface an error to the
-        // caller instead of silently retrying timeouts.
-        match rt.evt_rx.recv() {
-            Ok(evt) => {
-                if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
-                    // expected, proceed
-                } else {
-                    log::warn!(
-                        "scan_ports: received unexpected event while stopping {name}: {evt:?}"
-                    );
-                }
-            }
-            Err(err) => {
-                return Err(anyhow!("failed to receive Stopped event for {name}: {err}"));
-            }
-        }
-    }
-
-    // After stopping runtimes, remove disappeared ports from the map and
-    // update order to remove references to them.
-    if !to_remove_names.is_empty() {
-        write_status(|status| {
-            for key in to_remove_names.iter() {
-                status.ports.map.remove(key);
-            }
-            // Trim order to remove deleted names
-            status.ports.order.retain(|n| !to_remove_names.contains(n));
-            Ok(())
-        })?;
-    }
-
-    *scan_in_progress = false;
-
-    // After adding ports to status, spawn per-port runtime listeners.
+    // Temporarily disabled - needs refactoring for new PortData structure
+    // Just send refresh and return
     core_tx
         .send(CoreToUi::Refreshed)
         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
-    // Log state after scan completes
-    if let Err(err) = crate::tui::log_state_snapshot() {
-        log::warn!("Failed to log state snapshot after scan: {err}");
-    }
-    Ok(true)
+    *scan_in_progress = false;
+    Ok(false)
 }
