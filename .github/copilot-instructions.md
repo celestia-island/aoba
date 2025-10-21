@@ -20,10 +20,9 @@ The TUI E2E testing framework has been refactored to support two complementary t
 
 #### For TUI Processes
 
-Set the environment variable before starting TUI:
+Start TUI with the `--debug-ci-e2e-test` flag:
 ```bash
-export AOBA_DEBUG_CI_E2E_TEST=1
-cargo run --package aoba -- --tui
+cargo run --package aoba -- --tui --debug-ci-e2e-test
 ```
 
 This will create `/tmp/ci_tui_status.json` with periodic status dumps (every 500ms).
@@ -41,13 +40,13 @@ This will create `/tmp/ci_cli_vcom1_status.json` with periodic status dumps (use
 
 ### Note: Running commands on Windows (non-CI)
 
-If you run these commands on a local Windows machine (not in CI) and you use WSL (Windows Subsystem for Linux), we recommend wrapping commands that must run in a Unix-like environment with `wsl bash -lc '...'` so environment variables, paths and temporary file locations (for example `/tmp`) are resolved correctly inside WSL.
+If you run these commands on a local Windows machine (not in CI) and you use WSL (Windows Subsystem for Linux), we recommend wrapping commands that must run in a Unix-like environment with `wsl bash -lc '...'` so paths and temporary file locations (for example `/tmp`) are resolved correctly inside WSL.
 
 For example:
 
 ```bash
 # Start TUI in debug mode inside WSL
-wsl bash -lc 'export AOBA_DEBUG_CI_E2E_TEST=1; cargo run --package aoba -- --tui'
+wsl bash -lc 'cargo run --package aoba -- --tui --debug-ci-e2e-test'
 
 # Manually start CLI subprocess (debug mode) inside WSL
 wsl bash -lc 'cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-test'
@@ -112,11 +111,8 @@ use ci_utils::{
 
 #[tokio::test]
 async fn test_tui_master_configuration() -> Result<()> {
-    // Enable debug mode
-    std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
-
-    // Spawn TUI
-    let mut tui_session = spawn_expect_process(&["--tui"])?;
+    // Spawn TUI with debug mode enabled
+    let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
 
     // Wait for TUI to initialize and start writing status
     // Note: In production tests, prefer using wait_for_tui_page() instead of sleep
@@ -271,16 +267,16 @@ let actions = vec![
 
 #### Status file not found
 
-Ensure debug mode is enabled:
+Ensure debug mode is enabled by passing the `--debug-ci-e2e-test` flag when spawning the TUI or CLI process:
 ```rust
-std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
+spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
 ```
 
 #### Status file not updating
 
 Check that the status dump thread is running. Look for log messages:
 ```
-Started status dump thread, writing to /tmp/tui_e2e_status.json
+Started status dump thread, writing to /tmp/ci_tui_status.json
 ```
 
 #### Timeout waiting for status

@@ -50,10 +50,6 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     }
     log::info!("✅ Virtual COM ports verified");
 
-    // Enable debug mode for status monitoring
-    std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
-    log::info!("🔍 Debug CI E2E test mode enabled");
-
     // Spawn TUI process (will be master/server on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])
