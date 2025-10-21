@@ -167,12 +167,35 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
             direction: ArrowKey::Down,
             count: 3, // Navigate to register length field (from Station ID)
         },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter, // Enter edit mode
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 }, // Wait for cursor to reach register length field
+        CursorAction::DebugBreakpoint {
+            description: "before_edit_register_length".to_string(),
+        },
+        CursorAction::PressEnter,         // Enter edit mode
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for edit mode to fully initialize
+        CursorAction::DebugBreakpoint {
+            description: "after_enter_edit_mode".to_string(),
+        },
         CursorAction::TypeString(REGISTER_LENGTH.to_string()),
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter, // Confirm edit
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for typing to complete and buffer to update
+        CursorAction::DebugBreakpoint {
+            description: "after_type_12".to_string(),
+        },
+        CursorAction::PressEnter, // Confirm edit and commit to status tree
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Wait for value to be committed to global status tree
+        CursorAction::DebugBreakpoint {
+            description: "after_confirm_edit".to_string(),
+        },
+        // Verify the value was actually committed
+        CursorAction::CheckStatus {
+            description: format!("Register length should be updated to {}", REGISTER_LENGTH),
+            path: "ports[0].modbus_slaves[0].register_count".to_string(),
+            expected: json!(REGISTER_LENGTH),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+        // Move back to top before saving (per documentation)
+        CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "configure_slave").await?;

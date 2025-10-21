@@ -12,6 +12,7 @@ use ci_utils::{
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
     terminal::{build_debug_bin, spawn_expect_process},
+    tui::enter_modbus_panel,
 };
 use serde_json::json;
 
@@ -75,10 +76,6 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     log::info!("🧪 Step 3: Navigate to {} in port list", port1);
     let actions = vec![
         // Port list starts with cursor on first port (vcom1), so just press Enter
-        // Debug: Check terminal to see if port is highlighted
-        CursorAction::DebugBreakpoint {
-            description: "port_selection".to_string(),
-        },
         CursorAction::PressEnter, // Enter port details
         CursorAction::Sleep { ms: 1000 },
         // Check that we reached ConfigPanel
@@ -92,26 +89,42 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "navigate_to_port").await?;
 
-    // Enter Modbus configuration panel
+    // Enter Modbus configuration panel from ConfigPanel
+    // We need to navigate to "Enter Business Configuration" option
     log::info!("🧪 Step 4: Enter Modbus configuration panel");
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    // Verify we're now on ModbusDashboard
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Should be on ModbusDashboard".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("ModbusDashboard"),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "verify_modbus_panel",
+    )
+    .await?;
+
+    // Step 4.5: Verify clean state before configuration (no previous test residue)
+    log::info!("🧪 Step 4.5: Verify clean state (port disabled, no config)");
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 2, // Navigate to ProtocolConfig (ModBus Master/Slave Set)
-        },
-        CursorAction::Sleep { ms: 300 },
-        // Debug: Verify cursor position before entering panel
-        CursorAction::DebugBreakpoint {
-            description: "before_enter_modbus".to_string(),
-        },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-        // Verify we're now on ModbusDashboard
         CursorAction::CheckStatus {
-            description: "Should be on ModbusDashboard".to_string(),
-            path: "page.type".to_string(),
-            expected: json!("ModbusDashboard"),
+            description: "Port should be disabled before configuration".to_string(),
+            path: "ports[0].enabled".to_string(),
+            expected: json!(false),
             timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+        CursorAction::CheckStatus {
+            description: "Should have no modbus masters configured yet".to_string(),
+            path: "ports[0].modbus_masters".to_string(),
+            expected: json!([]),
+            timeout_secs: Some(5),
             retry_interval_ms: Some(500),
         },
     ];
@@ -119,7 +132,7 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
         &mut tui_session,
         &mut tui_cap,
         &actions,
-        "enter_modbus_panel",
+        "verify_clean_state",
     )
     .await?;
 
@@ -129,22 +142,42 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
         // Press Enter on "Create Station" button
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-        // Debug: Check if station creation dialog appeared
-        CursorAction::DebugBreakpoint {
-            description: "after_create_station".to_string(),
-        },
         // Configure station (station_id=1, holding registers, address=0, length=12)
-        // Navigate to register length field
+        // After pressing Enter on "Create Station", cursor is on Station ID field
+        // Navigate: Down 1 = Register Type, Down 2 = Start Address, Down 3 = Register Length
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
-            count: 4,
+            count: 3,
         },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter, // Enter edit mode
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 }, // Wait for cursor to reach register length field
+        CursorAction::DebugBreakpoint {
+            description: "test2_before_edit_register_length".to_string(),
+        },
+        CursorAction::PressEnter,         // Enter edit mode
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for edit mode to fully initialize
+        CursorAction::DebugBreakpoint {
+            description: "test2_after_enter_edit_mode".to_string(),
+        },
         CursorAction::TypeString(REGISTER_LENGTH.to_string()),
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter, // Confirm edit
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for typing to complete and buffer to update
+        CursorAction::DebugBreakpoint {
+            description: "test2_after_type_12".to_string(),
+        },
+        CursorAction::PressEnter, // Confirm edit and commit to status tree
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Wait for value to be committed to global status tree
+        CursorAction::DebugBreakpoint {
+            description: "test2_after_confirm_edit".to_string(),
+        },
+        // Verify the value was actually committed
+        CursorAction::CheckStatus {
+            description: format!("Register length should be updated to {}", REGISTER_LENGTH),
+            path: "ports[0].modbus_masters[0].register_count".to_string(),
+            expected: json!(REGISTER_LENGTH),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+        // Move back to top before saving (per documentation)
+        CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "configure_master").await?;
@@ -152,25 +185,21 @@ pub async fn test_tui_master_with_cli_slave_continuous(port1: &str, port2: &str)
     // Save configuration with Ctrl+S which will auto-enable the port
     log::info!("🧪 Step 6: Save configuration with Ctrl+S to auto-enable port");
     let actions = vec![
-        // Debug: Check state before saving
-        CursorAction::DebugBreakpoint {
-            description: "before_save".to_string(),
-        },
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
+        CursorAction::Sleep { ms: 5000 }, // Wait longer for port to enable and stabilize
         // Verify port is enabled through status monitoring
         CursorAction::CheckStatus {
             description: format!("Port {} should be enabled", port1),
             path: "ports[0].enabled".to_string(),
             expected: json!(true),
-            timeout_secs: Some(15),
+            timeout_secs: Some(20), // Increase timeout
             retry_interval_ms: Some(500),
         },
-        // Verify master configuration exists
+        // Verify master configuration register count is 12
         CursorAction::CheckStatus {
-            description: "Should have one master station configured".to_string(),
-            path: "ports[0].modbus_masters[0].station_id".to_string(),
-            expected: json!(1),
+            description: "Master station should have 12 registers configured".to_string(),
+            path: "ports[0].modbus_masters[0].register_count".to_string(),
+            expected: json!(12),
             timeout_secs: Some(10),
             retry_interval_ms: Some(500),
         },
