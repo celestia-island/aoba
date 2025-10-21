@@ -8,7 +8,7 @@ use ci_utils::{
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
-    terminal::spawn_expect_process,
+    terminal::spawn_expect_process_with_size,
     tui::update_tui_registers,
 };
 use expectrl::Expect;
@@ -64,9 +64,11 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
 
     // Spawn TUI process for masters
     log::info!("🧪 Step 1: Spawning TUI Masters process");
-    let mut tui_session = spawn_expect_process(&["--tui"])
+    let terminal_size = TerminalSize::Large;
+    let (rows, cols) = terminal_size.dimensions();
+    let mut tui_session = spawn_expect_process_with_size(&["--tui"], Some((rows, cols)))
         .map_err(|err| anyhow!("Failed to spawn TUI Masters process: {err}"))?;
-    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Large); // Need larger terminal for 4 stations
+    let mut tui_cap = TerminalCapture::with_size(terminal_size);
 
     sleep_seconds(3).await;
 

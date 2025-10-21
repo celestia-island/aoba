@@ -166,10 +166,18 @@ pub async fn create_modbus_stations<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "nav_to_create_station_button").await?;
 
     // Create stations by pressing Enter N times
+    // After each Enter, cursor moves to the new station, so we need to go back to "Create Station" button
     log::info!("➕ Creating {station_count} stations...");
     for i in 1..=station_count {
         log::info!("  Creating station {i}/{station_count}");
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+            // After creating a station, cursor moves down to the new station
+            // We need to go back to "Create Station" button for the next iteration
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 300 },
+        ];
         execute_cursor_actions(session, cap, &actions, &format!("create_station_{i}")).await?;
     }
 

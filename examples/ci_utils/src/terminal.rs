@@ -64,7 +64,11 @@ pub fn run_binary_sync(args: &[&str]) -> Result<Output> {
 
 /// Spawn a process using `expectrl::spawn` and return a boxed `Expect` trait object.
 /// This is useful for TUI tests that need to interact with the process via a pty.
-pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
+/// 
+/// # Arguments
+/// * `args` - Command line arguments to pass to the process
+/// * `pty_size` - Optional PTY size (rows, cols). If None, uses default size.
+pub fn spawn_expect_process_with_size(args: &[&str], pty_size: Option<(u16, u16)>) -> Result<impl expectrl::Expect> {
     // Build the debug binary for aoba if needed and spawn it with args.
     let bin_path = build_debug_bin("aoba")?;
 
@@ -73,6 +77,10 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
         bin_path.display(),
         args.join(" ")
     );
+
+    if let Some((rows, cols)) = pty_size {
+        log::info!("   PTY size: {}x{} (rows x cols)", rows, cols);
+    }
 
     // If spawning TUI, set AOBA_LOG_FILE environment variable
     let tui_log_path = if args.contains(&"--tui") {
@@ -105,8 +113,20 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
     cmd.env("LANG", "en_US.UTF-8");
 
     // Use expectrl's spawn with Command
-    let session = expectrl::session::Session::spawn(cmd)
+    let mut session = expectrl::session::Session::spawn(cmd)
         .map_err(|err| anyhow!("Failed to spawn process via expectrl: {err}"))?;
 
+    // Set PTY size if specified
+    if let Some((rows, cols)) = pty_size {
+        session.get_process_mut().set_window_size(cols, rows)
+            .map_err(|err| anyhow!("Failed to set PTY window size: {err}"))?;
+    }
+
     Ok(session)
+}
+
+/// Spawn a process using `expectrl::spawn` with default PTY size.
+/// For compatibility with existing code.
+pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
+    spawn_expect_process_with_size(args, None)
 }
