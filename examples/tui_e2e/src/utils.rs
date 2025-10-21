@@ -127,7 +127,291 @@ pub async fn navigate_to_port<T: Expect>(
     Ok(())
 }
 
+/// Create multiple Modbus stations in bulk (Phase 1 of configuration)
+/// 
+/// This function creates N stations by pressing Enter N times on the "Create Station" button.
+/// After creation, it verifies the last station exists and optionally switches to Master mode.
+/// 
+/// # Arguments
+/// * `session` - Terminal session
+/// * `cap` - Terminal capture for screenshots
+/// * `station_count` - Number of stations to create
+/// * `is_master` - If true, switches the mode to Master after creation
+pub async fn create_modbus_stations<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    station_count: usize,
+    is_master: bool,
+) -> Result<()> {
+    use regex::Regex;
+
+    log::info!("🏗️ Phase 1: Creating {station_count} Modbus stations (Master: {is_master})");
+
+    // Verify we are inside Modbus panel
+    let screen = cap.capture(session, "verify_modbus_panel_before_creation").await?;
+    if !screen.contains("ModBus Master/Slave Set") {
+        return Err(anyhow!("Expected to be inside ModBus panel for station creation"));
+    }
+
+    // Navigate to "Create Station" button using Ctrl+PageUp
+    log::info!("📍 Navigating to Create Station button");
+    let actions = vec![
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "nav_to_create_station_button").await?;
+
+    // Create stations by pressing Enter N times
+    log::info!("➕ Creating {station_count} stations...");
+    for i in 1..=station_count {
+        log::info!("  Creating station {i}/{station_count}");
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, &format!("create_station_{i}")).await?;
+    }
+
+    // Verify the last station was created using regex screenshot
+    log::info!("🔍 Verifying station #{station_count} exists");
+    let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
+    let actions = vec![
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::MatchPattern {
+            pattern: station_pattern,
+            description: format!("Station #{station_count} exists"),
+            line_range: None,
+            col_range: None,
+            retry_action: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "verify_last_station_created").await?;
+
+    // Press Down arrow to move off the "Create Station" button
+    log::info!("⬇️ Moving cursor down from Create Station button");
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "move_down_after_creation").await?;
+
+    // If Master mode is needed, switch to it
+    if is_master {
+        log::info!("🔄 Switching to Master mode: Enter, Right, Enter");
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Right,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "switch_to_master_mode").await?;
+    }
+
+    // Move to beginning using Ctrl+PgUp
+    log::info!("⏫ Moving to beginning with Ctrl+PgUp");
+    let actions = vec![
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "move_to_beginning_after_creation").await?;
+
+    log::info!("✅ Phase 1 complete: Created {station_count} stations");
+    Ok(())
+}
+
+/// Configure a single Modbus station (Phase 2 of configuration)
+/// 
+/// This function configures one station by navigating to it and setting all parameters.
+/// It follows the exact flow specified: verify station exists, navigate to it, configure fields.
+/// 
+/// # Arguments
+/// * `session` - Terminal session
+/// * `cap` - Terminal capture for screenshots
+/// * `station_index` - Station index (0-based, so station #1 has index 0)
+/// * `station_id` - Station ID to set
+/// * `register_type` - Register type (1=Coils, 2=Discrete, 3=Holding, 4=Input)
+/// * `start_address` - Start address (will be entered as hex)
+/// * `register_count` - Number of registers (will be entered as decimal)
+pub async fn configure_modbus_station<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    station_index: usize,
+    station_id: u8,
+    register_type: u8,
+    start_address: u16,
+    register_count: usize,
+) -> Result<()> {
+    use regex::Regex;
+
+    let station_number = station_index + 1; // Station #1, #2, etc. (1-based)
+    
+    log::info!("⚙️ Phase 2: Configuring Station #{station_number} (ID={station_id}, Type={register_type:02}, Addr=0x{start_address:04X}, Count={register_count})");
+
+    // Safety: Move to beginning with Ctrl+PgUp
+    log::info!("📍 Safety: Moving to beginning");
+    let actions = vec![
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, &format!("safety_move_to_beginning_s{station_number}")).await?;
+
+    // Safety: Verify station #{station_number} exists with screenshot regex
+    log::info!("🔍 Safety: Verifying station #{station_number} exists");
+    let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_number))?;
+    let actions = vec![
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::MatchPattern {
+            pattern: station_pattern,
+            description: format!("Station #{station_number} exists"),
+            line_range: None,
+            col_range: None,
+            retry_action: None,
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, &format!("verify_station_{station_number}_exists")).await?;
+
+    // Navigate to the station using PgDown
+    log::info!("📄 Navigating to station #{station_number} with PgDown x{station_index}");
+    if station_index > 0 {
+        let mut actions = Vec::new();
+        for _ in 0..station_index {
+            actions.push(CursorAction::PressPageDown);
+            actions.push(CursorAction::Sleep { ms: 300 });
+        }
+        execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{station_number}")).await?;
+    } else {
+        // For station #1, we're already at the right position after Ctrl+PgUp
+        // But still need to move down to the first field
+        let actions = vec![
+            CursorAction::PressPageDown,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "nav_to_station_1").await?;
+    }
+
+    // Configure Station ID: Enter, type ID, Enter, Down
+    log::info!("🆔 Setting Station ID to {station_id}");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(station_id.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, &format!("set_station_id_s{station_number}")).await?;
+
+    // Configure Register Type: Enter, navigate based on type, Enter, Down
+    log::info!("📝 Setting Register Type to {register_type:02}");
+    
+    // Calculate navigation for register type
+    // After pressing Enter, cursor is at position 2 (Holding/03) by default
+    // Positions: 0=Coils(01), 1=Discrete(02), 2=Holding(03), 3=Input(04)
+    let current_pos = 2; // Default is Holding (position 2)
+    let target_pos = (register_type as usize).saturating_sub(1);
+    
+    let nav_actions = if target_pos < current_pos {
+        // Navigate left
+        vec![
+            CursorAction::PressArrow {
+                direction: ArrowKey::Left,
+                count: current_pos - target_pos,
+            },
+            CursorAction::Sleep { ms: 300 },
+        ]
+    } else if target_pos > current_pos {
+        // Navigate right
+        vec![
+            CursorAction::PressArrow {
+                direction: ArrowKey::Right,
+                count: target_pos - current_pos,
+            },
+            CursorAction::Sleep { ms: 300 },
+        ]
+    } else {
+        // Already at the correct position (Holding/03)
+        vec![]
+    };
+
+    let mut actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+    ];
+    actions.extend(nav_actions);
+    actions.extend(vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ]);
+    execute_cursor_actions(session, cap, &actions, &format!("set_register_type_s{station_number}")).await?;
+
+    // Configure Start Address: Enter, type hex address, Enter, Down
+    log::info!("📍 Setting Start Address to 0x{start_address:04X}");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(start_address.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, &format!("set_start_address_s{station_number}")).await?;
+
+    // Configure Register Count: Enter, type decimal count, Enter, Down
+    log::info!("📊 Setting Register Count to {register_count}");
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::TypeString(register_count.to_string()),
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, &format!("set_register_count_s{station_number}")).await?;
+
+    // Save configuration: Ctrl+S, then Ctrl+PgUp
+    log::info!("💾 Saving configuration for station #{station_number}");
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, &format!("save_station_{station_number}_config")).await?;
+
+    log::info!("✅ Station #{station_number} configured successfully");
+    Ok(())
+}
+
 /// Configure a TUI process as a Modbus Master with common settings
+/// DEPRECATED: Use create_modbus_stations + configure_modbus_station instead
 pub async fn configure_tui_master_common<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
