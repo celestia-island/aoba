@@ -109,7 +109,6 @@ use ci_utils::{
     read_tui_status,
 };
 
-#[tokio::test]
 async fn test_tui_master_configuration() -> Result<()> {
     // Spawn TUI with debug mode enabled
     let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
