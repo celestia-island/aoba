@@ -1,13 +1,13 @@
 # TUI Refactoring Status
 
-## Completed ✅
+## Completed ✅ (as of Part 9)
 
 ### Core Architecture Changes
-- **PortOwner enum**: Completely removed
-- **PortData structure**: `subprocess_info` field added directly
-- **PortState enum**: Simplified to 3 states (no owner field)
-- **TUI status tree**: Changed from `HashMap<String, Arc<RwLock<PortData>>>` to `HashMap<String, PortData>`
-- **Helper functions**: Removed `with_port_read()` and `with_port_write()`
+- **PortOwner enum**: Completely removed ✅
+- **PortData structure**: `subprocess_info` field added directly ✅
+- **PortState enum**: Simplified to 3 states (no owner field) ✅
+- **TUI status tree**: Changed from `HashMap<String, Arc<RwLock<PortData>>>` to `HashMap<String, PortData>` ✅
+- **Helper functions**: Removed `with_port_read()` and `with_port_write()` ✅
 
 ### TUI Core Logic  
 - ✅ `tui/mod.rs`: Fully updated (300+ lines refactored)
@@ -20,42 +20,50 @@
 - ✅ `runtime` module: Commented out (depends on daemon)
 - ✅ `scan_ports`: Stubbed (needs refactoring)
 
-## Remaining Work 🔄
+### UI Files Fixed (7 files)
+- ✅ `src/tui/status/serializable.rs`: Removed with_port_read, direct access
+- ✅ `src/tui/ui/title.rs`: Removed with_port_read from both functions
+- ✅ `src/tui/ui/pages/entry/components/list.rs`: Direct port access
+- ✅ `src/tui/ui/pages/entry/components/panel.rs`: Direct port access, removed runtime_handle
+- ✅ `src/tui/ui/pages/log_panel/components/display.rs`: Direct log access
+- ✅ `src/tui/ui/pages/modbus_panel/components/display.rs`: All 5 with_port_read removed
+- ✅ Import cleanup: Removed with_port_* imports from all TUI files
 
-### Compilation Errors: 67 total
+## Remaining Work 🔄 (63 errors)
+
+### Compilation Errors: 63 total
 
 **Error breakdown:**
-- 34 × E0425: Cannot find value (port_guard, port_data_guard variables)
-- 10 × E0432: Unresolved import (with_port_read/write)
-- 6 × E0599: No method found (.read() on PortData)
-- 6 × E0433: Failed to resolve (PortOwner, runtime references)
-- 11 × Other types
+- ~30 × Cannot find function `with_port_read`/`with_port_write` in scope
+- ~15 × Cannot find value `port_guard` / `port_data_guard` (variable scope)
+- ~10 × Runtime-related errors (runtime_handle(), RuntimeCommand)
+- ~5 × Type mismatches (Arc vs direct PortData)
+- ~3 × Other errors
 
-### Files Needing Updates (~15 files)
+### Files Needing Updates (7 remaining files)
 
-#### Config Panel (7 files)
-- `src/tui/ui/pages/config_panel/components/renderer.rs`
-- `src/tui/ui/pages/config_panel/components/utilities.rs`
-- `src/tui/ui/pages/config_panel/input/editing.rs`
-- `src/tui/ui/pages/config_panel/input/navigation.rs`
+#### Config Panel (4 files) - MOST COMPLEX
+- `src/tui/ui/pages/config_panel/components/renderer.rs` - 6 with_port_read calls + runtime refs
+- `src/tui/ui/pages/config_panel/components/utilities.rs` - 3 with_port_read calls
+- `src/tui/ui/pages/config_panel/input/editing.rs` - **10 with_port_write + 10 runtime_handle() calls** ⚠️
+- `src/tui/ui/pages/config_panel/input/navigation.rs` - 2 with_port_write calls
 
-#### Modbus Panel (4 files)
-- `src/tui/ui/pages/modbus_panel/components/display.rs`
-- `src/tui/ui/pages/modbus_panel/input/actions.rs`
-- `src/tui/ui/pages/modbus_panel/input/editing.rs`
-- `src/tui/ui/pages/modbus_panel/input/navigation.rs`
-- `src/tui/ui/pages/modbus_panel/render.rs`
+#### Modbus Panel (3 files) - PARTIALLY DONE
+- `src/tui/ui/pages/modbus_panel/input/actions.rs` - 5 with_port_* calls (some fixed)
+- `src/tui/ui/pages/modbus_panel/input/editing.rs` - 6 with_port_* calls (some fixed)
+- `src/tui/ui/pages/modbus_panel/input/navigation.rs` - 3 with_port_* calls (some fixed)
 
-#### Entry Panel (2 files)
-- `src/tui/ui/pages/entry/components/list.rs`
-- `src/tui/ui/pages/entry/components/panel.rs`
+**Note**: Entry panel, log panel, display.rs, title.rs, serializable.rs are all DONE ✅
 
-#### Log Panel (1 file)
-- `src/tui/ui/pages/log_panel/components/display.rs`
+## Critical Issue: config_panel/input/editing.rs
 
-#### Other (3 files)
-- `src/tui/ui/title.rs`
-- `src/tui/status/serializable.rs`
+This file has 10+ calls to `runtime_handle()` and `runtime_handle_mut()` which no longer exist.
+These are used for serial port configuration (baud rate, parity, etc.).
+
+**Options:**
+1. **Remove config panel functionality** - Comment out the entire editing.rs (breaks config panel)
+2. **Stub runtime calls** - Return None/default values (config panel shows but doesn't work)
+3. **Refactor to use subprocess** - Store config in PortData, sync to CLI subprocess (proper fix, time-consuming)
 
 ## What Each File Needs
 
