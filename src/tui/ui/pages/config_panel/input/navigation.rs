@@ -1,9 +1,7 @@
 use anyhow::Result;
 
 use crate::{
-    protocol::status::{
-        types::{self, cursor::Cursor},
-    },
+    protocol::status::types::{self, cursor::Cursor},
     tui::status::write_status,
 };
 

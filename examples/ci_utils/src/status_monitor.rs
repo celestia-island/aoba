@@ -145,16 +145,14 @@ pub async fn wait_for_tui_page(
     loop {
         if start.elapsed() > timeout.into() {
             return Err(anyhow!(
-                "Timeout waiting for TUI page '{}' (waited {}s)",
-                expected_page,
-                timeout_secs
+                "Timeout waiting for TUI page '{expected_page}' (waited {timeout_secs}s)"
             ));
         }
 
         if let Ok(status) = read_tui_status() {
             let current_page = format!("{:?}", status.page);
             if current_page == expected_page {
-                log::info!("✅ TUI reached page '{}'", expected_page);
+                log::info!("✅ TUI reached page '{expected_page}'");
                 return Ok(status);
             }
             log::debug!(
@@ -198,11 +196,11 @@ pub async fn wait_for_port_enabled(
         if let Ok(status) = read_tui_status() {
             for port in &status.ports {
                 if port.name == port_name && port.enabled {
-                    log::info!("✅ Port '{}' is enabled", port_name);
+                    log::info!("✅ Port '{port_name}' is enabled");
                     return Ok(status);
                 }
             }
-            log::debug!("Port '{}' not yet enabled, retrying...", port_name);
+            log::debug!("Port '{port_name}' not yet enabled, retrying...");
         }
 
         sleep(Duration::from_millis(interval)).await;

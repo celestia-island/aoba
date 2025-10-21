@@ -7,11 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    i18n::lang,
-    protocol::status::{
-        types::{self, port::PortStatusIndicator},
-    },
-    tui::status::read_status,
+    i18n::lang, protocol::status::types::port::PortStatusIndicator, tui::status::read_status,
 };
 
 fn get_port_name(selected_port: usize) -> Result<String> {
@@ -132,28 +128,28 @@ pub fn render_title(frame: &mut Frame, area: Rect) -> Result<()> {
             let (status_text, status_icon, status_color) = get_status_display(&indicator)?;
 
             // Check if we need to show time-limited statuses
-            let should_show_status =
-                match indicator {
-                    PortStatusIndicator::AppliedSuccess { timestamp } => {
-                        use chrono::Local;
-                        let elapsed = Local::now().signed_duration_since(timestamp);
-                        elapsed.num_seconds() < 3
-                    }
-                    PortStatusIndicator::StartupFailed { timestamp, .. } => {
-                        // Show startup failure for 10 seconds
-                        use chrono::Local;
-                        let elapsed = Local::now().signed_duration_since(timestamp);
-                        elapsed.num_seconds() < 10
-                    }
-                    _ => true,
-                };
+            let should_show_status = match indicator {
+                PortStatusIndicator::AppliedSuccess { timestamp } => {
+                    use chrono::Local;
+                    let elapsed = Local::now().signed_duration_since(timestamp);
+                    elapsed.num_seconds() < 3
+                }
+                PortStatusIndicator::StartupFailed { timestamp, .. } => {
+                    // Show startup failure for 10 seconds
+                    use chrono::Local;
+                    let elapsed = Local::now().signed_duration_since(timestamp);
+                    elapsed.num_seconds() < 10
+                }
+                _ => true,
+            };
 
             if should_show_status {
-                let mut status_spans = Vec::new();
-                status_spans.push(Span::styled(status_text, Style::default().fg(status_color)));
-                status_spans.push(Span::raw(" "));
-                status_spans.push(Span::styled(status_icon, Style::default().fg(status_color)));
-                status_spans.push(Span::raw(" ")); // Add trailing space before terminal edge
+                let status_spans = vec![
+                    Span::styled(status_text, Style::default().fg(status_color)),
+                    Span::raw(" "),
+                    Span::styled(status_icon, Style::default().fg(status_color)),
+                    Span::raw(" "), // Add trailing space before terminal edge
+                ];
 
                 let status_para =
                     Paragraph::new(vec![Line::from(status_spans)]).alignment(Alignment::Right);
@@ -237,7 +233,10 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
                 error_message.clone()
             };
             Ok((
-                format!("{}: {}", lang.protocol.common.status_startup_failed, truncated_msg),
+                format!(
+                    "{}: {}",
+                    lang.protocol.common.status_startup_failed, truncated_msg
+                ),
                 "✘".to_string(),
                 Color::Red,
             ))

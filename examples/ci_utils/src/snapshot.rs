@@ -65,7 +65,7 @@ impl TerminalCapture {
     /// Read available bytes from the expectrl session, feed them to the
     /// internal vt100 parser (so cursor moves / clears are applied), log a
     /// snapshot, and return the current rendered screen contents.
-    /// 
+    ///
     /// If `log_content` is false, only logs the capture point but not the screen content.
     /// This reduces log verbosity during successful test runs.
     pub async fn capture(
@@ -73,7 +73,8 @@ impl TerminalCapture {
         session: &mut impl Expect,
         step_description: &str,
     ) -> Result<String> {
-        self.capture_with_logging(session, step_description, true).await
+        self.capture_with_logging(session, step_description, true)
+            .await
     }
 
     /// Capture screen content with optional logging of the content itself.

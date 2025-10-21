@@ -37,8 +37,7 @@ pub fn check_status_indicator(screen: &str) -> Result<String> {
     }
 
     Err(anyhow!(
-        "No status indicator found in title bar: {}",
-        first_line
+        "No status indicator found in title bar: {first_line}"
     ))
 }
 
@@ -56,7 +55,7 @@ pub async fn verify_port_enabled<T: Expect>(
 
     for attempt in 1..=MAX_ATTEMPTS {
         let screen = cap
-            .capture(session, &format!("{}_{}", capture_name, attempt))
+            .capture(session, &format!("{capture_name}_{attempt}"))
             .await?;
 
         match check_status_indicator(&screen) {

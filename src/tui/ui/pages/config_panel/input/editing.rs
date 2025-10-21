@@ -1,20 +1,14 @@
 use anyhow::{anyhow, Result};
-use parking_lot::RwLock;
-use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
-    protocol::{
-        status::{
-            types::{
-                self,
-                cursor::{Cursor, ModbusDashboardCursor},
-                port::PortData,
-            },
-        },
+    protocol::status::types::{
+        self,
+        cursor::{Cursor, ModbusDashboardCursor},
+        // removed unused import: port::PortData
     },
     tui::{
         status::{read_status, write_status},
@@ -84,7 +78,7 @@ fn handle_editing_input(
             })?;
 
             if let Some(port_name) = port_name_opt {
-                if let Some(port) =
+                if let Some(_port) =
                     read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
                 {
                     if let Some(s) = maybe_string {
@@ -221,7 +215,9 @@ fn handle_navigation_input(
             // First, get the selected_port and ports_count outside the write lock
             let (selected_port_opt, _ports_count) = read_status(|status| {
                 let selected_port =
-                    if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = &status.page {
+                    if let crate::tui::status::Page::ConfigPanel { selected_port, .. } =
+                        &status.page
+                    {
                         Some(*selected_port)
                     } else {
                         None
@@ -372,10 +368,9 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                 if let Some(port) = status.ports.map.get(port_name) {
                     match cursor {
                         types::cursor::ConfigPanelCursor::BaudRate => {
-                            let index = types::modbus::BaudRateSelector::from_u32(
-                                port.serial_config.baud,
-                            )
-                            .to_index();
+                            let index =
+                                types::modbus::BaudRateSelector::from_u32(port.serial_config.baud)
+                                    .to_index();
 
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
@@ -438,7 +433,10 @@ fn handle_selector_commit(
                 if matches!(sel, types::modbus::BaudRateSelector::Custom { .. }) {
                     // Switch to string input mode for custom baud rate
                     let current_baud = read_status(|status| {
-                        Ok(status.ports.map.get(port_name)
+                        Ok(status
+                            .ports
+                            .map
+                            .get(port_name)
                             .map(|port| port.serial_config.baud)
                             .unwrap_or(9600))
                     })?;

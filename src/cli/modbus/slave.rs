@@ -109,7 +109,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             .unwrap_or(&port_name);
 
         let dump_path =
-            std::path::PathBuf::from(format!("/tmp/ci_cli_{}_status.json", port_basename));
+            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(
@@ -552,7 +552,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             .unwrap_or(&port_name);
 
         let dump_path =
-            std::path::PathBuf::from(format!("/tmp/ci_cli_{}_status.json", port_basename));
+            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
 
         Some(
             crate::protocol::status::debug_dump::start_status_dump_thread(

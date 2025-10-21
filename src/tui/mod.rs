@@ -1,6 +1,6 @@
-pub mod status;
 pub mod input;
 pub mod persistence;
+pub mod status;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
@@ -26,14 +26,10 @@ use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 use crate::{
     protocol::{
         ipc::IpcMessage,
-        status::{
-            types::{
-                self,
-                modbus::RegisterMode,
-                port::{
-                    PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode,
-                },
-            },
+        status::types::{
+            self,
+            modbus::RegisterMode,
+            port::{PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode},
         },
     },
     tui::{
@@ -327,7 +323,7 @@ fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
                         merged_data[target_idx] = value;
                     }
                 }
-                }
+            }
 
             return Ok(Some(merged_data));
         }
@@ -569,7 +565,7 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
             || {
                 crate::tui::status::TuiStatus::from_global_status().and_then(|status| {
                     serde_json::to_string_pretty(&status)
-                        .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {}", e))
+                        .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {e}"))
                 })
             },
         );
@@ -587,12 +583,12 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
                 self::status::write_status(|status| {
                     if let Some(port) = status.ports.map.get_mut(&port_name) {
                         port.config = config.clone();
-                        log::info!("✅ Restored configuration for port: {}", port_name);
+                        log::info!("✅ Restored configuration for port: {port_name}");
                     }
                     Ok(())
                 })?;
             }
-            log::info!("📂 Restored {} port configuration(s)", count);
+            log::info!("📂 Restored {count} port configuration(s)");
         }
     }
 
@@ -734,7 +730,7 @@ fn run_core_thread(
 
     // do_scan extracted to module-level function below
 
-    let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
+    let _last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         // Drain UI -> core messages
@@ -849,8 +845,7 @@ fn run_core_thread(
                     // Extract CLI inputs WITHOUT holding any locks during subprocess operations
                     let cli_inputs = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
-                            let types::port::PortConfig::Modbus { mode, stations } =
-                                &port.config;
+                            let types::port::PortConfig::Modbus { mode, stations } = &port.config;
                             log::info!(
                                 "ToggleRuntime({port_name}): checking CLI inputs - mode={}, station_count={}",
                                 if mode.is_master() { "Master" } else { "Slave" },
@@ -919,11 +914,15 @@ fn run_core_thread(
 
                                             // Now update status with the result (short lock hold)
                                             self::status::write_status(|status| {
-                                                if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                                if let Some(port) =
+                                                    status.ports.map.get_mut(&port_name)
+                                                {
                                                     port.state = PortState::OccupiedByThis;
-                                                    port.subprocess_info = Some(subprocess_info.clone());
+                                                    port.subprocess_info =
+                                                        Some(subprocess_info.clone());
                                                     // Port is now running
-                                                    port.status_indicator = if port.config_modified {
+                                                    port.status_indicator = if port.config_modified
+                                                    {
                                                         types::port::PortStatusIndicator::RunningWithChanges
                                                     } else {
                                                         types::port::PortStatusIndicator::Running
@@ -952,10 +951,11 @@ fn run_core_thread(
                                         );
                                         append_port_log(&port_name, msg.clone());
                                         self::status::write_status(|status| {
-                                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                                                message: msg.clone(),
-                                                timestamp: chrono::Local::now(),
-                                            });
+                                            status.temporarily.error =
+                                                Some(crate::tui::status::ErrorInfo {
+                                                    message: msg.clone(),
+                                                    timestamp: chrono::Local::now(),
+                                                });
                                             Ok(())
                                         })?;
                                         // Note: No data source file to clean up for SlavePoll mode
@@ -1010,19 +1010,21 @@ fn run_core_thread(
                                                 ipc_socket_name: snapshot.ipc_socket_name.clone(),
                                                 pid: snapshot.pid,
                                                 data_source_path: Some(
-                                                    data_source_path
-                                                        .to_string_lossy()
-                                                        .to_string(),
+                                                    data_source_path.to_string_lossy().to_string(),
                                                 ),
                                             };
 
                                             // Now update status with the result (short lock hold)
                                             self::status::write_status(|status| {
-                                                if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                                if let Some(port) =
+                                                    status.ports.map.get_mut(&port_name)
+                                                {
                                                     port.state = PortState::OccupiedByThis;
-                                                    port.subprocess_info = Some(subprocess_info.clone());
+                                                    port.subprocess_info =
+                                                        Some(subprocess_info.clone());
                                                     // Port is now running
-                                                    port.status_indicator = if port.config_modified {
+                                                    port.status_indicator = if port.config_modified
+                                                    {
                                                         types::port::PortStatusIndicator::RunningWithChanges
                                                     } else {
                                                         types::port::PortStatusIndicator::Running
@@ -1050,20 +1052,22 @@ fn run_core_thread(
                                             "Failed to start CLI subprocess for {port_name}: {err}"
                                         );
                                         append_port_log(&port_name, msg.clone());
-                                        
+
                                         // Update port status indicator to show failure
                                         self::status::write_status(|status| {
-                                            if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                            if let Some(port) = status.ports.map.get_mut(&port_name)
+                                            {
                                                 port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
                                                     error_message: err.to_string(),
                                                     timestamp: chrono::Local::now(),
                                                 };
                                             }
-                                            
-                                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
-                                                message: msg.clone(),
-                                                timestamp: chrono::Local::now(),
-                                            });
+
+                                            status.temporarily.error =
+                                                Some(crate::tui::status::ErrorInfo {
+                                                    message: msg.clone(),
+                                                    timestamp: chrono::Local::now(),
+                                                });
                                             Ok(())
                                         })?;
 
@@ -1154,8 +1158,7 @@ fn run_core_thread(
                             port.state = PortState::Free;
                             port.subprocess_info = None;
                             // Port is now stopped
-                            port.status_indicator =
-                                types::port::PortStatusIndicator::NotStarted;
+                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
                         }
                     }
                 }

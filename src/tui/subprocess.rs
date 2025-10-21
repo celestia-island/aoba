@@ -353,7 +353,7 @@ impl ManagedSubprocess {
         if let Some(ref mut client) = self.command_client {
             // Serialize stations using postcard
             let stations_data = postcard::to_allocvec(stations)
-                .map_err(|e| anyhow!("Failed to serialize stations: {}", e))?;
+                .map_err(|e| anyhow!("Failed to serialize stations: {e}"))?;
 
             let msg = IpcMessage::stations_update(stations_data);
             client.send(&msg)?;

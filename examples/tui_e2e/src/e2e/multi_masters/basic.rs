@@ -1,9 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{
-    navigate_to_modbus_panel, test_station_with_retries,
-};
+use crate::utils::{navigate_to_modbus_panel, test_station_with_retries};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -122,7 +120,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
-            i,                 // station_index (0-based)
+            i, // station_index (0-based)
             station_id,
             register_type,
             start_address,
@@ -150,7 +148,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         "nav_to_top_before_save",
     )
     .await?;
-    
+
     log::info!("💾 Saving all master configurations with Ctrl+S to enable port...");
     let actions = vec![
         CursorAction::PressCtrlS,
@@ -175,11 +173,18 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     )
     .await?;
     log::info!("✅ Port enabled with status: {}, ready for testing", status);
-    
+
     // Now update register data for all masters after port is enabled
-    for (i, &(_station_id, _register_type, _register_mode, start_address)) in masters.iter().enumerate() {
-        log::info!("📝 Updating Master {} data at address 0x{:04X}: {:?}", i + 1, start_address, master_data[i]);
-        
+    for (i, &(_station_id, _register_type, _register_mode, start_address)) in
+        masters.iter().enumerate()
+    {
+        log::info!(
+            "📝 Updating Master {} data at address 0x{:04X}: {:?}",
+            i + 1,
+            start_address,
+            master_data[i]
+        );
+
         // Navigate to the specific station before updating its registers
         // This ensures we're editing the right station
         let nav_to_station_actions = vec![
@@ -188,7 +193,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
             CursorAction::PressPageDown, // Jump to first station
             CursorAction::Sleep { ms: 300 },
         ];
-        
+
         // If not the first station, navigate down to the target station
         if i > 0 {
             execute_cursor_actions(
@@ -217,7 +222,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
             )
             .await?;
         }
-        
+
         update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
         log::info!("✅ Master {} data updated", i + 1);
     }

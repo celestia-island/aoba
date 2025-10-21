@@ -72,12 +72,7 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
     // In CI environment (when AOBA_DEBUG_CI_E2E_TEST is set), only detect vcom1 and vcom2
     // to avoid false positives from residual ports (vcom3, vcom4, etc.)
     let virtual_port_paths = if std::env::var("AOBA_DEBUG_CI_E2E_TEST").is_ok() {
-        vec![
-            "/dev/vcom1",
-            "/dev/vcom2",
-            "/tmp/vcom1",
-            "/tmp/vcom2",
-        ]
+        vec!["/dev/vcom1", "/dev/vcom2", "/tmp/vcom1", "/tmp/vcom2"]
     } else {
         vec![
             "/dev/vcom1",

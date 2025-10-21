@@ -8,10 +8,7 @@ use crossterm::event::KeyEvent;
 
 use crate::{
     protocol::status::types,
-    tui::{
-        status::read_status,
-        utils::bus::Bus,
-    },
+    tui::{status::read_status, utils::bus::Bus},
 };
 
 use editing::handle_editing_input;

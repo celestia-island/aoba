@@ -69,7 +69,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 let has_config = match &old_port_data.config {
                     PortConfig::Modbus { stations, .. } => !stations.is_empty(),
                 };
-                
+
                 let should_preserve = !matches!(old_port_data.state, PortState::Free)
                     || has_config
                     || !old_port_data.logs.is_empty();

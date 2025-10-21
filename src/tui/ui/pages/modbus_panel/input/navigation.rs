@@ -4,9 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
-    protocol::status::{
-        types::{self, cursor::Cursor},
-    },
+    protocol::status::types::{self, cursor::Cursor},
     tui::{
         status::{read_status, write_status},
         utils::bus::{Bus, UiToCore},
@@ -461,7 +459,10 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
 
             // Mark config as not modified
             write_status(|status| {
-                let port = status.ports.map.get_mut(&port_name)
+                let port = status
+                    .ports
+                    .map
+                    .get_mut(&port_name)
                     .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                 port.config_modified = false;
                 // Set status to AppliedSuccess for 3 seconds
@@ -474,9 +475,9 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
 
             // Check if port is already enabled
             let is_enabled = matches!(
-                    port.state,
-                    crate::protocol::status::types::port::PortState::OccupiedByThis
-                );
+                port.state,
+                crate::protocol::status::types::port::PortState::OccupiedByThis
+            );
 
             if !is_enabled {
                 // Enable the port if not already enabled
@@ -553,7 +554,9 @@ fn jump_to_next_group(
         types::cursor::ModbusDashboardCursor::ModbusMode => {
             // Jump to first station if exists
             let has_stations = read_status(|status| {
-                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
@@ -582,7 +585,9 @@ fn jump_to_next_group(
         } => {
             // Check if next station exists
             let has_next = read_status(|status| {
-                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;

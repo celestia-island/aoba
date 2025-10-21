@@ -6,10 +6,7 @@ use ratatui::{
     text::Span,
 };
 
-use crate::{
-    protocol::status::types::ui::InputRawBuffer,
-    tui::status::read_status,
-};
+use crate::{protocol::status::types::ui::InputRawBuffer, tui::status::read_status};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextState {

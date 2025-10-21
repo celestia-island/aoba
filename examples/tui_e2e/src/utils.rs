@@ -128,10 +128,10 @@ pub async fn navigate_to_port<T: Expect>(
 }
 
 /// Create multiple Modbus stations in bulk (Phase 1 of configuration)
-/// 
+///
 /// This function creates N stations by pressing Enter N times on the "Create Station" button.
 /// After creation, it verifies the last station exists and optionally switches to Master mode.
-/// 
+///
 /// # Arguments
 /// * `session` - Terminal session
 /// * `cap` - Terminal capture for screenshots
@@ -148,9 +148,13 @@ pub async fn create_modbus_stations<T: Expect>(
     log::info!("🏗️ Phase 1: Creating {station_count} Modbus stations (Master: {is_master})");
 
     // Verify we are inside Modbus panel
-    let screen = cap.capture(session, "verify_modbus_panel_before_creation").await?;
+    let screen = cap
+        .capture(session, "verify_modbus_panel_before_creation")
+        .await?;
     if !screen.contains("ModBus Master/Slave Set") {
-        return Err(anyhow!("Expected to be inside ModBus panel for station creation"));
+        return Err(anyhow!(
+            "Expected to be inside ModBus panel for station creation"
+        ));
     }
 
     // Navigate to "Create Station" button using Ctrl+PageUp
@@ -165,10 +169,7 @@ pub async fn create_modbus_stations<T: Expect>(
     log::info!("➕ Creating {station_count} stations...");
     for i in 1..=station_count {
         log::info!("  Creating station {i}/{station_count}");
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
-        ];
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
         execute_cursor_actions(session, cap, &actions, &format!("create_station_{i}")).await?;
     }
 
@@ -228,10 +229,10 @@ pub async fn create_modbus_stations<T: Expect>(
 }
 
 /// Configure a single Modbus station (Phase 2 of configuration)
-/// 
+///
 /// This function configures one station by navigating to it and setting all parameters.
 /// It follows the exact flow specified: verify station exists, navigate to it, configure fields.
-/// 
+///
 /// # Arguments
 /// * `session` - Terminal session
 /// * `cap` - Terminal capture for screenshots
@@ -252,7 +253,7 @@ pub async fn configure_modbus_station<T: Expect>(
     use regex::Regex;
 
     let station_number = station_index + 1; // Station #1, #2, etc. (1-based)
-    
+
     log::info!("⚙️ Phase 2: Configuring Station #{station_number} (ID={station_id}, Type={register_type:02}, Addr=0x{start_address:04X}, Count={register_count})");
 
     // Safety: Move to beginning with Ctrl+PgUp
@@ -261,7 +262,13 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("safety_move_to_beginning_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("safety_move_to_beginning_s{station_number}"),
+    )
+    .await?;
 
     // Safety: Verify station #{station_number} exists with screenshot regex
     log::info!("🔍 Safety: Verifying station #{station_number} exists");
@@ -276,7 +283,13 @@ pub async fn configure_modbus_station<T: Expect>(
             retry_action: None,
         },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("verify_station_{station_number}_exists")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("verify_station_{station_number}_exists"),
+    )
+    .await?;
 
     // Navigate to the station using PgDown
     log::info!("📄 Navigating to station #{station_number} with PgDown x{station_index}");
@@ -286,14 +299,17 @@ pub async fn configure_modbus_station<T: Expect>(
             actions.push(CursorAction::PressPageDown);
             actions.push(CursorAction::Sleep { ms: 300 });
         }
-        execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{station_number}")).await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("nav_to_station_{station_number}"),
+        )
+        .await?;
     } else {
         // For station #1, we're already at the right position after Ctrl+PgUp
         // But still need to move down to the first field
-        let actions = vec![
-            CursorAction::PressPageDown,
-            CursorAction::Sleep { ms: 500 },
-        ];
+        let actions = vec![CursorAction::PressPageDown, CursorAction::Sleep { ms: 500 }];
         execute_cursor_actions(session, cap, &actions, "nav_to_station_1").await?;
     }
 
@@ -312,17 +328,23 @@ pub async fn configure_modbus_station<T: Expect>(
         },
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("set_station_id_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_station_id_s{station_number}"),
+    )
+    .await?;
 
     // Configure Register Type: Enter, navigate based on type, Enter, Down
     log::info!("📝 Setting Register Type to {register_type:02}");
-    
+
     // Calculate navigation for register type
     // After pressing Enter, cursor is at position 2 (Holding/03) by default
     // Positions: 0=Coils(01), 1=Discrete(02), 2=Holding(03), 3=Input(04)
     let current_pos = 2; // Default is Holding (position 2)
     let target_pos = (register_type as usize).saturating_sub(1);
-    
+
     let nav_actions = if target_pos < current_pos {
         // Navigate left
         vec![
@@ -346,10 +368,7 @@ pub async fn configure_modbus_station<T: Expect>(
         vec![]
     };
 
-    let mut actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
-    ];
+    let mut actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 300 }];
     actions.extend(nav_actions);
     actions.extend(vec![
         CursorAction::PressEnter,
@@ -360,7 +379,13 @@ pub async fn configure_modbus_station<T: Expect>(
         },
         CursorAction::Sleep { ms: 300 },
     ]);
-    execute_cursor_actions(session, cap, &actions, &format!("set_register_type_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_register_type_s{station_number}"),
+    )
+    .await?;
 
     // Configure Start Address: Enter, type hex address, Enter, Down
     log::info!("📍 Setting Start Address to 0x{start_address:04X}");
@@ -377,7 +402,13 @@ pub async fn configure_modbus_station<T: Expect>(
         },
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("set_start_address_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_start_address_s{station_number}"),
+    )
+    .await?;
 
     // Configure Register Count: Enter, type decimal count, Enter, Down
     log::info!("📊 Setting Register Count to {register_count}");
@@ -394,7 +425,13 @@ pub async fn configure_modbus_station<T: Expect>(
         },
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("set_register_count_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_register_count_s{station_number}"),
+    )
+    .await?;
 
     // Move back to beginning for next iteration
     log::info!("⏫ Moving to beginning with Ctrl+PgUp");
@@ -402,18 +439,24 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("move_to_beginning_after_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("move_to_beginning_after_s{station_number}"),
+    )
+    .await?;
 
     log::info!("✅ Station #{station_number} configured successfully");
     Ok(())
 }
 
 /// Configure a TUI process as a Modbus Master with common settings
-/// 
+///
 /// **DEPRECATED**: This function is deprecated. Use the two-phase approach instead:
 /// 1. Call `create_modbus_stations` once to create all stations
 /// 2. Call `configure_modbus_station` for each station to configure it
-/// 
+///
 /// This function remains for backward compatibility but may have navigation issues
 /// in multi-station scenarios. The new two-phase approach follows the standard
 /// test flow more closely and is more reliable.
@@ -683,11 +726,11 @@ pub async fn configure_tui_master_common<T: Expect>(
 }
 
 /// Configure a TUI process as a Modbus Slave with common settings
-/// 
+///
 /// **DEPRECATED**: This function is deprecated. Use the two-phase approach instead:
 /// 1. Call `create_modbus_stations` once to create all stations (with is_master=false)
 /// 2. Call `configure_modbus_station` for each station to configure it
-/// 
+///
 /// This function remains for backward compatibility but may have navigation issues
 /// in multi-station scenarios. The new two-phase approach follows the standard
 /// test flow more closely and is more reliable.

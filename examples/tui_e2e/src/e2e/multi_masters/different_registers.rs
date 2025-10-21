@@ -1,9 +1,7 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{
-    navigate_to_modbus_panel, test_station_with_retries,
-};
+use crate::utils::{navigate_to_modbus_panel, test_station_with_retries};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
@@ -111,7 +109,7 @@ pub async fn test_tui_multi_masters_different_registers(port1: &str, port2: &str
         configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
-            i,                 // station_index (0-based)
+            i, // station_index (0-based)
             station_id,
             register_type,
             start_address,

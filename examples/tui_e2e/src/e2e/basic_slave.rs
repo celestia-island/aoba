@@ -60,9 +60,8 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])
         .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
-    let mut tui_cap = ci_utils::snapshot::TerminalCapture::with_size(
-        ci_utils::snapshot::TerminalSize::Small,
-    );
+    let mut tui_cap =
+        ci_utils::snapshot::TerminalCapture::with_size(ci_utils::snapshot::TerminalSize::Small);
 
     // Wait for TUI to initialize and start writing status
     log::info!("⏳ Waiting for TUI to initialize...");
@@ -80,7 +79,10 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "wait_entry_page").await?;
 
     // Navigate to port1 using keyboard and enter its config panel
-    log::info!("🧪 Step 3: Navigate to {} in port list and enter config", port1);
+    log::info!(
+        "🧪 Step 3: Navigate to {} in port list and enter config",
+        port1
+    );
     let actions = vec![
         // Port list starts with cursor on first port (vcom1), so just press Enter
         CursorAction::PressEnter, // Enter port details
@@ -100,7 +102,7 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     // We need to navigate to "Enter Business Configuration" option
     log::info!("🧪 Step 4: Enter Modbus configuration panel");
     enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-    
+
     // Verify we're now on ModbusDashboard
     let actions = vec![CursorAction::CheckStatus {
         description: "Should be on ModbusDashboard".to_string(),
@@ -142,14 +144,8 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "set_slave_mode",
-    )
-    .await?;
-    
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "set_slave_mode").await?;
+
     // Add debug breakpoint to verify mode change
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "after_mode_change_to_slave".to_string(),
