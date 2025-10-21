@@ -89,7 +89,14 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in
+    // Phase 1: Create all 4 stations at once
+    use crate::utils::create_modbus_stations;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, true).await?;
+    log::info!("✅ Phase 1 complete: All 4 stations created");
+
+    // Phase 2: Configure each station individually and update its data
+    use crate::utils::configure_modbus_station;
+    for (i, &(station_id, register_type, _register_mode, start_address)) in
         masters.iter().enumerate()
     {
         log::info!(
@@ -99,38 +106,14 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
             register_type
         );
 
-        // For second and subsequent masters, create a new station first
-        if i > 0 {
-            log::info!("➕ Creating new station entry for Master {}", i + 1);
-            use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-            use ci_utils::key_input::ArrowKey;
-            let actions = vec![
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Up,
-                    count: 30,
-                },
-                CursorAction::Sleep { ms: 500 },
-                CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 1000 },
-            ];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &actions,
-                &format!("create_station_for_master_{}", i + 1),
-            )
-            .await?;
-        }
-
-        configure_tui_master_common(
+        configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
+            i,                 // station_index (0-based)
             station_id,
             register_type,
-            register_mode,
             start_address,
             REGISTER_LENGTH,
-            i == 0, // is_first_station
         )
         .await?;
 
@@ -143,6 +126,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
         ci_utils::sleep_a_while().await;
         ci_utils::sleep_a_while().await;
     }
+    log::info!("✅ Phase 2 complete: All 4 stations configured and data updated");
 
     // After configuring all Masters, save and exit Modbus panel
     log::info!("🔄 All Masters configured, saving configuration...");

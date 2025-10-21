@@ -89,7 +89,14 @@ pub async fn test_tui_multi_slaves_same_station(port1: &str, port2: &str) -> Res
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    // Phase 1: Create all 4 stations at once
+    use crate::utils::create_modbus_stations;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?; // false = slave mode
+    log::info!("✅ Phase 1 complete: All 4 stations created");
+
+    // Phase 2: Configure each station individually and update its data
+    use crate::utils::configure_modbus_station;
+    for (i, &(station_id, register_type, _register_mode, start_address)) in slaves.iter().enumerate()
     {
         log::info!(
             "🔧 Configuring Slave {} (Station {}, Type {:02})",
@@ -98,12 +105,12 @@ pub async fn test_tui_multi_slaves_same_station(port1: &str, port2: &str) -> Res
             register_type
         );
 
-        configure_tui_slave_common(
+        configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
+            i,                 // station_index (0-based)
             station_id,
             register_type,
-            register_mode,
             start_address,
             REGISTER_LENGTH,
         )
@@ -118,6 +125,7 @@ pub async fn test_tui_multi_slaves_same_station(port1: &str, port2: &str) -> Res
         ci_utils::sleep_a_while().await;
         ci_utils::sleep_a_while().await;
     }
+    log::info!("✅ Phase 2 complete: All 4 stations configured and data updated");
 
     // After configuring all Slaves, save and exit Modbus panel
     log::info!("🔄 All Slaves configured, saving configuration...");

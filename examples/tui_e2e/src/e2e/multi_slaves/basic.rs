@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::time::Duration;
 
 use crate::utils::{
-    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
+    navigate_to_modbus_panel, test_station_with_retries,
 };
 use ci_utils::{
     data::generate_random_registers,
@@ -87,12 +87,19 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    log::info!("🧪 Step 2: Configuring and updating 4 slaves on {port2}");
+    log::info!("🧪 Step 2: Configuring 4 slaves on {port2}");
 
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    // Phase 1: Create all 4 stations at once
+    use crate::utils::create_modbus_stations;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?; // false = slave mode
+    log::info!("✅ Phase 1 complete: All 4 stations created");
+
+    // Phase 2: Configure each station individually
+    use crate::utils::configure_modbus_station;
+    for (i, &(station_id, register_type, _register_mode, start_address)) in slaves.iter().enumerate()
     {
         log::info!(
             "🔧 Configuring Slave {} (Station {}, Type {:02}, Addr 0x{:04X})",
@@ -102,19 +109,20 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
             start_address
         );
 
-        configure_tui_slave_common(
+        configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
+            i,                 // station_index (0-based)
             station_id,
             register_type,
-            register_mode,
             start_address,
             REGISTER_LENGTH,
         )
         .await?;
 
-        log::info!("✅ Slave {} configured (data will be updated after port is enabled)", i + 1);
+        log::info!("✅ Slave {} configured", i + 1);
     }
+    log::info!("✅ Phase 2 complete: All 4 stations configured");
 
     // All Slaves configured, now save once with Ctrl+S to enable port and commit all changes
     // First, navigate to the top of the panel to ensure we're not in edit mode
