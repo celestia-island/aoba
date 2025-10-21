@@ -96,12 +96,19 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    log::info!("🧪 Step 2: Configuring and updating 4 masters on {port1}");
+    log::info!("🧪 Step 2: Configuring 4 masters on {port1}");
 
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in
+    // Phase 1: Create all 4 stations at once
+    use crate::utils::create_modbus_stations;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, true).await?;
+    log::info!("✅ Phase 1 complete: All 4 stations created");
+
+    // Phase 2: Configure each station individually
+    use crate::utils::configure_modbus_station;
+    for (i, &(station_id, register_type, _register_mode, start_address)) in
         masters.iter().enumerate()
     {
         log::info!(
@@ -112,46 +119,20 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
             start_address
         );
 
-        // For second and subsequent masters, create a new station first
-        if i > 0 {
-            log::info!("➕ Creating new station entry for Master {}", i + 1);
-            // Navigate to "Create Station" button and press Enter
-            use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-            use ci_utils::key_input::ArrowKey;
-            let actions = vec![
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Up,
-                    count: 30, // Ensure we're at the top
-                },
-                CursorAction::Sleep { ms: 500 },
-                CursorAction::PressEnter, // Press Enter on "Create Station"
-                CursorAction::Sleep { ms: 1000 }, // Wait for station to be created
-            ];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &actions,
-                &format!("create_station_for_master_{}", i + 1),
-            )
-            .await?;
-            log::info!("✅ New station created, cursor should now be on it");
-        }
-
-        // Configure the station (skip creation since it's already done)
-        configure_tui_master_common(
+        configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
+            i,                 // station_index (0-based)
             station_id,
             register_type,
-            register_mode,
             start_address,
             REGISTER_LENGTH,
-            i == 0, // is_first_station: true only for the first master
         )
         .await?;
 
-        log::info!("✅ Master {} configured (data will be updated after port is enabled)", i + 1);
+        log::info!("✅ Master {} configured", i + 1);
     }
+    log::info!("✅ Phase 2 complete: All 4 stations configured");
 
     // All Masters configured, now save once with Ctrl+S to enable port and commit all changes
     // First, navigate to the top of the panel to ensure we're not in edit mode

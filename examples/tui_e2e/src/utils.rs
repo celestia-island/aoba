@@ -396,15 +396,13 @@ pub async fn configure_modbus_station<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, &format!("set_register_count_s{station_number}")).await?;
 
-    // Save configuration: Ctrl+S, then Ctrl+PgUp
-    log::info!("💾 Saving configuration for station #{station_number}");
+    // Move back to beginning for next iteration
+    log::info!("⏫ Moving to beginning with Ctrl+PgUp");
     let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 1000 },
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(session, cap, &actions, &format!("save_station_{station_number}_config")).await?;
+    execute_cursor_actions(session, cap, &actions, &format!("move_to_beginning_after_s{station_number}")).await?;
 
     log::info!("✅ Station #{station_number} configured successfully");
     Ok(())
