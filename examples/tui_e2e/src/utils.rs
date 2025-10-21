@@ -409,7 +409,19 @@ pub async fn configure_modbus_station<T: Expect>(
 }
 
 /// Configure a TUI process as a Modbus Master with common settings
-/// DEPRECATED: Use create_modbus_stations + configure_modbus_station instead
+/// 
+/// **DEPRECATED**: This function is deprecated. Use the two-phase approach instead:
+/// 1. Call `create_modbus_stations` once to create all stations
+/// 2. Call `configure_modbus_station` for each station to configure it
+/// 
+/// This function remains for backward compatibility but may have navigation issues
+/// in multi-station scenarios. The new two-phase approach follows the standard
+/// test flow more closely and is more reliable.
+#[deprecated(
+    since = "0.0.1",
+    note = "Use create_modbus_stations + configure_modbus_station instead"
+)]
+#[allow(dead_code)]
 pub async fn configure_tui_master_common<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -671,6 +683,19 @@ pub async fn configure_tui_master_common<T: Expect>(
 }
 
 /// Configure a TUI process as a Modbus Slave with common settings
+/// 
+/// **DEPRECATED**: This function is deprecated. Use the two-phase approach instead:
+/// 1. Call `create_modbus_stations` once to create all stations (with is_master=false)
+/// 2. Call `configure_modbus_station` for each station to configure it
+/// 
+/// This function remains for backward compatibility but may have navigation issues
+/// in multi-station scenarios. The new two-phase approach follows the standard
+/// test flow more closely and is more reliable.
+#[deprecated(
+    since = "0.0.1",
+    note = "Use create_modbus_stations + configure_modbus_station instead"
+)]
+#[allow(dead_code)]
 pub async fn configure_tui_slave_common<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,

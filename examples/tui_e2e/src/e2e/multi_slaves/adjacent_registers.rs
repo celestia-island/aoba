@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::time::Duration;
 
 use crate::utils::{
-    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
+    navigate_to_modbus_panel, test_station_with_retries,
 };
 use ci_utils::{
     data::generate_random_registers,
