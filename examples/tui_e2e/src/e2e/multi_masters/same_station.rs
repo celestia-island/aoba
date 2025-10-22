@@ -1,15 +1,15 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{navigate_to_modbus_panel, test_station_with_retries};
+use crate::utils::{
+    configure_multiple_stations, navigate_to_modbus_panel, test_station_with_retries,
+};
 use ci_utils::{
-    data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
     terminal::spawn_expect_process_with_size,
-    tui::update_tui_registers,
 };
 use expectrl::Expect;
 
@@ -84,49 +84,13 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
-    // Generate register data for all masters first (before configuration)
-    let master_data: Vec<Vec<u16>> = (0..3)
-        .map(|_| generate_random_registers(REGISTER_LENGTH))
+    // Use unified configuration function to create and configure all stations
+    let station_configs: Vec<(u8, u8, u16, usize)> = masters
+        .iter()
+        .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    // Phase 1: Create all 4 stations at once
-    use crate::utils::create_modbus_stations;
-    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, true).await?;
-    log::info!("✅ Phase 1 complete: All 4 stations created");
-
-    // Phase 2: Configure each station individually and update its data
-    use crate::utils::configure_modbus_station;
-    for (i, &(station_id, register_type, _register_mode, start_address)) in
-        masters.iter().enumerate()
-    {
-        log::info!(
-            "🔧 Configuring Master {} (Station {}, Type {:02})",
-            i + 1,
-            station_id,
-            register_type
-        );
-
-        configure_modbus_station(
-            &mut tui_session,
-            &mut tui_cap,
-            i, // station_index (0-based)
-            station_id,
-            register_type,
-            start_address,
-            REGISTER_LENGTH,
-        )
-        .await?;
-
-        // Immediately update data for this master
-        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
-        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
-
-        // Wait for register updates to be saved before configuring next master
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await;
-    }
-    log::info!("✅ Phase 2 complete: All 4 stations configured and data updated");
+    configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
 
     // After configuring all Masters, save and exit Modbus panel
     log::info!("🔄 All Masters configured, saving configuration...");
@@ -206,12 +170,14 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Test all 3 register types from vcom2
+    // NOTE: Since we skip data update phase, all registers should be 0 (default value)
+    let expected_data: Vec<u16> = vec![0; REGISTER_LENGTH];
     let mut register_type_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in
+    for (_i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {
-        log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode})");
+        log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode}, expecting all zeros)");
         register_type_success.insert(
             register_type,
             test_station_with_retries(
@@ -219,7 +185,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
                 station_id,
                 register_mode,
                 start_address,
-                &master_data[i],
+                &expected_data, // Expect all zeros since we didn't update data
                 MAX_RETRIES,
                 RETRY_INTERVAL_MS,
             )

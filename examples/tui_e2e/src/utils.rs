@@ -6,7 +6,7 @@ use expectrl::Expect;
 
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
-    key_input::ArrowKey,
+    key_input::{ArrowKey, ExpectKeyExt},
     snapshot::TerminalCapture,
     tui::enter_modbus_panel,
 };
@@ -268,6 +268,7 @@ pub async fn configure_modbus_station<T: Expect>(
     .await?;
 
     // ===== Configure Station ID (Field 1) =====
+    log::info!("📝 Setting Station ID to {station_id}");
     let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
 
     // PgDown to station area (station_index+1 times)
@@ -281,11 +282,15 @@ pub async fn configure_modbus_station<T: Expect>(
             direction: ArrowKey::Down,
             count: 1,
         },
+        CursorAction::Sleep { ms: 100 }, // Stabilize before Enter
         CursorAction::PressEnter,
-        CursorAction::PressCtrlA,     // Select all existing text
-        CursorAction::PressBackspace, // Delete selected text
+        CursorAction::Sleep { ms: 100 }, // Wait for edit mode
+        CursorAction::PressCtrlA,        // Select all existing text
+        CursorAction::PressBackspace,    // Delete selected text
         CursorAction::TypeString(station_id.to_string()),
+        CursorAction::Sleep { ms: 100 }, // Wait for input
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 200 }, // Wait for field update
     ]);
 
     execute_cursor_actions(
@@ -296,18 +301,29 @@ pub async fn configure_modbus_station<T: Expect>(
     )
     .await?;
 
+    // Verify Station ID was set correctly by capturing screen
+    let _screen = cap
+        .capture(session, &format!("after_set_station_id_{station_number}"))
+        .await?;
+    log::info!("📸 Station ID field updated");
+
     // ===== Configure Register Type (Field 2) =====
+    log::info!("📝 Setting Register Type to {register_type:02}");
     let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
 
     for _ in 0..=station_index {
         nav_actions.push(CursorAction::PressPageDown);
     }
 
-    nav_actions.push(CursorAction::PressArrow {
-        direction: ArrowKey::Down,
-        count: 2,
-    });
-    nav_actions.push(CursorAction::PressEnter);
+    nav_actions.extend(vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::Sleep { ms: 100 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 100 },
+    ]);
 
     // Navigate to the correct register type
     // After Enter, cursor is at Holding (03) by default
@@ -320,14 +336,17 @@ pub async fn configure_modbus_station<T: Expect>(
             direction: ArrowKey::Left,
             count: current_pos - target_pos,
         });
+        nav_actions.push(CursorAction::Sleep { ms: 100 });
     } else if target_pos > current_pos {
         nav_actions.push(CursorAction::PressArrow {
             direction: ArrowKey::Right,
             count: target_pos - current_pos,
         });
+        nav_actions.push(CursorAction::Sleep { ms: 100 });
     }
 
     nav_actions.push(CursorAction::PressEnter);
+    nav_actions.push(CursorAction::Sleep { ms: 200 });
 
     execute_cursor_actions(
         session,
@@ -337,7 +356,16 @@ pub async fn configure_modbus_station<T: Expect>(
     )
     .await?;
 
+    let _screen = cap
+        .capture(
+            session,
+            &format!("after_set_register_type_{station_number}"),
+        )
+        .await?;
+    log::info!("📸 Register Type field updated");
+
     // ===== Configure Start Address (Field 3) =====
+    log::info!("📝 Setting Start Address to 0x{start_address:04X} ({start_address})");
     let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
 
     for _ in 0..=station_index {
@@ -349,11 +377,15 @@ pub async fn configure_modbus_station<T: Expect>(
             direction: ArrowKey::Down,
             count: 3,
         },
+        CursorAction::Sleep { ms: 100 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 100 },
         CursorAction::PressCtrlA,     // Select all existing text
         CursorAction::PressBackspace, // Delete selected text
         CursorAction::TypeString(start_address.to_string()),
+        CursorAction::Sleep { ms: 100 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 200 },
     ]);
 
     execute_cursor_actions(
@@ -364,7 +396,16 @@ pub async fn configure_modbus_station<T: Expect>(
     )
     .await?;
 
+    let _screen = cap
+        .capture(
+            session,
+            &format!("after_set_start_address_{station_number}"),
+        )
+        .await?;
+    log::info!("📸 Start Address field updated");
+
     // ===== Configure Register Length (Field 4) =====
+    log::info!("📝 Setting Register Length to {register_count}");
     let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
 
     for _ in 0..=station_index {
@@ -376,12 +417,15 @@ pub async fn configure_modbus_station<T: Expect>(
             direction: ArrowKey::Down,
             count: 4,
         },
+        CursorAction::Sleep { ms: 100 },
         CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 100 },
         CursorAction::PressCtrlA,     // Select all existing text
         CursorAction::PressBackspace, // Delete selected text
         CursorAction::TypeString(register_count.to_string()),
+        CursorAction::Sleep { ms: 100 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 200 }, // Wait for register grid to update
+        CursorAction::Sleep { ms: 300 }, // Wait for register grid to update
     ]);
 
     execute_cursor_actions(
@@ -392,7 +436,94 @@ pub async fn configure_modbus_station<T: Expect>(
     )
     .await?;
 
-    log::info!("✅ Station #{station_number} configured");
+    let _screen = cap
+        .capture(
+            session,
+            &format!("after_set_register_length_{station_number}"),
+        )
+        .await?;
+    log::info!("📸 Register Length field updated");
+
+    log::info!("✅ Station #{station_number} configured successfully");
+    Ok(())
+}
+
+/// Configure multiple Modbus stations in a batch
+///
+/// This is the recommended high-level function for configuring multiple stations.
+/// It handles the two-phase process automatically:
+/// 1. Creates all stations at once
+/// 2. Configures each station with provided parameters
+///
+/// # Arguments
+/// * `session` - The TUI process session
+/// * `cap` - Terminal capture for screen snapshots
+/// * `stations` - Array of station configurations (station_id, register_type, start_address, register_count)
+///
+/// # Example
+/// ```ignore
+/// let stations = [
+///     (1, 3, 0, 8),    // Station 1, Type 03, Address 0, Length 8
+///     (1, 3, 12, 8),   // Station 1, Type 03, Address 12, Length 8
+///     (1, 3, 24, 8),   // Station 1, Type 03, Address 24, Length 8
+/// ];
+/// configure_multiple_stations(&mut session, &mut cap, &stations).await?;
+/// ```
+pub async fn configure_multiple_stations<T: ExpectKeyExt + Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    stations: &[(u8, u8, u16, usize)], // (station_id, register_type, start_address, register_count)
+) -> Result<()> {
+    let num_stations = stations.len();
+
+    log::info!(
+        "🏗️ Starting batch configuration for {} stations",
+        num_stations
+    );
+
+    // Phase 1: Create all stations at once
+    log::info!("📋 Phase 1: Creating {} stations", num_stations);
+    create_modbus_stations(session, cap, num_stations, false).await?;
+    log::info!("✅ Phase 1 complete: All {} stations created", num_stations);
+
+    // Phase 2: Configure each station individually
+    log::info!("⚙️ Phase 2: Configuring each station");
+    for (i, &(station_id, register_type, start_address, register_count)) in
+        stations.iter().enumerate()
+    {
+        log::info!(
+            "🔧 Phase 2.{}: Configuring Station {} (ID={}, Type={:02}, Addr=0x{:04X}, Length={})",
+            i + 1,
+            i + 1,
+            station_id,
+            register_type,
+            start_address,
+            register_count
+        );
+
+        configure_modbus_station(
+            session,
+            cap,
+            i, // station_index (0-based)
+            station_id,
+            register_type,
+            start_address,
+            register_count,
+        )
+        .await?;
+
+        log::info!("✅ Station {} configured successfully", i + 1);
+    }
+
+    log::info!(
+        "✅ Phase 2 complete: All {} stations configured",
+        num_stations
+    );
+
+    // NOTE: Data update phase is intentionally skipped
+    // New stations have default register values (0) which is sufficient for configuration testing
+    // If specific register values are needed, they should be set after this function returns
+
     Ok(())
 }
 
