@@ -220,6 +220,8 @@ Port is disabled (status changes to `Disabled` or `Not Started ×`) when:
 2. TUI process exits
 3. Configuration is discarded with `Ctrl+Esc`
 
+**IMPORTANT**: Pressing Escape (Esc) alone does NOT enable the port. You MUST use `Ctrl+S` to save configuration and trigger port enabling. After `Ctrl+S`, you can then press `Esc` to return to the previous page (ConfigPanel).
+
 #### Verification Best Practice
 
 Always verify port status AFTER Ctrl+S, while still in Modbus Panel:
@@ -232,6 +234,75 @@ execute_cursor_actions(&mut session, &mut cap, &save_actions, "save_config").awa
 let status = verify_port_enabled(&mut session, &mut cap, "verify_after_save").await?;
 // Status should be "Running ●" or "Applied ✔"
 ```
+
+### Multi-Station Configuration Workflow
+
+When configuring multiple Modbus stations, follow this two-phase approach:
+
+#### Phase 1: Station Creation
+
+Create all stations first before configuring any:
+
+```rust
+// Press Enter on "Create Station" N times (where N = number of stations)
+for i in 1..=station_count {
+    let actions = vec![
+        CursorAction::PressEnter,        // Create station
+        CursorAction::Sleep { ms: 200 },
+        CursorAction::PressCtrlPageUp,   // Return to Create Station button
+    ];
+    execute_cursor_actions(&mut session, &mut cap, &actions, &format!("create_station_{i}")).await?;
+}
+
+// Verify last station was created using regex
+let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
+let actions = vec![
+    CursorAction::MatchPattern {
+        pattern: station_pattern,
+        description: format!("Station #{station_count} exists"),
+        line_range: None,
+        col_range: None,
+        retry_action: None,
+    },
+];
+```
+
+#### Phase 2: Station Configuration
+
+Configure each station individually, using absolute positioning:
+
+```rust
+for (i, station_config) in station_configs.iter().enumerate() {
+    let station_number = i + 1; // 1-indexed
+    
+    // Navigate to station using Ctrl+PgUp + PgDown
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
+    for _ in 0..=i {
+        actions.push(CursorAction::PressPageDown);
+    }
+    
+    // Configure Station ID
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::PressEnter,
+        CursorAction::PressCtrlA,     // Select all
+        CursorAction::PressBackspace, // Clear
+        CursorAction::TypeString(station_id.to_string()),
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 200 },
+    ]);
+    
+    // Configure Register Type (field 2, using Down count: 2)
+    // ... similar pattern for other fields ...
+}
+```
+
+**Key Points:**
+- Always use `Ctrl+PgUp` to reset to top of panel before navigating to a station
+- Use `PgDown` to jump to station sections (one PgDown per station from top)
+- Use `Down` arrow keys to navigate between fields within a station
+- After configuring all stations, use `Ctrl+S` once to save all configurations and enable the port
+- Use `Ctrl+PgUp` at the end of each station configuration to return to top (ensures consistent state)
 
 ### Best Practices
 

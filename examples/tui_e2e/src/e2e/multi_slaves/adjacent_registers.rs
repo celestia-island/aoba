@@ -131,13 +131,19 @@ pub async fn test_tui_multi_slaves_adjacent_registers(port1: &str, port2: &str) 
     }
     log::info!("✅ Phase 2 complete: All 4 stations configured and data updated");
 
-    // After configuring all Slaves, save and exit Modbus panel
-    log::info!("🔄 All Slaves configured, saving configuration...");
+    // After configuring all Slaves, save configuration with Ctrl+S (auto-enables port)
+    log::info!("🔄 All Slaves configured, saving configuration with Ctrl+S...");
 
-    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
-    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
-    tui_session.send("\x1b")?;
+    // Send Ctrl+S to save and auto-enable the port
+    log::info!("⌨️ Sending Ctrl+S to save configuration and auto-enable port...");
+    tui_session.send_ctrl_s()?;
     ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await;
+    ci_utils::sleep_a_while().await; // Extra wait for port to enable
+    
+    // Now send Esc to return to ConfigPanel
+    log::info!("⌨️ Sending Esc to return to ConfigPanel...");
+    tui_session.send("\x1b")?;
     ci_utils::sleep_a_while().await;
 
     // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
