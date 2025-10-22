@@ -282,8 +282,8 @@ pub async fn configure_modbus_station<T: Expect>(
             count: 1,
         },
         CursorAction::PressEnter,
-        CursorAction::PressCtrlA,      // Select all existing text
-        CursorAction::PressBackspace,  // Delete selected text
+        CursorAction::PressCtrlA,     // Select all existing text
+        CursorAction::PressBackspace, // Delete selected text
         CursorAction::TypeString(station_id.to_string()),
         CursorAction::PressEnter,
     ]);
@@ -350,8 +350,8 @@ pub async fn configure_modbus_station<T: Expect>(
             count: 3,
         },
         CursorAction::PressEnter,
-        CursorAction::PressCtrlA,      // Select all existing text
-        CursorAction::PressBackspace,  // Delete selected text
+        CursorAction::PressCtrlA,     // Select all existing text
+        CursorAction::PressBackspace, // Delete selected text
         CursorAction::TypeString(start_address.to_string()),
         CursorAction::PressEnter,
     ]);
@@ -377,8 +377,8 @@ pub async fn configure_modbus_station<T: Expect>(
             count: 4,
         },
         CursorAction::PressEnter,
-        CursorAction::PressCtrlA,      // Select all existing text
-        CursorAction::PressBackspace,  // Delete selected text
+        CursorAction::PressCtrlA,     // Select all existing text
+        CursorAction::PressBackspace, // Delete selected text
         CursorAction::TypeString(register_count.to_string()),
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 200 }, // Wait for register grid to update

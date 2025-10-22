@@ -110,7 +110,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?;
     log::info!("✅ Phase 1 complete: All 4 stations created");
 
-    // Phase 2: Configure each station individually and update its data immediately
+    // Phase 2: Configure each station individually (without updating register data yet)
     use crate::utils::configure_modbus_station;
     for (i, &(station_id, register_type, _register_mode, start_address)) in
         masters.iter().enumerate()
@@ -134,18 +134,36 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         )
         .await?;
 
-        // Immediately update data for this master (while cursor is in its register area)
-        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
-        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
-
-        // Wait for register updates to be saved before configuring next master
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await;
-
-        log::info!("✅ Master {} configured and data updated", i + 1);
+        log::info!("✅ Master {} configured (data update will come later)", i + 1);
     }
-    log::info!("✅ Phase 2 complete: All 4 stations configured with data");
+    log::info!("✅ Phase 2 complete: All 4 stations configured (without data yet)");
+
+    // Phase 3: Update register data for each station
+    log::info!("🧪 Phase 3: Updating register data for all stations");
+    for (i, data) in master_data.iter().enumerate() {
+        log::info!("📝 Updating Master {} data: {:?}", i + 1, data);
+        
+        // Navigate to station i's register area
+        // Strategy: Go to top, then PgDown i+1 times to reach station i
+        use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+        let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
+        for _ in 0..=i {
+            nav_actions.push(CursorAction::PressPageDown);
+        }
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &nav_actions,
+            &format!("nav_to_station_{}_for_data_update", i + 1),
+        )
+        .await?;
+
+        // Now update registers starting from current position
+        update_tui_registers(&mut tui_session, &mut tui_cap, data, false).await?;
+
+        log::info!("✅ Master {} data updated", i + 1);
+    }
+    log::info!("✅ Phase 3 complete: All station data updated");
 
     // All Masters configured with data, now save once with Ctrl+S to enable port
     log::info!("📍 Navigating to top of panel before saving...");
