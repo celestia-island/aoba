@@ -71,6 +71,25 @@ impl Args {
     }
 }
 
+/// Clean up TUI configuration cache file to ensure clean test state
+///
+/// TUI saves port configurations to aoba_tui_config.json and auto-loads them on startup.
+/// This can cause tests to inherit state from previous runs, leading to unexpected behavior
+/// in multi-station creation tests. This function removes the cache before each test.
+pub fn cleanup_tui_config_cache() -> Result<()> {
+    let config_path = std::path::Path::new("aoba_tui_config.json");
+
+    if config_path.exists() {
+        log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
+        std::fs::remove_file(config_path)?;
+        log::info!("✅ TUI config cache cleaned");
+    } else {
+        log::debug!("📂 No TUI config cache found, nothing to clean");
+    }
+
+    Ok(())
+}
+
 /// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
 pub fn setup_virtual_serial_ports() -> Result<bool> {
@@ -150,6 +169,10 @@ async fn main() -> Result<()> {
         args.port1,
         args.port2
     );
+
+    // Clean up TUI config cache before any tests to ensure clean state
+    log::info!("🧪 Cleaning up TUI configuration cache...");
+    cleanup_tui_config_cache()?;
 
     // On Unix-like systems, try to setup virtual serial ports
     #[cfg(not(windows))]
