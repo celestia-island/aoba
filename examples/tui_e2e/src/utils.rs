@@ -364,7 +364,7 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::TypeString(register_count.to_string()),
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Extra long wait for register grid initialization
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Extra long wait for register grid initialization and value commit
     ]);
     execute_cursor_actions(session, cap, &actions, &format!("set_register_length_s{station_number}")).await?;
 
