@@ -35,7 +35,9 @@ pub use status_monitor::{
     PortState as E2EPortState, RegisterMode, TuiModbusMaster, TuiModbusSlave, TuiPage, TuiPort,
     TuiStatus,
 };
-pub use terminal::{build_debug_bin, run_binary_sync, spawn_expect_process, spawn_expect_process_with_size};
+pub use terminal::{
+    build_debug_bin, run_binary_sync, spawn_expect_process, spawn_expect_process_with_size,
+};
 pub use tui::{
     check_status_indicator, enable_port_carefully, enter_modbus_panel, navigate_to_vcom,
     update_tui_registers, verify_port_enabled,
