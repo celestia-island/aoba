@@ -329,7 +329,7 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::TypeString(station_id.to_string()),
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
@@ -343,6 +343,15 @@ pub async fn configure_modbus_station<T: Expect>(
         &format!("set_station_id_s{station_number}"),
     )
     .await?;
+    
+    // DEBUG: Verify Station ID was set
+    let verify_screen = cap.capture(session, &format!("verify_station_id_s{station_number}")).await?;
+    log::info!("🔍 DEBUG After Station ID: cursor should be on Register Type");
+    for line in verify_screen.lines().take(30).skip(10) {
+        if line.contains("Station ID") || line.contains("Register Type") || line.contains(">") {
+            log::info!("  {}", line);
+        }
+    }
 
     // Configure Register Type: Enter, navigate based on type, Enter, Down
     log::info!("📝 Setting Register Type to {register_type:02}");
@@ -380,7 +389,7 @@ pub async fn configure_modbus_station<T: Expect>(
     actions.extend(nav_actions);
     actions.extend(vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
@@ -394,6 +403,15 @@ pub async fn configure_modbus_station<T: Expect>(
         &format!("set_register_type_s{station_number}"),
     )
     .await?;
+    
+    // DEBUG: Verify Register Type was set and cursor is on Start Address
+    let verify_screen = cap.capture(session, &format!("verify_register_type_s{station_number}")).await?;
+    log::info!("🔍 DEBUG After Register Type: cursor should be on Start Address");
+    for line in verify_screen.lines().take(35).skip(12) {
+        if line.contains("Register Type") || line.contains("Start Address") || line.contains(">") {
+            log::info!("  {}", line);
+        }
+    }
 
     // Configure Start Address: Enter, type hex address, Enter, Down
     log::info!("📍 Setting Start Address to 0x{start_address:04X}");
@@ -401,14 +419,12 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 300 },
         CursorAction::TypeString(start_address.to_string()),
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
+        // NOTE: After Start Address, cursor needs to move to Register Length
+        // The single Down press may not be enough (might stop at register grid)
+        // So we don't press Down here - let the next field access handle navigation
     ];
     execute_cursor_actions(
         session,
@@ -417,9 +433,54 @@ pub async fn configure_modbus_station<T: Expect>(
         &format!("set_start_address_s{station_number}"),
     )
     .await?;
+    
+    // DEBUG: Verify Start Address was set
+    let verify_screen = cap.capture(session, &format!("verify_start_address_s{station_number}")).await?;
+    log::info!("🔍 DEBUG After Start Address: checking current position");
+    let expected_addr_hex = format!("0x{:04X}", start_address);
+    log::info!("  Expected Start Address: {expected_addr_hex}");
+    for line in verify_screen.lines().take(40).skip(14) {
+        if line.contains("Start Address") || line.contains("Register Length") || line.contains(">") {
+            log::info!("  {}", line);
+        }
+    }
 
-    // Configure Register Count: Enter, type decimal count, Enter, Down
+    // Configure Register Count: Navigate explicitly to Register Length, then Enter, type, Enter
     log::info!("📊 Setting Register Count to {register_count}");
+    
+    // First, ensure we're on Register Length field by navigating Down explicitly
+    // From Start Address, we need to go Down to reach Register Length
+    // NOTE: May need 2 Down presses if there's register grid in between
+    let nav_to_length = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 }, // Wait for cursor to move
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &nav_to_length,
+        &format!("nav_to_register_length_s{station_number}"),
+    )
+    .await?;
+    
+    // DEBUG: Verify we're now on Register Length field
+    let verify_nav = cap.capture(session, &format!("verify_on_register_length_s{station_number}")).await?;
+    log::info!("🔍 DEBUG After navigating to Register Length:");
+    for line in verify_nav.lines().take(40).skip(14) {
+        if line.contains("Start Address") || line.contains("Register Length") || line.contains(">") {
+            log::info!("  {}", line);
+        }
+    }
+    
+    // Now set the Register Length value
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 300 },
@@ -440,6 +501,25 @@ pub async fn configure_modbus_station<T: Expect>(
         &format!("set_register_count_s{station_number}"),
     )
     .await?;
+
+    // DEBUG: Capture screen after Register Count to verify it was set correctly
+    log::info!("🔍 DEBUG: Verifying Register Count was set to {register_count}");
+    let verify_screen = cap
+        .capture(session, &format!("verify_register_count_s{station_number}"))
+        .await?;
+    
+    // Check if the screen shows the expected value (hex format 0x0008 for count=8, 0x000C for count=12)
+    let expected_hex = format!("0x{:04X}", register_count);
+    if !verify_screen.contains(&expected_hex) {
+        log::warn!("⚠️ Register Count may not have been set correctly!");
+        log::warn!("   Expected: {expected_hex} (decimal {register_count})");
+        log::warn!("   Screen content around Register Length:");
+        for line in verify_screen.lines().filter(|l| l.contains("Register Length") || l.contains("Register Count") || l.contains("0x0001")) {
+            log::warn!("   {}", line);
+        }
+    } else {
+        log::info!("✅ Verified: Register Count shows {expected_hex} in UI");
+    }
 
     // Move back to beginning for next iteration
     log::info!("⏫ Moving to beginning with Ctrl+PgUp");
