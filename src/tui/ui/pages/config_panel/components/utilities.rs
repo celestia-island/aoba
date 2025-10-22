@@ -1,9 +1,6 @@
 use anyhow::Result;
 
-use crate::{
-    protocol::status::types,
-    tui::status::read_status,
-};
+use crate::{protocol::status::types, tui::status::read_status};
 
 /// Derive selection index for config panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ConfigPanelCursor> {

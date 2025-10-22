@@ -8,10 +8,7 @@ use anyhow::Result;
 
 use ratatui::prelude::*;
 
-use crate::{
-    protocol::status::types,
-    tui::status::read_status,
-};
+use crate::tui::status::read_status;
 
 /// Return page-provided bottom hints for the current app state.
 /// Now returns a Vec of rows, where each row is a Vec of hint fragments.

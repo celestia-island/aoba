@@ -15,7 +15,7 @@ use crate::{
 use super::utilities::{derive_selection, is_port_occupied_by_this};
 use types::modbus::ParityOption;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.

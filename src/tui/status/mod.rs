@@ -1,7 +1,6 @@
 /// TUI status module
 ///
 /// This module provides the TUI-specific status tree and read/write functions.
-
 pub mod global;
 pub mod serializable;
 

@@ -58,9 +58,7 @@ pub struct TuiModbusSlave {
 /// Convert from global Status to TuiStatus for serialization
 impl TuiStatus {
     pub fn from_global_status() -> anyhow::Result<Self> {
-        use crate::protocol::status::{
-            types::port::PortState as ProtocolPortState,
-        };
+        use crate::protocol::status::types::port::PortState as ProtocolPortState;
 
         super::read_status(|status| {
             let mut ports = Vec::new();
@@ -69,14 +67,16 @@ impl TuiStatus {
                 if let Some(port) = status.ports.map.get(port_name) {
                     let enabled = matches!(port.state, ProtocolPortState::OccupiedByThis);
                     let state = match &port.state {
-                        ProtocolPortState::Free => crate::tui::status::serializable::PortState::Free,
+                        ProtocolPortState::Free => {
+                            crate::tui::status::serializable::PortState::Free
+                        }
                         ProtocolPortState::OccupiedByThis => {
                             crate::tui::status::serializable::PortState::OccupiedByThis
                         }
                         ProtocolPortState::OccupiedByOther => {
                             crate::tui::status::serializable::PortState::OccupiedByOther
                         }
-                        };
+                    };
 
                     let mut modbus_masters = Vec::new();
                     let mut modbus_slaves = Vec::new();

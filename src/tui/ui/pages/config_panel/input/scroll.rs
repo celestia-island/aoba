@@ -1,9 +1,6 @@
 use anyhow::Result;
 
-use crate::{
-    protocol::status::types,
-    tui::status::write_status,
-};
+use crate::tui::status::write_status;
 
 /// Scroll the ConfigPanel view offset up by `amount` (saturating at 0).
 pub fn handle_scroll_up(amount: usize) -> Result<()> {

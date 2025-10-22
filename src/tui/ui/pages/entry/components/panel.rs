@@ -7,9 +7,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{
-        types::{self, cursor::EntryCursor},
-    },
+    protocol::status::types::{self, cursor::EntryCursor},
     tui::{
         status::read_status,
         ui::{
@@ -137,20 +135,19 @@ fn get_refresh_content() -> Vec<Line<'static>> {
 /// serial parameters in a compact layout.
 fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
     // Fetch the port Arc once under the status read lock to minimize lock churn
-    let port_opt =
-        read_status(|s| {
-            Ok(s.ports
-                .order
-                .get(index)
-                .and_then(|name| s.ports.map.get(name).cloned()))
-        })
-        .unwrap_or(None);
+    let port_opt = read_status(|s| {
+        Ok(s.ports
+            .order
+            .get(index)
+            .and_then(|name| s.ports.map.get(name).cloned()))
+    })
+    .unwrap_or(None);
 
     if let Some(port) = port_opt {
-        let pn = port.port_name.clone();
+        let _pn = port.port_name.clone();
         let st = port.state.clone();
         let cfg = &port.serial_config;
-        
+
         let mut lines: Vec<Line<'static>> = Vec::new();
 
         let enabled = matches!(st, types::port::PortState::OccupiedByThis);
@@ -161,56 +158,56 @@ fn render_port_basic_info_lines(index: usize) -> Vec<Line<'static>> {
 
         {
             let sep_len = 48usize;
-                let sep_str: String = "─".repeat(sep_len);
-                lines.push(Line::from(Span::styled(
-                    sep_str,
-                    Style::default().fg(Color::DarkGray),
-                )));
+            let sep_str: String = "─".repeat(sep_len);
+            lines.push(Line::from(Span::styled(
+                sep_str,
+                Style::default().fg(Color::DarkGray),
+            )));
 
-                let left_min_width: usize = 14; // reasonable default to match config panel style
+            let left_min_width: usize = 14; // reasonable default to match config panel style
 
-                let kv_pairs = vec![
-                    (
-                        lang().protocol.common.label_baud.as_str().to_string(),
-                        cfg.baud.to_string(),
-                    ),
-                    (
-                        lang().protocol.common.label_data_bits.as_str().to_string(),
-                        cfg.data_bits.to_string(),
-                    ),
-                    (
-                        lang().protocol.common.label_parity.as_str().to_string(),
-                        match cfg.parity {
-                            types::port::SerialParity::None => "None".to_string(),
-                            types::port::SerialParity::Odd => "Odd".to_string(),
-                            types::port::SerialParity::Even => "Even".to_string(),
-                        },
-                    ),
-                    (
-                        lang().protocol.common.label_stop_bits.as_str().to_string(),
-                        cfg.stop_bits.to_string(),
-                    ),
+            let kv_pairs = vec![
+                (
+                    lang().protocol.common.label_baud.as_str().to_string(),
+                    cfg.baud.to_string(),
+                ),
+                (
+                    lang().protocol.common.label_data_bits.as_str().to_string(),
+                    cfg.data_bits.to_string(),
+                ),
+                (
+                    lang().protocol.common.label_parity.as_str().to_string(),
+                    match cfg.parity {
+                        types::port::SerialParity::None => "None".to_string(),
+                        types::port::SerialParity::Odd => "Odd".to_string(),
+                        types::port::SerialParity::Even => "Even".to_string(),
+                    },
+                ),
+                (
+                    lang().protocol.common.label_stop_bits.as_str().to_string(),
+                    cfg.stop_bits.to_string(),
+                ),
+            ];
+
+            for (label, val) in kv_pairs {
+                let lab_w = UnicodeWidthStr::width(label.as_str());
+                let pad = if left_min_width > lab_w {
+                    left_min_width - lab_w
+                } else {
+                    1
+                };
+                let spacer = " ".repeat(pad);
+
+                let spans = vec![
+                    Span::styled(label, Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(spacer),
+                    Span::raw(val),
                 ];
-
-                for (label, val) in kv_pairs {
-                    let lab_w = UnicodeWidthStr::width(label.as_str());
-                    let pad = if left_min_width > lab_w {
-                        left_min_width - lab_w
-                    } else {
-                        1
-                    };
-                    let spacer = " ".repeat(pad);
-
-                    let spans = vec![
-                        Span::styled(label, Style::default().add_modifier(Modifier::BOLD)),
-                        Span::raw(spacer),
-                        Span::raw(val),
-                    ];
-                    lines.push(Line::from(spans));
-                }
+                lines.push(Line::from(spans));
             }
+        }
 
-            return lines;
+        return lines;
     }
 
     vec![Line::from(lang().index.invalid_port_selection.as_str())]

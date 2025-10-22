@@ -69,15 +69,10 @@ fn parse_serial_after(s: &str, key: &str) -> Option<String> {
 fn detect_virtual_ports() -> Vec<SerialPortInfo> {
     let mut virtual_ports = Vec::new();
 
-    // In CI environment (when AOBA_DEBUG_CI_E2E_TEST is set), only detect vcom1 and vcom2
+    // In CI debug mode (when --debug-ci-e2e-test is set), only detect vcom1 and vcom2
     // to avoid false positives from residual ports (vcom3, vcom4, etc.)
-    let virtual_port_paths = if std::env::var("AOBA_DEBUG_CI_E2E_TEST").is_ok() {
-        vec![
-            "/dev/vcom1",
-            "/dev/vcom2",
-            "/tmp/vcom1",
-            "/tmp/vcom2",
-        ]
+    let virtual_port_paths = if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+        vec!["/dev/vcom1", "/dev/vcom2", "/tmp/vcom1", "/tmp/vcom2"]
     } else {
         vec![
             "/dev/vcom1",
@@ -155,9 +150,9 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
 
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
-    // In CI environment (when AOBA_DEBUG_CI_E2E_TEST is set), skip real serial port enumeration
+    // In CI debug mode (when --debug-ci-e2e-test is set), skip real serial port enumeration
     // and only return virtual ports to avoid interference from host serial devices
-    let mut raw_ports = if std::env::var("AOBA_DEBUG_CI_E2E_TEST").is_ok() {
+    let mut raw_ports = if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
         log::debug!("CI debug mode: skipping real serial port enumeration");
         Vec::new()
     } else {

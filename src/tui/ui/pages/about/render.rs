@@ -4,7 +4,6 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::types,
     tui::{
         status::read_status,
         ui::{

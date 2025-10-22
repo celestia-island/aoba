@@ -1,14 +1,12 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;
 use crate::{
     i18n::lang,
-    protocol::status::{
-        types::{
-            self,
-            modbus::{ModbusConnectionMode, RegisterMode},
-        },
+    protocol::status::types::{
+        self,
+        modbus::{ModbusConnectionMode, RegisterMode},
     },
     tui::{
         status::read_status,
@@ -204,48 +202,47 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             // Remove individual connection mode selector since we now have global mode
 
             lines.push(create_line(
-                    &lang().protocol.modbus.station_id,
-                    matches!(
+                &lang().protocol.modbus.station_id,
+                matches!(
+                    current_selection,
+                    types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
+                ),
+                || -> Result<Vec<Span<'static>>> {
+                    let rendered_value_spans: Vec<Span>;
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
+                    let current_value = if let Some(item) = stations.get(index) {
+                        item.station_id.to_string()
+                    } else {
+                        "?".to_string()
+                    };
+
+                    let selected = matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
-                    ),
-                    || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        let types::port::PortConfig::Modbus { mode: _, stations } =
-                            &port_data.config;
-                        let current_value = if let Some(item) = stations.get(index) {
-                            item.station_id.to_string()
-                        } else {
-                            "?".to_string()
-                        };
+                    );
 
-                        let selected = matches!(
-                            current_selection,
-                            types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
-                        );
+                    let editing =
+                        selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
-                        let editing = selected
-                            && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
+                    let state = if editing {
+                        TextState::Editing
+                    } else if selected {
+                        TextState::Selected
+                    } else {
+                        TextState::Normal
+                    };
 
-                        let state = if editing {
-                            TextState::Editing
-                        } else if selected {
-                            TextState::Selected
-                        } else {
-                            TextState::Normal
-                        };
-
-                        let hex_display = if current_value.starts_with("0x") {
-                            current_value.clone()
-                        } else if let Ok(n) = current_value.parse::<u8>() {
-                            format!("0x{n:02X} ({n})")
-                        } else {
-                            format!("0x{current_value} (?)")
-                        };
-                        rendered_value_spans = input_spans(hex_display, state)?;
-                        Ok(rendered_value_spans)
-                    },
-                )?);
+                    let hex_display = if current_value.starts_with("0x") {
+                        current_value.clone()
+                    } else if let Ok(n) = current_value.parse::<u8>() {
+                        format!("0x{n:02X} ({n})")
+                    } else {
+                        format!("0x{current_value} (?)")
+                    };
+                    rendered_value_spans = input_spans(hex_display, state)?;
+                    Ok(rendered_value_spans)
+                },
+            )?);
 
             lines.push(create_line(
                     &lang().protocol.modbus.register_mode,
@@ -254,7 +251,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterMode { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
+                        let rendered_value_spans: Vec<Span>;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_mode = if let Some(item) = stations.get(index) {
@@ -301,7 +298,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterStartAddress { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
+                        let rendered_value_spans: Vec<Span>;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {
@@ -345,7 +342,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
+                        let rendered_value_spans: Vec<Span>;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {

@@ -1,16 +1,14 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{
-    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
-};
+use crate::utils::{navigate_to_modbus_panel, test_station_with_retries};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
-    terminal::spawn_expect_process,
+    terminal::spawn_expect_process_with_size,
     tui::update_tui_registers,
 };
 
@@ -68,9 +66,11 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
 
     // Spawn TUI process for slaves
     log::info!("🧪 Step 1: Spawning TUI Slaves process");
-    let mut tui_session = spawn_expect_process(&["--tui"])
+    let terminal_size = TerminalSize::Large;
+    let (rows, cols) = terminal_size.dimensions();
+    let mut tui_session = spawn_expect_process_with_size(&["--tui"], Some((rows, cols)))
         .map_err(|err| anyhow!("Failed to spawn TUI Slaves process: {err}"))?;
-    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Large); // Increased height to show all 4 stations
+    let mut tui_cap = TerminalCapture::with_size(terminal_size);
 
     sleep_seconds(3).await;
 
@@ -87,12 +87,20 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    log::info!("🧪 Step 2: Configuring and updating 4 slaves on {port2}");
+    log::info!("🧪 Step 2: Configuring 4 slaves on {port2}");
 
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    // Phase 1: Create all 4 stations at once
+    use crate::utils::create_modbus_stations;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?; // false = slave mode
+    log::info!("✅ Phase 1 complete: All 4 stations created");
+
+    // Phase 2: Configure each station individually
+    use crate::utils::configure_modbus_station;
+    for (i, &(station_id, register_type, _register_mode, start_address)) in
+        slaves.iter().enumerate()
     {
         log::info!(
             "🔧 Configuring Slave {} (Station {}, Type {:02}, Addr 0x{:04X})",
@@ -102,22 +110,31 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
             start_address
         );
 
-        configure_tui_slave_common(
+        configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
+            i, // station_index (0-based)
             station_id,
             register_type,
-            register_mode,
             start_address,
             REGISTER_LENGTH,
         )
         .await?;
 
-        log::info!("✅ Slave {} configured (data will be updated after port is enabled)", i + 1);
-    }
+        // Immediately update data for this slave (while cursor is in its register area)
+        log::info!("📝 Updating Slave {} data: {:?}", i + 1, slave_data[i]);
+        update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
 
-    // All Slaves configured, now save once with Ctrl+S to enable port and commit all changes
-    // First, navigate to the top of the panel to ensure we're not in edit mode
+        // Wait for register updates to be saved before configuring next slave
+        log::info!("⏱️ Waiting for register updates to be fully saved...");
+        ci_utils::sleep_a_while().await;
+        ci_utils::sleep_a_while().await;
+
+        log::info!("✅ Slave {} configured and data updated", i + 1);
+    }
+    log::info!("✅ Phase 2 complete: All 4 stations configured with data");
+
+    // All Slaves configured with data, now save once with Ctrl+S to enable port
     log::info!("📍 Navigating to top of panel before saving...");
     use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
     use ci_utils::key_input::ArrowKey;
@@ -132,11 +149,11 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
         "nav_to_top_before_save",
     )
     .await?;
-    
+
     log::info!("💾 Saving all slave configurations with Ctrl+S to enable port...");
     let actions = vec![
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 }, // Increased wait time for port to enable and stabilize
+        CursorAction::Sleep { ms: 5000 }, // Wait for port to enable and CLI subprocess to start reading data
     ];
     execute_cursor_actions(
         &mut tui_session,
@@ -146,9 +163,6 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
     )
     .await?;
 
-    // After configuring all Slaves, verify port is enabled
-    log::info!("✅ All Slaves configured and saved, verifying port is enabled...");
-
     // Verify port is enabled by checking the status indicator
     log::info!("🔍 Verifying port is enabled");
     let status = ci_utils::verify_port_enabled(
@@ -157,50 +171,10 @@ pub async fn test_tui_multi_slaves_basic(port1: &str, port2: &str) -> Result<()>
         "verify_port_enabled_multi_slaves",
     )
     .await?;
-    log::info!("✅ Port enabled with status: {}, ready for testing", status);
-    
-    // Now update register data for all slaves after port is enabled
-    for (i, &(_station_id, _register_type, _register_mode, start_address)) in slaves.iter().enumerate() {
-        log::info!("📝 Updating Slave {} data at address 0x{:04X}: {:?}", i + 1, start_address, slave_data[i]);
-        
-        // Navigate to the specific station before updating its registers
-        if i > 0 {
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &[
-                    CursorAction::PressCtrlPageUp,
-                    CursorAction::Sleep { ms: 300 },
-                    CursorAction::PressPageDown,
-                    CursorAction::Sleep { ms: 300 },
-                    CursorAction::PressArrow {
-                        direction: ArrowKey::Down,
-                        count: i * 5, // Each station takes ~5 cursor positions
-                    },
-                    CursorAction::Sleep { ms: 300 },
-                ],
-                &format!("nav_to_station_{}_for_update", i + 1),
-            )
-            .await?;
-        } else {
-            let nav_to_station_actions = vec![
-                CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 300 },
-                CursorAction::PressPageDown,
-                CursorAction::Sleep { ms: 300 },
-            ];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &nav_to_station_actions,
-                "nav_to_first_station_for_update",
-            )
-            .await?;
-        }
-        
-        update_tui_registers(&mut tui_session, &mut tui_cap, &slave_data[i], false).await?;
-        log::info!("✅ Slave {} data updated", i + 1);
-    }
+    log::info!(
+        "✅ Port enabled with status: {}, all data committed, ready for testing",
+        status
+    );
 
     // Test all 4 address ranges from vcom1
     let mut address_range_success = std::collections::HashMap::new();

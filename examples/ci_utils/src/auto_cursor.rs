@@ -21,6 +21,10 @@ pub enum CursorAction {
     CtrlC,
     /// Press Ctrl+S to save configuration
     PressCtrlS,
+    /// Press Ctrl+A to select all text
+    PressCtrlA,
+    /// Press Backspace to delete
+    PressBackspace,
     /// Press PageUp key
     PressPageUp,
     /// Press PageDown key
@@ -225,52 +229,88 @@ pub async fn execute_cursor_actions<T: Expect>(
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressEnter => {
                 log::info!("↩️ Pressing Enter");
                 session.send_enter()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressEscape => {
                 log::info!("⎋ Pressing Escape");
                 session.send_escape()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressTab => {
                 log::info!("⇥ Pressing Tab");
                 session.send_tab()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::CtrlC => {
                 log::info!("🛑 Pressing Ctrl+C to exit");
                 session.send_ctrl_c()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressCtrlS => {
                 log::info!("💾 Pressing Ctrl+S to save");
                 session.send_ctrl_s()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
+            }
+            CursorAction::PressCtrlA => {
+                log::info!("🔤 Pressing Ctrl+A to select all");
+                session.send_ctrl_a()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
+            }
+            CursorAction::PressBackspace => {
+                log::info!("⌫ Pressing Backspace");
+                session.send_backspace()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressPageUp => {
                 log::info!("⬆️📄 Pressing PageUp");
                 session.send_page_up()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressPageDown => {
                 log::info!("⬇️📄 Pressing PageDown");
                 session.send_page_down()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressCtrlPageUp => {
                 log::info!("⬆️📄 Pressing Ctrl+PageUp");
                 session.send_ctrl_page_up()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::PressCtrlPageDown => {
                 log::info!("⬇️📄 Pressing Ctrl+PageDown");
                 session.send_ctrl_page_down()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::TypeChar(ch) => {
                 log::info!("⌨️ Typing character '{ch}'");
                 session.send_char(*ch)?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::TypeString(s) => {
                 log::info!("⌨️ Typing string '{s}'");
                 for ch in s.chars() {
                     session.send_char(ch)?;
                 }
+                // Auto sleep after keypress
+                sleep_a_while().await;
             }
             CursorAction::Sleep { ms } => {
                 log::info!("💤 Sleeping for {ms} ms");

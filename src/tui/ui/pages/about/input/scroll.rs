@@ -1,9 +1,7 @@
 use anyhow::Result;
 
-use crate::{
-    protocol::status::types,
-    tui::status::write_status,
-};
+// removed unused import: protocol::status::types
+use crate::tui::status::write_status;
 
 /// Scroll the About page view offset up by `amount` (saturating at 0).
 pub fn handle_scroll_up(amount: usize) -> Result<()> {

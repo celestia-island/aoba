@@ -1,16 +1,14 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crate::utils::{
-    configure_tui_slave_common, navigate_to_modbus_panel, test_station_with_retries,
-};
+use crate::utils::{navigate_to_modbus_panel, test_station_with_retries};
 use ci_utils::{
     data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
-    terminal::spawn_expect_process,
+    terminal::spawn_expect_process_with_size,
     tui::update_tui_registers,
 };
 use expectrl::Expect;
@@ -67,9 +65,11 @@ pub async fn test_tui_multi_slaves_adjacent_registers(port1: &str, port2: &str) 
 
     // Spawn TUI process for slaves
     log::info!("🧪 Step 1: Spawning TUI Slaves process");
-    let mut tui_session = spawn_expect_process(&["--tui"])
+    let terminal_size = TerminalSize::Large;
+    let (rows, cols) = terminal_size.dimensions();
+    let mut tui_session = spawn_expect_process_with_size(&["--tui"], Some((rows, cols)))
         .map_err(|err| anyhow!("Failed to spawn TUI Slaves process: {err}"))?;
-    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
+    let mut tui_cap = TerminalCapture::with_size(terminal_size);
 
     sleep_seconds(3).await;
 
@@ -90,16 +90,24 @@ pub async fn test_tui_multi_slaves_adjacent_registers(port1: &str, port2: &str) 
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in slaves.iter().enumerate()
+    // Phase 1: Create all 4 stations at once
+    use crate::utils::create_modbus_stations;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?; // false = slave mode
+    log::info!("✅ Phase 1 complete: All 4 stations created");
+
+    // Phase 2: Configure each station individually and update its data
+    use crate::utils::configure_modbus_station;
+    for (i, &(station_id, register_type, _register_mode, start_address)) in
+        slaves.iter().enumerate()
     {
         log::info!("🔧 Configuring Slave {} (Station {})", i + 1, station_id);
 
-        configure_tui_slave_common(
+        configure_modbus_station(
             &mut tui_session,
             &mut tui_cap,
+            i, // station_index (0-based)
             station_id,
             register_type,
-            register_mode,
             start_address,
             REGISTER_LENGTH,
         )
@@ -121,6 +129,7 @@ pub async fn test_tui_multi_slaves_adjacent_registers(port1: &str, port2: &str) 
         ci_utils::sleep_a_while().await;
         ci_utils::sleep_a_while().await;
     }
+    log::info!("✅ Phase 2 complete: All 4 stations configured and data updated");
 
     // After configuring all Slaves, save and exit Modbus panel
     log::info!("🔄 All Slaves configured, saving configuration...");

@@ -71,6 +71,25 @@ impl Args {
     }
 }
 
+/// Clean up TUI configuration cache file to ensure clean test state
+///
+/// TUI saves port configurations to aoba_tui_config.json and auto-loads them on startup.
+/// This can cause tests to inherit state from previous runs, leading to unexpected behavior
+/// in multi-station creation tests. This function removes the cache before each test.
+pub fn cleanup_tui_config_cache() -> Result<()> {
+    let config_path = std::path::Path::new("aoba_tui_config.json");
+
+    if config_path.exists() {
+        log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
+        std::fs::remove_file(config_path)?;
+        log::info!("✅ TUI config cache cleaned");
+    } else {
+        log::debug!("📂 No TUI config cache found, nothing to clean");
+    }
+
+    Ok(())
+}
+
 /// Setup virtual serial ports by running socat_init script without requiring sudo
 /// This function can be called before each test to reset ports
 pub fn setup_virtual_serial_ports() -> Result<bool> {
@@ -85,15 +104,27 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         log::info!("🧪 Setting up virtual serial ports...");
 
         // Find the socat_init.sh script (centralized at repo root)
-        let script_path = std::path::Path::new("scripts/socat_init.sh");
+        // Try both relative paths: from repo root and from examples/tui_e2e
+        let script_paths = [
+            std::path::Path::new("scripts/socat_init.sh"),
+            std::path::Path::new("../../scripts/socat_init.sh"),
+        ];
 
-        if !script_path.exists() {
-            log::warn!(
-                "⚠️ socat_init.sh script not found at {}",
-                script_path.display()
-            );
-            return Ok(false);
-        }
+        let script_path = script_paths.iter().find(|p| p.exists()).ok_or_else(|| {
+            anyhow::anyhow!(
+                "⚠️ socat_init.sh script not found at any of: {}",
+                script_paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
+        log::debug!(
+            "📍 Using socat_init.sh script at: {}",
+            script_path.display()
+        );
 
         // Run the script directly; it operates entirely in user-mode
         let output = Command::new("bash")
@@ -139,6 +170,10 @@ async fn main() -> Result<()> {
         args.port2
     );
 
+    // Clean up TUI config cache before any tests to ensure clean state
+    log::info!("🧪 Cleaning up TUI configuration cache...");
+    cleanup_tui_config_cache()?;
+
     // On Unix-like systems, try to setup virtual serial ports
     #[cfg(not(windows))]
     {
@@ -163,7 +198,20 @@ async fn main() -> Result<()> {
         #[cfg(not(windows))]
         {
             log::info!("🧪 Resetting virtual serial ports after Test 0...");
+
+            // Kill all aoba processes to ensure clean state
+            let _ = std::process::Command::new("pkill")
+                .args(&["-9", "aoba"])
+                .output();
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            // Reset socat to fully release port locks
             setup_virtual_serial_ports()?;
+
+            // Add extended delay to ensure PTY devices are ready
+            log::info!("⏳ Waiting for ports to stabilize (15 seconds)...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
         }
     }
 
@@ -179,7 +227,26 @@ async fn main() -> Result<()> {
         #[cfg(not(windows))]
         {
             log::info!("🧪 Resetting virtual serial ports after Test 1...");
+
+            // Kill all aoba processes to ensure clean state
+            let _ = std::process::Command::new("pkill")
+                .args(&["-9", "aoba"])
+                .output();
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            // Reset socat to fully release port locks
             setup_virtual_serial_ports()?;
+
+            // Add extended delay to ensure PTY devices are ready
+            log::info!("⏳ Waiting for ports to stabilize (15 seconds)...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+
+            // Verify status files are clean
+            log::info!("🧪 Verifying status files are reset...");
+            if let Ok(status_content) = std::fs::read_to_string("/tmp/ci_tui_status.json") {
+                log::debug!("Status file content after cleanup: {}", status_content);
+            }
         }
     }
 

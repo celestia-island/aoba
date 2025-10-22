@@ -20,9 +20,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if has_ctrl {
                 // Ctrl+PageUp: Jump to first log item
                 write_status(|status| {
-                    if let crate::tui::status::Page::LogPanel {
-                        selected_item, ..
-                    } = &mut status.page
+                    if let crate::tui::status::Page::LogPanel { selected_item, .. } =
+                        &mut status.page
                     {
                         *selected_item = Some(0);
                     }
@@ -86,9 +85,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Handle Enter key for input area editing
             write_status(|status| {
                 // Set input mode to editing or toggle between modes
-                if let crate::tui::status::Page::LogPanel { input_mode, .. } =
-                    &mut status.page
-                {
+                if let crate::tui::status::Page::LogPanel { input_mode, .. } = &mut status.page {
                     *input_mode = match input_mode {
                         crate::protocol::status::types::ui::InputMode::Ascii => {
                             crate::protocol::status::types::ui::InputMode::Hex

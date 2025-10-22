@@ -123,6 +123,6 @@ impl CliStatus {
     /// Serialize to JSON string
     pub fn to_json(&self) -> anyhow::Result<String> {
         serde_json::to_string_pretty(self)
-            .map_err(|e| anyhow::anyhow!("Failed to serialize CLI status: {}", e))
+            .map_err(|e| anyhow::anyhow!("Failed to serialize CLI status: {e}"))
     }
 }

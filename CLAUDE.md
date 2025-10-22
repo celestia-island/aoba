@@ -20,10 +20,9 @@ The TUI E2E testing framework has been refactored to support two complementary t
 
 #### For TUI Processes
 
-Set the environment variable before starting TUI:
+Start TUI with the `--debug-ci-e2e-test` flag:
 ```bash
-export AOBA_DEBUG_CI_E2E_TEST=1
-cargo run --package aoba -- --tui
+cargo run --package aoba -- --tui --debug-ci-e2e-test
 ```
 
 This will create `/tmp/ci_tui_status.json` with periodic status dumps (every 500ms).
@@ -38,6 +37,22 @@ cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-tes
 ```
 
 This will create `/tmp/ci_cli_vcom1_status.json` with periodic status dumps (uses port basename, e.g., "/tmp/vcom1" -> "vcom1").
+
+### Note: Running commands on Windows (non-CI)
+
+If you run these commands on a local Windows machine (not in CI) and you use WSL (Windows Subsystem for Linux), we recommend wrapping commands that must run in a Unix-like environment with `wsl bash -lc '...'` so paths and temporary file locations (for example `/tmp`) are resolved correctly inside WSL.
+
+For example:
+
+```bash
+# Start TUI in debug mode inside WSL
+wsl bash -lc 'cargo run --package aoba -- --tui --debug-ci-e2e-test'
+
+# Manually start CLI subprocess (debug mode) inside WSL
+wsl bash -lc 'cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-test'
+```
+
+If you run the above commands in native Windows shells (PowerShell / cmd) you may encounter path or permission issues because debug status files are written to Unix-style temporary directories (e.g., `/tmp`). Using `wsl bash -lc '...'` runs the command explicitly in WSL and avoids these problems.
 
 ### Status File Format
 
@@ -94,13 +109,9 @@ use ci_utils::{
     read_tui_status,
 };
 
-#[tokio::test]
 async fn test_tui_master_configuration() -> Result<()> {
-    // Enable debug mode
-    std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
-
-    // Spawn TUI
-    let mut tui_session = spawn_expect_process(&["--tui"])?;
+    // Spawn TUI with debug mode enabled
+    let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
 
     // Wait for TUI to initialize and start writing status
     // Note: In production tests, prefer using wait_for_tui_page() instead of sleep
@@ -141,6 +152,86 @@ async fn test_tui_master_configuration() -> Result<()> {
 - `read_cli_status(port)` - Read current CLI status from `/tmp/cli_e2e_{port}.log`
 - `port_exists_in_tui(port_name)` - Check if port exists in TUI
 - `get_port_log_count(port_name)` - Get number of logs for a port
+
+### TUI Port Enable Mechanism (CRITICAL)
+
+**IMPORTANT**: Understanding how ports are enabled/disabled in TUI is critical for writing correct E2E tests.
+
+#### How Port Enable Works
+
+**Port is automatically enabled when you save Modbus configuration with `Ctrl+S`:**
+
+```rust
+// Configure stations (Station ID, Register Type, Address, Length)
+// ... create station 1, station 2, etc. ...
+
+// Save configuration - THIS ENABLES THE PORT AUTOMATICALLY
+let actions = vec![
+    CursorAction::PressCtrlS,
+    CursorAction::Sleep { ms: 5000 }, // Wait for port to enable and stabilize
+];
+```
+
+**Key Points:**
+1. **Ctrl+S triggers port enable**: When you press `Ctrl+S` in Modbus Panel, TUI saves the configuration AND automatically enables the port
+2. **Port state changes from `Disabled` → `Running`**: After Ctrl+S, the status indicator in title bar changes to show `Running ●`
+3. **No manual toggle needed**: You do NOT need to manually toggle "Enable Port" field or press Right arrow on it
+4. **Escape does NOT enable port**: Pressing Escape to leave Modbus Panel does NOT trigger port enable (this was a previous misunderstanding)
+
+#### Common Mistake: Redundant Port Restart
+
+**WRONG - Redundant leave/return/verify after updating registers:**
+```rust
+// After Ctrl+S, port is already Running ●
+update_tui_registers(&mut session, &mut cap, &data, false).await?;
+
+// ❌ WRONG: No need to leave and return to trigger restart
+let actions = vec![
+    CursorAction::PressEscape,  // ❌ This doesn't restart the port
+    CursorAction::Sleep { ms: 3000 },
+    CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 },
+    CursorAction::PressEnter,  // ❌ Unnecessary return to panel
+];
+```
+
+**CORRECT - Port already enabled after Ctrl+S:**
+```rust
+// Save configuration (enables port automatically)
+let actions = vec![
+    CursorAction::PressCtrlS,
+    CursorAction::Sleep { ms: 5000 },
+];
+execute_cursor_actions(&mut session, &mut cap, &actions, "save_and_enable").await?;
+
+// Verify port is enabled (we're already in Modbus Panel with status indicator visible)
+let status = verify_port_enabled(&mut session, &mut cap, "verify_enabled").await?;
+
+// Update register values (port stays Running)
+update_tui_registers(&mut session, &mut cap, &data, false).await?;
+
+// ✅ CORRECT: Port is still Running, directly proceed to testing
+test_modbus_communication(...).await?;
+```
+
+#### When Port Gets Disabled
+
+Port is disabled (status changes to `Disabled` or `Not Started ×`) when:
+1. User manually disables it (not typically done in E2E tests)
+2. TUI process exits
+3. Configuration is discarded with `Ctrl+Esc`
+
+#### Verification Best Practice
+
+Always verify port status AFTER Ctrl+S, while still in Modbus Panel:
+
+```rust
+// Save configuration
+execute_cursor_actions(&mut session, &mut cap, &save_actions, "save_config").await?;
+
+// Verify immediately (status indicator is visible in Modbus Panel title bar)
+let status = verify_port_enabled(&mut session, &mut cap, "verify_after_save").await?;
+// Status should be "Running ●" or "Applied ✔"
+```
 
 ### Best Practices
 
@@ -255,16 +346,16 @@ let actions = vec![
 
 #### Status file not found
 
-Ensure debug mode is enabled:
+Ensure debug mode is enabled by passing the `--debug-ci-e2e-test` flag when spawning the TUI or CLI process:
 ```rust
-std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
+spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
 ```
 
 #### Status file not updating
 
 Check that the status dump thread is running. Look for log messages:
 ```
-Started status dump thread, writing to /tmp/tui_e2e_status.json
+Started status dump thread, writing to /tmp/ci_tui_status.json
 ```
 
 #### Timeout waiting for status

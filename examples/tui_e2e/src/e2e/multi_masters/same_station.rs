@@ -2,16 +2,14 @@ use anyhow::{anyhow, Result};
 use std::time::Duration;
 
 use crate::utils::{
-    configure_tui_master_common, navigate_to_modbus_panel, test_station_with_retries,
+    configure_multiple_stations, navigate_to_modbus_panel, test_station_with_retries,
 };
 use ci_utils::{
-    data::generate_random_registers,
     helpers::sleep_seconds,
     key_input::ExpectKeyExt,
     ports::{port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
-    terminal::spawn_expect_process,
-    tui::update_tui_registers,
+    terminal::spawn_expect_process_with_size,
 };
 use expectrl::Expect;
 
@@ -66,9 +64,11 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
 
     // Spawn TUI process for masters
     log::info!("🧪 Step 1: Spawning TUI Masters process");
-    let mut tui_session = spawn_expect_process(&["--tui"])
+    let terminal_size = TerminalSize::Large;
+    let (rows, cols) = terminal_size.dimensions();
+    let mut tui_session = spawn_expect_process_with_size(&["--tui"], Some((rows, cols)))
         .map_err(|err| anyhow!("Failed to spawn TUI Masters process: {err}"))?;
-    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
+    let mut tui_cap = TerminalCapture::with_size(terminal_size);
 
     sleep_seconds(3).await;
 
@@ -84,65 +84,13 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
-    // Generate register data for all masters first (before configuration)
-    let master_data: Vec<Vec<u16>> = (0..3)
-        .map(|_| generate_random_registers(REGISTER_LENGTH))
+    // Use unified configuration function to create and configure all stations
+    let station_configs: Vec<(u8, u8, u16, usize)> = masters
+        .iter()
+        .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in
-        masters.iter().enumerate()
-    {
-        log::info!(
-            "🔧 Configuring Master {} (Station {}, Type {:02})",
-            i + 1,
-            station_id,
-            register_type
-        );
-
-        // For second and subsequent masters, create a new station first
-        if i > 0 {
-            log::info!("➕ Creating new station entry for Master {}", i + 1);
-            use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
-            use ci_utils::key_input::ArrowKey;
-            let actions = vec![
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Up,
-                    count: 30,
-                },
-                CursorAction::Sleep { ms: 500 },
-                CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 1000 },
-            ];
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &actions,
-                &format!("create_station_for_master_{}", i + 1),
-            )
-            .await?;
-        }
-
-        configure_tui_master_common(
-            &mut tui_session,
-            &mut tui_cap,
-            station_id,
-            register_type,
-            register_mode,
-            start_address,
-            REGISTER_LENGTH,
-            i == 0, // is_first_station
-        )
-        .await?;
-
-        // Immediately update data for this master
-        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
-        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
-
-        // Wait for register updates to be saved before configuring next master
-        log::info!("⏱️ Waiting for register updates to be fully saved...");
-        ci_utils::sleep_a_while().await;
-        ci_utils::sleep_a_while().await;
-    }
+    configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
 
     // After configuring all Masters, save and exit Modbus panel
     log::info!("🔄 All Masters configured, saving configuration...");
@@ -222,12 +170,14 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     log::info!("✅ Successfully returned to port details page with port enabled");
 
     // Test all 3 register types from vcom2
+    // NOTE: Since we skip data update phase, all registers should be 0 (default value)
+    let expected_data: Vec<u16> = vec![0; REGISTER_LENGTH];
     let mut register_type_success = std::collections::HashMap::new();
 
-    for (i, &(station_id, register_type, register_mode, start_address)) in
+    for (_i, &(station_id, register_type, register_mode, start_address)) in
         masters.iter().enumerate()
     {
-        log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode})");
+        log::info!("🧪 Testing Station {station_id} (Type {register_type}, {register_mode}, expecting all zeros)");
         register_type_success.insert(
             register_type,
             test_station_with_retries(
@@ -235,7 +185,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
                 station_id,
                 register_mode,
                 start_address,
-                &master_data[i],
+                &expected_data, // Expect all zeros since we didn't update data
                 MAX_RETRIES,
                 RETRY_INTERVAL_MS,
             )

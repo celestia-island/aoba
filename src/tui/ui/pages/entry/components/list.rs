@@ -7,11 +7,9 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{
-        types::{
-            self,
-            port::{PortData, PortState},
-        },
+    protocol::status::types::{
+        self,
+        port::{PortData, PortState},
     },
     tui::{
         status::read_status,
@@ -24,7 +22,10 @@ use crate::{
 use anyhow::Result;
 
 /// Helper function to derive selection from page state (entry page specific)
-pub fn derive_selection_from_page(page: &crate::tui::status::Page, ports_order: &[String]) -> Result<usize> {
+pub fn derive_selection_from_page(
+    page: &crate::tui::status::Page,
+    ports_order: &[String],
+) -> Result<usize> {
     let res = match page {
         crate::tui::status::Page::Entry { cursor, .. } => match cursor {
             Some(types::cursor::EntryCursor::Com { index }) => *index,
@@ -167,7 +168,8 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         }
 
         // Get view_offset from page state
-        let view_offset = if let crate::tui::status::Page::Entry { view_offset, .. } = &status.page {
+        let view_offset = if let crate::tui::status::Page::Entry { view_offset, .. } = &status.page
+        {
             *view_offset
         } else {
             0

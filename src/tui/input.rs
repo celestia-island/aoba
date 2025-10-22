@@ -4,7 +4,7 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::types,
+    // removed unused import: protocol::status::types
     tui::{
         status::{read_status, write_status},
         ui::pages,

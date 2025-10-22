@@ -56,7 +56,7 @@ pub enum PortStatusIndicator {
     /// Config was just successfully applied (green ✔ checkmark, shown for 3 seconds)
     AppliedSuccess { timestamp: DateTime<Local> },
     /// Port failed to start (red text with error message)
-    StartupFailed { 
+    StartupFailed {
         error_message: String,
         timestamp: DateTime<Local>,
     },
@@ -104,13 +104,13 @@ pub struct PortData {
     pub port_type: String,
     pub extra: PortExtra,
     pub state: PortState,
-    
+
     /// CLI subprocess info (only present when state is OccupiedByThis)
     pub subprocess_info: Option<PortSubprocessInfo>,
-    
+
     /// Serial port configuration (baud rate, data bits, stop bits, parity)
     pub serial_config: SerialConfig,
-    
+
     pub config: PortConfig,
 
     pub logs: Vec<PortLogEntry>,

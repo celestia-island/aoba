@@ -7,11 +7,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::{
-    i18n::lang,
-    protocol::status::types,
-    tui::status::read_status,
-};
+use crate::{i18n::lang, protocol::status::types, tui::status::read_status};
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Option<usize>)>> {

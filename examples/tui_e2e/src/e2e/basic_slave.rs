@@ -52,17 +52,12 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     }
     log::info!("✅ Virtual COM ports verified");
 
-    // Enable debug mode for status monitoring
-    std::env::set_var("AOBA_DEBUG_CI_E2E_TEST", "1");
-    log::info!("🔍 Debug CI E2E test mode enabled");
-
     // Spawn TUI process (will be slave/server on vcom1)
     log::info!("🧪 Step 1: Spawning TUI process");
     let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])
         .map_err(|err| anyhow!("Failed to spawn TUI process: {err}"))?;
-    let mut tui_cap = ci_utils::snapshot::TerminalCapture::with_size(
-        ci_utils::snapshot::TerminalSize::Small,
-    );
+    let mut tui_cap =
+        ci_utils::snapshot::TerminalCapture::with_size(ci_utils::snapshot::TerminalSize::Small);
 
     // Wait for TUI to initialize and start writing status
     log::info!("⏳ Waiting for TUI to initialize...");
@@ -80,7 +75,10 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "wait_entry_page").await?;
 
     // Navigate to port1 using keyboard and enter its config panel
-    log::info!("🧪 Step 3: Navigate to {} in port list and enter config", port1);
+    log::info!(
+        "🧪 Step 3: Navigate to {} in port list and enter config",
+        port1
+    );
     let actions = vec![
         // Port list starts with cursor on first port (vcom1), so just press Enter
         CursorAction::PressEnter, // Enter port details
@@ -100,7 +98,7 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     // We need to navigate to "Enter Business Configuration" option
     log::info!("🧪 Step 4: Enter Modbus configuration panel");
     enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
-    
+
     // Verify we're now on ModbusDashboard
     let actions = vec![CursorAction::CheckStatus {
         description: "Should be on ModbusDashboard".to_string(),
@@ -142,14 +140,8 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
     ];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "set_slave_mode",
-    )
-    .await?;
-    
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "set_slave_mode").await?;
+
     // Add debug breakpoint to verify mode change
     let actions = vec![CursorAction::DebugBreakpoint {
         description: "after_mode_change_to_slave".to_string(),
@@ -175,12 +167,35 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
             direction: ArrowKey::Down,
             count: 3, // Navigate to register length field (from Station ID)
         },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter, // Enter edit mode
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 }, // Wait for cursor to reach register length field
+        CursorAction::DebugBreakpoint {
+            description: "before_edit_register_length".to_string(),
+        },
+        CursorAction::PressEnter,         // Enter edit mode
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for edit mode to fully initialize
+        CursorAction::DebugBreakpoint {
+            description: "after_enter_edit_mode".to_string(),
+        },
         CursorAction::TypeString(REGISTER_LENGTH.to_string()),
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter, // Confirm edit
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for typing to complete and buffer to update
+        CursorAction::DebugBreakpoint {
+            description: "after_type_12".to_string(),
+        },
+        CursorAction::PressEnter, // Confirm edit and commit to status tree
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Wait for value to be committed to global status tree
+        CursorAction::DebugBreakpoint {
+            description: "after_confirm_edit".to_string(),
+        },
+        // Verify the value was actually committed
+        CursorAction::CheckStatus {
+            description: format!("Register length should be updated to {}", REGISTER_LENGTH),
+            path: "ports[0].modbus_slaves[0].register_count".to_string(),
+            expected: json!(REGISTER_LENGTH),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+        // Move back to top before saving (per documentation)
+        CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "configure_slave").await?;

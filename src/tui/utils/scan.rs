@@ -9,7 +9,7 @@ use crate::{
 /// because another scan was already in progress.
 ///
 /// This function enumerates available serial ports and updates the TUI status with the results.
-/// In CI debug mode (AOBA_DEBUG_CI_E2E_TEST=1), only virtual ports (vcom) are enumerated.
+/// In CI debug mode (when --debug-ci-e2e-test is set), only virtual ports (vcom) are enumerated.
 /// In normal mode, all available serial ports are enumerated using serialport library.
 pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool) -> Result<bool> {
     if *scan_in_progress {
@@ -69,7 +69,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 let has_config = match &old_port_data.config {
                     PortConfig::Modbus { stations, .. } => !stations.is_empty(),
                 };
-                
+
                 let should_preserve = !matches!(old_port_data.state, PortState::Free)
                     || has_config
                     || !old_port_data.logs.is_empty();

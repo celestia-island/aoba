@@ -37,8 +37,7 @@ pub fn check_status_indicator(screen: &str) -> Result<String> {
     }
 
     Err(anyhow!(
-        "No status indicator found in title bar: {}",
-        first_line
+        "No status indicator found in title bar: {first_line}"
     ))
 }
 
@@ -56,7 +55,7 @@ pub async fn verify_port_enabled<T: Expect>(
 
     for attempt in 1..=MAX_ATTEMPTS {
         let screen = cap
-            .capture(session, &format!("{}_{}", capture_name, attempt))
+            .capture(session, &format!("{capture_name}_{attempt}"))
             .await?;
 
         match check_status_indicator(&screen) {
@@ -526,13 +525,10 @@ pub async fn update_tui_registers<T: Expect>(
     log::info!("🔍 Resetting to top of Modbus panel...");
 
     // Navigate up many times to ensure we reach the top
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 50, // Large count to ensure we reach top
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-    ];
+    let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+        direction: crate::key_input::ArrowKey::Up,
+        count: 50, // Large count to ensure we reach top
+    }];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
 
     // Now search down for the register grid
@@ -560,13 +556,10 @@ pub async fn update_tui_registers<T: Expect>(
 
         if !found_register {
             // Navigate down to find registers
-            let actions = vec![
-                crate::auto_cursor::CursorAction::PressArrow {
-                    direction: crate::key_input::ArrowKey::Down,
-                    count: 1,
-                },
-                crate::auto_cursor::CursorAction::Sleep { ms: 100 },
-            ];
+            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+                direction: crate::key_input::ArrowKey::Down,
+                count: 1,
+            }];
             crate::auto_cursor::execute_cursor_actions(
                 session,
                 cap,
@@ -618,13 +611,10 @@ pub async fn update_tui_registers<T: Expect>(
 
         // If we left the grid or screen didn't change, go back down one and stop
         if !still_in_grid || before == after {
-            let actions = vec![
-                crate::auto_cursor::CursorAction::PressArrow {
-                    direction: crate::key_input::ArrowKey::Down,
-                    count: 1,
-                },
-                crate::auto_cursor::CursorAction::Sleep { ms: 200 },
-            ];
+            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+                direction: crate::key_input::ArrowKey::Down,
+                count: 1,
+            }];
             crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first_reg")
                 .await?;
             log::info!("Positioned at first register after {} up attempts", attempt);
@@ -641,7 +631,6 @@ pub async fn update_tui_registers<T: Expect>(
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::TypeString(hex_val),
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 50 },
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
@@ -688,24 +677,13 @@ pub async fn update_tui_registers<T: Expect>(
     // before any subsequent operations (like navigating to add another station)
     log::info!("⏱️ Waiting for all register values to be committed...");
     crate::helpers::sleep_a_while().await;
-    crate::helpers::sleep_a_while().await;
-    crate::helpers::sleep_a_while().await; // Extra safety margin
 
-    // Navigate back to top of page for next station configuration
-    // After editing registers, cursor is at the last register. The next call to
-    // configure_tui_master_common expects to be near the top of the Modbus panel (station list).
-    // We need to go up but NOT leave the Modbus panel (which would take us to port config).
-    // The register grid is ~3-4 rows, so Up 10 should be safe to reach station list without leaving panel.
-    log::info!("⬆️ Navigating back to station list within Modbus panel");
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 10, // Moderate count to reach station list without leaving Modbus panel
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_station_list")
-        .await?;
+    // Navigate back to top of Modbus panel for next station configuration
+    // Use Ctrl+PageUp to jump to the absolute top of the panel (Create Station / Connection Mode area).
+    // This is more reliable than counting Up presses, which can vary based on register count.
+    log::info!("⬆️ Jumping back to top of Modbus panel with Ctrl+PageUp");
+    let actions = vec![crate::auto_cursor::CursorAction::PressCtrlPageUp];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_top").await?;
 
     Ok(())
 }
