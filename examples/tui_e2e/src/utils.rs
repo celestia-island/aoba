@@ -275,13 +275,15 @@ pub async fn configure_modbus_station<T: Expect>(
         nav_actions.push(CursorAction::PressPageDown);
     }
 
-    // Navigate and edit Station ID (Down 1, Enter, Type, Enter)
+    // Navigate and edit Station ID (Down 1, Enter, Clear, Type, Enter)
     nav_actions.extend(vec![
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
         CursorAction::PressEnter,
+        CursorAction::PressCtrlA,      // Select all existing text
+        CursorAction::PressBackspace,  // Delete selected text
         CursorAction::TypeString(station_id.to_string()),
         CursorAction::PressEnter,
     ]);
@@ -348,6 +350,8 @@ pub async fn configure_modbus_station<T: Expect>(
             count: 3,
         },
         CursorAction::PressEnter,
+        CursorAction::PressCtrlA,      // Select all existing text
+        CursorAction::PressBackspace,  // Delete selected text
         CursorAction::TypeString(start_address.to_string()),
         CursorAction::PressEnter,
     ]);
@@ -373,6 +377,8 @@ pub async fn configure_modbus_station<T: Expect>(
             count: 4,
         },
         CursorAction::PressEnter,
+        CursorAction::PressCtrlA,      // Select all existing text
+        CursorAction::PressBackspace,  // Delete selected text
         CursorAction::TypeString(register_count.to_string()),
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 200 }, // Wait for register grid to update

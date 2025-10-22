@@ -21,6 +21,10 @@ pub enum CursorAction {
     CtrlC,
     /// Press Ctrl+S to save configuration
     PressCtrlS,
+    /// Press Ctrl+A to select all text
+    PressCtrlA,
+    /// Press Backspace to delete
+    PressBackspace,
     /// Press PageUp key
     PressPageUp,
     /// Press PageDown key
@@ -255,6 +259,18 @@ pub async fn execute_cursor_actions<T: Expect>(
             CursorAction::PressCtrlS => {
                 log::info!("💾 Pressing Ctrl+S to save");
                 session.send_ctrl_s()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
+            }
+            CursorAction::PressCtrlA => {
+                log::info!("🔤 Pressing Ctrl+A to select all");
+                session.send_ctrl_a()?;
+                // Auto sleep after keypress
+                sleep_a_while().await;
+            }
+            CursorAction::PressBackspace => {
+                log::info!("⌫ Pressing Backspace");
+                session.send_backspace()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
