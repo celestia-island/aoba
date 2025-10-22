@@ -220,8 +220,9 @@ pub async fn create_modbus_stations<T: Expect>(
 
 /// Configure a single Modbus station (Phase 2 of configuration)
 ///
-/// This function configures one station by navigating to it and setting all parameters.
-/// Uses absolute positioning strategy: Ctrl+PgUp to top, then PgDown + Down to reach each field.
+/// This function configures one station by navigating to it once and then
+/// explicitly navigating to each field using Down arrow counts from the station header.
+/// This ensures reliable field access while avoiding repeated full re-navigation.
 ///
 /// # Arguments
 /// * `session` - Terminal session
@@ -229,7 +230,7 @@ pub async fn create_modbus_stations<T: Expect>(
 /// * `station_index` - Station index (0-based, so station #1 has index 0)
 /// * `station_id` - Station ID to set
 /// * `register_type` - Register type (1=Coils, 2=Discrete, 3=Holding, 4=Input)
-/// * `start_address` - Start address (will be entered as hex)
+/// * `start_address` - Start address (will be entered as decimal, displayed as hex)
 /// * `register_count` - Number of registers (will be entered as decimal)
 pub async fn configure_modbus_station<T: Expect>(
     session: &mut T,
@@ -250,7 +251,7 @@ pub async fn configure_modbus_station<T: Expect>(
     let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_number))?;
     let verify_actions = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 200 }, // Allow UI to stabilize
+        CursorAction::Sleep { ms: 200 },
         CursorAction::MatchPattern {
             pattern: station_pattern,
             description: format!("Station #{station_number} exists"),
@@ -267,182 +268,110 @@ pub async fn configure_modbus_station<T: Expect>(
     )
     .await?;
 
-    // ===== Configure Station ID (Field 1) =====
+    // Configure each field by navigating from top each time (reliable but verbose)
+    // This ensures we always start from a known position
+    
+    // ===== Field 1: Station ID =====
     log::info!("📝 Setting Station ID to {station_id}");
-    let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
-
-    // PgDown to station area (station_index+1 times)
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
     for _ in 0..=station_index {
-        nav_actions.push(CursorAction::PressPageDown);
+        actions.push(CursorAction::PressPageDown);
     }
-
-    // Navigate and edit Station ID (Down 1, Enter, Clear, Type, Enter)
-    nav_actions.extend(vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 100 }, // Stabilize before Enter
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 100 }, // Wait for edit mode
-        CursorAction::PressCtrlA,        // Select all existing text
-        CursorAction::PressBackspace,    // Delete selected text
+        CursorAction::Sleep { ms: 500 }, // Wait for edit mode to activate
+        CursorAction::PressCtrlA,
+        CursorAction::PressBackspace,
         CursorAction::TypeString(station_id.to_string()),
-        CursorAction::Sleep { ms: 100 }, // Wait for input
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 200 }, // Wait for field update
+        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for edit mode to fully exit and value to commit
     ]);
+    execute_cursor_actions(session, cap, &actions, &format!("set_station_id_s{station_number}")).await?;
 
-    execute_cursor_actions(
-        session,
-        cap,
-        &nav_actions,
-        &format!("set_station_id_s{station_number}"),
-    )
-    .await?;
-
-    // Verify Station ID was set correctly by capturing screen
-    let _screen = cap
-        .capture(session, &format!("after_set_station_id_{station_number}"))
-        .await?;
-    log::info!("📸 Station ID field updated");
-
-    // ===== Configure Register Type (Field 2) =====
+    // ===== Field 2: Register Type =====
     log::info!("📝 Setting Register Type to {register_type:02}");
-    let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
-
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
     for _ in 0..=station_index {
-        nav_actions.push(CursorAction::PressPageDown);
+        actions.push(CursorAction::PressPageDown);
     }
-
-    nav_actions.extend(vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 2,
-        },
-        CursorAction::Sleep { ms: 100 },
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 100 },
+        CursorAction::Sleep { ms: 500 },
     ]);
-
-    // Navigate to the correct register type
-    // After Enter, cursor is at Holding (03) by default
-    // Positions: 0=Coils(01), 1=Discrete(02), 2=Holding(03), 3=Input(04)
-    let current_pos = 2;
+    
+    // Navigate to correct register type
+    let current_pos = 2; // Holding (03) is default
     let target_pos = (register_type as usize).saturating_sub(1);
-
+    
     if target_pos < current_pos {
-        nav_actions.push(CursorAction::PressArrow {
+        actions.push(CursorAction::PressArrow {
             direction: ArrowKey::Left,
             count: current_pos - target_pos,
         });
-        nav_actions.push(CursorAction::Sleep { ms: 100 });
+        actions.push(CursorAction::Sleep { ms: 300 });
     } else if target_pos > current_pos {
-        nav_actions.push(CursorAction::PressArrow {
+        actions.push(CursorAction::PressArrow {
             direction: ArrowKey::Right,
             count: target_pos - current_pos,
         });
-        nav_actions.push(CursorAction::Sleep { ms: 100 });
+        actions.push(CursorAction::Sleep { ms: 300 });
     }
+    
+    actions.extend(vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 }, // Wait for selection to commit
+    ]);
+    execute_cursor_actions(session, cap, &actions, &format!("set_register_type_s{station_number}")).await?;
 
-    nav_actions.push(CursorAction::PressEnter);
-    nav_actions.push(CursorAction::Sleep { ms: 200 });
-
-    execute_cursor_actions(
-        session,
-        cap,
-        &nav_actions,
-        &format!("set_register_type_s{station_number}"),
-    )
-    .await?;
-
-    let _screen = cap
-        .capture(
-            session,
-            &format!("after_set_register_type_{station_number}"),
-        )
-        .await?;
-    log::info!("📸 Register Type field updated");
-
-    // ===== Configure Start Address (Field 3) =====
+    // ===== Field 3: Start Address =====
     log::info!("📝 Setting Start Address to 0x{start_address:04X} ({start_address})");
-    let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
-
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
     for _ in 0..=station_index {
-        nav_actions.push(CursorAction::PressPageDown);
+        actions.push(CursorAction::PressPageDown);
     }
-
-    nav_actions.extend(vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 3,
-        },
-        CursorAction::Sleep { ms: 100 },
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 100 },
-        CursorAction::PressCtrlA,     // Select all existing text
-        CursorAction::PressBackspace, // Delete selected text
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressCtrlA,
+        CursorAction::PressBackspace,
         CursorAction::TypeString(start_address.to_string()),
-        CursorAction::Sleep { ms: 100 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 200 },
+        CursorAction::Sleep { ms: 1000 }, // Wait for value to commit
     ]);
+    execute_cursor_actions(session, cap, &actions, &format!("set_start_address_s{station_number}")).await?;
 
-    execute_cursor_actions(
-        session,
-        cap,
-        &nav_actions,
-        &format!("set_start_address_s{station_number}"),
-    )
-    .await?;
-
-    let _screen = cap
-        .capture(
-            session,
-            &format!("after_set_start_address_{station_number}"),
-        )
-        .await?;
-    log::info!("📸 Start Address field updated");
-
-    // ===== Configure Register Length (Field 4) =====
+    // ===== Field 4: Register Length =====
     log::info!("📝 Setting Register Length to {register_count}");
-    let mut nav_actions = vec![CursorAction::PressCtrlPageUp];
-
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
     for _ in 0..=station_index {
-        nav_actions.push(CursorAction::PressPageDown);
+        actions.push(CursorAction::PressPageDown);
     }
-
-    nav_actions.extend(vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 4,
-        },
-        CursorAction::Sleep { ms: 100 },
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 4 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 100 },
-        CursorAction::PressCtrlA,     // Select all existing text
-        CursorAction::PressBackspace, // Delete selected text
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressCtrlA,
+        CursorAction::PressBackspace,
         CursorAction::TypeString(register_count.to_string()),
-        CursorAction::Sleep { ms: 100 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 }, // Wait for register grid to update
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Extra long wait for register grid initialization
     ]);
+    execute_cursor_actions(session, cap, &actions, &format!("set_register_length_s{station_number}")).await?;
 
-    execute_cursor_actions(
-        session,
-        cap,
-        &nav_actions,
-        &format!("set_register_length_s{station_number}"),
-    )
-    .await?;
-
-    let _screen = cap
-        .capture(
-            session,
-            &format!("after_set_register_length_{station_number}"),
-        )
-        .await?;
-    log::info!("📸 Register Length field updated");
+    // Return to top with Ctrl+PgUp as per workflow requirement
+    log::info!("⏫ Returning to top with Ctrl+PgUp");
+    let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 200 }];
+    execute_cursor_actions(session, cap, &actions, &format!("return_to_top_s{station_number}")).await?;
 
     log::info!("✅ Station #{station_number} configured successfully");
     Ok(())
