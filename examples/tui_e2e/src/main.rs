@@ -175,7 +175,20 @@ async fn main() -> Result<()> {
         #[cfg(not(windows))]
         {
             log::info!("🧪 Resetting virtual serial ports after Test 0...");
+
+            // Kill all aoba processes to ensure clean state
+            let _ = std::process::Command::new("pkill")
+                .args(&["-9", "aoba"])
+                .output();
+
+            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+
+            // Reset socat to fully release port locks
             setup_virtual_serial_ports()?;
+
+            // Add extended delay to ensure PTY devices are ready
+            log::info!("⏳ Waiting for ports to stabilize (15 seconds)...");
+            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
         }
     }
 

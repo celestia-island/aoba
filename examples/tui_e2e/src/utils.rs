@@ -424,9 +424,9 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 300 },
         CursorAction::TypeString(register_count.to_string()),
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 }, // Increased wait time for TUI to process the input
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 800 }, // Increased wait time for TUI to update register grid
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,

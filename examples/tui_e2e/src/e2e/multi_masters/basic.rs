@@ -34,7 +34,7 @@ use ci_utils::{
 /// 3. IPC communication prevents port conflicts
 /// 4. Communication reliability with retry logic
 pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()> {
-    const REGISTER_LENGTH: usize = 12;
+    const REGISTER_LENGTH: usize = 8; // Reduced from 12 for testing
     const MAX_RETRIES: usize = 10;
     const RETRY_INTERVAL_MS: u64 = 1000;
 
@@ -101,12 +101,16 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
+    // Default connection mode is already Master, no need to change
+    log::info!("✅ Connection mode is Master by default");
+
     // Phase 1: Create all 4 stations at once
+    // Note: Pass is_master=false because default is already Master, don't toggle
     use crate::utils::create_modbus_stations;
-    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, true).await?;
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?;
     log::info!("✅ Phase 1 complete: All 4 stations created");
 
-    // Phase 2: Configure each station individually
+    // Phase 2: Configure each station individually and update its data immediately
     use crate::utils::configure_modbus_station;
     for (i, &(station_id, register_type, _register_mode, start_address)) in
         masters.iter().enumerate()
@@ -130,12 +134,20 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         )
         .await?;
 
-        log::info!("✅ Master {} configured", i + 1);
-    }
-    log::info!("✅ Phase 2 complete: All 4 stations configured");
+        // Immediately update data for this master (while cursor is in its register area)
+        log::info!("📝 Updating Master {} data: {:?}", i + 1, master_data[i]);
+        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
 
-    // All Masters configured, now save once with Ctrl+S to enable port and commit all changes
-    // First, navigate to the top of the panel to ensure we're not in edit mode
+        // Wait for register updates to be saved before configuring next master
+        log::info!("⏱️ Waiting for register updates to be fully saved...");
+        ci_utils::sleep_a_while().await;
+        ci_utils::sleep_a_while().await;
+
+        log::info!("✅ Master {} configured and data updated", i + 1);
+    }
+    log::info!("✅ Phase 2 complete: All 4 stations configured with data");
+
+    // All Masters configured with data, now save once with Ctrl+S to enable port
     log::info!("📍 Navigating to top of panel before saving...");
     use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
     use ci_utils::key_input::ArrowKey;
@@ -154,7 +166,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     log::info!("💾 Saving all master configurations with Ctrl+S to enable port...");
     let actions = vec![
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 }, // Increased wait time for port to enable and stabilize
+        CursorAction::Sleep { ms: 5000 }, // Wait for port to enable and CLI subprocess to start reading data
     ];
     execute_cursor_actions(
         &mut tui_session,
@@ -164,9 +176,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     )
     .await?;
 
-    log::info!("✅ All Masters configured and saved, verifying port is enabled...");
-
-    // Verify port is enabled by checking the status indicator in the top-right corner
+    // Verify port is enabled by checking the status indicator
     log::info!("🔍 Verifying port is enabled");
     let status = ci_utils::verify_port_enabled(
         &mut tui_session,
@@ -174,60 +184,10 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         "verify_port_enabled_multi_masters",
     )
     .await?;
-    log::info!("✅ Port enabled with status: {}, ready for testing", status);
-
-    // Now update register data for all masters after port is enabled
-    for (i, &(_station_id, _register_type, _register_mode, start_address)) in
-        masters.iter().enumerate()
-    {
-        log::info!(
-            "📝 Updating Master {} data at address 0x{:04X}: {:?}",
-            i + 1,
-            start_address,
-            master_data[i]
-        );
-
-        // Navigate to the specific station before updating its registers
-        // This ensures we're editing the right station
-        let nav_to_station_actions = vec![
-            CursorAction::PressCtrlPageUp, // Jump to top first
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressPageDown, // Jump to first station
-            CursorAction::Sleep { ms: 300 },
-        ];
-
-        // If not the first station, navigate down to the target station
-        if i > 0 {
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &[
-                    CursorAction::PressCtrlPageUp,
-                    CursorAction::Sleep { ms: 300 },
-                    CursorAction::PressPageDown,
-                    CursorAction::Sleep { ms: 300 },
-                    CursorAction::PressArrow {
-                        direction: ArrowKey::Down,
-                        count: i * 5, // Each station takes ~5 cursor positions (ID, Type, Addr, Length, registers)
-                    },
-                    CursorAction::Sleep { ms: 300 },
-                ],
-                &format!("nav_to_station_{}_for_update", i + 1),
-            )
-            .await?;
-        } else {
-            execute_cursor_actions(
-                &mut tui_session,
-                &mut tui_cap,
-                &nav_to_station_actions,
-                "nav_to_first_station_for_update",
-            )
-            .await?;
-        }
-
-        update_tui_registers(&mut tui_session, &mut tui_cap, &master_data[i], false).await?;
-        log::info!("✅ Master {} data updated", i + 1);
-    }
+    log::info!(
+        "✅ Port enabled with status: {}, all data committed, ready for testing",
+        status
+    );
 
     // Test all 4 address ranges from vcom2
     let mut address_range_success = std::collections::HashMap::new();

@@ -153,6 +153,86 @@ async fn test_tui_master_configuration() -> Result<()> {
 - `port_exists_in_tui(port_name)` - Check if port exists in TUI
 - `get_port_log_count(port_name)` - Get number of logs for a port
 
+### TUI Port Enable Mechanism (CRITICAL)
+
+**IMPORTANT**: Understanding how ports are enabled/disabled in TUI is critical for writing correct E2E tests.
+
+#### How Port Enable Works
+
+**Port is automatically enabled when you save Modbus configuration with `Ctrl+S`:**
+
+```rust
+// Configure stations (Station ID, Register Type, Address, Length)
+// ... create station 1, station 2, etc. ...
+
+// Save configuration - THIS ENABLES THE PORT AUTOMATICALLY
+let actions = vec![
+    CursorAction::PressCtrlS,
+    CursorAction::Sleep { ms: 5000 }, // Wait for port to enable and stabilize
+];
+```
+
+**Key Points:**
+1. **Ctrl+S triggers port enable**: When you press `Ctrl+S` in Modbus Panel, TUI saves the configuration AND automatically enables the port
+2. **Port state changes from `Disabled` → `Running`**: After Ctrl+S, the status indicator in title bar changes to show `Running ●`
+3. **No manual toggle needed**: You do NOT need to manually toggle "Enable Port" field or press Right arrow on it
+4. **Escape does NOT enable port**: Pressing Escape to leave Modbus Panel does NOT trigger port enable (this was a previous misunderstanding)
+
+#### Common Mistake: Redundant Port Restart
+
+**WRONG - Redundant leave/return/verify after updating registers:**
+```rust
+// After Ctrl+S, port is already Running ●
+update_tui_registers(&mut session, &mut cap, &data, false).await?;
+
+// ❌ WRONG: No need to leave and return to trigger restart
+let actions = vec![
+    CursorAction::PressEscape,  // ❌ This doesn't restart the port
+    CursorAction::Sleep { ms: 3000 },
+    CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 },
+    CursorAction::PressEnter,  // ❌ Unnecessary return to panel
+];
+```
+
+**CORRECT - Port already enabled after Ctrl+S:**
+```rust
+// Save configuration (enables port automatically)
+let actions = vec![
+    CursorAction::PressCtrlS,
+    CursorAction::Sleep { ms: 5000 },
+];
+execute_cursor_actions(&mut session, &mut cap, &actions, "save_and_enable").await?;
+
+// Verify port is enabled (we're already in Modbus Panel with status indicator visible)
+let status = verify_port_enabled(&mut session, &mut cap, "verify_enabled").await?;
+
+// Update register values (port stays Running)
+update_tui_registers(&mut session, &mut cap, &data, false).await?;
+
+// ✅ CORRECT: Port is still Running, directly proceed to testing
+test_modbus_communication(...).await?;
+```
+
+#### When Port Gets Disabled
+
+Port is disabled (status changes to `Disabled` or `Not Started ×`) when:
+1. User manually disables it (not typically done in E2E tests)
+2. TUI process exits
+3. Configuration is discarded with `Ctrl+Esc`
+
+#### Verification Best Practice
+
+Always verify port status AFTER Ctrl+S, while still in Modbus Panel:
+
+```rust
+// Save configuration
+execute_cursor_actions(&mut session, &mut cap, &save_actions, "save_config").await?;
+
+// Verify immediately (status indicator is visible in Modbus Panel title bar)
+let status = verify_port_enabled(&mut session, &mut cap, "verify_after_save").await?;
+// Status should be "Running ●" or "Applied ✔"
+```
+
 ### Best Practices
 
 #### When to Use UI Testing vs Status Monitoring

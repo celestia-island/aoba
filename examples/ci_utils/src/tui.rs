@@ -690,21 +690,15 @@ pub async fn update_tui_registers<T: Expect>(
     crate::helpers::sleep_a_while().await;
     crate::helpers::sleep_a_while().await; // Extra safety margin
 
-    // Navigate back to top of page for next station configuration
-    // After editing registers, cursor is at the last register. The next call to
-    // configure_tui_master_common expects to be near the top of the Modbus panel (station list).
-    // We need to go up but NOT leave the Modbus panel (which would take us to port config).
-    // The register grid is ~3-4 rows, so Up 10 should be safe to reach station list without leaving panel.
-    log::info!("⬆️ Navigating back to station list within Modbus panel");
+    // Navigate back to top of Modbus panel for next station configuration
+    // Use Ctrl+PageUp to jump to the absolute top of the panel (Create Station / Connection Mode area).
+    // This is more reliable than counting Up presses, which can vary based on register count.
+    log::info!("⬆️ Jumping back to top of Modbus panel with Ctrl+PageUp");
     let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 10, // Moderate count to reach station list without leaving Modbus panel
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        crate::auto_cursor::CursorAction::PressCtrlPageUp,
+        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
     ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_station_list")
-        .await?;
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_top").await?;
 
     Ok(())
 }
