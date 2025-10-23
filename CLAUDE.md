@@ -598,5 +598,17 @@ Started status dump thread, writing to /tmp/ci_tui_status.json
 If menu navigation (e.g., "Enter Business Configuration") fails intermittently:
 - **Root Cause**: Race condition between status update and terminal rendering
 - **Solution**: Use multi-attempt retry with status tree verification (see "Menu Navigation Timing" section)
+- **Implementation**: The `enter_modbus_panel` function now includes:
+  - Up to 10 retry attempts with 1-second delays
+  - Status tree polling (when debug mode enabled) or terminal verification fallback
+  - Automatic re-navigation on failure
 - **Prevention**: Always verify page changes via status tree before checking terminal content
 - **Debugging**: Add DebugBreakpoint actions to see actual terminal state during failures
+
+#### Multi-station configuration issues
+
+When configuring multiple Modbus stations:
+- **Navigation**: Use `Ctrl+PgUp` to reset to top, then `PgDown` to jump to specific stations
+- **Timing**: Allow sufficient delays between field edits (1000-2000ms after Enter to exit edit mode)
+- **Verification**: Check each station's configuration before pressing Ctrl+S to save
+- **Known Issue**: PgDown navigation may not position cursor correctly on all stations; verify with debug breakpoints
