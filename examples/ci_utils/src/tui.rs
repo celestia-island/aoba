@@ -528,13 +528,13 @@ pub async fn update_tui_registers<T: Expect>(
     // This ensures we always start from the same position regardless of where
     // the cursor was after previous operations (like Ctrl+S).
 
-    log::info!("🔍 Resetting to top of Modbus panel...");
+    log::info!("🔍 Resetting to top of Modbus panel using Ctrl+PgUp...");
 
-    // Navigate up many times to ensure we reach the top
-    let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
-        direction: crate::key_input::ArrowKey::Up,
-        count: 50, // Large count to ensure we reach top
-    }];
+    // Use Ctrl+PageUp to jump to top of Modbus panel (more reliable than pressing Up 50 times)
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressCtrlPageUp,
+        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+    ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
 
     // Now search down for the register grid
@@ -549,11 +549,13 @@ pub async fn update_tui_registers<T: Expect>(
             .await?;
 
         // Check if current screen shows register values
-        // Look for lines with multiple hex values (register display)
+        // Look for lines with hex addresses and register values
         for line in screen.lines() {
             // Register lines contain hex addresses and values like:
-            // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"
-            if line.contains("0x00") && line.matches("0x").count() >= 3 {
+            // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"  (multiple registers)
+            // "    0x0008              0x0000 ______ ______ ______"  (single register with placeholders)
+            // Look for lines with "0x" followed by register address pattern
+            if line.contains("0x00") && (line.matches("0x").count() >= 2 || line.contains("______")) {
                 found_register = true;
                 log::info!("Found register grid at attempt {}", attempts);
                 break;
