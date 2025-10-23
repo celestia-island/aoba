@@ -175,15 +175,24 @@ pub async fn create_modbus_stations<T: Expect>(
 
     // Verify the last station was created using regex screenshot
     log::info!("🔍 Verifying station #{station_count} exists");
+    // Scroll down to ensure the last station is visible before verification
+    // Use PageDown to scroll, but first ensure we're not already at the bottom
     let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
     let actions = vec![
         CursorAction::Sleep { ms: 500 }, // Wait longer for UI to stabilize after creation (especially for CI)
+        // Try to scroll down to make sure the last station is visible
+        CursorAction::PressPageDown,
+        CursorAction::Sleep { ms: 300 },
         CursorAction::MatchPattern {
             pattern: station_pattern,
             description: format!("Station #{station_count} exists"),
             line_range: None,
             col_range: None,
-            retry_action: None,
+            retry_action: Some(vec![
+                // If not found, try scrolling down more
+                CursorAction::PressPageDown,
+                CursorAction::Sleep { ms: 300 },
+            ]),
         },
     ];
     execute_cursor_actions(session, cap, &actions, "verify_last_station_created").await?;

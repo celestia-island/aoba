@@ -482,6 +482,12 @@ pub async fn enter_modbus_panel<T: Expect>(
         crate::key_input::ArrowKey::Up
     };
 
+    // Retry action: if Enter doesn't navigate us to Modbus panel, try pressing Enter again
+    let retry_action = Some(vec![
+        crate::auto_cursor::CursorAction::PressEnter,
+        crate::auto_cursor::CursorAction::Sleep { ms: 3000 },
+    ]);
+    
     let actions = vec![
         crate::auto_cursor::CursorAction::PressArrow {
             direction,
@@ -489,13 +495,13 @@ pub async fn enter_modbus_panel<T: Expect>(
         },
         crate::auto_cursor::CursorAction::Sleep { ms: 500 },
         crate::auto_cursor::CursorAction::PressEnter,
-        crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Give page time to load and stabilize rendering
+        crate::auto_cursor::CursorAction::Sleep { ms: 3000 }, // Give page time to load and stabilize rendering (increased from 2000ms)
         crate::auto_cursor::CursorAction::MatchPattern {
             pattern: Regex::new(r"ModBus Master/Slave Set")?,
             description: "In Modbus settings".to_string(),
             line_range: Some((0, 10)), // Expanded range to catch the header even if scrolled
             col_range: None,
-            retry_action: None, // Retry is handled at a higher level (setup_tui_port)
+            retry_action, // Retry by pressing Enter again if pattern not found
         },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_modbus_panel")
