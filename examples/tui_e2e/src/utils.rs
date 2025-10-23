@@ -376,6 +376,9 @@ pub async fn configure_modbus_station<T: Expect>(
     actions.extend(vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 }, // Down 3 for Register Length
         CursorAction::Sleep { ms: 300 },
+        CursorAction::DebugBreakpoint {
+            description: format!("before_enter_reglen_field_s{}", station_number),
+        },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
         CursorAction::DebugBreakpoint {
