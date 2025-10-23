@@ -102,7 +102,7 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
         .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
+    ci_utils::configure_multiple_stations_with_mode(&mut tui_session, &mut tui_cap, &station_configs, true).await?;
 
     // All Masters configured with data, now save once with Ctrl+S to enable port
     log::info!("📍 Navigating to top of panel before saving...");

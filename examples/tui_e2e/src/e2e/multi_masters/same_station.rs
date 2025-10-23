@@ -82,13 +82,13 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
-    // Use unified configuration function to create and configure all stations
+    // Use unified configuration function to create and configure all stations in Master mode
     let station_configs: Vec<(u8, u8, u16, usize)> = masters
         .iter()
         .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
+    ci_utils::configure_multiple_stations_with_mode(&mut tui_session, &mut tui_cap, &station_configs, true).await?;
 
     // Wait for all configuration writes to complete before saving
     log::info!("⏳ Waiting for configuration to stabilize...");

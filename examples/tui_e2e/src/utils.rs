@@ -424,16 +424,27 @@ pub async fn configure_multiple_stations<T: ExpectKeyExt + Expect>(
     cap: &mut TerminalCapture,
     stations: &[(u8, u8, u16, usize)], // (station_id, register_type, start_address, register_count)
 ) -> Result<()> {
+    configure_multiple_stations_with_mode(session, cap, stations, false).await
+}
+
+/// Configure multiple Modbus stations with specified mode (Master/Slave)
+pub async fn configure_multiple_stations_with_mode<T: ExpectKeyExt + Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    stations: &[(u8, u8, u16, usize)], // (station_id, register_type, start_address, register_count)
+    is_master: bool,
+) -> Result<()> {
     let num_stations = stations.len();
 
     log::info!(
-        "🏗️ Starting batch configuration for {} stations",
-        num_stations
+        "🏗️ Starting batch configuration for {} stations (Mode: {})",
+        num_stations,
+        if is_master { "Master" } else { "Slave" }
     );
 
-    // Phase 1: Create all stations at once
+    // Phase 1: Create all stations at once with correct mode
     log::info!("📋 Phase 1: Creating {} stations", num_stations);
-    create_modbus_stations(session, cap, num_stations, false).await?;
+    create_modbus_stations(session, cap, num_stations, is_master).await?;
     log::info!("✅ Phase 1 complete: All {} stations created", num_stations);
 
     // Phase 2: Configure each station individually
