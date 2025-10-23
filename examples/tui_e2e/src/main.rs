@@ -183,6 +183,16 @@ async fn main() -> Result<()> {
             log::info!("  - cli_port_release");
             log::info!("  - modbus_tui_slave_cli_master");
             log::info!("  - modbus_tui_master_cli_slave");
+            log::info!("  TUI Single-Station Master Mode:");
+            log::info!("    - tui_master_coils");
+            log::info!("    - tui_master_discrete_inputs");
+            log::info!("    - tui_master_holding");
+            log::info!("    - tui_master_input");
+            log::info!("  TUI Single-Station Slave Mode:");
+            log::info!("    - tui_slave_coils");
+            log::info!("    - tui_slave_discrete_inputs");
+            log::info!("    - tui_slave_holding");
+            log::info!("    - tui_slave_input");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
             return Ok(());
@@ -200,6 +210,28 @@ async fn main() -> Result<()> {
         "modbus_tui_master_cli_slave" => {
             e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?
         }
+
+        // TUI Single-Station Master Mode Tests
+        "tui_master_coils" => e2e::test_tui_master_coils(&args.port1, &args.port2).await?,
+        "tui_master_discrete_inputs" => {
+            e2e::test_tui_master_discrete_inputs(&args.port1, &args.port2).await?
+        }
+        "tui_master_holding" => {
+            e2e::test_tui_master_holding_registers(&args.port1, &args.port2).await?
+        }
+        "tui_master_input" => {
+            e2e::test_tui_master_input_registers(&args.port1, &args.port2).await?
+        }
+
+        // TUI Single-Station Slave Mode Tests
+        "tui_slave_coils" => e2e::test_tui_slave_coils(&args.port1, &args.port2).await?,
+        "tui_slave_discrete_inputs" => {
+            e2e::test_tui_slave_discrete_inputs(&args.port1, &args.port2).await?
+        }
+        "tui_slave_holding" => {
+            e2e::test_tui_slave_holding_registers(&args.port1, &args.port2).await?
+        }
+        "tui_slave_input" => e2e::test_tui_slave_input_registers(&args.port1, &args.port2).await?,
 
         _ => {
             log::error!("❌ Unknown module: {}", module);
