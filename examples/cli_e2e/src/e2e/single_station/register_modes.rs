@@ -148,6 +148,47 @@ fn spawn_cli_slave_listener(
     Ok(child)
 }
 
+/// Helper to spawn a CLI slave listener process without data source
+/// (initializes storage to zeros)
+fn spawn_cli_slave_listener_no_data(
+    port: &str,
+    station_id: u8,
+    register_mode: &str,
+    start_address: u16,
+    register_count: u16,
+) -> Result<std::process::Child> {
+    let binary = build_debug_bin("aoba")?;
+
+    let child = std::process::Command::new(&binary)
+        .args([
+            "--slave-listen-persist",
+            port,
+            "--station-id",
+            &station_id.to_string(),
+            "--register-mode",
+            register_mode,
+            "--register-address",
+            &start_address.to_string(),
+            "--register-length",
+            &register_count.to_string(),
+            "--baud-rate",
+            "9600",
+            "--debug-ci-e2e-test",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    log::info!(
+        "✅ Spawned CLI Slave (listener without data): mode={}, addr=0x{:04X}, count={}",
+        register_mode,
+        start_address,
+        register_count
+    );
+
+    Ok(child)
+}
+
 /// Helper to write data to a file for master to read
 fn write_data_to_file(file_path: &std::path::Path, data: &[u16]) -> Result<()> {
     use std::io::Write;
@@ -325,30 +366,24 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
     let register_count = 10;
     let register_mode = "discrete";
 
-    // Generate test data
-    let test_data = generate_random_coils(register_count as usize);
-    log::info!("🎲 Test data: {:?}", test_data);
+    // Expected data: all zeros (slave-listen initializes storage to zeros)
+    let expected_data: Vec<u16> = vec![0; register_count as usize];
+    log::info!("🎲 Expected data (zeros): {:?}", expected_data);
 
-    // Create temporary files for data exchange
+    // Create temporary file for poller output
     let temp_dir = std::env::temp_dir();
-    let listener_data_file = temp_dir.join("cli_e2e_listener_discrete_data.json");
     let poller_output_file = temp_dir.join("cli_e2e_poller_discrete_output.json");
     
     // Clean up any existing files
-    let _ = std::fs::remove_file(&listener_data_file);
     let _ = std::fs::remove_file(&poller_output_file);
 
-    // Write test data to listener's data file
-    write_data_to_file(&listener_data_file, &test_data)?;
-
-    // Step 1 - Spawn Slave Listener on port1 (provides data)
-    let mut listener = spawn_cli_slave_listener(
+    // Step 1 - Spawn Slave Listener on port1 (provides data - starts with zeros)
+    let mut listener = spawn_cli_slave_listener_no_data(
         &ports.port1_name,
         station_id,
         register_mode,
         start_address,
         register_count,
-        &format!("file:{}", listener_data_file.display()),
     )?;
 
     sleep_seconds(2).await;
@@ -364,7 +399,6 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
             String::new()
         };
         
-        let _ = std::fs::remove_file(&listener_data_file);
         return Err(anyhow!("Listener exited prematurely with status {}: {}", status, stderr));
     }
 
@@ -382,9 +416,9 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
 
     // Step 3 - Read data from Poller output and verify
     let received_data = read_data_from_file(&poller_output_file, 10)?;
-    if test_data != received_data {
+    if expected_data != received_data {
         log::error!("❌ Data mismatch!");
-        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Expected: {:?}", expected_data);
         log::error!("  Received: {:?}", received_data);
         
         // Cleanup
@@ -392,7 +426,6 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
         listener.wait()?;
         poller.kill()?;
         poller.wait()?;
-        let _ = std::fs::remove_file(&listener_data_file);
         let _ = std::fs::remove_file(&poller_output_file);
         
         return Err(anyhow!("Data verification failed"));
@@ -404,7 +437,6 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
     listener.wait()?;
     poller.kill()?;
     poller.wait()?;
-    let _ = std::fs::remove_file(&listener_data_file);
     let _ = std::fs::remove_file(&poller_output_file);
 
     log::info!("✅ Test 02 Discrete Inputs Mode completed successfully");
@@ -516,7 +548,10 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
 /// Test 04: Input Registers mode (0x0030, length 10)
 ///
 /// Tests communication with input registers.
-/// Slave listens and provides input register data, another Slave polls and reads it.
+/// Slave listens and provides input register data (initialized to zeros),
+/// another Slave polls and reads it.
+/// Note: slave-listen initializes storage to zeros, so this test verifies
+/// zero values are correctly communicated.
 pub async fn test_single_station_input_registers() -> Result<()> {
     log::info!("🧪 Starting CLI Single-Station Test: 04 Input Registers Mode");
 
@@ -526,30 +561,24 @@ pub async fn test_single_station_input_registers() -> Result<()> {
     let register_count = 10;
     let register_mode = "input";
 
-    // Generate test data
-    let test_data = generate_random_registers(register_count as usize);
-    log::info!("🎲 Test data: {:?}", test_data);
+    // Expected data: all zeros (slave-listen initializes storage to zeros)
+    let expected_data: Vec<u16> = vec![0; register_count as usize];
+    log::info!("🎲 Expected data (zeros): {:?}", expected_data);
 
-    // Create temporary files for data exchange
+    // Create temporary file for poller output
     let temp_dir = std::env::temp_dir();
-    let listener_data_file = temp_dir.join("cli_e2e_listener_input_data.json");
     let poller_output_file = temp_dir.join("cli_e2e_poller_input_output.json");
     
     // Clean up any existing files
-    let _ = std::fs::remove_file(&listener_data_file);
     let _ = std::fs::remove_file(&poller_output_file);
 
-    // Write test data to listener's data file
-    write_data_to_file(&listener_data_file, &test_data)?;
-
-    // Step 1 - Spawn Slave Listener on port1 (provides data)
-    let mut listener = spawn_cli_slave_listener(
+    // Step 1 - Spawn Slave Listener on port1 (provides data - starts with zeros)
+    let mut listener = spawn_cli_slave_listener_no_data(
         &ports.port1_name,
         station_id,
         register_mode,
         start_address,
         register_count,
-        &format!("file:{}", listener_data_file.display()),
     )?;
 
     sleep_seconds(2).await;
@@ -565,7 +594,6 @@ pub async fn test_single_station_input_registers() -> Result<()> {
             String::new()
         };
         
-        let _ = std::fs::remove_file(&listener_data_file);
         return Err(anyhow!("Listener exited prematurely with status {}: {}", status, stderr));
     }
 
@@ -583,9 +611,9 @@ pub async fn test_single_station_input_registers() -> Result<()> {
 
     // Step 3 - Read data from Poller and verify
     let received_data = read_data_from_file(&poller_output_file, 10)?;
-    if test_data != received_data {
+    if expected_data != received_data {
         log::error!("❌ Data mismatch!");
-        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Expected: {:?}", expected_data);
         log::error!("  Received: {:?}", received_data);
         
         // Cleanup
@@ -593,7 +621,6 @@ pub async fn test_single_station_input_registers() -> Result<()> {
         listener.wait()?;
         poller.kill()?;
         poller.wait()?;
-        let _ = std::fs::remove_file(&listener_data_file);
         let _ = std::fs::remove_file(&poller_output_file);
         
         return Err(anyhow!("Data verification failed"));
@@ -605,7 +632,6 @@ pub async fn test_single_station_input_registers() -> Result<()> {
     listener.wait()?;
     poller.kill()?;
     poller.wait()?;
-    let _ = std::fs::remove_file(&listener_data_file);
     let _ = std::fs::remove_file(&poller_output_file);
 
     log::info!("✅ Test 04 Input Registers Mode completed successfully");
