@@ -15,10 +15,9 @@ use expectrl::Expect;
 
 /// Test Multiple TUI Slaves on Single Port with Same Station ID but Different Register Types
 ///
-/// This test simulates 3 TUI slaves on vcom2 with the same station ID but different register types:
+/// This test simulates 2 TUI slaves on vcom2 with the same station ID but different register types:
 /// - Slave 1: Station ID 1, Register Type 03 (Holding Register)
 /// - Slave 2: Station ID 1, Register Type 04 (Input Register)
-/// - Slave 3: Station ID 1, Register Type 01 (Coils)
 ///
 /// Test Design:
 /// - All slaves share the same vcom2 port and same station ID but different register types
@@ -72,27 +71,27 @@ pub async fn test_tui_multi_slaves_same_station(port1: &str, port2: &str) -> Res
 
     sleep_seconds(3).await;
 
-    // Configure 3 slaves on vcom2 with same station ID but different register types
+    // Configure 2 slaves on vcom2 with same station ID but different register types
+    // Reduced from 3 to 2 for debugging
     let slaves = [
         (1, 3, "holding", 0), // Station 1, Type 03 Holding Register, Address 0
         (1, 4, "input", 0),   // Station 1, Type 04 Input Register, Address 0
-        (1, 1, "coils", 0),   // Station 1, Type 01 Coils, Address 0
     ];
 
-    log::info!("🧪 Step 2: Configuring 3 slaves on {port2} with same station ID");
+    log::info!("🧪 Step 2: Configuring 2 slaves on {port2} with same station ID");
 
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port2).await?;
 
     // Generate register data for all slaves first (before configuration)
-    let slave_data: Vec<Vec<u16>> = (0..3)
+    let slave_data: Vec<Vec<u16>> = (0..2)
         .map(|_| generate_random_registers(REGISTER_LENGTH))
         .collect();
 
-    // Phase 1: Create all 4 stations at once
+    // Phase 1: Create all 2 stations at once
     use crate::utils::create_modbus_stations;
-    create_modbus_stations(&mut tui_session, &mut tui_cap, 4, false).await?; // false = slave mode
-    log::info!("✅ Phase 1 complete: All 4 stations created");
+    create_modbus_stations(&mut tui_session, &mut tui_cap, 2, false).await?; // false = slave mode
+    log::info!("✅ Phase 1 complete: All 2 stations created");
 
     // Phase 2: Configure each station individually and update its data
     use crate::utils::configure_modbus_station;

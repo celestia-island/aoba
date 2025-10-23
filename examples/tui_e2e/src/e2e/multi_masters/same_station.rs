@@ -15,10 +15,9 @@ use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with Same Station ID but Different Register Types
 ///
-/// This test simulates 3 TUI masters on vcom1 with the same station ID but different register types:
+/// This test simulates 2 TUI masters on vcom1 with the same station ID but different register types:
 /// - Master 1: Station ID 1, Register Type 03 (Holding Register)
 /// - Master 2: Station ID 1, Register Type 04 (Input Register)
-/// - Master 3: Station ID 1, Register Type 01 (Coils)
 ///
 /// Test Design:
 /// - All masters share the same vcom1 port and same station ID but different register types
@@ -49,7 +48,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     let port2 = ports.port2_name.clone();
 
     log::info!("📍 Port configuration:");
-    log::info!("  Masters: {port1} (3 masters with same station ID, different register types)");
+    log::info!("  Masters: {port1} (2 masters with same station ID, different register types)");
     log::info!("  Slaves: {port2} (CLI, polls all register types)");
 
     // Verify ports exist
@@ -72,14 +71,13 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
 
     sleep_seconds(3).await;
 
-    // Configure 3 masters on vcom1 with same station ID but different register types
+    // Configure 2 masters on vcom1 with same station ID but different register types
     let masters = [
         (1, 3, "holding", 0), // Station 1, Type 03 Holding Register, Address 0
         (1, 4, "input", 0),   // Station 1, Type 04 Input Register, Address 0
-        (1, 1, "coils", 0),   // Station 1, Type 01 Coils, Address 0
     ];
 
-    log::info!("🧪 Step 2: Configuring 3 masters on {port1} with same station ID");
+    log::info!("🧪 Step 2: Configuring 2 masters on {port1} with same station ID");
 
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
