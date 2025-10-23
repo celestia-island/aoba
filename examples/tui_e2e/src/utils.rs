@@ -216,12 +216,12 @@ pub async fn create_modbus_stations<T: Expect>(
     } else {
         log::info!("🔄 Switching to Slave mode: Enter, Left, Enter");
         let actions = vec![
-            CursorAction::PressEnter,        // Enter edit mode on "Connection Mode"
+            CursorAction::PressEnter, // Enter edit mode on "Connection Mode"
             CursorAction::PressArrow {
-                direction: ArrowKey::Left,   // Press Left to switch from Master to Slave
+                direction: ArrowKey::Left, // Press Left to switch from Master to Slave
                 count: 1,
             },
-            CursorAction::PressEnter,        // Confirm the change
+            CursorAction::PressEnter, // Confirm the change
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave_mode").await?;
     }
@@ -287,7 +287,7 @@ pub async fn configure_modbus_station<T: Expect>(
 
     // Configure each field by navigating from top each time (reliable but verbose)
     // This ensures we always start from a known position
-    
+
     // ===== Field 1: Station ID =====
     log::info!("📝 Setting Station ID to {station_id}");
     let mut actions = vec![CursorAction::PressCtrlPageUp];
@@ -314,7 +314,13 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for edit mode to fully exit and value to commit
     ]);
-    execute_cursor_actions(session, cap, &actions, &format!("set_station_id_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_station_id_s{station_number}"),
+    )
+    .await?;
 
     // ===== Field 2: Register Type =====
     log::info!("📝 Setting Register Type to {register_type:02}");
@@ -323,16 +329,19 @@ pub async fn configure_modbus_station<T: Expect>(
         actions.push(CursorAction::PressPageDown);
     }
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 }, // Down 1 for Register Type (PgDown lands at Station ID)
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        }, // Down 1 for Register Type (PgDown lands at Station ID)
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
     ]);
-    
+
     // Navigate to correct register type
     let current_pos = 2; // Holding (03) is default
     let target_pos = (register_type as usize).saturating_sub(1);
-    
+
     if target_pos < current_pos {
         actions.push(CursorAction::PressArrow {
             direction: ArrowKey::Left,
@@ -346,12 +355,18 @@ pub async fn configure_modbus_station<T: Expect>(
         });
         actions.push(CursorAction::Sleep { ms: 300 });
     }
-    
+
     actions.extend(vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 }, // Wait for selection to commit
     ]);
-    execute_cursor_actions(session, cap, &actions, &format!("set_register_type_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_register_type_s{station_number}"),
+    )
+    .await?;
 
     // ===== Field 3: Start Address =====
     log::info!("📝 Setting Start Address to 0x{start_address:04X} ({start_address})");
@@ -363,7 +378,10 @@ pub async fn configure_modbus_station<T: Expect>(
         description: format!("before_nav_to_start_addr_s{}", station_number),
     });
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 }, // Down 2 for Start Address
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 2,
+        }, // Down 2 for Start Address
         CursorAction::Sleep { ms: 500 },
         CursorAction::DebugBreakpoint {
             description: format!("before_enter_start_addr_field_s{}", station_number),
@@ -386,7 +404,13 @@ pub async fn configure_modbus_station<T: Expect>(
             description: format!("after_enter_start_addr_s{}", station_number),
         },
     ]);
-    execute_cursor_actions(session, cap, &actions, &format!("set_start_address_s{station_number}")).await?;
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_start_address_s{station_number}"),
+    )
+    .await?;
 
     // ===== Field 4: Register Length =====
     log::info!("📝 Setting Register Length to {register_count}");
@@ -398,7 +422,10 @@ pub async fn configure_modbus_station<T: Expect>(
         description: format!("after_pgdown_before_down_for_reglen_s{}", station_number),
     });
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 }, // Down 3 for Register Length
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 3,
+        }, // Down 3 for Register Length
         CursorAction::Sleep { ms: 300 },
         CursorAction::DebugBreakpoint {
             description: format!("before_enter_reglen_field_s{}", station_number),
@@ -421,16 +448,31 @@ pub async fn configure_modbus_station<T: Expect>(
             description: format!("after_set_register_length_s{}", station_number),
         },
     ]);
-    execute_cursor_actions(session, cap, &actions, &format!("set_register_length_s{station_number}")).await?;
-    
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("set_register_length_s{station_number}"),
+    )
+    .await?;
+
     // Additional wait to ensure all state transitions are complete before next station
     log::info!("⏱️ Waiting for station configuration to stabilize...");
     tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Return to top with Ctrl+PgUp as per workflow requirement
     log::info!("⏫ Returning to top with Ctrl+PgUp");
-    let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 200 }];
-    execute_cursor_actions(session, cap, &actions, &format!("return_to_top_s{station_number}")).await?;
+    let actions = vec![
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 200 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("return_to_top_s{station_number}"),
+    )
+    .await?;
 
     log::info!("✅ Station #{station_number} configured successfully");
     Ok(())
@@ -460,14 +502,18 @@ pub async fn update_station_registers<T: Expect>(
     station_index: usize,
     register_values: &[Option<u16>],
 ) -> Result<()> {
-    use serde_json::json;
     use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
     use ci_utils::key_input::ArrowKey;
-    
+    use serde_json::json;
+
     let station_number = station_index + 1;
-    
-    log::info!("📝 Updating {} register values for Station #{}", register_values.len(), station_number);
-    
+
+    log::info!(
+        "📝 Updating {} register values for Station #{}",
+        register_values.len(),
+        station_number
+    );
+
     // Navigate to station's first register
     // From top: Ctrl+PgUp, then PgDown to station, then Down to first register field
     let mut actions = vec![CursorAction::PressCtrlPageUp];
@@ -477,11 +523,20 @@ pub async fn update_station_registers<T: Expect>(
     // From station header, navigate down to first register
     // Fields: Station ID (0), Register Type (1), Start Address (2), Register Length (3), First Register (4)
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 4 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 4,
+        },
         CursorAction::Sleep { ms: 500 },
     ]);
-    execute_cursor_actions(session, cap, &actions, &format!("nav_to_first_reg_s{}", station_number)).await?;
-    
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("nav_to_first_reg_s{}", station_number),
+    )
+    .await?;
+
     // Iterate through each register value
     for (reg_idx, opt_value) in register_values.iter().enumerate() {
         match opt_value {
@@ -489,14 +544,23 @@ pub async fn update_station_registers<T: Expect>(
                 // Skip this register, just move to next
                 log::info!("  Register {}: Skipping (no value to set)", reg_idx);
                 let actions = vec![
-                    CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Right,
+                        count: 1,
+                    },
                     CursorAction::Sleep { ms: 200 },
                 ];
-                execute_cursor_actions(session, cap, &actions, &format!("skip_reg{}_s{}", reg_idx, station_number)).await?;
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &actions,
+                    &format!("skip_reg{}_s{}", reg_idx, station_number),
+                )
+                .await?;
             }
             Some(value) => {
                 log::info!("  Register {}: Setting to 0x{:04X}", reg_idx, value);
-                
+
                 // Enter edit mode, type hex value, confirm
                 let hex_value = format!("{:x}", value);
                 let actions = vec![
@@ -507,43 +571,80 @@ pub async fn update_station_registers<T: Expect>(
                     CursorAction::PressEnter,
                     CursorAction::Sleep { ms: 1000 }, // Wait for value to commit to status tree
                 ];
-                execute_cursor_actions(session, cap, &actions, &format!("set_reg{}_s{}", reg_idx, station_number)).await?;
-                
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &actions,
+                    &format!("set_reg{}_s{}", reg_idx, station_number),
+                )
+                .await?;
+
                 // Verify value was written to global status tree
                 // Path format: ports[0].modbus_masters[station_index].registers[reg_idx]
                 // or: ports[0].modbus_slaves[station_index].registers[reg_idx]
                 // We'll check the master path for now (can be extended based on is_master flag)
-                let verify_actions = vec![
-                    CursorAction::CheckStatus {
-                        description: format!("Register {} should be 0x{:04X} in status tree", reg_idx, value),
-                        path: format!("ports[0].modbus_masters[{}].registers[{}]", station_index, reg_idx),
-                        expected: json!(*value),
-                        timeout_secs: Some(5),
-                        retry_interval_ms: Some(500),
-                    },
-                ];
-                execute_cursor_actions(session, cap, &verify_actions, &format!("verify_reg{}_s{}", reg_idx, station_number)).await?;
-                
+                let verify_actions = vec![CursorAction::CheckStatus {
+                    description: format!(
+                        "Register {} should be 0x{:04X} in status tree",
+                        reg_idx, value
+                    ),
+                    path: format!(
+                        "ports[0].modbus_masters[{}].registers[{}]",
+                        station_index, reg_idx
+                    ),
+                    expected: json!(*value),
+                    timeout_secs: Some(5),
+                    retry_interval_ms: Some(500),
+                }];
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &verify_actions,
+                    &format!("verify_reg{}_s{}", reg_idx, station_number),
+                )
+                .await?;
+
                 log::info!("  ✅ Register {} value verified in status tree", reg_idx);
-                
+
                 // Move to next register
                 if reg_idx < register_values.len() - 1 {
                     let actions = vec![
-                        CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
+                        CursorAction::PressArrow {
+                            direction: ArrowKey::Right,
+                            count: 1,
+                        },
                         CursorAction::Sleep { ms: 200 },
                     ];
-                    execute_cursor_actions(session, cap, &actions, &format!("next_reg{}_s{}", reg_idx, station_number)).await?;
+                    execute_cursor_actions(
+                        session,
+                        cap,
+                        &actions,
+                        &format!("next_reg{}_s{}", reg_idx, station_number),
+                    )
+                    .await?;
                 }
             }
         }
     }
-    
-    log::info!("✅ All register values updated for Station #{}", station_number);
-    
+
+    log::info!(
+        "✅ All register values updated for Station #{}",
+        station_number
+    );
+
     // Return to top with Ctrl+PgUp
-    let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 200 }];
-    execute_cursor_actions(session, cap, &actions, &format!("return_to_top_after_regs_s{}", station_number)).await?;
-    
+    let actions = vec![
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 200 },
+    ];
+    execute_cursor_actions(
+        session,
+        cap,
+        &actions,
+        &format!("return_to_top_after_regs_s{}", station_number),
+    )
+    .await?;
+
     Ok(())
 }
 
