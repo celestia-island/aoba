@@ -287,8 +287,7 @@ pub async fn configure_modbus_station<T: Expect>(
         description: format!("after_pgdown_to_station_{}", station_number),
     });
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
+        // PgDown lands us at Station ID field, no need to press Down
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 }, // Wait for edit mode to activate
         CursorAction::PressCtrlA,
@@ -307,7 +306,7 @@ pub async fn configure_modbus_station<T: Expect>(
         actions.push(CursorAction::PressPageDown);
     }
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 },
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 }, // Down 1 for Register Type (PgDown lands at Station ID)
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
@@ -344,7 +343,7 @@ pub async fn configure_modbus_station<T: Expect>(
         actions.push(CursorAction::PressPageDown);
     }
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 },
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 }, // Down 2 for Start Address
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
@@ -363,8 +362,11 @@ pub async fn configure_modbus_station<T: Expect>(
     for _ in 0..(station_index + 2) {
         actions.push(CursorAction::PressPageDown);
     }
+    actions.push(CursorAction::DebugBreakpoint {
+        description: format!("after_pgdown_before_down_for_reglen_s{}", station_number),
+    });
     actions.extend(vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 4 },
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 }, // Down 3 for Register Length
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
