@@ -109,6 +109,9 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     let actions = vec![
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 5000 }, // Wait for port to enable and CLI subprocess to start
+        CursorAction::DebugBreakpoint {
+            description: "after_ctrl_s_save".to_string(),
+        },
     ];
     execute_cursor_actions(
         &mut tui_session,
