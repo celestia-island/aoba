@@ -1,27 +1,26 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;
 use crate::{
     i18n::lang,
-    protocol::status::{
-        read_status,
-        types::{
-            self,
-            modbus::{ModbusConnectionMode, RegisterMode},
-        },
-        with_port_read,
+    protocol::status::types::{
+        self,
+        modbus::{ModbusConnectionMode, RegisterMode},
     },
-    tui::ui::components::{
-        kv_line::render_kv_line,
-        styled_label::{input_spans, selector_spans, TextState},
+    tui::{
+        status::read_status,
+        ui::components::{
+            kv_line::render_kv_line,
+            styled_label::{input_spans, selector_spans, TextState},
+        },
     },
 };
 
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {
     read_status(|status| {
-        if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
             Ok(*cursor)
         } else {
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -65,7 +64,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     }
 
     let port_data = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(status
                 .ports
                 .order
@@ -93,12 +92,9 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     // Add global mode selector using proper selector_spans
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
-        if let Some(port) = port_data.as_ref() {
-            let (current_mode, mode_obj) = with_port_read(port, |port| {
-                let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
-                (mode.to_index(), mode.clone())
-            })
-            .ok_or(anyhow!("Failed to read port data for ModbusMode"))?;
+        if let Some(ref port) = port_data {
+            let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
+            let (current_mode, mode_obj) = (mode.to_index(), mode.clone());
 
             let selected = matches!(
                 current_selection,
@@ -173,11 +169,11 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 
     // reuse sep_len from above and helper for separator
     let has_any = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
-                    let port_guard = port_entry.read();
-                    match &port_guard.config {
+                    let port = port_entry;
+                    match &port.config {
                         types::port::PortConfig::Modbus { mode: _, stations } => {
                             return Ok(!stations.is_empty());
                         }
@@ -192,8 +188,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
     }
 
     if let Some(port_entry) = &port_data {
-        let port_data_guard = port_entry.read();
-        let types::port::PortConfig::Modbus { mode: _, stations } = &port_data_guard.config;
+        let port_data = port_entry;
+        let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
         let all_items = stations.clone();
 
         for (index, item) in all_items.iter().enumerate() {
@@ -206,53 +202,47 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
             // Remove individual connection mode selector since we now have global mode
 
             lines.push(create_line(
-                    &lang().protocol.modbus.station_id,
-                    matches!(
+                &lang().protocol.modbus.station_id,
+                matches!(
+                    current_selection,
+                    types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
+                ),
+                || -> Result<Vec<Span<'static>>> {
+                    let rendered_value_spans: Vec<Span>;
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
+                    let current_value = if let Some(item) = stations.get(index) {
+                        item.station_id.to_string()
+                    } else {
+                        "?".to_string()
+                    };
+
+                    let selected = matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
-                    ),
-                    || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
-                            let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    item.station_id.to_string()
-                                } else {
-                                    "?".to_string()
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for StationId"))?;
+                    );
 
-                            let selected = matches!(
-                                current_selection,
-                                types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
-                            );
+                    let editing =
+                        selected && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
-                            let editing = selected
-                                && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
+                    let state = if editing {
+                        TextState::Editing
+                    } else if selected {
+                        TextState::Selected
+                    } else {
+                        TextState::Normal
+                    };
 
-                            let state = if editing {
-                                TextState::Editing
-                            } else if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
-
-                            let hex_display = if current_value.starts_with("0x") {
-                                current_value.clone()
-                            } else if let Ok(n) = current_value.parse::<u8>() {
-                                format!("0x{n:02X} ({n})")
-                            } else {
-                                format!("0x{current_value} (?)")
-                            };
-                            rendered_value_spans = input_spans(hex_display, state)?;
-                        }
-                        Ok(rendered_value_spans)
-                    },
-                )?);
+                    let hex_display = if current_value.starts_with("0x") {
+                        current_value.clone()
+                    } else if let Ok(n) = current_value.parse::<u8>() {
+                        format!("0x{n:02X} ({n})")
+                    } else {
+                        format!("0x{current_value} (?)")
+                    };
+                    rendered_value_spans = input_spans(hex_display, state)?;
+                    Ok(rendered_value_spans)
+                },
+            )?);
 
             lines.push(create_line(
                     &lang().protocol.modbus.register_mode,
@@ -261,47 +251,42 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterMode { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
-                            let current_mode = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    (item.register_mode as u8 - 1u8) as usize
-                                } else {
-                                    2usize // default to Holding
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for RegisterMode"))?;
+                        let rendered_value_spans: Vec<Span>;
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &port_data.config;
+                        let current_mode = if let Some(item) = stations.get(index) {
+                            (item.register_mode as u8 - 1u8) as usize
+                        } else {
+                            2usize // default to Holding
+                        };
 
-                            let selected = matches!(
-                                current_selection,
-                                types::cursor::ModbusDashboardCursor::RegisterMode { index: i } if i == index
-                            );
+                        let selected = matches!(
+                            current_selection,
+                            types::cursor::ModbusDashboardCursor::RegisterMode { index: i } if i == index
+                        );
 
-                            let editing = selected
-                                && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+                        let editing = selected
+                            && matches!(&input_raw_buffer, types::ui::InputRawBuffer::Index(_));
 
-                            let selected_index = if editing {
-                                if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
-                                    *i
-                                } else {
-                                    current_mode
-                                }
+                        let selected_index = if editing {
+                            if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                                *i
                             } else {
                                 current_mode
-                            };
+                            }
+                        } else {
+                            current_mode
+                        };
 
-                            let state = if editing {
-                                TextState::Editing
-                            } else if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
 
-                            rendered_value_spans = selector_spans::<RegisterMode>(selected_index, state)?;
-                        }
+                        rendered_value_spans = selector_spans::<RegisterMode>(selected_index, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -313,44 +298,39 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterStartAddress { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
-                            let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    item.register_address.to_string()
-                                } else {
-                                    "0".to_string()
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for RegisterStartAddress"))?;
+                        let rendered_value_spans: Vec<Span>;
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &port_data.config;
+                        let current_value = if let Some(item) = stations.get(index) {
+                            item.register_address.to_string()
+                        } else {
+                            "0".to_string()
+                        };
 
-                            let selected = matches!(
-                                current_selection,
-                                types::cursor::ModbusDashboardCursor::RegisterStartAddress { index: i } if i == index
-                            );
+                        let selected = matches!(
+                            current_selection,
+                            types::cursor::ModbusDashboardCursor::RegisterStartAddress { index: i } if i == index
+                        );
 
-                            let editing = selected
-                                && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
+                        let editing = selected
+                            && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
-                            let state = if editing {
-                                TextState::Editing
-                            } else if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
 
-                            let hex_display = if current_value.starts_with("0x") {
-                                current_value.clone()
-                            } else if let Ok(n) = current_value.parse::<u16>() {
-                                format!("0x{n:04X} ({n})")
-                            } else {
-                                format!("0x{current_value} (?)")
-                            };
-                            rendered_value_spans = input_spans(hex_display, state)?;
-                        }
+                        let hex_display = if current_value.starts_with("0x") {
+                            current_value.clone()
+                        } else if let Ok(n) = current_value.parse::<u16>() {
+                            format!("0x{n:04X} ({n})")
+                        } else {
+                            format!("0x{current_value} (?)")
+                        };
+                        rendered_value_spans = input_spans(hex_display, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -362,44 +342,39 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let mut rendered_value_spans: Vec<Span> = Vec::new();
-                        if let Some(port) = port_data.as_ref() {
-                            let current_value = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                if let Some(item) = stations.get(index) {
-                                    item.register_length.to_string()
-                                } else {
-                                    "1".to_string()
-                                }
-                            })
-                            .ok_or(anyhow!("Failed to read port data for RegisterLength"))?;
+                        let rendered_value_spans: Vec<Span>;
+                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                            &port_data.config;
+                        let current_value = if let Some(item) = stations.get(index) {
+                            item.register_length.to_string()
+                        } else {
+                            "1".to_string()
+                        };
 
-                            let selected = matches!(
-                                current_selection,
-                                types::cursor::ModbusDashboardCursor::RegisterLength { index: i } if i == index
-                            );
+                        let selected = matches!(
+                            current_selection,
+                            types::cursor::ModbusDashboardCursor::RegisterLength { index: i } if i == index
+                        );
 
-                            let editing = selected
-                                && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
+                        let editing = selected
+                            && !matches!(&input_raw_buffer, types::ui::InputRawBuffer::None);
 
-                            let state = if editing {
-                                TextState::Editing
-                            } else if selected {
-                                TextState::Selected
-                            } else {
-                                TextState::Normal
-                            };
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
 
-                            let hex_display = if current_value.starts_with("0x") {
-                                current_value.clone()
-                            } else if let Ok(n) = current_value.parse::<u16>() {
-                                format!("0x{n:04X} ({n})")
-                            } else {
-                                format!("0x{current_value} (?)")
-                            };
-                            rendered_value_spans = input_spans(hex_display, state)?;
-                        }
+                        let hex_display = if current_value.starts_with("0x") {
+                            current_value.clone()
+                        } else if let Ok(n) = current_value.parse::<u16>() {
+                            format!("0x{n:04X} ({n})")
+                        } else {
+                            format!("0x{current_value} (?)")
+                        };
+                        rendered_value_spans = input_spans(hex_display, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -445,7 +420,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 /// Generate status lines for modbus panel display
 pub fn render_modbus_status_lines() -> Result<Vec<Line<'static>>> {
     let sel_index = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)

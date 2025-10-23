@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 
-use crate::protocol::status::types::{self, Status};
+use crate::tui::status::{self as types, Status};
 
 /// Set or clear a transient UI error in the provided `Status` snapshot (mutable).
 /// Accepts an optional `(message, timestamp)` tuple and converts it to the

@@ -69,21 +69,26 @@ fn parse_serial_after(s: &str, key: &str) -> Option<String> {
 fn detect_virtual_ports() -> Vec<SerialPortInfo> {
     let mut virtual_ports = Vec::new();
 
-    // Common locations for virtual serial ports
-    let virtual_port_paths = [
-        "/dev/vcom1",
-        "/dev/vcom2",
-        "/dev/vcom3",
-        "/dev/vcom4",
-        "/dev/vcom5",
-        "/dev/vcom6",
-        "/tmp/vcom1",
-        "/tmp/vcom2",
-        "/tmp/vcom3",
-        "/tmp/vcom4",
-        "/tmp/vcom5",
-        "/tmp/vcom6",
-    ];
+    // In CI debug mode (when --debug-ci-e2e-test is set), only detect vcom1 and vcom2
+    // to avoid false positives from residual ports (vcom3, vcom4, etc.)
+    let virtual_port_paths = if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+        vec!["/dev/vcom1", "/dev/vcom2", "/tmp/vcom1", "/tmp/vcom2"]
+    } else {
+        vec![
+            "/dev/vcom1",
+            "/dev/vcom2",
+            "/dev/vcom3",
+            "/dev/vcom4",
+            "/dev/vcom5",
+            "/dev/vcom6",
+            "/tmp/vcom1",
+            "/tmp/vcom2",
+            "/tmp/vcom3",
+            "/tmp/vcom4",
+            "/tmp/vcom5",
+            "/tmp/vcom6",
+        ]
+    };
 
     for port_path in &virtual_port_paths {
         if Path::new(port_path).exists() {
@@ -145,7 +150,14 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
 
 /// Return the list of available serial ports sorted / deduped for Unix.
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
-    let mut raw_ports = serialport::available_ports().unwrap_or_default();
+    // In CI debug mode (when --debug-ci-e2e-test is set), skip real serial port enumeration
+    // and only return virtual ports to avoid interference from host serial devices
+    let mut raw_ports = if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+        log::debug!("CI debug mode: skipping real serial port enumeration");
+        Vec::new()
+    } else {
+        serialport::available_ports().unwrap_or_default()
+    };
 
     // Add virtual ports created by socat or similar tools
     let virtual_ports = detect_virtual_ports();

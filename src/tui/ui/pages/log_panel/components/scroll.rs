@@ -1,9 +1,9 @@
-use crate::protocol::status::{types, write_status};
+use crate::tui::status::write_status;
 
 /// Scroll up in the LogPanel by moving the selected_item up by `amount` items.
 pub fn handle_scroll_up(amount: usize) -> anyhow::Result<()> {
     write_status(|status| {
-        if let types::Page::LogPanel {
+        if let crate::tui::status::Page::LogPanel {
             selected_item,
             selected_port,
             ..
@@ -12,7 +12,7 @@ pub fn handle_scroll_up(amount: usize) -> anyhow::Result<()> {
             // Get the log count for selected port
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    let port_data = port.read();
+                    let port_data = port;
                     let log_count = port_data.logs.len();
 
                     if log_count == 0 {
@@ -41,7 +41,7 @@ pub fn handle_scroll_up(amount: usize) -> anyhow::Result<()> {
 /// Scroll down in the LogPanel by moving the selected_item down by `amount` items.
 pub fn handle_scroll_down(amount: usize) -> anyhow::Result<()> {
     write_status(|status| {
-        if let types::Page::LogPanel {
+        if let crate::tui::status::Page::LogPanel {
             selected_item,
             selected_port,
             ..
@@ -50,7 +50,7 @@ pub fn handle_scroll_down(amount: usize) -> anyhow::Result<()> {
             // Get the log count for selected port
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    let port_data = port.read();
+                    let port_data = port;
                     let log_count = port_data.logs.len();
 
                     if log_count == 0 {

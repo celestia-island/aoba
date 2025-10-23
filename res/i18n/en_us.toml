@@ -142,6 +142,7 @@ status_running_with_changes = "Modified"
 status_saving = "Saving"
 status_syncing = "Syncing"
 status_applied_success = "Applied"
+status_startup_failed = "Failed to create port"
 
 [protocol.modbus]
 edit_suffix = "[Edit: {}]"

@@ -1,5 +1,3 @@
-mod basic_master;
-mod basic_slave;
 mod cli_port_cleanup;
 mod e2e;
 mod utils;
@@ -9,15 +7,17 @@ use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
 
-use basic_master::test_tui_master_with_cli_slave_continuous;
-use basic_slave::test_tui_slave_with_cli_master_continuous;
 use cli_port_cleanup::test_cli_port_release;
 
-/// TUI E2E test suite with selective test execution
+/// TUI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
 #[command(name = "tui_e2e")]
 #[command(about = "TUI E2E test suite", long_about = None)]
 struct Args {
+    /// Test module to run
+    #[arg(long)]
+    module: Option<String>,
+
     /// Virtual serial port 1 path
     #[arg(long, default_value = "/tmp/vcom1")]
     port1: String,
@@ -29,50 +29,62 @@ struct Args {
     /// Enable debug mode (show debug breakpoints and additional logging)
     #[arg(long)]
     debug: bool,
-
-    /// Run only test 0: CLI port release verification
-    #[arg(long)]
-    test0: bool,
-
-    /// Run only test 1: TUI Slave + CLI Master
-    #[arg(long)]
-    test1: bool,
-
-    /// Run only test 2: TUI Master + CLI Slave
-    #[arg(long)]
-    test2: bool,
-
-    /// Run only test 3: Multiple TUI Masters
-    #[arg(long)]
-    test3: bool,
-
-    /// Run only test 4: Multiple TUI Slaves
-    #[arg(long)]
-    test4: bool,
 }
 
-impl Args {
-    /// Check if any specific test is selected
-    fn has_specific_tests(&self) -> bool {
-        self.test0 || self.test1 || self.test2 || self.test3 || self.test4
+/// Clean up TUI configuration cache file to ensure clean test state
+///
+/// TUI saves port configurations to aoba_tui_config.json and auto-loads them on startup.
+/// This can cause tests to inherit state from previous runs, leading to unexpected behavior
+/// in multi-station creation tests. This function removes the cache before each test.
+pub fn cleanup_tui_config_cache() -> Result<()> {
+    // Paths to check for config files
+    let mut config_paths = vec![
+        std::path::PathBuf::from("aoba_tui_config.json"),
+        std::path::PathBuf::from("/tmp/aoba_tui_config.json"),
+    ];
+    
+    // Also check ~/.config/aoba/
+    if let Ok(home_dir) = std::env::var("HOME") {
+        config_paths.push(std::path::PathBuf::from(home_dir).join(".config/aoba/aoba_tui_config.json"));
     }
 
-    /// Check if a specific test should run
-    fn should_run_test(&self, test_num: usize) -> bool {
-        if !self.has_specific_tests() {
-            // If no specific tests selected, run all tests
-            return true;
-        }
-
-        match test_num {
-            0 => self.test0,
-            1 => self.test1,
-            2 => self.test2,
-            3 => self.test3,
-            4 => self.test4,
-            _ => false,
+    let mut removed_count = 0;
+    for config_path in &config_paths {
+        if config_path.exists() {
+            log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
+            match std::fs::remove_file(&config_path) {
+                Ok(_) => {
+                    removed_count += 1;
+                    log::info!("✅ Removed: {}", config_path.display());
+                }
+                Err(e) => {
+                    log::warn!("⚠️  Failed to remove {}: {}", config_path.display(), e);
+                }
+            }
         }
     }
+    
+    // Also clean up any debug status files from previous runs
+    let status_files = vec![
+        std::path::PathBuf::from("/tmp/ci_tui_status.json"),
+        std::path::PathBuf::from("/tmp/ci_cli_vcom1_status.json"),
+        std::path::PathBuf::from("/tmp/ci_cli_vcom2_status.json"),
+    ];
+    
+    for status_file in &status_files {
+        if status_file.exists() {
+            log::debug!("🗑️  Removing old status file: {}", status_file.display());
+            let _ = std::fs::remove_file(&status_file);
+        }
+    }
+
+    if removed_count > 0 {
+        log::info!("✅ TUI config cache cleaned ({} files removed)", removed_count);
+    } else {
+        log::debug!("📂 No TUI config cache found, nothing to clean");
+    }
+
+    Ok(())
 }
 
 /// Setup virtual serial ports by running socat_init script without requiring sudo
@@ -89,15 +101,27 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         log::info!("🧪 Setting up virtual serial ports...");
 
         // Find the socat_init.sh script (centralized at repo root)
-        let script_path = std::path::Path::new("scripts/socat_init.sh");
+        // Try both relative paths: from repo root and from examples/tui_e2e
+        let script_paths = [
+            std::path::Path::new("scripts/socat_init.sh"),
+            std::path::Path::new("../../scripts/socat_init.sh"),
+        ];
 
-        if !script_path.exists() {
-            log::warn!(
-                "⚠️ socat_init.sh script not found at {}",
-                script_path.display()
-            );
-            return Ok(false);
-        }
+        let script_path = script_paths.iter().find(|p| p.exists()).ok_or_else(|| {
+            anyhow::anyhow!(
+                "⚠️ socat_init.sh script not found at any of: {}",
+                script_paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
+        log::debug!(
+            "📍 Using socat_init.sh script at: {}",
+            script_path.display()
+        );
 
         // Run the script directly; it operates entirely in user-mode
         let output = Command::new("bash")
@@ -109,7 +133,6 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
         if output.status.success() {
             // Don't use environment variables anymore, just log the ports being used
             log::info!("✅ Virtual serial ports reset successfully");
-            log::info!("🔗 Using ports: PORT1={port1}, PORT2={port2}");
             Ok(true)
         } else {
             log::warn!("⚠️ Failed to setup virtual serial ports:");
@@ -144,80 +167,40 @@ async fn main() -> Result<()> {
         args.port2
     );
 
-    // On Unix-like systems, try to setup virtual serial ports
-    #[cfg(not(windows))]
-    {
-        log::info!("🧪 Setting up virtual serial ports...");
-        setup_virtual_serial_ports()?;
-    }
+    // Clean up TUI config cache before any tests to ensure clean state
+    log::info!("🧪 Cleaning up TUI configuration cache...");
+    cleanup_tui_config_cache()?;
 
-    // Check if we should run virtual serial port tests
-    if !ci_utils::should_run_vcom_tests_with_ports(&args.port1, &args.port2) {
-        log::warn!("⚠️ Virtual serial ports not available, skipping E2E tests");
-        return Ok(());
-    }
+    // If no module specified, show available modules and exit
+    let module = match &args.module {
+        Some(m) => m.as_str(),
+        None => {
+            log::info!("📋 Available modules:");
+            log::info!("  - cli_port_release");
+            log::info!("  - modbus_tui_slave_cli_master");
+            log::info!("  - modbus_tui_master_cli_slave");
+            log::info!("");
+            log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
+            return Ok(());
+        }
+    };
 
-    log::info!("🧪 Virtual serial ports available, running E2E tests...");
+    log::info!("🧪 Running module: {}", module);
 
-    // Test 0: CLI port release test - verify CLI properly releases ports on exit
-    if args.should_run_test(0) {
-        log::info!("🧪 Test 0/4: CLI port release verification");
-        test_cli_port_release().await?;
-
-        // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 0...");
-            setup_virtual_serial_ports()?;
+    // Run the selected module
+    match module {
+        "cli_port_release" => test_cli_port_release().await?,
+        "modbus_tui_slave_cli_master" => e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?,
+        "modbus_tui_master_cli_slave" => e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?,
+        
+        _ => {
+            log::error!("❌ Unknown module: {}", module);
+            log::error!("Run without --module to see available modules");
+            return Err(anyhow::anyhow!("Unknown module: {}", module));
         }
     }
 
-    // Test 1: TUI Slave + CLI Master with 10 rounds of continuous random data
-    if args.should_run_test(1) {
-        log::info!("🧪 Test 1/4: TUI Slave + CLI Master (10 rounds, holding registers)");
-        test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 1...");
-            setup_virtual_serial_ports()?;
-        }
-    }
-
-    // Test 2: TUI Master + CLI Slave (repeat for stability)
-    if args.should_run_test(2) {
-        log::info!("🧪 Test 2/4: TUI Master + CLI Slave - Repeat (10 rounds, holding registers)");
-        test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 2...");
-            setup_virtual_serial_ports()?;
-        }
-    }
-
-    // Test 3: Multiple TUI Masters on vcom1
-    if args.should_run_test(3) {
-        log::info!("🧪 Test 3/4: Multiple TUI Masters on vcom1 (E2E test suite)");
-        e2e::test_tui_multi_masters(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 3...");
-            setup_virtual_serial_ports()?;
-        }
-    }
-
-    // Test 4: Multiple TUI Slaves on vcom2
-    if args.should_run_test(4) {
-        log::info!("🧪 Test 4/4: Multiple TUI Slaves on vcom2 (E2E test suite)");
-        e2e::test_tui_multi_slaves(&args.port1, &args.port2).await?;
-    }
-
-    log::info!("🧪 All selected TUI E2E tests passed!");
+    log::info!("✅ Module '{}' completed successfully!", module);
 
     Ok(())
 }

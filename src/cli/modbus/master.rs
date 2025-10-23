@@ -155,6 +155,44 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     // Setup IPC if requested
     let mut ipc_connections = crate::cli::actions::setup_ipc(matches);
 
+    // Check if debug CI E2E test mode is enabled
+    let _debug_dump_thread = if matches.get_flag("debug-ci-e2e-test") {
+        log::info!("🔍 Debug CI E2E test mode enabled for CLI subprocess");
+
+        let port_name = port.to_string();
+        let station_id_copy = station_id;
+        let reg_mode_copy = reg_mode;
+        let register_address_copy = register_address;
+        let register_length_copy = register_length;
+
+        // Extract basename from port path (e.g., "/tmp/vcom1" -> "vcom1")
+        let port_basename = std::path::Path::new(&port)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&port);
+        let dump_path =
+            std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
+
+        Some(
+            crate::protocol::status::debug_dump::start_status_dump_thread(
+                dump_path,
+                None,
+                move || {
+                    crate::cli::status::CliStatus::new_master_provide(
+                        port_name.clone(),
+                        station_id_copy,
+                        reg_mode_copy,
+                        register_address_copy,
+                        register_length_copy,
+                    )
+                    .to_json()
+                },
+            ),
+        )
+    } else {
+        None
+    };
+
     // Open serial port with longer timeout for reading requests
     let port_handle = serialport::new(port, baud_rate)
         .timeout(Duration::from_millis(50))

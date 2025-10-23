@@ -1,21 +1,20 @@
 use anyhow::{anyhow, Result};
 
 use crate::{
-    protocol::status::{
-        read_status,
-        types::{
-            self,
-            port::{PortOwner, PortState, PortSubprocessMode},
-        },
-        with_port_write, write_status,
+    protocol::status::types::{
+        self,
+        port::{PortState, PortSubprocessInfo, PortSubprocessMode},
     },
-    tui::utils::bus::{Bus, UiToCore},
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::{Bus, UiToCore},
+    },
 };
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");
     let current_cursor = read_status(|status| {
-        if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
             log::info!("🔵 Current cursor in ModbusDashboard: {cursor:?}");
             Ok(*cursor)
         } else {
@@ -33,12 +32,14 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
 
             // Move cursor to the new station's StationId field
             let new_station_index = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             return Ok(stations.len().saturating_sub(1));
                         }
                     }
@@ -47,14 +48,11 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             write_status(|status| {
-                if let types::Page::ModbusDashboard { cursor, .. } = &mut status.page {
+                if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &mut status.page {
                     *cursor = types::cursor::ModbusDashboardCursor::StationId {
                         index: new_station_index,
                     };
-                    log::info!(
-                        "🔵 Moved cursor to new station StationId field (index: {})",
-                        new_station_index
-                    );
+                    log::info!("🔵 Moved cursor to new station StationId field (index: {new_station_index})");
                 }
                 Ok(())
             })?;
@@ -68,12 +66,14 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
         types::cursor::ModbusDashboardCursor::ModbusMode => {
             // Toggle global mode for this port between Master and Slave
             let current_mode = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode, stations: _ } =
-                                &port_guard.config;
+                                &port.config;
                             return Ok(if mode.is_master() { 0 } else { 1 });
                         }
                     }
@@ -93,12 +93,14 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
             // Get the current register mode value from port config
             let current_value = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             let all_items: Vec<_> = stations.iter().collect();
                             if let Some(item) = all_items.get(index) {
                                 return Ok((item.register_mode as u8 - 1) as usize);
@@ -137,7 +139,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             register_index,
         } => {
             let port_name_opt = read_status(|status| match &status.page {
-                types::Page::ModbusDashboard { selected_port, .. } => {
+                crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                     Ok(status.ports.order.get(*selected_port).cloned())
                 }
                 _ => Ok(None),
@@ -147,9 +149,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 // Get the register mode to determine behavior
                 let register_mode = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        let port_guard = port_entry.read();
-                        let types::port::PortConfig::Modbus { mode: _, stations } =
-                            &port_guard.config;
+                        let port = port_entry;
+                        let types::port::PortConfig::Modbus { mode: _, stations } = &port.config;
                         let all_items: Vec<_> = stations.iter().collect();
                         if let Some(item) = all_items.get(slave_index) {
                             return Ok(Some(item.register_mode));
@@ -164,8 +165,10 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         | types::modbus::RegisterMode::DiscreteInputs => {
                             // Toggle coil value
                             let selected_port = read_status(|status| {
-                                if let types::Page::ModbusDashboard { selected_port, .. } =
-                                    &status.page
+                                if let crate::tui::status::Page::ModbusDashboard {
+                                    selected_port,
+                                    ..
+                                } = &status.page
                                 {
                                     Ok(*selected_port)
                                 } else {
@@ -178,15 +181,21 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                             })?;
 
                             if let Some(port_name) = port_name_opt {
-                                if let Some(port) = read_status(|status| {
+                                if let Some(_port) = read_status(|status| {
                                     Ok(status.ports.map.get(&port_name).cloned())
                                 })? {
-                                    let mut owner_snapshot: Option<PortOwner> = None;
+                                    let mut subprocess_info_snapshot: Option<PortSubprocessInfo> =
+                                        None;
                                     let mut register_update: Option<(String, u8, u16, Vec<u16>)> =
                                         None;
 
-                                    with_port_write(&port, |port| {
-                                        owner_snapshot = port.state.owner().cloned();
+                                    write_status(|status| {
+                                        let port = status
+                                            .ports
+                                            .map
+                                            .get_mut(&port_name)
+                                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                                        subprocess_info_snapshot = port.subprocess_info.clone();
 
                                         let types::port::PortConfig::Modbus { mode, stations } =
                                             &mut port.config;
@@ -218,8 +227,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     ..
                                                 } => {
                                                     let should_queue = !matches!(
-                                                        owner_snapshot.as_ref(),
-                                                        Some(PortOwner::CliSubprocess(info))
+                                                        subprocess_info_snapshot.as_ref(),
+                                                        Some(info)
                                                             if info.mode == PortSubprocessMode::MasterProvide
                                                     );
 
@@ -269,10 +278,11 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                 }
                                             }
                                         }
-                                    });
+                                        Ok(())
+                                    })?;
 
-                                    if let (Some(PortOwner::CliSubprocess(_)), Some(update)) =
-                                        (owner_snapshot, register_update)
+                                    if let (Some(_), Some(update)) =
+                                        (subprocess_info_snapshot, register_update)
                                     {
                                         if let Err(err) =
                                             bus.ui_tx.send(UiToCore::SendRegisterUpdate {
@@ -322,33 +332,39 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     log::info!("🟦 handle_leave_page called");
 
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
         }
     })?;
 
-    log::info!("🟦 Selected port index: {}", selected_port);
+    log::info!("🟦 Selected port index: {selected_port}");
 
     // Check if we need to restart the runtime or auto-enable the port
     let (port_name, should_restart, should_auto_enable, has_stations) = read_status(|status| {
         let port_name = status.ports.order.get(selected_port).cloned();
-        log::info!("🟦 Port name: {:?}", port_name);
+        log::info!("🟦 Port name: {port_name:?}");
 
         let (should_restart, should_auto_enable, has_stations) = if let Some(name) = &port_name {
             let port_data = status.ports.map.get(name);
             let port_state = port_data.as_ref().map(|p| {
-                let port = p.read();
+                let port = p;
                 log::info!("🟦 Port state: {:?}", port.state);
                 port.state.clone()
             });
+
+            // Check if port has subprocess info (CLI subprocess)
+            let has_subprocess_info = port_data
+                .as_ref()
+                .map(|p| p.subprocess_info.is_some())
+                .unwrap_or(false);
 
             // Check if port has any stations configured
             let has_stations = port_data
                 .as_ref()
                 .map(|p| {
-                    let port = p.read();
+                    let port = p;
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
                     let count = stations.len();
                     log::debug!("🟦 Port {} has {} stations", name, count);
@@ -356,12 +372,9 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 })
                 .unwrap_or(false);
 
-            let should_restart = matches!(
-                port_state,
-                Some(types::port::PortState::OccupiedByThis {
-                    owner: types::port::PortOwner::Runtime(_)
-                })
-            );
+            // TUI only uses CLI subprocesses. Check if port has subprocess info.
+            let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
+                && has_subprocess_info;
 
             // Auto-enable if: port is Free AND has stations configured
             let should_auto_enable =
@@ -415,7 +428,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     }
 
     write_status(|status| {
-        status.page = types::Page::ConfigPanel {
+        status.page = crate::tui::status::Page::ConfigPanel {
             selected_port,
             view_offset: 0,
             cursor: types::cursor::ConfigPanelCursor::EnablePort,
@@ -431,7 +444,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
     log::info!("🟢 create_new_modbus_entry called");
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             log::info!("🟢 Selected port index: {selected_port}");
             Ok(*selected_port)
         } else {
@@ -449,7 +462,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
     if let Some(port_name) = port_name_opt {
         log::info!("🟢 Found port name: {port_name}");
         let mut should_restart_runtime = false;
-        if let Some(port) = read_status(|status| {
+        if let Some(_port) = read_status(|status| {
             let port = status.ports.map.get(&port_name).cloned();
             if port.is_some() {
                 log::info!("🟢 Port entry found in map for: {port_name}");
@@ -458,18 +471,19 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
             }
             Ok(port)
         })? {
-            log::info!("🟢 Calling with_port_write for: {port_name}");
-            with_port_write(&port, |port| {
-                log::info!("🟢 Inside with_port_write closure");
+            log::info!("🟢 Calling write_status for: {port_name}");
+            write_status(|status| {
+                let port = status
+                    .ports
+                    .map
+                    .get_mut(&port_name)
+                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                log::info!("🟢 Inside write_status closure");
                 // Check if port is currently occupied before adding station
-                if matches!(
-                    port.state,
-                    PortState::OccupiedByThis {
-                        owner: PortOwner::Runtime(_)
-                    }
-                ) {
+                // TUI only uses CLI subprocesses
+                if matches!(port.state, PortState::OccupiedByThis) {
                     log::info!(
-                        "🟢 Port {port_name} is occupied by native runtime - scheduling restart"
+                        "🟢 Port {port_name} is occupied by CLI subprocess - scheduling restart"
                     );
                     should_restart_runtime = true;
                 }
@@ -501,8 +515,9 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
                     if mode.is_master() { "Master" } else { "Slave" },
                     stations.len()
                 );
-            });
-            log::info!("🟢 with_port_write completed");
+                Ok(())
+            })?;
+            log::info!("🟢 write_status completed");
 
             // Save configuration to disk
             if let Err(e) = save_current_configs() {
@@ -533,7 +548,7 @@ fn save_current_configs() -> Result<()> {
     let configs: HashMap<String, types::port::PortConfig> = read_status(|status| {
         let mut map = HashMap::new();
         for (name, port_arc) in &status.ports.map {
-            let port = port_arc.read();
+            let port = port_arc;
             // Only save Modbus ports with stations
             let types::port::PortConfig::Modbus { stations, .. } = &port.config;
             if !stations.is_empty() {

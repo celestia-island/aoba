@@ -4,12 +4,11 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
-    protocol::status::{
-        read_status,
-        types::{self, cursor::Cursor},
-        with_port_read, write_status,
+    protocol::status::types::{self, cursor::Cursor},
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::{Bus, UiToCore},
     },
-    tui::utils::bus::{Bus, UiToCore},
 };
 
 use super::actions::{handle_enter_action, handle_leave_page};
@@ -37,7 +36,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 let new_cursor = types::cursor::ModbusDashboardCursor::AddLine;
                 let new_offset = new_cursor.view_offset();
                 write_status(|status| {
-                    if let types::Page::ModbusDashboard {
+                    if let crate::tui::status::Page::ModbusDashboard {
                         cursor,
                         view_offset,
                         ..
@@ -51,14 +50,14 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             } else {
                 // PageUp: Jump to previous station group
                 let current_cursor = read_status(|status| match &status.page {
-                    types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                    crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
                     _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
                 })?;
 
                 let new_cursor = jump_to_prev_group(current_cursor)?;
                 let new_offset = new_cursor.view_offset();
                 write_status(|status| {
-                    if let types::Page::ModbusDashboard {
+                    if let crate::tui::status::Page::ModbusDashboard {
                         cursor,
                         view_offset,
                         ..
@@ -81,7 +80,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 let new_cursor = jump_to_last_group()?;
                 let new_offset = new_cursor.view_offset();
                 write_status(|status| {
-                    if let types::Page::ModbusDashboard {
+                    if let crate::tui::status::Page::ModbusDashboard {
                         cursor,
                         view_offset,
                         ..
@@ -95,14 +94,14 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             } else {
                 // PageDown: Jump to next station group
                 let current_cursor = read_status(|status| match &status.page {
-                    types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                    crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
                     _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
                 })?;
 
                 let new_cursor = jump_to_next_group(current_cursor)?;
                 let new_offset = new_cursor.view_offset();
                 write_status(|status| {
-                    if let types::Page::ModbusDashboard {
+                    if let crate::tui::status::Page::ModbusDashboard {
                         cursor,
                         view_offset,
                         ..
@@ -121,7 +120,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Left | KeyCode::Char('h') => {
             let current_cursor = read_status(|status| match &status.page {
-                types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
                 _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
@@ -146,7 +145,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let new_offset = new_cursor.view_offset();
             write_status(|status| {
-                if let types::Page::ModbusDashboard {
+                if let crate::tui::status::Page::ModbusDashboard {
                     cursor,
                     view_offset,
                     ..
@@ -164,7 +163,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Right | KeyCode::Char('l') => {
             let current_cursor = read_status(|status| {
-                if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -180,16 +179,16 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     // Get register length and check if there's a next station
                     let (max_register, has_next_station) = read_status(|status| {
                         let port_name_opt = match &status.page {
-                            types::Page::ModbusDashboard { selected_port, .. } => {
+                            crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
                             _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                let port_guard = port_entry.read();
+                                let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
+                                    &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
@@ -221,7 +220,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let new_offset = new_cursor.view_offset();
             write_status(|status| {
-                if let types::Page::ModbusDashboard {
+                if let crate::tui::status::Page::ModbusDashboard {
                     cursor,
                     view_offset,
                     ..
@@ -239,7 +238,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Up | KeyCode::Char('k') => {
             let current_cursor = read_status(|status| match &status.page {
-                types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
                 _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
@@ -255,16 +254,16 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     // Get register length
                     let _max_register = read_status(|status| {
                         let port_name_opt = match &status.page {
-                            types::Page::ModbusDashboard { selected_port, .. } => {
+                            crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
                             _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                let port_guard = port_entry.read();
+                                let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
+                                    &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     return Ok(item.register_length as usize);
@@ -297,7 +296,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let new_offset = new_cursor.view_offset();
             write_status(|status| {
-                if let types::Page::ModbusDashboard {
+                if let crate::tui::status::Page::ModbusDashboard {
                     cursor,
                     view_offset,
                     ..
@@ -315,7 +314,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
         }
         KeyCode::Down | KeyCode::Char('j') => {
             let current_cursor = read_status(|status| match &status.page {
-                types::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
+                crate::tui::status::Page::ModbusDashboard { cursor, .. } => Ok(*cursor),
                 _ => Ok(types::cursor::ModbusDashboardCursor::AddLine),
             })?;
 
@@ -331,16 +330,16 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     // Get register length and check if there's a next station
                     let (max_register, has_next_slave) = read_status(|status| {
                         let port_name_opt = match &status.page {
-                            types::Page::ModbusDashboard { selected_port, .. } => {
+                            crate::tui::status::Page::ModbusDashboard { selected_port, .. } => {
                                 status.ports.order.get(*selected_port).cloned()
                             }
                             _ => None,
                         };
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
-                                let port_guard = port_entry.read();
+                                let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port_guard.config;
+                                    &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
@@ -385,7 +384,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
             let new_offset = new_cursor.view_offset();
             write_status(|status| {
-                if let types::Page::ModbusDashboard {
+                if let crate::tui::status::Page::ModbusDashboard {
                     cursor,
                     view_offset,
                     ..
@@ -422,11 +421,10 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 /// Handle saving configuration with Ctrl+S
 /// This marks the config as saved and triggers port enable if not already enabled
 fn handle_save_config(bus: &Bus) -> Result<()> {
-    use crate::protocol::status::{with_port_write, write_status};
     use chrono::Local;
 
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
@@ -438,17 +436,16 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
     if let Some(port_name) = port_name_opt {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             // Check if port has any stations configured
-            let has_stations = with_port_read(&port, |port| match &port.config {
+            let has_stations = match &port.config {
                 crate::protocol::status::types::port::PortConfig::Modbus { stations, .. } => {
                     !stations.is_empty()
                 }
-            })
-            .unwrap_or(false);
+            };
 
             if !has_stations {
                 // Show error if no stations configured
                 write_status(|status| {
-                    status.temporarily.error = Some(crate::protocol::status::types::ErrorInfo {
+                    status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                         message: lang().index.err_modbus_config_empty.clone(),
                         timestamp: Local::now(),
                     });
@@ -461,23 +458,26 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             }
 
             // Mark config as not modified
-            with_port_write(&port, |port| {
+            write_status(|status| {
+                let port = status
+                    .ports
+                    .map
+                    .get_mut(&port_name)
+                    .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                 port.config_modified = false;
                 // Set status to AppliedSuccess for 3 seconds
                 port.status_indicator =
                     crate::protocol::status::types::port::PortStatusIndicator::AppliedSuccess {
                         timestamp: Local::now(),
                     };
-            });
+                Ok(())
+            })?;
 
             // Check if port is already enabled
-            let is_enabled = with_port_read(&port, |port| {
-                matches!(
-                    port.state,
-                    crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
-                )
-            })
-            .unwrap_or(false);
+            let is_enabled = matches!(
+                port.state,
+                crate::protocol::status::types::port::PortState::OccupiedByThis
+            );
 
             if !is_enabled {
                 // Enable the port if not already enabled
@@ -554,12 +554,14 @@ fn jump_to_next_group(
         types::cursor::ModbusDashboardCursor::ModbusMode => {
             // Jump to first station if exists
             let has_stations = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             return Ok(!stations.is_empty());
                         }
                     }
@@ -583,12 +585,14 @@ fn jump_to_next_group(
         } => {
             // Check if next station exists
             let has_next = read_status(|status| {
-                if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
-                            let port_guard = port_entry.read();
+                            let port = port_entry;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port_guard.config;
+                                &port.config;
                             let all_items: Vec<_> = stations.iter().collect();
                             return Ok(index + 1 < all_items.len());
                         }
@@ -610,11 +614,11 @@ fn jump_to_next_group(
 /// Jump to last station group (first item of last station if exists, otherwise ModbusMode)
 fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
     let last_station_index = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
-                    let port_guard = port_entry.read();
-                    let types::port::PortConfig::Modbus { mode: _, stations } = &port_guard.config;
+                    let port = port_entry;
+                    let types::port::PortConfig::Modbus { mode: _, stations } = &port.config;
                     let all_items: Vec<_> = stations.iter().collect();
                     if !all_items.is_empty() {
                         return Ok(Some(all_items.len() - 1));

@@ -118,6 +118,12 @@ impl ManagedSubprocess {
         args.push("--ipc-channel".to_string());
         args.push(ipc_socket_name.clone());
 
+        // If TUI is in debug CI E2E test mode, propagate to CLI subprocess
+        if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+            args.push("--debug-ci-e2e-test".to_string());
+            log::debug!("Injecting --debug-ci-e2e-test flag to CLI subprocess");
+        }
+
         log::debug!("CLI subprocess command: {exe_path:?} {args:?}");
 
         // Spawn the subprocess
@@ -347,7 +353,7 @@ impl ManagedSubprocess {
         if let Some(ref mut client) = self.command_client {
             // Serialize stations using postcard
             let stations_data = postcard::to_allocvec(stations)
-                .map_err(|e| anyhow!("Failed to serialize stations: {}", e))?;
+                .map_err(|e| anyhow!("Failed to serialize stations: {e}"))?;
 
             let msg = IpcMessage::stations_update(stations_data);
             client.send(&msg)?;
@@ -561,12 +567,12 @@ impl SubprocessManager {
     /// This sends the complete station configuration for the port
     pub fn send_stations_update_for_port(&mut self, port_name: &str) -> Result<()> {
         use crate::protocol::status::port_stations_to_config;
-        use crate::protocol::status::read_status;
+        use crate::tui::status::read_status;
 
         // Get current stations configuration from the port
         let stations: Vec<crate::cli::config::StationConfig> = read_status(|status| {
             if let Some(port_arc) = status.ports.map.get(port_name) {
-                let port_data = port_arc.read();
+                let port_data = port_arc;
                 let stations_vec = port_stations_to_config(&port_data);
                 Ok(stations_vec)
             } else {

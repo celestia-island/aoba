@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::actions::{handle_clear_logs, handle_leave_page, handle_toggle_follow};
-use crate::{protocol::status::write_status, tui::utils::bus::Bus};
+use crate::{tui::status::write_status, tui::utils::bus::Bus};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Conservative estimate of viewport height (total height minus title, borders, bottom hints)
@@ -20,9 +20,8 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if has_ctrl {
                 // Ctrl+PageUp: Jump to first log item
                 write_status(|status| {
-                    if let crate::protocol::status::types::Page::LogPanel {
-                        selected_item, ..
-                    } = &mut status.page
+                    if let crate::tui::status::Page::LogPanel { selected_item, .. } =
+                        &mut status.page
                     {
                         *selected_item = Some(0);
                     }
@@ -41,7 +40,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if has_ctrl {
                 // Ctrl+PageDown: Jump to last log item
                 write_status(|status| {
-                    if let crate::protocol::status::types::Page::LogPanel {
+                    if let crate::tui::status::Page::LogPanel {
                         selected_item,
                         selected_port,
                         ..
@@ -49,7 +48,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     {
                         if let Some(port_name) = status.ports.order.get(*selected_port) {
                             if let Some(port) = status.ports.map.get(port_name) {
-                                let port_data = port.read();
+                                let port_data = port;
                                 let log_count = port_data.logs.len();
                                 if log_count > 0 {
                                     *selected_item = Some(log_count.saturating_sub(1));
@@ -86,9 +85,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             // Handle Enter key for input area editing
             write_status(|status| {
                 // Set input mode to editing or toggle between modes
-                if let crate::protocol::status::types::Page::LogPanel { input_mode, .. } =
-                    &mut status.page
-                {
+                if let crate::tui::status::Page::LogPanel { input_mode, .. } = &mut status.page {
                     *input_mode = match input_mode {
                         crate::protocol::status::types::ui::InputMode::Ascii => {
                             crate::protocol::status::types::ui::InputMode::Hex

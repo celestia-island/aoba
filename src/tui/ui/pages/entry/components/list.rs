@@ -7,34 +7,36 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    protocol::status::{
-        read_status,
-        types::{
-            self,
-            port::{PortData, PortState},
-        },
-        with_port_read,
+    protocol::status::types::{
+        self,
+        port::{PortData, PortState},
     },
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
+        },
     },
 };
 
 use anyhow::Result;
 
 /// Helper function to derive selection from page state (entry page specific)
-pub fn derive_selection_from_page(page: &types::Page, ports_order: &[String]) -> Result<usize> {
+pub fn derive_selection_from_page(
+    page: &crate::tui::status::Page,
+    ports_order: &[String],
+) -> Result<usize> {
     let res = match page {
-        types::Page::Entry { cursor, .. } => match cursor {
+        crate::tui::status::Page::Entry { cursor, .. } => match cursor {
             Some(types::cursor::EntryCursor::Com { index }) => *index,
             Some(types::cursor::EntryCursor::Refresh) => ports_order.len(),
             Some(types::cursor::EntryCursor::CreateVirtual) => ports_order.len().saturating_add(1),
             Some(types::cursor::EntryCursor::About) => ports_order.len().saturating_add(2),
             None => 0usize,
         },
-        types::Page::ModbusDashboard { selected_port, .. }
-        | types::Page::ConfigPanel { selected_port, .. }
-        | types::Page::LogPanel { selected_port, .. } => *selected_port,
+        crate::tui::status::Page::ModbusDashboard { selected_port, .. }
+        | crate::tui::status::Page::ConfigPanel { selected_port, .. }
+        | crate::tui::status::Page::LogPanel { selected_port, .. } => *selected_port,
         _ => 0usize,
     };
     Ok(res)
@@ -49,23 +51,13 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
 
         for (i, name) in status.ports.order.iter().enumerate() {
             let (name, state) = if let Some(port) = status.ports.map.get(name) {
-                if let Some((pn, st)) =
-                    with_port_read(port, |port| (port.port_name.clone(), port.state.clone()))
-                {
-                    (pn, st)
-                } else {
-                    log::warn!("Failed to acquire read lock for port {name} while rendering the ports list");
-                    (
-                        PortData::default().port_name.clone(),
-                        PortData::default().state.clone(),
-                    )
-                }
+                (port.port_name.clone(), port.state.clone())
             } else {
                 (default_pd.port_name.clone(), default_pd.state.clone())
             };
             let (state_text, state_style) = match state {
                 PortState::Free => (lang().index.port_state_free.clone(), Style::default()),
-                PortState::OccupiedByThis { owner: _ } => (
+                PortState::OccupiedByThis => (
                     lang().index.port_state_owned.clone(),
                     Style::default().fg(Color::Green),
                 ),
@@ -176,7 +168,8 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
         }
 
         // Get view_offset from page state
-        let view_offset = if let types::Page::Entry { view_offset, .. } = &status.page {
+        let view_offset = if let crate::tui::status::Page::Entry { view_offset, .. } = &status.page
+        {
             *view_offset
         } else {
             0

@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::status::read_status;
-
 /// For the config panel we have groups of options separated by blank lines.
 /// Define the sizes of each group so view_offset can account for the
 /// extra blank rows introduced between groups.
@@ -44,9 +42,10 @@ impl Cursor for EntryCursor {
             }
             EntryCursor::Refresh => {
                 // Go to last COM port if any exist
-                let max_port_index =
-                    read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))
-                        .unwrap_or(0);
+                let max_port_index = crate::tui::status::read_status(|status| {
+                    Ok(status.ports.order.len().saturating_sub(1))
+                })
+                .unwrap_or(0);
                 if max_port_index > 0 {
                     EntryCursor::Com {
                         index: max_port_index,
@@ -63,9 +62,10 @@ impl Cursor for EntryCursor {
     fn next(self) -> Self {
         match self {
             EntryCursor::Com { index } => {
-                let max_port_index =
-                    read_status(|status| Ok(status.ports.order.len().saturating_sub(1)))
-                        .unwrap_or(0);
+                let max_port_index = crate::tui::status::read_status(|status| {
+                    Ok(status.ports.order.len().saturating_sub(1))
+                })
+                .unwrap_or(0);
                 if index < max_port_index {
                     EntryCursor::Com { index: index + 1 }
                 } else {
@@ -76,7 +76,9 @@ impl Cursor for EntryCursor {
             EntryCursor::CreateVirtual => EntryCursor::About,
             EntryCursor::About => {
                 // Wrap to first COM port if any exist
-                if read_status(|status| Ok(!status.ports.order.is_empty())).unwrap_or(false) {
+                if crate::tui::status::read_status(|status| Ok(!status.ports.order.is_empty()))
+                    .unwrap_or(false)
+                {
                     EntryCursor::Com { index: 0 }
                 } else {
                     EntryCursor::Refresh
@@ -90,15 +92,21 @@ impl Cursor for EntryCursor {
             EntryCursor::Com { index } => *index,
             EntryCursor::Refresh => {
                 // When scrolling to the last 3 items, add +1 offset
-                let ports_count = read_status(|status| Ok(status.ports.order.len())).unwrap_or(0);
+                let ports_count =
+                    crate::tui::status::read_status(|status| Ok(status.ports.order.len()))
+                        .unwrap_or(0);
                 ports_count.saturating_add(1)
             }
             EntryCursor::CreateVirtual => {
-                let ports_count = read_status(|status| Ok(status.ports.order.len())).unwrap_or(0);
+                let ports_count =
+                    crate::tui::status::read_status(|status| Ok(status.ports.order.len()))
+                        .unwrap_or(0);
                 ports_count.saturating_add(2)
             }
             EntryCursor::About => {
-                let ports_count = read_status(|status| Ok(status.ports.order.len())).unwrap_or(0);
+                let ports_count =
+                    crate::tui::status::read_status(|status| Ok(status.ports.order.len()))
+                        .unwrap_or(0);
                 ports_count.saturating_add(3)
             }
         }
@@ -343,10 +351,8 @@ impl Cursor for ModbusDashboardCursor {
 fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::ModbusRegisterItem> {
     let mut items_vec: Vec<crate::protocol::status::types::modbus::ModbusRegisterItem> = Vec::new();
 
-    let items_opt = read_status(|status| {
-        if let crate::protocol::status::types::Page::ModbusDashboard { selected_port, .. } =
-            &status.page
-        {
+    let items_opt = crate::tui::status::read_status(|status| {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             let port_name = status.ports.order.get(*selected_port).cloned();
             Ok(port_name)
         } else {
@@ -357,10 +363,9 @@ fn build_modbus_items_vec() -> Vec<crate::protocol::status::types::modbus::Modbu
     .flatten();
 
     if let Some(port_name) = items_opt {
-        if let Ok(Some(port_entry)) =
-            read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
+        if let Ok(Some(port_data)) =
+            crate::tui::status::read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
-            let port_data = port_entry.read();
             let crate::protocol::status::types::port::PortConfig::Modbus { mode: _, stations } =
                 &port_data.config;
             for it in stations.iter() {

@@ -164,6 +164,7 @@ derive_struct! {
                 status_saving: String = "status_saving".to_string(),
                 status_syncing: String = "status_syncing".to_string(),
                 status_applied_success: String = "status_applied_success".to_string(),
+                status_startup_failed: String = "status_startup_failed".to_string(),
             },
             modbus: {
                 edit_suffix: String = "edit_suffix".to_string(),

@@ -7,29 +7,19 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::{
-    i18n::lang,
-    protocol::status::{read_status, types, with_port_read},
-};
+use crate::{i18n::lang, protocol::status::types, tui::status::read_status};
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Option<usize>)>> {
     let res = read_status(|status| match &status.page {
-        types::Page::LogPanel {
+        crate::tui::status::Page::LogPanel {
             selected_port,
             selected_item,
             ..
         } => {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    if let Some(tuple) =
-                        with_port_read(port, |pd| Some((pd.logs.clone(), *selected_item)))
-                    {
-                        Ok(tuple)
-                    } else {
-                        log::warn!("Failed to acquire read lock for port {port_name} while extracting log data");
-                        Ok(None)
-                    }
+                    Ok(Some((port.logs.clone(), *selected_item)))
                 } else {
                     Ok(None)
                 }

@@ -3,6 +3,7 @@ pub mod cleanup;
 pub mod config;
 pub mod config_convert;
 pub mod modbus;
+pub mod status;
 
 use clap::{Arg, ArgMatches, Command};
 
@@ -172,6 +173,13 @@ pub fn parse_args() -> ArgMatches {
                 .help("Run as Modbus daemon (IPC mode) - communicates via IPC without holding port directly")
                 .value_name("IPC_CHANNEL")
                 .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon"]),
+        )
+        .arg(
+            Arg::new("debug-ci-e2e-test")
+                .long("debug-ci-e2e-test")
+                .help("Enable CI E2E test mode: periodically dump global status to /tmp/ci_cli_{port}_status.json")
+                .action(clap::ArgAction::SetTrue)
+                .hide(true), // Hidden from normal help output
         )
         .get_matches()
 }

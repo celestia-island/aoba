@@ -1,8 +1,12 @@
 pub mod input;
 pub mod persistence;
+pub mod status;
 pub mod subprocess;
 pub mod ui;
 pub mod utils;
+
+// Re-export Page for convenience since it's used throughout TUI code
+pub use status::Page;
 
 use anyhow::{anyhow, Result};
 use chrono::Local;
@@ -22,20 +26,14 @@ use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 use crate::{
     protocol::{
         ipc::IpcMessage,
-        status::{
-            init_status, read_status,
-            types::{
-                self,
-                modbus::RegisterMode,
-                port::{
-                    PortLogEntry, PortOwner, PortState, PortSubprocessInfo, PortSubprocessMode,
-                },
-                Status,
-            },
-            with_port_read, with_port_write, write_status,
+        status::types::{
+            self,
+            modbus::RegisterMode,
+            port::{PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode},
         },
     },
     tui::{
+        status::Status,
         subprocess::{CliMode, CliSubprocessConfig, SubprocessManager},
         ui::components::error_msg::ui_error_set,
         utils::bus::{Bus, CoreToUi, UiToCore},
@@ -90,18 +88,12 @@ fn append_port_log(port_name: &str, raw: String) {
         parsed: None,
     };
 
-    if let Err(err) = write_status(|status| {
-        if let Some(port) = status.ports.map.get(port_name) {
-            if with_port_write(port, |port| {
-                port.logs.push(entry.clone());
-                if port.logs.len() > 1000 {
-                    let excess = port.logs.len() - 1000;
-                    port.logs.drain(0..excess);
-                }
-            })
-            .is_none()
-            {
-                log::warn!("append_port_log: failed to acquire write lock for port {port_name}");
+    if let Err(err) = self::status::write_status(|status| {
+        if let Some(port) = status.ports.map.get_mut(port_name) {
+            port.logs.push(entry.clone());
+            if port.logs.len() > 1000 {
+                let excess = port.logs.len() - 1000;
+                port.logs.drain(0..excess);
             }
         }
         Ok(())
@@ -278,66 +270,62 @@ fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Re
 #[allow(dead_code)]
 fn update_cli_data_file(port_name: &str, path: &PathBuf) -> Result<()> {
     // Read current station values and rebuild the merged data file
-    let merged_data = read_status(|status| {
-        if let Some(port_entry) = status.ports.map.get(port_name) {
-            if let Some(port) = with_port_read(port_entry, |port| {
-                let types::port::PortConfig::Modbus { stations, .. } = &port.config;
+    let merged_data = self::status::read_status(|status| {
+        if let Some(port) = status.ports.map.get(port_name) {
+            let types::port::PortConfig::Modbus { stations, .. } = &port.config;
 
-                if stations.is_empty() {
-                    return None;
-                }
-
-                // Use first station's metadata as reference
-                let first = &stations[0];
-                let station_id = first.station_id;
-                let register_mode = first.register_mode;
-
-                // Find min and max addresses across all matching stations
-                let mut min_addr = u16::MAX;
-                let mut max_addr = 0u16;
-
-                for station in stations {
-                    if station.station_id != station_id || station.register_mode != register_mode {
-                        continue;
-                    }
-
-                    let start = station.register_address;
-                    let end = start + station.register_length;
-
-                    if start < min_addr {
-                        min_addr = start;
-                    }
-                    if end > max_addr {
-                        max_addr = end;
-                    }
-                }
-
-                let total_length = max_addr - min_addr;
-
-                // Create merged data array
-                let mut merged_data = vec![0u16; total_length as usize];
-
-                // Fill in data from each station
-                for station in stations {
-                    if station.station_id != station_id || station.register_mode != register_mode {
-                        continue;
-                    }
-
-                    let start_offset = (station.register_address - min_addr) as usize;
-                    let station_values = station_values_for_cli(station);
-
-                    for (i, &value) in station_values.iter().enumerate() {
-                        let target_idx = start_offset + i;
-                        if target_idx < merged_data.len() {
-                            merged_data[target_idx] = value;
-                        }
-                    }
-                }
-
-                Some(merged_data)
-            }) {
-                return Ok(port);
+            if stations.is_empty() {
+                return Ok(None);
             }
+
+            // Use first station's metadata as reference
+            let first = &stations[0];
+            let station_id = first.station_id;
+            let register_mode = first.register_mode;
+
+            // Find min and max addresses across all matching stations
+            let mut min_addr = u16::MAX;
+            let mut max_addr = 0u16;
+
+            for station in stations {
+                if station.station_id != station_id || station.register_mode != register_mode {
+                    continue;
+                }
+
+                let start = station.register_address;
+                let end = start + station.register_length;
+
+                if start < min_addr {
+                    min_addr = start;
+                }
+                if end > max_addr {
+                    max_addr = end;
+                }
+            }
+
+            let total_length = max_addr - min_addr;
+
+            // Create merged data array
+            let mut merged_data = vec![0u16; total_length as usize];
+
+            // Fill in data from each station
+            for station in stations {
+                if station.station_id != station_id || station.register_mode != register_mode {
+                    continue;
+                }
+
+                let start_offset = (station.register_address - min_addr) as usize;
+                let station_values = station_values_for_cli(station);
+
+                for (i, &value) in station_values.iter().enumerate() {
+                    let target_idx = start_offset + i;
+                    if target_idx < merged_data.len() {
+                        merged_data[target_idx] = value;
+                    }
+                }
+            }
+
+            return Ok(Some(merged_data));
         }
         Ok(None)
     })?;
@@ -369,93 +357,74 @@ fn apply_register_update_from_ipc(
     let mut handled = false;
     let mut data_source_path: Option<PathBuf> = None;
 
-    write_status(|status| {
-        if let Some(port_entry) = status.ports.map.get(port_name) {
-            if with_port_write(port_entry, |port| {
-                let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
-                // Find the station that matches station_id, register_mode AND address range
-                if let Some(item) = stations.iter_mut().find(|item| {
-                    if item.station_id != station_id || item.register_mode != register_mode {
-                        return false;
+    self::status::write_status(|status| {
+        if let Some(port) = status.ports.map.get_mut(port_name) {
+            let types::port::PortConfig::Modbus { stations, .. } = &mut port.config;
+            // Find the station that matches station_id, register_mode AND address range
+            if let Some(item) = stations.iter_mut().find(|item| {
+                if item.station_id != station_id || item.register_mode != register_mode {
+                    return false;
+                }
+                // Check if start_address falls within this station's address range
+                let item_start = item.register_address;
+                let item_end = item_start + item.register_length;
+                start_address >= item_start && start_address < item_end
+            }) {
+                item.req_total = item.req_total.saturating_add(1);
+                item.req_success = item.req_success.saturating_add(1);
+                item.last_response_time = Some(std::time::Instant::now());
+
+                let configured_len = item.register_length as usize;
+                if configured_len > 0 {
+                    if item.last_values.len() != configured_len {
+                        item.last_values.resize(configured_len, 0);
                     }
-                    // Check if start_address falls within this station's address range
-                    let item_start = item.register_address;
-                    let item_end = item_start + item.register_length;
-                    start_address >= item_start && start_address < item_end
-                }) {
-                        item.req_total = item.req_total.saturating_add(1);
-                        item.req_success = item.req_success.saturating_add(1);
-                        item.last_response_time = Some(std::time::Instant::now());
 
-                        let configured_len = item.register_length as usize;
-                        if configured_len == 0 {
-                            return;
-                        }
-
-                        if item.last_values.len() != configured_len {
-                            item.last_values.resize(configured_len, 0);
-                        }
-
-                        if start_address < item.register_address {
-                            log::warn!(
-                                "Register update for {port_name}: start address 0x{start_address:04X} is before configured base 0x{:04X}",
-                                item.register_address
-                            );
-                            return;
-                        }
-
+                    if start_address >= item.register_address {
                         let base_index = (start_address - item.register_address) as usize;
-                        if base_index >= configured_len {
+                        if base_index < configured_len {
+                            let capacity = configured_len - base_index;
+                            let limit = std::cmp::min(values.len(), capacity);
+                            if values.len() > capacity {
+                                log::debug!(
+                                    "Register update for {port_name}: truncating values from {} to configured capacity {}",
+                                    values.len(),
+                                    capacity
+                                );
+                            }
+
+                            for (offset, value) in values.iter().take(limit).enumerate() {
+                                item.last_values[base_index + offset] = *value;
+                            }
+
+                            handled = true;
+                        } else {
                             log::warn!(
                                 "Register update for {port_name}: start address 0x{start_address:04X} outside configured range base=0x{:04X} len=0x{:04X}",
                                 item.register_address,
                                 item.register_length
                             );
-                            return;
                         }
-
-                        let capacity = configured_len - base_index;
-                        let limit = std::cmp::min(values.len(), capacity);
-                        if values.len() > capacity {
-                            log::debug!(
-                                "Register update for {port_name}: truncating values from {} to configured capacity {}",
-                                values.len(),
-                                capacity
-                            );
-                        }
-
-                        for (offset, value) in values.iter().take(limit).enumerate() {
-                            item.last_values[base_index + offset] = *value;
-                        }
-
-                        handled = true;
-                } else {
-                    log::debug!(
-                        "Register update for {port_name}: station {station_id} in mode {register_mode:?} not found"
-                    );
+                    } else {
+                        log::warn!(
+                            "Register update for {port_name}: start address 0x{start_address:04X} is before configured base 0x{:04X}",
+                            item.register_address
+                        );
+                    }
                 }
-            })
-            .is_none()
-            {
-                log::warn!(
-                    "Register update for {port_name}: failed to acquire port write lock"
+            } else {
+                log::debug!(
+                    "Register update for {port_name}: station {station_id} in mode {register_mode:?} not found"
                 );
             }
 
             // Get data source path if available for this port
-            if with_port_read(port_entry, |port| {
-                if let PortState::OccupiedByThis {
-                    owner: PortOwner::CliSubprocess(info),
-                } = &port.state
-                {
+            if port.state.is_occupied_by_this() {
+                if let Some(info) = &port.subprocess_info {
                     if let Some(path_str) = &info.data_source_path {
                         data_source_path = Some(PathBuf::from(path_str));
                     }
                 }
-            })
-            .is_none()
-            {
-                log::debug!("Register update for {port_name}: failed to acquire port read lock for data path");
             }
         } else {
             log::debug!("Register update for {port_name}: port not found in status map");
@@ -488,8 +457,8 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             let msg = format!("CLI subprocess error: {error}");
             log::warn!("CLI[{port_name}]: {msg}");
             append_port_log(port_name, msg.clone());
-            write_status(|status| {
-                status.temporarily.error = Some(types::ErrorInfo {
+            self::status::write_status(|status| {
+                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
                     message: msg.clone(),
                     timestamp: chrono::Local::now(),
                 });
@@ -568,7 +537,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     Ok(())
 }
 
-pub fn start() -> Result<()> {
+pub fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
     // Terminal is initialized inside the rendering thread to avoid sharing
@@ -578,28 +547,53 @@ pub fn start() -> Result<()> {
     let app = Arc::new(RwLock::new(Status::default()));
 
     // Initialize the global status
-    init_status(app.clone())?;
+    self::status::init_status(app.clone())?;
+
+    // Check if debug CI E2E test mode is enabled
+    let debug_ci_e2e_enabled = matches.get_flag("debug-ci-e2e-test");
+    let debug_dump_shutdown = if debug_ci_e2e_enabled {
+        log::info!("🔍 Debug CI E2E test mode enabled - starting status dump thread");
+        crate::protocol::status::debug_dump::enable_debug_dump();
+
+        let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let dump_path = std::path::PathBuf::from("/tmp/ci_tui_status.json");
+        let shutdown_signal_clone = shutdown_signal.clone();
+
+        crate::protocol::status::debug_dump::start_status_dump_thread(
+            dump_path,
+            Some(shutdown_signal_clone),
+            || {
+                crate::tui::status::TuiStatus::from_global_status().and_then(|status| {
+                    serde_json::to_string_pretty(&status)
+                        .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {e}"))
+                })
+            },
+        );
+
+        Some(shutdown_signal)
+    } else {
+        None
+    };
 
     // Load persisted port configurations
     if let Ok(persisted_configs) = persistence::load_port_configs() {
         if !persisted_configs.is_empty() {
             let count = persisted_configs.len();
             for (port_name, config) in persisted_configs {
-                write_status(|status| {
-                    if let Some(port_arc) = status.ports.map.get(&port_name) {
-                        let mut port = port_arc.write();
+                self::status::write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(&port_name) {
                         port.config = config.clone();
-                        log::info!("✅ Restored configuration for port: {}", port_name);
+                        log::info!("✅ Restored configuration for port: {port_name}");
                     }
                     Ok(())
                 })?;
             }
-            log::info!("📂 Restored {} port configuration(s)", count);
+            log::info!("📂 Restored {count} port configuration(s)");
         }
     }
 
     if std::env::var("AOBA_TUI_FORCE_ERROR").is_ok() {
-        write_status(|g| {
+        self::status::write_status(|g| {
             ui_error_set(
                 g,
                 Some((
@@ -652,6 +646,13 @@ pub fn start() -> Result<()> {
     input_handle
         .join()
         .map_err(|err| anyhow!("Failed to join input thread: {err:?}"))??;
+
+    // Stop debug dump thread if it was started
+    if let Some(shutdown_signal) = debug_dump_shutdown {
+        shutdown_signal.store(true, std::sync::atomic::Ordering::SeqCst);
+        log::info!("🔍 Debug dump thread shutdown signal sent");
+    }
+
     Ok(())
 }
 
@@ -729,7 +730,7 @@ fn run_core_thread(
 
     // do_scan extracted to module-level function below
 
-    let mut last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
+    let _last_modbus_run = std::time::Instant::now() - std::time::Duration::from_secs(1);
     let mut subprocess_manager = SubprocessManager::new();
     loop {
         // Drain UI -> core messages
@@ -793,152 +794,76 @@ fn run_core_thread(
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
 
-                    let existing_owner = read_status(|status| {
+                    let subprocess_info_opt = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
-                            if let Some(owner) =
-                                with_port_read(port, |port| port.state.owner().cloned())
-                            {
-                                return Ok(owner);
-                            }
+                            return Ok(port.subprocess_info.clone());
                         }
                         Ok(None)
                     })?;
 
-                    if let Some(owner) = existing_owner {
-                        match owner {
-                            PortOwner::Runtime(rt) => {
-                                write_status(|status| {
-                                    if let Some(port) = status.ports.map.get(&port_name) {
-                                        if with_port_write(port, |port| {
-                                            port.state = PortState::Free;
-                                            // Port is now stopped
-                                            port.status_indicator =
-                                                types::port::PortStatusIndicator::NotStarted;
-                                        })
-                                        .is_none()
-                                        {
-                                            log::warn!(
-                                                "ToggleRuntime: failed to acquire write lock for {port_name} when clearing runtime"
-                                            );
-                                        }
-                                    }
-                                    Ok(())
-                                })?;
+                    if let Some(info) = subprocess_info_opt {
+                        // TUI only manages CLI subprocesses, stop it
+                        if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
+                            log::warn!(
+                                "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
+                            );
+                        }
 
-                                if let Err(err) = rt
-                                    .cmd_tx
-                                    .send(crate::protocol::runtime::RuntimeCommand::Stop)
-                                {
-                                    let warn_msg =
-                                        format!("ToggleRuntime: failed to send Stop: {err}");
-                                    log::warn!("{warn_msg}");
-                                    append_port_log(&port_name, warn_msg);
-                                }
-
-                                match rt.evt_rx.recv_timeout(std::time::Duration::from_secs(1)) {
-                                    Ok(evt) => {
-                                        if evt != crate::protocol::runtime::RuntimeEvent::Stopped {
-                                            log::warn!(
-                                                "ToggleRuntime: received unexpected event while stopping {port_name}: {evt:?}"
-                                            );
-                                        }
-                                    }
-                                    Err(flume::RecvTimeoutError::Timeout) => {
-                                        log::warn!("ToggleRuntime: stop did not emit Stopped event within 1s for {port_name}");
-                                    }
-                                    Err(err) => {
-                                        log::warn!("ToggleRuntime: failed to receive Stopped event for {port_name}: {err}");
-                                    }
-                                }
-
-                                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
-                                    log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
-                                }
-                                if let Err(err) = log_state_snapshot() {
-                                    log::warn!("Failed to log state snapshot: {err}");
-                                }
-                                continue;
-                            }
-                            PortOwner::CliSubprocess(info) => {
-                                if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
-                                    log::warn!(
-                                        "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
-                                    );
-                                }
-
-                                if let Some(path) = info.data_source_path.clone() {
-                                    if let Err(err) = fs::remove_file(&path) {
-                                        log::debug!(
-                                            "ToggleRuntime: failed to remove data source {path}: {err}"
-                                        );
-                                    }
-                                }
-
-                                write_status(|status| {
-                                    if let Some(port) = status.ports.map.get(&port_name) {
-                                        if with_port_write(port, |port| {
-                                            port.state = PortState::Free;
-                                            // Port is now stopped
-                                            port.status_indicator =
-                                                types::port::PortStatusIndicator::NotStarted;
-                                        })
-                                        .is_none()
-                                        {
-                                            log::warn!(
-                                                "ToggleRuntime: failed to acquire write lock for {port_name} when clearing CLI owner"
-                                            );
-                                        }
-                                    }
-                                    Ok(())
-                                })?;
-
-                                append_port_log(
-                                    &port_name,
-                                    "Stopped CLI subprocess managed by TUI".to_string(),
+                        if let Some(path) = info.data_source_path.clone() {
+                            if let Err(err) = fs::remove_file(&path) {
+                                log::debug!(
+                                    "ToggleRuntime: failed to remove data source {path}: {err}"
                                 );
-
-                                if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
-                                    log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
-                                }
-                                if let Err(err) = log_state_snapshot() {
-                                    log::warn!("Failed to log state snapshot: {err}");
-                                }
-                                continue;
                             }
                         }
+
+                        self::status::write_status(|status| {
+                            if let Some(port) = status.ports.map.get_mut(&port_name) {
+                                port.state = PortState::Free;
+                                port.subprocess_info = None;
+                                // Port is now stopped
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::NotStarted;
+                            }
+                            Ok(())
+                        })?;
+
+                        append_port_log(
+                            &port_name,
+                            "Stopped CLI subprocess managed by TUI".to_string(),
+                        );
+
+                        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+                            log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
+                        }
+                        if let Err(err) = log_state_snapshot() {
+                            log::warn!("Failed to log state snapshot: {err}");
+                        }
+                        continue;
                     }
 
                     // Extract CLI inputs WITHOUT holding any locks during subprocess operations
-                    let cli_inputs = read_status(|status| {
+                    let cli_inputs = self::status::read_status(|status| {
                         if let Some(port) = status.ports.map.get(&port_name) {
-                            if let Some(result) = with_port_read(port, |port| {
-                                let types::port::PortConfig::Modbus { mode, stations } =
-                                    &port.config;
+                            let types::port::PortConfig::Modbus { mode, stations } = &port.config;
+                            log::info!(
+                                "ToggleRuntime({port_name}): checking CLI inputs - mode={}, station_count={}",
+                                if mode.is_master() { "Master" } else { "Slave" },
+                                stations.len()
+                            );
+                            if !stations.is_empty() {
+                                // Use default baud rate (TUI uses CLI subprocesses, not direct port access)
+                                let baud = 9600;
                                 log::info!(
-                                    "ToggleRuntime({port_name}): checking CLI inputs - mode={}, station_count={}",
-                                    if mode.is_master() { "Master" } else { "Slave" },
+                                    "ToggleRuntime({port_name}): found {} station(s) - will attempt CLI subprocess",
                                     stations.len()
                                 );
-                                if !stations.is_empty() {
-                                    let baud = port
-                                        .state
-                                        .runtime_handle()
-                                        .map(|rt| rt.current_cfg.baud)
-                                        .unwrap_or(9600);
-                                    log::info!(
-                                        "ToggleRuntime({port_name}): found {} station(s) - will attempt CLI subprocess",
-                                        stations.len()
-                                    );
-                                    // For Master mode, pass all stations; for Slave, only first
-                                    return Some((mode.clone(), stations.clone(), baud));
-                                }
-                                log::info!(
-                                    "ToggleRuntime({port_name}): no station configured - will use native runtime"
-                                );
-                                None
-                            }) {
-                                return Ok(result);
+                                // For Master mode, pass all stations; for Slave, only first
+                                return Ok(Some((mode.clone(), stations.clone(), baud)));
                             }
+                            log::info!(
+                                "ToggleRuntime({port_name}): no station configured - nothing to do"
+                            );
                         }
                         Ok(None)
                     })?;
@@ -980,37 +905,28 @@ fn run_core_thread(
                                                 snapshot.mode,
                                                 snapshot.pid
                                             );
-                                            let owner =
-                                                PortOwner::CliSubprocess(PortSubprocessInfo {
-                                                    mode: cli_mode_to_port_mode(&snapshot.mode),
-                                                    ipc_socket_name: snapshot
-                                                        .ipc_socket_name
-                                                        .clone(),
-                                                    pid: snapshot.pid,
-                                                    data_source_path: None, // SlavePoll doesn't use data source
-                                                });
+                                            let subprocess_info = PortSubprocessInfo {
+                                                mode: cli_mode_to_port_mode(&snapshot.mode),
+                                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
+                                                pid: snapshot.pid,
+                                                data_source_path: None, // SlavePoll doesn't use data source
+                                            };
 
                                             // Now update status with the result (short lock hold)
-                                            write_status(|status| {
-                                                if let Some(port) = status.ports.map.get(&port_name)
+                                            self::status::write_status(|status| {
+                                                if let Some(port) =
+                                                    status.ports.map.get_mut(&port_name)
                                                 {
-                                                    if with_port_write(port, |port| {
-                                                        port.state = PortState::OccupiedByThis {
-                                                            owner: owner.clone(),
-                                                        };
-                                                        // Port is now running
-                                                        port.status_indicator = if port.config_modified {
-                                                            types::port::PortStatusIndicator::RunningWithChanges
-                                                        } else {
-                                                            types::port::PortStatusIndicator::Running
-                                                        };
-                                                    })
-                                                    .is_none()
+                                                    port.state = PortState::OccupiedByThis;
+                                                    port.subprocess_info =
+                                                        Some(subprocess_info.clone());
+                                                    // Port is now running
+                                                    port.status_indicator = if port.config_modified
                                                     {
-                                                        log::warn!(
-                                                            "ToggleRuntime: failed to acquire write lock for {port_name} when marking CLI owner"
-                                                        );
-                                                    }
+                                                        types::port::PortStatusIndicator::RunningWithChanges
+                                                    } else {
+                                                        types::port::PortStatusIndicator::Running
+                                                    };
                                                 }
                                                 Ok(())
                                             })?;
@@ -1034,11 +950,12 @@ fn run_core_thread(
                                             "Failed to start CLI subprocess for {port_name}: {err}"
                                         );
                                         append_port_log(&port_name, msg.clone());
-                                        write_status(|status| {
-                                            status.temporarily.error = Some(types::ErrorInfo {
-                                                message: msg.clone(),
-                                                timestamp: chrono::Local::now(),
-                                            });
+                                        self::status::write_status(|status| {
+                                            status.temporarily.error =
+                                                Some(crate::tui::status::ErrorInfo {
+                                                    message: msg.clone(),
+                                                    timestamp: chrono::Local::now(),
+                                                });
                                             Ok(())
                                         })?;
                                         // Note: No data source file to clean up for SlavePoll mode
@@ -1088,41 +1005,30 @@ fn run_core_thread(
                                                 snapshot.pid,
                                                 data_source_path.display()
                                             );
-                                            let owner =
-                                                PortOwner::CliSubprocess(PortSubprocessInfo {
-                                                    mode: cli_mode_to_port_mode(&snapshot.mode),
-                                                    ipc_socket_name: snapshot
-                                                        .ipc_socket_name
-                                                        .clone(),
-                                                    pid: snapshot.pid,
-                                                    data_source_path: Some(
-                                                        data_source_path
-                                                            .to_string_lossy()
-                                                            .to_string(),
-                                                    ),
-                                                });
+                                            let subprocess_info = PortSubprocessInfo {
+                                                mode: cli_mode_to_port_mode(&snapshot.mode),
+                                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
+                                                pid: snapshot.pid,
+                                                data_source_path: Some(
+                                                    data_source_path.to_string_lossy().to_string(),
+                                                ),
+                                            };
 
                                             // Now update status with the result (short lock hold)
-                                            write_status(|status| {
-                                                if let Some(port) = status.ports.map.get(&port_name)
+                                            self::status::write_status(|status| {
+                                                if let Some(port) =
+                                                    status.ports.map.get_mut(&port_name)
                                                 {
-                                                    if with_port_write(port, |port| {
-                                                        port.state = PortState::OccupiedByThis {
-                                                            owner: owner.clone(),
-                                                        };
-                                                        // Port is now running
-                                                        port.status_indicator = if port.config_modified {
-                                                            types::port::PortStatusIndicator::RunningWithChanges
-                                                        } else {
-                                                            types::port::PortStatusIndicator::Running
-                                                        };
-                                                    })
-                                                    .is_none()
+                                                    port.state = PortState::OccupiedByThis;
+                                                    port.subprocess_info =
+                                                        Some(subprocess_info.clone());
+                                                    // Port is now running
+                                                    port.status_indicator = if port.config_modified
                                                     {
-                                                        log::warn!(
-                                                            "ToggleRuntime: failed to acquire write lock for {port_name} when marking CLI owner"
-                                                        );
-                                                    }
+                                                        types::port::PortStatusIndicator::RunningWithChanges
+                                                    } else {
+                                                        types::port::PortStatusIndicator::Running
+                                                    };
                                                 }
                                                 Ok(())
                                             })?;
@@ -1146,11 +1052,22 @@ fn run_core_thread(
                                             "Failed to start CLI subprocess for {port_name}: {err}"
                                         );
                                         append_port_log(&port_name, msg.clone());
-                                        write_status(|status| {
-                                            status.temporarily.error = Some(types::ErrorInfo {
-                                                message: msg.clone(),
-                                                timestamp: chrono::Local::now(),
-                                            });
+
+                                        // Update port status indicator to show failure
+                                        self::status::write_status(|status| {
+                                            if let Some(port) = status.ports.map.get_mut(&port_name)
+                                            {
+                                                port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
+                                                    error_message: err.to_string(),
+                                                    timestamp: chrono::Local::now(),
+                                                };
+                                            }
+
+                                            status.temporarily.error =
+                                                Some(crate::tui::status::ErrorInfo {
+                                                    message: msg.clone(),
+                                                    timestamp: chrono::Local::now(),
+                                                });
                                             Ok(())
                                         })?;
 
@@ -1167,97 +1084,12 @@ fn run_core_thread(
                         }
                     }
 
+                    // TUI no longer falls back to native runtime.
+                    // If CLI subprocess fails to start, the port remains Free.
                     if !cli_started {
-                        log::info!(
-                            "ToggleRuntime: falling back to native runtime spawn for {port_name}"
+                        log::warn!(
+                            "ToggleRuntime: CLI subprocess failed to start for {port_name}, port remains Free"
                         );
-                        let cfg = crate::protocol::runtime::SerialConfig::default();
-                        let mut spawn_err: Option<anyhow::Error> = None;
-                        let mut handle_opt: Option<crate::protocol::runtime::PortRuntimeHandle> =
-                            None;
-                        const MAX_RETRIES: usize = 12;
-                        for attempt in 0..MAX_RETRIES {
-                            match crate::protocol::runtime::PortRuntimeHandle::spawn(
-                                port_name.clone(),
-                                cfg.clone(),
-                            ) {
-                                Ok(h) => {
-                                    handle_opt = Some(h);
-                                    log::info!(
-                                        "ToggleRuntime: Successfully spawned runtime for {port_name} on attempt {}",
-                                        attempt + 1
-                                    );
-                                    break;
-                                }
-                                Err(err) => {
-                                    let attempt_number = attempt + 1;
-                                    let err_display = err.to_string();
-                                    let busy_retry = err_display
-                                        .contains("Device or resource busy")
-                                        || err_display.contains("Resource busy");
-
-                                    let wait_ms = if busy_retry {
-                                        // Allow extra time for the previous holder to release the virtual port.
-                                        750
-                                    } else {
-                                        250
-                                    };
-
-                                    spawn_err = Some(err);
-                                    log::warn!(
-                                        "ToggleRuntime: Failed to spawn runtime for {port_name} on attempt {attempt_number}: {err_display}"
-                                    );
-
-                                    if attempt_number < MAX_RETRIES {
-                                        log::debug!(
-                                            "ToggleRuntime: retrying runtime spawn for {port_name} in {wait_ms}ms (busy_retry={busy_retry})"
-                                        );
-                                        std::thread::sleep(std::time::Duration::from_millis(
-                                            wait_ms,
-                                        ));
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-
-                        if let Some(handle) = handle_opt {
-                            let handle_for_write = handle.clone();
-                            write_status(|status| {
-                                if let Some(port) = status.ports.map.get(&port_name) {
-                                    if with_port_write(port, |port| {
-                                        port.state = PortState::OccupiedByThis {
-                                            owner: PortOwner::Runtime(handle_for_write.clone()),
-                                        };
-                                        // Port is now running
-                                        port.status_indicator = if port.config_modified {
-                                            types::port::PortStatusIndicator::RunningWithChanges
-                                        } else {
-                                            types::port::PortStatusIndicator::Running
-                                        };
-                                    })
-                                    .is_none()
-                                    {
-                                        log::warn!(
-                                            "ToggleRuntime: failed to acquire write lock for {port_name} when storing runtime handle"
-                                        );
-                                    }
-                                }
-                                Ok(())
-                            })?;
-                            append_port_log(
-                                &port_name,
-                                "Spawned native runtime for port".to_string(),
-                            );
-                        } else if let Some(err) = spawn_err {
-                            write_status(|status| {
-                                status.temporarily.error = Some(types::ErrorInfo {
-                                    message: format!("Failed to start runtime: {err}"),
-                                    timestamp: chrono::Local::now(),
-                                });
-                                Ok(())
-                            })?;
-                        }
                     }
 
                     core_tx
@@ -1315,27 +1147,18 @@ fn run_core_thread(
         let dead_processes = subprocess_manager.reap_dead_processes();
         if !dead_processes.is_empty() {
             let mut cleanup_paths: HashMap<String, Option<String>> = HashMap::new();
-            write_status(|status| {
+            self::status::write_status(|status| {
                 for (port_name, _) in &dead_processes {
-                    if let Some(port) = status.ports.map.get(port_name) {
-                        if with_port_write(port, |port| {
-                            if let PortState::OccupiedByThis {
-                                owner: PortOwner::CliSubprocess(info),
-                            } = &mut port.state
-                            {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        if port.state.is_occupied_by_this() {
+                            if let Some(info) = &port.subprocess_info {
                                 cleanup_paths
                                     .insert(port_name.clone(), info.data_source_path.clone());
-                                port.state = PortState::Free;
-                                // Port is now stopped
-                                port.status_indicator =
-                                    types::port::PortStatusIndicator::NotStarted;
                             }
-                        })
-                        .is_none()
-                        {
-                            log::warn!(
-                                "Subprocess cleanup: failed to acquire write lock for {port_name}"
-                            );
+                            port.state = PortState::Free;
+                            port.subprocess_info = None;
+                            // Port is now stopped
+                            port.status_indicator = types::port::PortStatusIndicator::NotStarted;
                         }
                     }
                 }
@@ -1374,19 +1197,16 @@ fn run_core_thread(
         }
 
         // Update spinner frame for busy indicator animation
-        write_status(|status| {
+        self::status::write_status(|status| {
             status.temporarily.busy.spinner_frame =
                 status.temporarily.busy.spinner_frame.wrapping_add(1);
             Ok(())
         })?;
 
-        // Handle modbus communication at most once per 10ms to ensure very responsive behavior
-        // This high frequency is critical for TUI Master mode to respond quickly to CLI slave requests
-        if polling_enabled && last_modbus_run.elapsed() >= std::time::Duration::from_millis(10) {
-            // Update the timestamp first to ensure we don't re-enter while still running
-            last_modbus_run = std::time::Instant::now();
-            crate::protocol::daemon::handle_modbus_communication()?;
-        }
+        // Modbus communication is now handled entirely by CLI subprocesses via IPC.
+        // The daemon is no longer used by TUI since we removed PortOwner::Runtime support.
+        // TUI spawns CLI subprocesses which handle all port communication independently.
+        // The IPC messages are polled above in poll_ipc_messages().
 
         core_tx
             .send(CoreToUi::Tick)
@@ -1399,7 +1219,7 @@ fn run_core_thread(
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
 
-    let bottom_height = read_status(|status| {
+    let bottom_height = self::status::read_status(|status| {
         let err_lines = if status.temporarily.error.is_some() {
             1
         } else {
@@ -1434,31 +1254,31 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
 /// This function is called after each Refreshed event to allow log-based
 /// verification of state transitions.
 pub fn log_state_snapshot() -> Result<()> {
-    use crate::protocol::status::{read_status, types::port::PortState};
+    use crate::protocol::status::types::port::PortState;
     use serde_json::json;
 
-    read_status(|status| {
+    self::status::read_status(|status| {
         // Extract page info
         let page_name = match &status.page {
-            crate::protocol::status::types::Page::Entry { .. } => "Entry",
-            crate::protocol::status::types::Page::ConfigPanel { .. } => "ConfigPanel",
-            crate::protocol::status::types::Page::ModbusDashboard { .. } => "ModbusDashboard",
-            crate::protocol::status::types::Page::LogPanel { .. } => "LogPanel",
-            crate::protocol::status::types::Page::About { .. } => "About",
+            crate::tui::status::Page::Entry { .. } => "Entry",
+            crate::tui::status::Page::ConfigPanel { .. } => "ConfigPanel",
+            crate::tui::status::Page::ModbusDashboard { .. } => "ModbusDashboard",
+            crate::tui::status::Page::LogPanel { .. } => "LogPanel",
+            crate::tui::status::Page::About { .. } => "About",
         };
 
         let cursor_info = match &status.page {
-            crate::protocol::status::types::Page::Entry { cursor, .. } => {
+            crate::tui::status::Page::Entry { cursor, .. } => {
                 if let Some(c) = cursor {
                     format!("{c:?}")
                 } else {
                     "None".to_string()
                 }
             }
-            crate::protocol::status::types::Page::ConfigPanel { cursor, .. } => {
+            crate::tui::status::Page::ConfigPanel { cursor, .. } => {
                 format!("{cursor:?}")
             }
-            crate::protocol::status::types::Page::ModbusDashboard { cursor, .. } => {
+            crate::tui::status::Page::ModbusDashboard { cursor, .. } => {
                 format!("{cursor:?}")
             }
             _ => "N/A".to_string(),
@@ -1468,10 +1288,10 @@ pub fn log_state_snapshot() -> Result<()> {
         let mut port_states = vec![];
         for port_name in &status.ports.order {
             if let Some(port_arc) = status.ports.map.get(port_name) {
-                let port = port_arc.read();
+                let port = port_arc;
                 let state_str = match &port.state {
                     PortState::Free => "Free",
-                    PortState::OccupiedByThis { owner: _ } => "OccupiedByThis",
+                    PortState::OccupiedByThis => "OccupiedByThis",
                     PortState::OccupiedByOther => "OccupiedByOther",
                 };
                 port_states.push(json!({

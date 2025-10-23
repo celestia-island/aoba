@@ -4,13 +4,13 @@ use ratatui::{prelude::*, text::Line};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    protocol::status::{
-        read_status,
-        types::{self, modbus::RegisterMode},
-    },
-    tui::ui::components::{
-        kv_line::render_kv_line,
-        styled_label::{input_spans, switch_spans, TextState},
+    protocol::status::types::{self, modbus::RegisterMode},
+    tui::{
+        status::read_status,
+        ui::components::{
+            kv_line::render_kv_line,
+            styled_label::{input_spans, switch_spans, TextState},
+        },
     },
 };
 

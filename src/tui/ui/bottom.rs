@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use ratatui::{layout::*, prelude::*, widgets::*};
 
-use crate::{i18n::lang, protocol::status::read_status, tui::ui::pages::bottom_hints_for_app};
+use crate::{i18n::lang, tui::status::read_status, tui::ui::pages::bottom_hints_for_app};
 
 pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
     // Cumulative rendering: we render page-provided bottom hints and also
