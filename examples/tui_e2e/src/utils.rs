@@ -274,9 +274,18 @@ pub async fn configure_modbus_station<T: Expect>(
     // ===== Field 1: Station ID =====
     log::info!("📝 Setting Station ID to {station_id}");
     let mut actions = vec![CursorAction::PressCtrlPageUp];
-    for _ in 0..=station_index {
+    // PgDown logic: observations show:
+    // 1 PgDown -> Connection Mode
+    // 2 PgDown -> Station #1
+    // 3 PgDown -> Station #2
+    // So for Station N (0-indexed), we need station_index + 2 PgDown presses
+    for _ in 0..(station_index + 2) {
         actions.push(CursorAction::PressPageDown);
     }
+    // Add debug breakpoint to see where we land
+    actions.push(CursorAction::DebugBreakpoint {
+        description: format!("after_pgdown_to_station_{}", station_number),
+    });
     actions.extend(vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
@@ -294,7 +303,7 @@ pub async fn configure_modbus_station<T: Expect>(
     // ===== Field 2: Register Type =====
     log::info!("📝 Setting Register Type to {register_type:02}");
     let mut actions = vec![CursorAction::PressCtrlPageUp];
-    for _ in 0..=station_index {
+    for _ in 0..(station_index + 2) {
         actions.push(CursorAction::PressPageDown);
     }
     actions.extend(vec![
@@ -331,7 +340,7 @@ pub async fn configure_modbus_station<T: Expect>(
     // ===== Field 3: Start Address =====
     log::info!("📝 Setting Start Address to 0x{start_address:04X} ({start_address})");
     let mut actions = vec![CursorAction::PressCtrlPageUp];
-    for _ in 0..=station_index {
+    for _ in 0..(station_index + 2) {
         actions.push(CursorAction::PressPageDown);
     }
     actions.extend(vec![
@@ -351,7 +360,7 @@ pub async fn configure_modbus_station<T: Expect>(
     // ===== Field 4: Register Length =====
     log::info!("📝 Setting Register Length to {register_count}");
     let mut actions = vec![CursorAction::PressCtrlPageUp];
-    for _ in 0..=station_index {
+    for _ in 0..(station_index + 2) {
         actions.push(CursorAction::PressPageDown);
     }
     actions.extend(vec![
