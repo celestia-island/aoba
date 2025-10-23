@@ -20,6 +20,10 @@ use e2e::{
     multi_slaves::{
         test_multi_slaves, test_multi_slaves_adjacent_registers, test_multi_slaves_same_station,
     },
+    single_station::{
+        test_single_station_coils, test_single_station_discrete_inputs,
+        test_single_station_holding_registers, test_single_station_input_registers,
+    },
 };
 use help::test_cli_help;
 use list_ports::test_cli_list_ports;
@@ -151,6 +155,11 @@ async fn main() -> Result<()> {
             log::info!("    - modbus_multi_slaves");
             log::info!("    - modbus_multi_slaves_same_station");
             log::info!("    - modbus_multi_slaves_adjacent_registers");
+            log::info!("  Single-Station Register Mode Tests:");
+            log::info!("    - modbus_single_station_coils");
+            log::info!("    - modbus_single_station_discrete_inputs");
+            log::info!("    - modbus_single_station_holding");
+            log::info!("    - modbus_single_station_input");
             log::info!("");
             log::info!("Usage: cargo run --package cli_e2e -- --module <module_name>");
             return Ok(());
@@ -183,6 +192,12 @@ async fn main() -> Result<()> {
         "modbus_multi_slaves" => test_multi_slaves().await?,
         "modbus_multi_slaves_same_station" => test_multi_slaves_same_station().await?,
         "modbus_multi_slaves_adjacent_registers" => test_multi_slaves_adjacent_registers().await?,
+
+        // Single-Station Register Mode Tests
+        "modbus_single_station_coils" => test_single_station_coils().await?,
+        "modbus_single_station_discrete_inputs" => test_single_station_discrete_inputs().await?,
+        "modbus_single_station_holding" => test_single_station_holding_registers().await?,
+        "modbus_single_station_input" => test_single_station_input_registers().await?,
 
         _ => {
             log::error!("❌ Unknown module: {}", module);
