@@ -196,18 +196,20 @@ pub async fn create_modbus_stations<T: Expect>(
     }];
     execute_cursor_actions(session, cap, &actions, "move_down_after_creation").await?;
 
-    // If Master mode is needed, switch to it
+    // Switch connection mode (default is Master, so we need to change if Slave is needed)
     if is_master {
-        log::info!("🔄 Switching to Master mode: Enter, Right, Enter");
+        log::info!("✅ Keeping default Master mode (no action needed)");
+    } else {
+        log::info!("🔄 Switching to Slave mode: Enter, Left, Enter");
         let actions = vec![
-            CursorAction::PressEnter,
+            CursorAction::PressEnter,        // Enter edit mode on "Connection Mode"
             CursorAction::PressArrow {
-                direction: ArrowKey::Right,
+                direction: ArrowKey::Left,   // Press Left to switch from Master to Slave
                 count: 1,
             },
-            CursorAction::PressEnter,
+            CursorAction::PressEnter,        // Confirm the change
         ];
-        execute_cursor_actions(session, cap, &actions, "switch_to_master_mode").await?;
+        execute_cursor_actions(session, cap, &actions, "switch_to_slave_mode").await?;
     }
 
     // Move to beginning using Ctrl+PgUp
