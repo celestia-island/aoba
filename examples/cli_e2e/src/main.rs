@@ -33,11 +33,15 @@ use modbus_e2e::{
     test_master_provide_with_vcom, test_master_slave_communication, test_slave_listen_with_vcom,
 };
 
-/// CLI E2E test suite with selective test execution
+/// CLI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
 #[command(name = "cli_e2e")]
 #[command(about = "CLI E2E test suite", long_about = None)]
 struct Args {
+    /// Test module to run
+    #[arg(long)]
+    module: Option<String>,
+
     /// Virtual serial port 1 path
     #[arg(long, default_value = "/tmp/vcom1")]
     port1: String,
@@ -53,40 +57,6 @@ struct Args {
     /// Number of test loop iterations
     #[arg(long, default_value = "1")]
     loop_count: usize,
-
-    /// Run only basic CLI tests (help, list-ports)
-    #[arg(long)]
-    basic: bool,
-
-    /// Run only Modbus CLI tests (temp/persist modes)
-    #[arg(long)]
-    modbus_cli: bool,
-
-    /// Run only E2E tests with virtual ports
-    #[arg(long)]
-    e2e: bool,
-}
-
-impl Args {
-    /// Check if any specific test category is selected
-    fn has_specific_tests(&self) -> bool {
-        self.basic || self.modbus_cli || self.e2e
-    }
-
-    /// Check if basic tests should run
-    fn should_run_basic(&self) -> bool {
-        !self.has_specific_tests() || self.basic
-    }
-
-    /// Check if modbus CLI tests should run
-    fn should_run_modbus_cli(&self) -> bool {
-        !self.has_specific_tests() || self.modbus_cli
-    }
-
-    /// Check if E2E tests should run
-    fn should_run_e2e(&self) -> bool {
-        !self.has_specific_tests() || self.e2e
-    }
 }
 
 /// Setup virtual serial ports by running socat_init script without requiring sudo
@@ -156,101 +126,72 @@ async fn main() -> Result<()> {
         args.port2
     );
 
-    if args.loop_count > 1 {
-        log::info!(
-            "🧪 Running tests in loop mode: {} iterations",
-            args.loop_count
-        );
-    }
-
-    for iteration in 1..=args.loop_count {
-        if args.loop_count > 1 {
-            log::info!("🧪 ===== Iteration {iteration}/{} =====", args.loop_count);
+    // If no module specified, show available modules and exit
+    let module = match &args.module {
+        Some(m) => m.as_str(),
+        None => {
+            log::info!("📋 Available modules:");
+            log::info!("  Basic CLI:");
+            log::info!("    - help");
+            log::info!("    - list_ports");
+            log::info!("    - list_ports_json");
+            log::info!("    - list_ports_status");
+            log::info!("  Modbus CLI:");
+            log::info!("    - modbus_slave_listen_temp");
+            log::info!("    - modbus_slave_listen_persist");
+            log::info!("    - modbus_master_provide_temp");
+            log::info!("    - modbus_master_provide_persist");
+            log::info!("  Modbus E2E (requires vcom ports):");
+            log::info!("    - modbus_slave_listen_vcom");
+            log::info!("    - modbus_master_provide_vcom");
+            log::info!("    - modbus_master_slave_communication");
+            log::info!("    - modbus_basic_master_slave");
+            log::info!("    - modbus_multi_masters");
+            log::info!("    - modbus_multi_masters_same_station");
+            log::info!("    - modbus_multi_slaves");
+            log::info!("    - modbus_multi_slaves_same_station");
+            log::info!("    - modbus_multi_slaves_adjacent_registers");
+            log::info!("");
+            log::info!("Usage: cargo run --package cli_e2e -- --module <module_name>");
+            return Ok(());
         }
+    };
 
-        log::info!("🧪 Starting CLI E2E Tests...");
+    log::info!("🧪 Running module: {}", module);
 
-        if args.should_run_basic() {
-            test_cli_help().await?;
-            test_cli_list_ports().await?;
-            test_cli_list_ports_json().await?;
-            test_cli_list_ports_json_with_status().await?;
-        }
-
-        if args.should_run_modbus_cli() {
-            log::info!("🧪 Testing Modbus CLI features (basic)...");
-            test_slave_listen_temp().await?;
-            test_slave_listen_persist().await?;
-            test_master_provide_temp().await?;
-            test_master_provide_persist().await?;
-        }
-
-        // Check if we can setup virtual serial ports for E2E tests
-        if args.should_run_e2e() && setup_virtual_serial_ports()? {
-            log::info!("🧪 Virtual serial ports available, running E2E tests...");
-
-            // Run each E2E test with fresh port initialization
-            log::info!("🧪 Test 1/7: Slave listen with virtual ports");
-            setup_virtual_serial_ports()?;
-            test_slave_listen_with_vcom().await?;
-
-            log::info!("🧪 Test 2/7: Master provide with virtual ports");
-            setup_virtual_serial_ports()?;
-            test_master_provide_with_vcom().await?;
-
-            log::info!("🧪 Test 3/7: Master-slave communication");
-            setup_virtual_serial_ports()?;
-            test_master_slave_communication().await?;
-
-            log::info!("🧪 Test 4/7: Basic master-slave communication");
-            setup_virtual_serial_ports()?;
-            test_basic_master_slave_communication().await?;
-
-            log::info!("🧪 Test 5/7: Configuration mode test");
-            setup_virtual_serial_ports()?;
-            // TODO: Fix config_mode.rs to use new config structure
-            // test_config_mode().await?;
-            log::warn!("⚠️  Skipping config_mode test (needs update to new config structure)");
-
-            log::info!("🧪 Test 6/7: Multi-master configurations");
-            setup_virtual_serial_ports()?;
-            test_multi_masters().await?;
-
-            log::info!("🧪 Test 7/7: Multi-master same station configurations");
-            setup_virtual_serial_ports()?;
-            test_multi_masters_same_station().await?;
-
-            log::info!("🧪 Test 8/7: Multi-slave configurations");
-            setup_virtual_serial_ports()?;
-            test_multi_slaves().await?;
-
-            log::info!("🧪 Test 9/7: Multi-slave same station configurations");
-            setup_virtual_serial_ports()?;
-            test_multi_slaves_same_station().await?;
-
-            log::info!("🧪 Test 10/7: Multi-slave adjacent registers configurations");
-            setup_virtual_serial_ports()?;
-            test_multi_slaves_adjacent_registers().await?;
-        } else if args.should_run_e2e() {
-            log::warn!("⚠️ Virtual serial ports setup failed, skipping E2E tests");
-        }
-
-        if args.loop_count > 1 {
-            log::info!(
-                "✅ Iteration {iteration}/{} completed successfully!",
-                args.loop_count
-            );
-        } else {
-            log::info!("🧪 All CLI E2E tests passed!");
+    // Run the selected module
+    match module {
+        // Basic CLI tests
+        "help" => test_cli_help().await?,
+        "list_ports" => test_cli_list_ports().await?,
+        "list_ports_json" => test_cli_list_ports_json().await?,
+        "list_ports_status" => test_cli_list_ports_json_with_status().await?,
+        
+        // Modbus CLI tests (no vcom needed)
+        "modbus_slave_listen_temp" => test_slave_listen_temp().await?,
+        "modbus_slave_listen_persist" => test_slave_listen_persist().await?,
+        "modbus_master_provide_temp" => test_master_provide_temp().await?,
+        "modbus_master_provide_persist" => test_master_provide_persist().await?,
+        
+        // Modbus E2E tests (require vcom ports)
+        "modbus_slave_listen_vcom" => test_slave_listen_with_vcom().await?,
+        "modbus_master_provide_vcom" => test_master_provide_with_vcom().await?,
+        "modbus_master_slave_communication" => test_master_slave_communication().await?,
+        "modbus_basic_master_slave" => test_basic_master_slave_communication().await?,
+        "modbus_multi_masters" => test_multi_masters().await?,
+        "modbus_multi_masters_same_station" => test_multi_masters_same_station().await?,
+        "modbus_multi_slaves" => test_multi_slaves().await?,
+        "modbus_multi_slaves_same_station" => test_multi_slaves_same_station().await?,
+        "modbus_multi_slaves_adjacent_registers" => test_multi_slaves_adjacent_registers().await?,
+        
+        _ => {
+            log::error!("❌ Unknown module: {}", module);
+            log::error!("Run without --module to see available modules");
+            return Err(anyhow::anyhow!("Unknown module: {}", module));
         }
     }
 
-    if args.loop_count > 1 {
-        log::info!(
-            "🎉 All {} iterations completed successfully!",
-            args.loop_count
-        );
-    }
+    log::info!("✅ Module '{}' completed successfully!", module);
 
     Ok(())
 }

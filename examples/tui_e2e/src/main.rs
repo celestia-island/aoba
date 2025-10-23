@@ -9,11 +9,15 @@ use std::process::Command;
 
 use cli_port_cleanup::test_cli_port_release;
 
-/// TUI E2E test suite with selective test execution
+/// TUI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
 #[command(name = "tui_e2e")]
 #[command(about = "TUI E2E test suite", long_about = None)]
 struct Args {
+    /// Test module to run
+    #[arg(long)]
+    module: Option<String>,
+
     /// Virtual serial port 1 path
     #[arg(long, default_value = "/tmp/vcom1")]
     port1: String,
@@ -25,50 +29,6 @@ struct Args {
     /// Enable debug mode (show debug breakpoints and additional logging)
     #[arg(long)]
     debug: bool,
-
-    /// Run only test 0: CLI port release verification
-    #[arg(long)]
-    test0: bool,
-
-    /// Run only test 1: TUI Slave + CLI Master
-    #[arg(long)]
-    test1: bool,
-
-    /// Run only test 2: TUI Master + CLI Slave
-    #[arg(long)]
-    test2: bool,
-
-    /// Run only test 3: Multiple TUI Masters
-    #[arg(long)]
-    test3: bool,
-
-    /// Run only test 4: Multiple TUI Slaves
-    #[arg(long)]
-    test4: bool,
-}
-
-impl Args {
-    /// Check if any specific test is selected
-    fn has_specific_tests(&self) -> bool {
-        self.test0 || self.test1 || self.test2 || self.test3 || self.test4
-    }
-
-    /// Check if a specific test should run
-    fn should_run_test(&self, test_num: usize) -> bool {
-        if !self.has_specific_tests() {
-            // If no specific tests selected, run all tests
-            return true;
-        }
-
-        match test_num {
-            0 => self.test0,
-            1 => self.test1,
-            2 => self.test2,
-            3 => self.test3,
-            4 => self.test4,
-            _ => false,
-        }
-    }
 }
 
 /// Clean up TUI configuration cache file to ensure clean test state
@@ -211,115 +171,36 @@ async fn main() -> Result<()> {
     log::info!("🧪 Cleaning up TUI configuration cache...");
     cleanup_tui_config_cache()?;
 
-    // On Unix-like systems, try to setup virtual serial ports
-    #[cfg(not(windows))]
-    {
-        log::info!("🧪 Setting up virtual serial ports...");
-        setup_virtual_serial_ports()?;
-    }
+    // If no module specified, show available modules and exit
+    let module = match &args.module {
+        Some(m) => m.as_str(),
+        None => {
+            log::info!("📋 Available modules:");
+            log::info!("  - cli_port_release");
+            log::info!("  - modbus_tui_slave_cli_master");
+            log::info!("  - modbus_tui_master_cli_slave");
+            log::info!("");
+            log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
+            return Ok(());
+        }
+    };
 
-    // Check if we should run virtual serial port tests
-    if !ci_utils::should_run_vcom_tests_with_ports(&args.port1, &args.port2) {
-        log::warn!("⚠️ Virtual serial ports not available, skipping E2E tests");
-        return Ok(());
-    }
+    log::info!("🧪 Running module: {}", module);
 
-    log::info!("🧪 Virtual serial ports available, running E2E tests...");
-
-    // Test 0: CLI port release test - verify CLI properly releases ports on exit
-    if args.should_run_test(0) {
-        log::info!("🧪 Test 0/4: CLI port release verification");
-        test_cli_port_release().await?;
-
-        // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 0...");
-
-            // Kill all aoba processes to ensure clean state
-            let _ = std::process::Command::new("pkill")
-                .args(&["-9", "aoba"])
-                .output();
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-            // Reset socat to fully release port locks
-            setup_virtual_serial_ports()?;
-
-            // Add extended delay to ensure PTY devices are ready
-            log::info!("⏳ Waiting for ports to stabilize (15 seconds)...");
-            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+    // Run the selected module
+    match module {
+        "cli_port_release" => test_cli_port_release().await?,
+        "modbus_tui_slave_cli_master" => e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?,
+        "modbus_tui_master_cli_slave" => e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?,
+        
+        _ => {
+            log::error!("❌ Unknown module: {}", module);
+            log::error!("Run without --module to see available modules");
+            return Err(anyhow::anyhow!("Unknown module: {}", module));
         }
     }
 
-    // Test 1: TUI Slave + CLI Master with 3 rounds (refactored with status monitoring)
-    // Test 1: TUI Slave + CLI Master with 3 rounds (status monitoring)
-    if args.should_run_test(1) {
-        log::info!(
-            "🧪 Test 1/4: TUI Slave + CLI Master (3 rounds, holding registers, status monitoring)"
-        );
-        e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 1...");
-
-            // Kill all aoba processes to ensure clean state
-            let _ = std::process::Command::new("pkill")
-                .args(&["-9", "aoba"])
-                .output();
-
-            tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
-
-            // Reset socat to fully release port locks
-            setup_virtual_serial_ports()?;
-
-            // Add extended delay to ensure PTY devices are ready
-            log::info!("⏳ Waiting for ports to stabilize (15 seconds)...");
-            tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
-
-            // Verify status files are clean
-            log::info!("🧪 Verifying status files are reset...");
-            if let Ok(status_content) = std::fs::read_to_string("/tmp/ci_tui_status.json") {
-                log::debug!("Status file content after cleanup: {}", status_content);
-            }
-        }
-    }
-
-    // Test 2: TUI Master + CLI Slave (repeat for stability)
-    if args.should_run_test(2) {
-        log::info!("🧪 Test 2/4: TUI Master + CLI Slave - Repeat (10 rounds, holding registers)");
-        e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 2...");
-            setup_virtual_serial_ports()?;
-        }
-    }
-
-    // Test 3: Multiple TUI Masters on vcom1
-    if args.should_run_test(3) {
-        log::info!("🧪 Test 3/4: Multiple TUI Masters on vcom1 (E2E test suite)");
-        e2e::test_tui_multi_masters(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 3...");
-            setup_virtual_serial_ports()?;
-        }
-    }
-
-    // Test 4: Multiple TUI Slaves on vcom2
-    if args.should_run_test(4) {
-        log::info!("🧪 Test 4/4: Multiple TUI Slaves on vcom2 (E2E test suite)");
-        e2e::test_tui_multi_slaves(&args.port1, &args.port2).await?;
-    }
-
-    log::info!("🧪 All selected TUI E2E tests passed!");
+    log::info!("✅ Module '{}' completed successfully!", module);
 
     Ok(())
 }

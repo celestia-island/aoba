@@ -359,17 +359,32 @@ pub async fn configure_modbus_station<T: Expect>(
     for _ in 0..(station_index + 2) {
         actions.push(CursorAction::PressPageDown);
     }
+    actions.push(CursorAction::DebugBreakpoint {
+        description: format!("before_nav_to_start_addr_s{}", station_number),
+    });
     actions.extend(vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 }, // Down 2 for Start Address
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
+        CursorAction::DebugBreakpoint {
+            description: format!("before_enter_start_addr_field_s{}", station_number),
+        },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 }, // Longer wait for edit mode to activate
+        CursorAction::DebugBreakpoint {
+            description: format!("in_edit_mode_start_addr_s{}", station_number),
+        },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(start_address.to_string()),
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 800 }, // Wait for typing to complete
+        CursorAction::DebugBreakpoint {
+            description: format!("after_typing_before_enter_s{}", station_number),
+        },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 }, // Wait for value to commit
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Very long wait for value to commit and edit mode to fully exit
+        CursorAction::DebugBreakpoint {
+            description: format!("after_enter_start_addr_s{}", station_number),
+        },
     ]);
     execute_cursor_actions(session, cap, &actions, &format!("set_start_address_s{station_number}")).await?;
 
@@ -401,12 +416,16 @@ pub async fn configure_modbus_station<T: Expect>(
             description: format!("after_type_before_enter_s{}", station_number),
         },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 3000 }, // CRITICAL: Much longer wait for register grid initialization and value commit
+        CursorAction::Sleep { ms: 4000 }, // CRITICAL: Very long wait for register grid initialization and value commit
         CursorAction::DebugBreakpoint {
             description: format!("after_set_register_length_s{}", station_number),
         },
     ]);
     execute_cursor_actions(session, cap, &actions, &format!("set_register_length_s{station_number}")).await?;
+    
+    // Additional wait to ensure all state transitions are complete before next station
+    log::info!("⏱️ Waiting for station configuration to stabilize...");
+    tokio::time::sleep(Duration::from_millis(1000)).await;
 
     // Return to top with Ctrl+PgUp as per workflow requirement
     log::info!("⏫ Returning to top with Ctrl+PgUp");
