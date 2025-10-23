@@ -468,6 +468,106 @@ let actions = vec![
 
 **Key Point**: Don't debug "blind" using only status checks. Use `DebugBreakpoint` to visually confirm UI behavior, then add appropriate `CheckStatus` assertions once you understand what's happening.
 
+### Menu Navigation Timing and Race Conditions
+
+#### Understanding the TUI Architecture
+
+The TUI uses a multi-threaded architecture that can cause timing issues in E2E tests:
+
+1. **Input Thread**: Captures keyboard events and updates global status synchronously
+2. **Core Thread**: Handles subprocess management, polls UI messages every ~50ms
+3. **Rendering Thread**: Draws UI based on global status, polls with 100ms timeout
+
+When a menu action like pressing Enter on "Enter Business Configuration" occurs:
+1. Input handler updates status immediately (`Page::ConfigPanel` → `Page::ModbusDashboard`)
+2. Sends `Refresh` message to rendering thread via channel
+3. Rendering thread processes message on next poll cycle (up to 100ms latency)
+4. Terminal is redrawn with new page content
+
+**Critical Issue**: E2E tests using terminal capture may see stale content if they capture before the rendering thread completes the draw cycle.
+
+#### Best Practices for Menu Navigation
+
+**DO**: Use status tree verification for page transitions
+```rust
+// Navigate to menu item and press Enter
+execute_cursor_actions(&mut session, &mut cap, &actions, "press_enter").await?;
+
+// Wait for status tree to reflect the page change
+wait_for_tui_page("ModbusDashboard", 5, Some(300)).await?;
+
+// Now safe to verify terminal content
+let screen = cap.capture(&mut session, "after_navigation").await?;
+assert!(screen.contains("ModBus Master/Slave Set"));
+```
+
+**DON'T**: Rely solely on terminal pattern matching immediately after navigation
+```rust
+// ❌ WRONG: May capture before rendering completes
+let actions = vec![
+    CursorAction::PressEnter,
+    CursorAction::Sleep { ms: 1000 },
+    CursorAction::MatchPattern {
+        pattern: Regex::new(r"ModBus Master/Slave Set")?,
+        // ... may fail intermittently
+    },
+];
+```
+
+#### Implementing Robust Menu Navigation
+
+For reliable menu navigation in E2E tests, use a multi-attempt strategy with status verification:
+
+```rust
+pub async fn enter_menu_with_retry<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    menu_item: &str,
+    expected_page: &str,
+    max_attempts: usize,
+) -> Result<()> {
+    for attempt in 1..=max_attempts {
+        // Navigate and press Enter
+        navigate_to_menu_item(session, cap, menu_item).await?;
+        
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 1000 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "press_enter").await?;
+        
+        // Wait for status tree to update
+        match wait_for_tui_page(expected_page, 3, Some(300)).await {
+            Ok(()) => {
+                // Verify terminal also updated
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                let screen = cap.capture(session, "verify").await?;
+                if screen.contains(expected_page) {
+                    return Ok(());
+                }
+            }
+            Err(_) if attempt < max_attempts => {
+                log::warn!("Attempt {} failed, retrying...", attempt);
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Err(anyhow!("Failed after {} attempts", max_attempts))
+}
+```
+
+#### Synchronization Points
+
+Always use status tree verification at these synchronization points:
+- **Page Navigation**: After pressing Enter on menu items
+- **Port Enable/Disable**: After toggling port state
+- **Configuration Save**: After pressing Ctrl+S
+- **Station Creation**: After creating new Modbus stations
+
+This ensures the TUI's internal state has fully updated before proceeding with subsequent actions.
+
 ### Troubleshooting
 
 #### Status file not found
@@ -492,3 +592,11 @@ Started status dump thread, writing to /tmp/ci_tui_status.json
 - Increase retry interval if file I/O is slow
 - Check if the expected state is actually reachable
 - Inspect `/tmp/tui_e2e_status.json` manually to see current state
+
+#### Intermittent menu navigation failures
+
+If menu navigation (e.g., "Enter Business Configuration") fails intermittently:
+- **Root Cause**: Race condition between status update and terminal rendering
+- **Solution**: Use multi-attempt retry with status tree verification (see "Menu Navigation Timing" section)
+- **Prevention**: Always verify page changes via status tree before checking terminal content
+- **Debugging**: Add DebugBreakpoint actions to see actual terminal state during failures
