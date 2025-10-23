@@ -77,12 +77,49 @@ impl Args {
 /// This can cause tests to inherit state from previous runs, leading to unexpected behavior
 /// in multi-station creation tests. This function removes the cache before each test.
 pub fn cleanup_tui_config_cache() -> Result<()> {
-    let config_path = std::path::Path::new("aoba_tui_config.json");
+    // Paths to check for config files
+    let mut config_paths = vec![
+        std::path::PathBuf::from("aoba_tui_config.json"),
+        std::path::PathBuf::from("/tmp/aoba_tui_config.json"),
+    ];
+    
+    // Also check ~/.config/aoba/
+    if let Ok(home_dir) = std::env::var("HOME") {
+        config_paths.push(std::path::PathBuf::from(home_dir).join(".config/aoba/aoba_tui_config.json"));
+    }
 
-    if config_path.exists() {
-        log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
-        std::fs::remove_file(config_path)?;
-        log::info!("✅ TUI config cache cleaned");
+    let mut removed_count = 0;
+    for config_path in &config_paths {
+        if config_path.exists() {
+            log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
+            match std::fs::remove_file(&config_path) {
+                Ok(_) => {
+                    removed_count += 1;
+                    log::info!("✅ Removed: {}", config_path.display());
+                }
+                Err(e) => {
+                    log::warn!("⚠️  Failed to remove {}: {}", config_path.display(), e);
+                }
+            }
+        }
+    }
+    
+    // Also clean up any debug status files from previous runs
+    let status_files = vec![
+        std::path::PathBuf::from("/tmp/ci_tui_status.json"),
+        std::path::PathBuf::from("/tmp/ci_cli_vcom1_status.json"),
+        std::path::PathBuf::from("/tmp/ci_cli_vcom2_status.json"),
+    ];
+    
+    for status_file in &status_files {
+        if status_file.exists() {
+            log::debug!("🗑️  Removing old status file: {}", status_file.display());
+            let _ = std::fs::remove_file(&status_file);
+        }
+    }
+
+    if removed_count > 0 {
+        log::info!("✅ TUI config cache cleaned ({} files removed)", removed_count);
     } else {
         log::debug!("📂 No TUI config cache found, nothing to clean");
     }

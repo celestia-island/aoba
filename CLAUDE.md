@@ -273,6 +273,14 @@ let actions = vec![
 ];
 ```
 
+**Connection Mode Configuration:**
+
+After creating stations, press Down arrow once to move to "Connection Mode" field. The TUI defaults to **Master** mode:
+- If Master mode is needed: No action required (already at default)
+- If Slave mode is needed: Press `Enter`, `Left`, `Enter` to switch from Master to Slave
+
+**Note**: There may be some ambiguity in the Chinese requirements which suggest pressing `Right` to switch to Master mode, but code inspection and existing tests confirm that the default is Master, and `Left` switches to Slave.
+
 #### Phase 2: Station Configuration
 
 Configure each station individually, using absolute positioning:
@@ -310,6 +318,43 @@ for (i, station_config) in station_configs.iter().enumerate() {
 - Use `Down` arrow keys to navigate between fields within a station
 - After configuring all stations, use `Ctrl+S` once to save all configurations and enable the port
 - Use `Ctrl+PgUp` at the end of each station configuration to return to top (ensures consistent state)
+
+### Register Value Configuration Workflow
+
+After configuring station fields (ID, Type, Address, Count), you can optionally configure individual register values:
+
+#### Detailed Step-by-Step Process
+
+1. **Navigate to First Register**: After setting Register Length and confirming, cursor moves to the register grid area
+2. **For Each Register**:
+   - If register doesn't need a value: Press `Right` to skip to next register
+   - If register needs a value:
+     - Press `Enter` to enter edit mode
+     - Type hexadecimal value (without 0x prefix)
+     - Press `Enter` to confirm
+     - **Verify value in status tree**: Use `CheckStatus` action to verify the value was written to global status
+     - Press `Right` to move to next register
+3. **After All Registers Configured**: Press `Ctrl+PgUp` to return to top
+
+#### Status Verification Path Format
+
+For master stations:
+```
+ports[0].modbus_masters[station_index].registers[register_index]
+```
+
+For slave stations:
+```
+ports[0].modbus_slaves[station_index].registers[register_index]
+```
+
+#### Important Notes
+
+- **Station Index**: 0-based (Station #1 has index 0)
+- **Register Index**: 0-based (First register has index 0)
+- **Value Format**: Hexadecimal without 0x prefix (e.g., "1234" not "0x1234")
+- **Status Verification**: Always verify critical values were committed to status tree before proceeding
+- **Clean State**: Remove JSON cache files (`rm -f ~/.config/aoba/*.json`) before running tests to avoid interference from previous test runs
 
 ### Best Practices
 

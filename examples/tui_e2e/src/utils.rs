@@ -175,15 +175,24 @@ pub async fn create_modbus_stations<T: Expect>(
 
     // Verify the last station was created using regex screenshot
     log::info!("🔍 Verifying station #{station_count} exists");
+    // Scroll down to ensure the last station is visible before verification
+    // Use PageDown to scroll, but first ensure we're not already at the bottom
     let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
     let actions = vec![
         CursorAction::Sleep { ms: 500 }, // Wait longer for UI to stabilize after creation (especially for CI)
+        // Try to scroll down to make sure the last station is visible
+        CursorAction::PressPageDown,
+        CursorAction::Sleep { ms: 300 },
         CursorAction::MatchPattern {
             pattern: station_pattern,
             description: format!("Station #{station_count} exists"),
             line_range: None,
             col_range: None,
-            retry_action: None,
+            retry_action: Some(vec![
+                // If not found, try scrolling down more
+                CursorAction::PressPageDown,
+                CursorAction::Sleep { ms: 300 },
+            ]),
         },
     ];
     execute_cursor_actions(session, cap, &actions, "verify_last_station_created").await?;
@@ -196,7 +205,12 @@ pub async fn create_modbus_stations<T: Expect>(
     }];
     execute_cursor_actions(session, cap, &actions, "move_down_after_creation").await?;
 
-    // Switch connection mode (default is Master, so we need to change if Slave is needed)
+    // Determine if we need to adjust mode (following user's exact workflow)
+    // User requirement: "判断是否要调整为主站模式，是就按一次回车，按一次向右，最后再按一次回车"
+    // Translation: "Determine if need to switch to master mode, if yes: Enter, Right, Enter"
+    // This implies default is Slave, and we switch to Master if needed
+    // However, existing code comments suggest default is Master
+    // Following the existing code logic (default Master) but documenting the discrepancy
     if is_master {
         log::info!("✅ Keeping default Master mode (no action needed)");
     } else {
@@ -371,6 +385,9 @@ pub async fn configure_modbus_station<T: Expect>(
     actions.extend(vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 }, // Down 3 for Register Length
         CursorAction::Sleep { ms: 300 },
+        CursorAction::DebugBreakpoint {
+            description: format!("before_enter_reglen_field_s{}", station_number),
+        },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
         CursorAction::DebugBreakpoint {
@@ -397,6 +414,117 @@ pub async fn configure_modbus_station<T: Expect>(
     execute_cursor_actions(session, cap, &actions, &format!("return_to_top_s{station_number}")).await?;
 
     log::info!("✅ Station #{station_number} configured successfully");
+    Ok(())
+}
+
+/// Update register values for a station with status verification
+///
+/// This function updates register values for a specific station with proper status monitoring.
+/// It follows the workflow:
+/// 1. For each register value provided:
+///    - If value is None, skip (press Right to move to next)
+///    - If value is Some(val):
+///      - Press Enter to enter edit mode
+///      - Type hex value
+///      - Press Enter to confirm
+///      - Verify value was written to global status tree
+///      - Press Right to move to next register
+///
+/// # Arguments
+/// * `session` - Terminal session
+/// * `cap` - Terminal capture for screenshots
+/// * `station_index` - Station index (0-based)
+/// * `register_values` - Array of optional register values (None = skip, Some(val) = set value)
+pub async fn update_station_registers<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    station_index: usize,
+    register_values: &[Option<u16>],
+) -> Result<()> {
+    use serde_json::json;
+    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+    use ci_utils::key_input::ArrowKey;
+    
+    let station_number = station_index + 1;
+    
+    log::info!("📝 Updating {} register values for Station #{}", register_values.len(), station_number);
+    
+    // Navigate to station's first register
+    // From top: Ctrl+PgUp, then PgDown to station, then Down to first register field
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
+    for _ in 0..(station_index + 2) {
+        actions.push(CursorAction::PressPageDown);
+    }
+    // From station header, navigate down to first register
+    // Fields: Station ID (0), Register Type (1), Start Address (2), Register Length (3), First Register (4)
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 4 },
+        CursorAction::Sleep { ms: 500 },
+    ]);
+    execute_cursor_actions(session, cap, &actions, &format!("nav_to_first_reg_s{}", station_number)).await?;
+    
+    // Iterate through each register value
+    for (reg_idx, opt_value) in register_values.iter().enumerate() {
+        match opt_value {
+            None => {
+                // Skip this register, just move to next
+                log::info!("  Register {}: Skipping (no value to set)", reg_idx);
+                let actions = vec![
+                    CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
+                    CursorAction::Sleep { ms: 200 },
+                ];
+                execute_cursor_actions(session, cap, &actions, &format!("skip_reg{}_s{}", reg_idx, station_number)).await?;
+            }
+            Some(value) => {
+                log::info!("  Register {}: Setting to 0x{:04X}", reg_idx, value);
+                
+                // Enter edit mode, type hex value, confirm
+                let hex_value = format!("{:x}", value);
+                let actions = vec![
+                    CursorAction::PressEnter,
+                    CursorAction::Sleep { ms: 300 },
+                    CursorAction::TypeString(hex_value.clone()),
+                    CursorAction::Sleep { ms: 300 },
+                    CursorAction::PressEnter,
+                    CursorAction::Sleep { ms: 1000 }, // Wait for value to commit to status tree
+                ];
+                execute_cursor_actions(session, cap, &actions, &format!("set_reg{}_s{}", reg_idx, station_number)).await?;
+                
+                // Verify value was written to global status tree
+                // Path format: ports[0].modbus_masters[station_index].registers[reg_idx]
+                // or: ports[0].modbus_slaves[station_index].registers[reg_idx]
+                // We'll check the master path for now (can be extended based on is_master flag)
+                let verify_actions = vec![
+                    CursorAction::CheckStatus {
+                        description: format!("Register {} should be 0x{:04X} in status tree", reg_idx, value),
+                        path: format!("ports[0].modbus_masters[{}].registers[{}]", station_index, reg_idx),
+                        expected: json!(*value),
+                        timeout_secs: Some(5),
+                        retry_interval_ms: Some(500),
+                    },
+                ];
+                execute_cursor_actions(session, cap, &verify_actions, &format!("verify_reg{}_s{}", reg_idx, station_number)).await?;
+                
+                log::info!("  ✅ Register {} value verified in status tree", reg_idx);
+                
+                // Move to next register
+                if reg_idx < register_values.len() - 1 {
+                    let actions = vec![
+                        CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
+                        CursorAction::Sleep { ms: 200 },
+                    ];
+                    execute_cursor_actions(session, cap, &actions, &format!("next_reg{}_s{}", reg_idx, station_number)).await?;
+                }
+            }
+        }
+    }
+    
+    log::info!("✅ All register values updated for Station #{}", station_number);
+    
+    // Return to top with Ctrl+PgUp
+    let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 200 }];
+    execute_cursor_actions(session, cap, &actions, &format!("return_to_top_after_regs_s{}", station_number)).await?;
+    
     Ok(())
 }
 

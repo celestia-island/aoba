@@ -34,7 +34,7 @@ use expectrl::Expect;
 /// 4. Communication reliability with retry logic
 pub async fn test_tui_multi_masters_different_registers(port1: &str, port2: &str) -> Result<()> {
     const REGISTER_LENGTH: usize = 8;
-    const MAX_RETRIES: usize = 10;
+    const MAX_RETRIES: usize = 3;
     const RETRY_INTERVAL_MS: u64 = 1000;
 
     if !should_run_vcom_tests_with_ports(port1, port2) {
