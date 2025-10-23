@@ -121,7 +121,7 @@ jobs:
           ./scripts/socat_init.sh
 
       - name: Run CLI E2E module
-        run: cargo run --package cli_e2e -- --module ${{ matrix.module }}
+        run: ./target/debug/cli_e2e --module ${{ matrix.module }}
 
       - name: Cleanup virtual ports
         if: always()
@@ -182,7 +182,7 @@ jobs:
           ./scripts/socat_init.sh
 
       - name: Run TUI E2E module
-        run: cargo run --package tui_e2e -- --module ${{ matrix.module }}
+        run: ./target/debug/tui_e2e --module ${{ matrix.module }}
 
       - name: Cleanup virtual ports
         if: always()
