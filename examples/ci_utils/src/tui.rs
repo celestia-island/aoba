@@ -569,28 +569,38 @@ pub async fn enter_modbus_panel<T: Expect>(
         crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("press_enter_attempt_{}", attempt))
             .await?;
         
-        // Wait for status tree to reflect the page change
-        log::info!("  Waiting for status tree to update to ModbusDashboard page");
-        let status_check_result = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            async {
-                for check_attempt in 1..=10 {
-                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                    
-                    // Try to read status
-                    if let Ok(status) = crate::read_tui_status() {
-                        if matches!(status.page, crate::status_monitor::TuiPage::ModbusDashboard) {
-                            log::info!("  ✅ Status tree updated to ModbusDashboard (check attempt {})", check_attempt);
-                            return Ok(());
+        // Try to wait for status tree to reflect the page change (if debug mode is enabled)
+        log::info!("  Attempting to verify status tree update to ModbusDashboard page");
+        let status_available = std::path::Path::new("/tmp/ci_tui_status.json").exists();
+        
+        let status_check_result = if status_available {
+            log::info!("  Status monitoring is available, using status tree verification");
+            tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                async {
+                    for check_attempt in 1..=10 {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        
+                        // Try to read status
+                        if let Ok(status) = crate::read_tui_status() {
+                            if matches!(status.page, crate::status_monitor::TuiPage::ModbusDashboard) {
+                                log::info!("  ✅ Status tree updated to ModbusDashboard (check attempt {})", check_attempt);
+                                return Ok(());
+                            }
+                            log::debug!("  Status page is still: {:?} (check attempt {})", status.page, check_attempt);
+                        } else {
+                            log::debug!("  Could not read status (check attempt {})", check_attempt);
                         }
-                        log::debug!("  Status page is still: {:?} (check attempt {})", status.page, check_attempt);
-                    } else {
-                        log::debug!("  Could not read status (check attempt {})", check_attempt);
                     }
+                    Err(anyhow!("Status tree did not update to ModbusDashboard"))
                 }
-                Err(anyhow!("Status tree did not update to ModbusDashboard"))
-            }
-        ).await;
+            ).await
+        } else {
+            log::info!("  Status monitoring not available (debug mode not enabled), falling back to terminal verification only");
+            // Just wait a bit for UI to settle
+            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+            Ok(Ok(()))
+        };
         
         match status_check_result {
             Ok(Ok(())) => {
