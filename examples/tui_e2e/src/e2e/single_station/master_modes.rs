@@ -324,10 +324,120 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
 pub async fn test_tui_master_discrete_inputs(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Starting TUI Master Single-Station Test: 02 Discrete Inputs Mode");
 
-    // TODO: Similar implementation to test_tui_master_coils
-    // with bidirectional write testing
+    let ports = vcom_matchers_with_ports(port1, port2);
 
-    log::warn!("⚠️ Test not yet fully implemented - TODO");
+    if !port_exists(&ports.port1_name) || !port_exists(&ports.port2_name) {
+        return Err(anyhow!("Virtual COM ports not available"));
+    }
+
+    let test_data = generate_random_coils(10);
+    log::info!("🎲 Test data: {:?}", test_data);
+
+    let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
+    sleep_seconds(3).await;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "TUI should be on Entry page".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("Entry"),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "wait_entry").await?;
+
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::CheckStatus {
+            description: "Should be on ConfigPanel".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("ConfigPanel"),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_config").await?;
+
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Port should be disabled".to_string(),
+        path: "ports[0].enabled".to_string(),
+        expected: json!(false),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
+
+    configure_tui_station(
+        &mut tui_session,
+        &mut tui_cap,
+        1,
+        "discrete_inputs",
+        0x0010,
+        10,
+        Some(&test_data),
+    )
+    .await?;
+
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 5000 },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Port should be enabled".to_string(),
+        path: "ports[0].enabled".to_string(),
+        expected: json!(true),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_enabled").await?;
+
+    let binary = build_debug_bin("aoba")?;
+    let slave_output = Command::new(&binary)
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-mode",
+            "discrete_inputs",
+            "--register-address",
+            "16",
+            "--register-length",
+            "10",
+            "--baud-rate",
+            "9600",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    if !slave_output.status.success() {
+        let stderr = String::from_utf8_lossy(&slave_output.stderr);
+        return Err(anyhow!("CLI Slave failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&slave_output.stdout);
+    log::info!("CLI Slave output: {}", stdout);
+
+    let received_data: Vec<u16> = serde_json::from_str(stdout.trim())?;
+    if test_data != received_data {
+        log::error!("❌ Data mismatch!");
+        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Received: {:?}", received_data);
+        return Err(anyhow!("Data verification failed"));
+    }
+
+    log::info!("✅ Data verified successfully!");
+
+    drop(tui_session);
+
+    log::info!("✅ TUI Master Discrete Inputs Mode test completed successfully");
     Ok(())
 }
 
@@ -335,10 +445,120 @@ pub async fn test_tui_master_discrete_inputs(port1: &str, port2: &str) -> Result
 pub async fn test_tui_master_holding_registers(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Starting TUI Master Single-Station Test: 03 Holding Registers Mode");
 
-    // TODO: Similar implementation to test_tui_master_coils
-    // but with holding registers instead of coils
+    let ports = vcom_matchers_with_ports(port1, port2);
 
-    log::warn!("⚠️ Test not yet fully implemented - TODO");
+    if !port_exists(&ports.port1_name) || !port_exists(&ports.port2_name) {
+        return Err(anyhow!("Virtual COM ports not available"));
+    }
+
+    let test_data = generate_random_registers(10);
+    log::info!("🎲 Test data: {:?}", test_data);
+
+    let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
+    sleep_seconds(3).await;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "TUI should be on Entry page".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("Entry"),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "wait_entry").await?;
+
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::CheckStatus {
+            description: "Should be on ConfigPanel".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("ConfigPanel"),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_config").await?;
+
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Port should be disabled".to_string(),
+        path: "ports[0].enabled".to_string(),
+        expected: json!(false),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
+
+    configure_tui_station(
+        &mut tui_session,
+        &mut tui_cap,
+        1,
+        "holding",
+        0x0020,
+        10,
+        Some(&test_data),
+    )
+    .await?;
+
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 5000 },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Port should be enabled".to_string(),
+        path: "ports[0].enabled".to_string(),
+        expected: json!(true),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_enabled").await?;
+
+    let binary = build_debug_bin("aoba")?;
+    let slave_output = Command::new(&binary)
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-mode",
+            "holding",
+            "--register-address",
+            "32",
+            "--register-length",
+            "10",
+            "--baud-rate",
+            "9600",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    if !slave_output.status.success() {
+        let stderr = String::from_utf8_lossy(&slave_output.stderr);
+        return Err(anyhow!("CLI Slave failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&slave_output.stdout);
+    log::info!("CLI Slave output: {}", stdout);
+
+    let received_data: Vec<u16> = serde_json::from_str(stdout.trim())?;
+    if test_data != received_data {
+        log::error!("❌ Data mismatch!");
+        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Received: {:?}", received_data);
+        return Err(anyhow!("Data verification failed"));
+    }
+
+    log::info!("✅ Data verified successfully!");
+
+    drop(tui_session);
+
+    log::info!("✅ TUI Master Holding Registers Mode test completed successfully");
     Ok(())
 }
 
@@ -346,9 +566,119 @@ pub async fn test_tui_master_holding_registers(port1: &str, port2: &str) -> Resu
 pub async fn test_tui_master_input_registers(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Starting TUI Master Single-Station Test: 04 Input Registers Mode");
 
-    // TODO: Similar implementation to test_tui_master_coils
-    // with bidirectional write testing
+    let ports = vcom_matchers_with_ports(port1, port2);
 
-    log::warn!("⚠️ Test not yet fully implemented - TODO");
+    if !port_exists(&ports.port1_name) || !port_exists(&ports.port2_name) {
+        return Err(anyhow!("Virtual COM ports not available"));
+    }
+
+    let test_data = generate_random_registers(10);
+    log::info!("🎲 Test data: {:?}", test_data);
+
+    let mut tui_session = spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
+    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
+    sleep_seconds(3).await;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "TUI should be on Entry page".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("Entry"),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "wait_entry").await?;
+
+    let actions = vec![
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::CheckStatus {
+            description: "Should be on ConfigPanel".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("ConfigPanel"),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_config").await?;
+
+    enter_modbus_panel(&mut tui_session, &mut tui_cap).await?;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Port should be disabled".to_string(),
+        path: "ports[0].enabled".to_string(),
+        expected: json!(false),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
+
+    configure_tui_station(
+        &mut tui_session,
+        &mut tui_cap,
+        1,
+        "input",
+        0x0030,
+        10,
+        Some(&test_data),
+    )
+    .await?;
+
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 5000 },
+    ];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
+
+    let actions = vec![CursorAction::CheckStatus {
+        description: "Port should be enabled".to_string(),
+        path: "ports[0].enabled".to_string(),
+        expected: json!(true),
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_enabled").await?;
+
+    let binary = build_debug_bin("aoba")?;
+    let slave_output = Command::new(&binary)
+        .args([
+            "--slave-poll",
+            &ports.port2_name,
+            "--station-id",
+            "1",
+            "--register-mode",
+            "input",
+            "--register-address",
+            "48",
+            "--register-length",
+            "10",
+            "--baud-rate",
+            "9600",
+            "--json",
+        ])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    if !slave_output.status.success() {
+        let stderr = String::from_utf8_lossy(&slave_output.stderr);
+        return Err(anyhow!("CLI Slave failed: {}", stderr));
+    }
+
+    let stdout = String::from_utf8_lossy(&slave_output.stdout);
+    log::info!("CLI Slave output: {}", stdout);
+
+    let received_data: Vec<u16> = serde_json::from_str(stdout.trim())?;
+    if test_data != received_data {
+        log::error!("❌ Data mismatch!");
+        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Received: {:?}", received_data);
+        return Err(anyhow!("Data verification failed"));
+    }
+
+    log::info!("✅ Data verified successfully!");
+
+    drop(tui_session);
+
+    log::info!("✅ TUI Master Input Registers Mode test completed successfully");
     Ok(())
 }
