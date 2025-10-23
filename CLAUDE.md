@@ -21,6 +21,7 @@ The TUI E2E testing framework has been refactored to support two complementary t
 #### For TUI Processes
 
 Start TUI with the `--debug-ci-e2e-test` flag:
+
 ```bash
 cargo run --package aoba -- --tui --debug-ci-e2e-test
 ```
@@ -32,6 +33,7 @@ This will create `/tmp/ci_tui_status.json` with periodic status dumps (every 500
 CLI subprocesses automatically inherit debug mode when spawned by a TUI process in debug mode. The `--debug-ci-e2e-test` flag is injected automatically.
 
 Manual CLI invocation:
+
 ```bash
 cargo run --package aoba -- --slave-listen-persist /tmp/vcom1 --debug-ci-e2e-test
 ```
@@ -173,6 +175,7 @@ let actions = vec![
 ```
 
 **Key Points:**
+
 1. **Ctrl+S triggers port enable**: When you press `Ctrl+S` in Modbus Panel, TUI saves the configuration AND automatically enables the port
 2. **Port state changes from `Disabled` → `Running`**: After Ctrl+S, the status indicator in title bar changes to show `Running ●`
 3. **No manual toggle needed**: You do NOT need to manually toggle "Enable Port" field or press Right arrow on it
@@ -181,6 +184,7 @@ let actions = vec![
 #### Common Mistake: Redundant Port Restart
 
 **WRONG - Redundant leave/return/verify after updating registers:**
+
 ```rust
 // After Ctrl+S, port is already Running ●
 update_tui_registers(&mut session, &mut cap, &data, false).await?;
@@ -195,6 +199,7 @@ let actions = vec![
 ```
 
 **CORRECT - Port already enabled after Ctrl+S:**
+
 ```rust
 // Save configuration (enables port automatically)
 let actions = vec![
@@ -216,9 +221,12 @@ test_modbus_communication(...).await?;
 #### When Port Gets Disabled
 
 Port is disabled (status changes to `Disabled` or `Not Started ×`) when:
+
 1. User manually disables it (not typically done in E2E tests)
 2. TUI process exits
 3. Configuration is discarded with `Ctrl+Esc`
+
+**IMPORTANT**: Pressing Escape (Esc) alone does NOT enable the port. You MUST use `Ctrl+S` to save configuration and trigger port enabling. After `Ctrl+S`, you can then press `Esc` to return to the previous page (ConfigPanel).
 
 #### Verification Best Practice
 
@@ -233,17 +241,89 @@ let status = verify_port_enabled(&mut session, &mut cap, "verify_after_save").aw
 // Status should be "Running ●" or "Applied ✔"
 ```
 
+### Multi-Station Configuration Workflow
+
+When configuring multiple Modbus stations, follow this two-phase approach:
+
+#### Phase 1: Station Creation
+
+Create all stations first before configuring any:
+
+```rust
+// Press Enter on "Create Station" N times (where N = number of stations)
+for i in 1..=station_count {
+    let actions = vec![
+        CursorAction::PressEnter,        // Create station
+        CursorAction::Sleep { ms: 200 },
+        CursorAction::PressCtrlPageUp,   // Return to Create Station button
+    ];
+    execute_cursor_actions(&mut session, &mut cap, &actions, &format!("create_station_{i}")).await?;
+}
+
+// Verify last station was created using regex
+let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
+let actions = vec![
+    CursorAction::MatchPattern {
+        pattern: station_pattern,
+        description: format!("Station #{station_count} exists"),
+        line_range: None,
+        col_range: None,
+        retry_action: None,
+    },
+];
+```
+
+#### Phase 2: Station Configuration
+
+Configure each station individually, using absolute positioning:
+
+```rust
+for (i, station_config) in station_configs.iter().enumerate() {
+    let station_number = i + 1; // 1-indexed
+
+    // Navigate to station using Ctrl+PgUp + PgDown
+    let mut actions = vec![CursorAction::PressCtrlPageUp];
+    for _ in 0..=i {
+        actions.push(CursorAction::PressPageDown);
+    }
+
+    // Configure Station ID
+    actions.extend(vec![
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::PressEnter,
+        CursorAction::PressCtrlA,     // Select all
+        CursorAction::PressBackspace, // Clear
+        CursorAction::TypeString(station_id.to_string()),
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 200 },
+    ]);
+
+    // Configure Register Type (field 2, using Down count: 2)
+    // ... similar pattern for other fields ...
+}
+```
+
+**Key Points:**
+
+- Always use `Ctrl+PgUp` to reset to top of panel before navigating to a station
+- Use `PgDown` to jump to station sections (one PgDown per station from top)
+- Use `Down` arrow keys to navigate between fields within a station
+- After configuring all stations, use `Ctrl+S` once to save all configurations and enable the port
+- Use `Ctrl+PgUp` at the end of each station configuration to return to top (ensures consistent state)
+
 ### Best Practices
 
 #### When to Use UI Testing vs Status Monitoring
 
 **Use UI Testing (terminal capture) for:**
+
 - Validating UI rendering and layout
 - Checking visual indicators (status symbols, colors)
 - Verifying edit mode brackets and formatting
 - Testing keyboard navigation and cursor movement
 
 **Use Status Monitoring for:**
+
 - Verifying port states (enabled/disabled)
 - Checking modbus configuration (stations, registers)
 - Waiting for state transitions
@@ -318,17 +398,18 @@ While TUI E2E tests primarily use status monitoring (CheckStatus) for validation
 3. **Verifying UI State**: Use breakpoints to confirm the TUI is in the expected state before performing actions
 
 **Example Usage:**
+
 ```rust
 let actions = vec![
     // Navigate to a port
     CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
     CursorAction::Sleep { ms: 500 },
-    
+
     // Debug: Check what the terminal shows
     CursorAction::DebugBreakpoint {
         description: "verify_port_selection".to_string(),
     },
-    
+
     // Then verify via status monitoring
     CursorAction::CheckStatus {
         description: "Port should be selected".to_string(),
@@ -347,6 +428,7 @@ let actions = vec![
 #### Status file not found
 
 Ensure debug mode is enabled by passing the `--debug-ci-e2e-test` flag when spawning the TUI or CLI process:
+
 ```rust
 spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
 ```
@@ -354,6 +436,7 @@ spawn_expect_process(&["--tui", "--debug-ci-e2e-test"])?;
 #### Status file not updating
 
 Check that the status dump thread is running. Look for log messages:
+
 ```
 Started status dump thread, writing to /tmp/ci_tui_status.json
 ```
@@ -364,9 +447,3 @@ Started status dump thread, writing to /tmp/ci_tui_status.json
 - Increase retry interval if file I/O is slow
 - Check if the expected state is actually reachable
 - Inspect `/tmp/tui_e2e_status.json` manually to see current state
-
-### Examples
-
-See `examples/status_monitoring_example.rs` for a complete working example.
-
-For real-world usage, refer to the updated TUI E2E tests in `examples/tui_e2e/`.

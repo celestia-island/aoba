@@ -21,7 +21,7 @@ impl TerminalSize {
     pub fn dimensions(self) -> (u16, u16) {
         match self {
             TerminalSize::Small => (24, 80),
-            TerminalSize::Large => (60, 80),
+            TerminalSize::Large => (40, 80), // Reduced from 60 to 40 for debugging
             TerminalSize::ExtraLarge => (80, 80),
         }
     }

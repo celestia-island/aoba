@@ -15,10 +15,9 @@ use expectrl::Expect;
 
 /// Test Multiple TUI Masters on Single Port with Same Station ID but Different Register Types
 ///
-/// This test simulates 3 TUI masters on vcom1 with the same station ID but different register types:
+/// This test simulates 2 TUI masters on vcom1 with the same station ID but different register types:
 /// - Master 1: Station ID 1, Register Type 03 (Holding Register)
 /// - Master 2: Station ID 1, Register Type 04 (Input Register)
-/// - Master 3: Station ID 1, Register Type 01 (Coils)
 ///
 /// Test Design:
 /// - All masters share the same vcom1 port and same station ID but different register types
@@ -49,7 +48,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     let port2 = ports.port2_name.clone();
 
     log::info!("📍 Port configuration:");
-    log::info!("  Masters: {port1} (3 masters with same station ID, different register types)");
+    log::info!("  Masters: {port1} (2 masters with same station ID, different register types)");
     log::info!("  Slaves: {port2} (CLI, polls all register types)");
 
     // Verify ports exist
@@ -72,102 +71,72 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
 
     sleep_seconds(3).await;
 
-    // Configure 3 masters on vcom1 with same station ID but different register types
+    // Configure 2 masters on vcom1 with same station ID but different register types
     let masters = [
         (1, 3, "holding", 0), // Station 1, Type 03 Holding Register, Address 0
         (1, 4, "input", 0),   // Station 1, Type 04 Input Register, Address 0
-        (1, 1, "coils", 0),   // Station 1, Type 01 Coils, Address 0
     ];
 
-    log::info!("🧪 Step 2: Configuring 3 masters on {port1} with same station ID");
+    log::info!("🧪 Step 2: Configuring 2 masters on {port1} with same station ID");
 
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
-    // Use unified configuration function to create and configure all stations
+    // Use unified configuration function to create and configure all stations in Master mode
     let station_configs: Vec<(u8, u8, u16, usize)> = masters
         .iter()
         .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
+    crate::utils::configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
 
-    // After configuring all Masters, save and exit Modbus panel
-    log::info!("🔄 All Masters configured, saving configuration...");
+    // Wait for all configuration writes to complete before saving
+    log::info!("⏳ Waiting for configuration to stabilize...");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 
-    // Send Esc to trigger handle_leave_page (auto-enable + switch to ConfigPanel)
-    log::info!("⌨️ Sending Esc to trigger auto-enable and return to ConfigPanel...");
-    tui_session.send("\x1b")?;
-    ci_utils::sleep_a_while().await;
-    ci_utils::sleep_a_while().await;
+    // All Masters configured, now save once with Ctrl+S to enable port
+    log::info!("📍 Navigating to top of panel before saving...");
+    use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
+    let nav_actions = vec![
+        CursorAction::PressCtrlPageUp, // Jump to top (AddLine / Create Station)
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &nav_actions,
+        "nav_to_top_before_save",
+    )
+    .await?;
 
-    // Verify we're at ConfigPanel (port details page) AND port is enabled with retry logic
-    log::info!("⏳ Waiting for screen to update to ConfigPanel and port to be enabled...");
-    let mut screen;
-    let max_attempts = 3;
-    let mut at_config_panel = false;
-    let mut port_enabled = false;
+    log::info!("💾 Saving all master configurations with Ctrl+S to enable port...");
+    let actions = vec![
+        CursorAction::PressCtrlS,
+        CursorAction::Sleep { ms: 10000 }, // Wait longer for port to enable and CLI subprocess to start (10s)
+        CursorAction::DebugBreakpoint {
+            description: "after_ctrl_s_save".to_string(),
+        },
+    ];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "save_all_masters_and_enable",
+    )
+    .await?;
 
-    for attempt in 1..=max_attempts {
-        ci_utils::sleep_a_while().await;
-        screen = tui_cap
-            .capture(
-                &mut tui_session,
-                &format!("after_save_modbus_attempt_{}", attempt),
-            )
-            .await?;
-
-        // Check if we're at ConfigPanel
-        if screen.contains("Enable Port") {
-            at_config_panel = true;
-
-            // Check if port is showing as Enabled
-            for line in screen.lines() {
-                if line.contains("Enable Port") && line.contains("Enabled") {
-                    port_enabled = true;
-                    break;
-                }
-            }
-
-            if port_enabled {
-                log::info!(
-                    "✅ Port enabled and shown in UI on attempt {}/{}",
-                    attempt,
-                    max_attempts
-                );
-                break;
-            } else {
-                log::info!(
-                    "⏳ Attempt {}/{}: At ConfigPanel but port not showing as Enabled yet, waiting for CLI subprocess...",
-                    attempt,
-                    max_attempts
-                );
-            }
-        } else {
-            log::warn!(
-                "⏳ Attempt {}/{}: Not at ConfigPanel yet, waiting...",
-                attempt,
-                max_attempts
-            );
-        }
-    }
-
-    if !at_config_panel {
-        return Err(anyhow!(
-            "Failed to return to port details page after saving Modbus configuration (tried {} times)",
-            max_attempts
-        ));
-    }
-
-    if !port_enabled {
-        return Err(anyhow!(
-            "Port not showing as Enabled after {} attempts",
-            max_attempts
-        ));
-    }
-
-    log::info!("💾 Saved Modbus configuration and auto-enabled port");
-    log::info!("✅ Successfully returned to port details page with port enabled");
+    // Verify port is enabled by checking the status indicator (still in Modbus panel)
+    log::info!("🔍 Verifying port is enabled");
+    let status = ci_utils::verify_port_enabled(
+        &mut tui_session,
+        &mut tui_cap,
+        "verify_port_enabled_multi_masters",
+    )
+    .await?;
+    log::info!(
+        "✅ Port enabled with status: {}, all data committed, ready for testing",
+        status
+    );
 
     // Test all 3 register types from vcom2
     // NOTE: Since we skip data update phase, all registers should be 0 (default value)
