@@ -92,7 +92,7 @@ fn spawn_cli_slave_multi_station(
 
     let child = std::process::Command::new(&binary)
         .args([
-            "--slave-listen-persist",
+            "--slave-poll-persist",
             port,
             "--station-id",
             &station_id.to_string(),

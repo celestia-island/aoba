@@ -64,7 +64,7 @@ fn spawn_cli_slave(
 
     let child = std::process::Command::new(&binary)
         .args([
-            "--slave-listen-persist",
+            "--slave-poll-persist",
             port,
             "--station-id",
             &station_id.to_string(),
@@ -84,7 +84,7 @@ fn spawn_cli_slave(
         .spawn()?;
 
     log::info!(
-        "✅ Spawned CLI Slave: mode={}, addr=0x{:04X}, count={}",
+        "✅ Spawned CLI Slave (polling): mode={}, addr=0x{:04X}, count={}",
         register_mode,
         start_address,
         register_count
