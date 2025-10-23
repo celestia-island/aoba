@@ -368,12 +368,18 @@ pub async fn configure_modbus_station<T: Expect>(
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 },
+        CursorAction::DebugBreakpoint {
+            description: format!("before_type_register_length_s{}", station_number),
+        },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(register_count.to_string()),
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 1000 }, // Wait after typing
+        CursorAction::DebugBreakpoint {
+            description: format!("after_type_before_enter_s{}", station_number),
+        },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Extra long wait for register grid initialization and value commit
+        CursorAction::Sleep { ms: 3000 }, // CRITICAL: Much longer wait for register grid initialization and value commit
         CursorAction::DebugBreakpoint {
             description: format!("after_set_register_length_s{}", station_number),
         },
