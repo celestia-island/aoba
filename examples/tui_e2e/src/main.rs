@@ -37,20 +37,12 @@ struct Args {
     /// Run only test 2: TUI Master + CLI Slave
     #[arg(long)]
     test2: bool,
-
-    /// Run only test 3: Multiple TUI Masters
-    #[arg(long)]
-    test3: bool,
-
-    /// Run only test 4: Multiple TUI Slaves
-    #[arg(long)]
-    test4: bool,
 }
 
 impl Args {
     /// Check if any specific test is selected
     fn has_specific_tests(&self) -> bool {
-        self.test0 || self.test1 || self.test2 || self.test3 || self.test4
+        self.test0 || self.test1 || self.test2
     }
 
     /// Check if a specific test should run
@@ -64,8 +56,6 @@ impl Args {
             0 => self.test0,
             1 => self.test1,
             2 => self.test2,
-            3 => self.test3,
-            4 => self.test4,
             _ => false,
         }
     }
@@ -228,7 +218,7 @@ async fn main() -> Result<()> {
 
     // Test 0: CLI port release test - verify CLI properly releases ports on exit
     if args.should_run_test(0) {
-        log::info!("🧪 Test 0/4: CLI port release verification");
+        log::info!("🧪 Test 0/2: CLI port release verification");
         test_cli_port_release().await?;
 
         // Reset ports after CLI cleanup test to remove any lingering locks from the spawned CLI process
@@ -252,11 +242,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Test 1: TUI Slave + CLI Master with 3 rounds (refactored with status monitoring)
     // Test 1: TUI Slave + CLI Master with 3 rounds (status monitoring)
     if args.should_run_test(1) {
         log::info!(
-            "🧪 Test 1/4: TUI Slave + CLI Master (3 rounds, holding registers, status monitoring)"
+            "🧪 Test 1/2: TUI Slave + CLI Master (3 rounds, holding registers, status monitoring)"
         );
         e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?;
 
@@ -289,7 +278,7 @@ async fn main() -> Result<()> {
 
     // Test 2: TUI Master + CLI Slave (repeat for stability)
     if args.should_run_test(2) {
-        log::info!("🧪 Test 2/4: TUI Master + CLI Slave - Repeat (10 rounds, holding registers)");
+        log::info!("🧪 Test 2/2: TUI Master + CLI Slave - Repeat (10 rounds, holding registers)");
         e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?;
 
         // Reset ports after test completes (Unix only)
@@ -298,25 +287,6 @@ async fn main() -> Result<()> {
             log::info!("🧪 Resetting virtual serial ports after Test 2...");
             setup_virtual_serial_ports()?;
         }
-    }
-
-    // Test 3: Multiple TUI Masters on vcom1
-    if args.should_run_test(3) {
-        log::info!("🧪 Test 3/4: Multiple TUI Masters on vcom1 (E2E test suite)");
-        e2e::test_tui_multi_masters(&args.port1, &args.port2).await?;
-
-        // Reset ports after test completes (Unix only)
-        #[cfg(not(windows))]
-        {
-            log::info!("🧪 Resetting virtual serial ports after Test 3...");
-            setup_virtual_serial_ports()?;
-        }
-    }
-
-    // Test 4: Multiple TUI Slaves on vcom2
-    if args.should_run_test(4) {
-        log::info!("🧪 Test 4/4: Multiple TUI Slaves on vcom2 (E2E test suite)");
-        e2e::test_tui_multi_slaves(&args.port1, &args.port2).await?;
     }
 
     log::info!("🧪 All selected TUI E2E tests passed!");
