@@ -18,6 +18,7 @@ fn spawn_cli_master(
     register_mode: &str,
     start_address: u16,
     register_count: u16,
+    data_source: &str,
 ) -> Result<std::process::Child> {
     let binary = build_debug_bin("aoba")?;
 
@@ -35,18 +36,20 @@ fn spawn_cli_master(
             &register_count.to_string(),
             "--baud-rate",
             "9600",
+            "--data-source",
+            data_source,
             "--debug-ci-e2e-test",
         ])
-        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
     log::info!(
-        "✅ Spawned CLI Master: mode={}, addr=0x{:04X}, count={}",
+        "✅ Spawned CLI Master: mode={}, addr=0x{:04X}, count={}, data_source={}",
         register_mode,
         start_address,
-        register_count
+        register_count,
+        data_source
     );
 
     Ok(child)
@@ -59,12 +62,62 @@ fn spawn_cli_slave(
     register_mode: &str,
     start_address: u16,
     register_count: u16,
+    output_sink: Option<&str>,
+) -> Result<std::process::Child> {
+    let binary = build_debug_bin("aoba")?;
+
+    let mut args = vec![
+        "--slave-poll-persist".to_string(),
+        port.to_string(),
+        "--station-id".to_string(),
+        station_id.to_string(),
+        "--register-mode".to_string(),
+        register_mode.to_string(),
+        "--register-address".to_string(),
+        start_address.to_string(),
+        "--register-length".to_string(),
+        register_count.to_string(),
+        "--baud-rate".to_string(),
+        "9600".to_string(),
+        "--debug-ci-e2e-test".to_string(),
+    ];
+
+    if let Some(output) = output_sink {
+        args.push("--output".to_string());
+        args.push(output.to_string());
+    }
+
+    let child = std::process::Command::new(&binary)
+        .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    log::info!(
+        "✅ Spawned CLI Slave (polling): mode={}, addr=0x{:04X}, count={}, output={:?}",
+        register_mode,
+        start_address,
+        register_count,
+        output_sink
+    );
+
+    Ok(child)
+}
+
+/// Helper to spawn a CLI slave listener process with specified parameters
+fn spawn_cli_slave_listener(
+    port: &str,
+    station_id: u8,
+    register_mode: &str,
+    start_address: u16,
+    register_count: u16,
+    data_source: &str,
 ) -> Result<std::process::Child> {
     let binary = build_debug_bin("aoba")?;
 
     let child = std::process::Command::new(&binary)
         .args([
-            "--slave-poll-persist",
+            "--slave-listen-persist",
             port,
             "--station-id",
             &station_id.to_string(),
@@ -76,53 +129,80 @@ fn spawn_cli_slave(
             &register_count.to_string(),
             "--baud-rate",
             "9600",
+            "--data-source",
+            data_source,
             "--debug-ci-e2e-test",
         ])
-        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
     log::info!(
-        "✅ Spawned CLI Slave (polling): mode={}, addr=0x{:04X}, count={}",
+        "✅ Spawned CLI Slave (listener): mode={}, addr=0x{:04X}, count={}, data_source={}",
         register_mode,
         start_address,
-        register_count
+        register_count,
+        data_source
     );
 
     Ok(child)
 }
 
-/// Helper to send data to a CLI process via stdin
-fn send_data_to_cli(child: &mut std::process::Child, data: &[u16]) -> Result<()> {
-    if let Some(stdin) = child.stdin.as_mut() {
-        // Send data as JSON array
-        let json_data = serde_json::to_string(data)?;
-        use std::io::Write;
-        writeln!(stdin, "{}", json_data)?;
-        stdin.flush()?;
-        log::info!("📤 Sent data to CLI: {:?}", data);
-        Ok(())
-    } else {
-        Err(anyhow!("Failed to get stdin handle for CLI process"))
-    }
+/// Helper to write data to a file for master to read
+fn write_data_to_file(file_path: &std::path::Path, data: &[u16]) -> Result<()> {
+    use std::io::Write;
+    let json_data = serde_json::json!({
+        "values": data
+    });
+    let json_str = serde_json::to_string(&json_data)?;
+    let mut file = std::fs::File::create(file_path)?;
+    writeln!(file, "{}", json_str)?;
+    file.flush()?;
+    log::info!("📤 Wrote data to file {}: {:?}", file_path.display(), data);
+    Ok(())
 }
 
-/// Helper to read data from a CLI process stdout
-fn read_data_from_cli(child: &mut std::process::Child) -> Result<Vec<u16>> {
-    if let Some(stdout) = child.stdout.take() {
-        let reader = BufReader::new(stdout);
-        let mut lines = reader.lines();
-
-        // Read first line of JSON output
-        if let Some(Ok(line)) = lines.next() {
-            let data: Vec<u16> = serde_json::from_str(&line)?;
-            log::info!("📥 Received data from CLI: {:?}", data);
-            return Ok(data);
+/// Helper to read data from a slave's output file
+fn read_data_from_file(file_path: &std::path::Path, timeout_secs: u64) -> Result<Vec<u16>> {
+    use std::time::{Duration, Instant};
+    
+    let start = Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+    
+    // Wait for file to be created and contain data
+    loop {
+        if start.elapsed() > timeout {
+            return Err(anyhow!("Timeout waiting for data in file {}", file_path.display()));
         }
+        
+        if file_path.exists() {
+            // Try to read the first line
+            let file = std::fs::File::open(file_path)?;
+            let reader = BufReader::new(file);
+            let mut lines = reader.lines();
+            
+            if let Some(Ok(line)) = lines.next() {
+                // Try to parse the JSON
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if let Some(values) = json.get("values") {
+                        if let Some(arr) = values.as_array() {
+                            let data: Vec<u16> = arr
+                                .iter()
+                                .filter_map(|v| v.as_u64())
+                                .map(|v| v as u16)
+                                .collect();
+                            if !data.is_empty() {
+                                log::info!("📥 Read data from file {}: {:?}", file_path.display(), data);
+                                return Ok(data);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        std::thread::sleep(Duration::from_millis(100));
     }
-
-    Err(anyhow!("Failed to read data from CLI stdout"))
 }
 
 /// Test 01: Coils mode (0x0000, length 10)
@@ -142,13 +222,26 @@ pub async fn test_single_station_coils() -> Result<()> {
     let test_data = generate_random_coils(register_count as usize);
     log::info!("🎲 Test data: {:?}", test_data);
 
-    // TODO: Step 1 - Spawn Master process on port1
+    // Create temporary files for data exchange
+    let temp_dir = std::env::temp_dir();
+    let master_data_file = temp_dir.join("cli_e2e_master_coils_data.json");
+    let slave_output_file = temp_dir.join("cli_e2e_slave_coils_output.json");
+    
+    // Clean up any existing files
+    let _ = std::fs::remove_file(&master_data_file);
+    let _ = std::fs::remove_file(&slave_output_file);
+
+    // Write test data to master's data file
+    write_data_to_file(&master_data_file, &test_data)?;
+
+    // Step 1 - Spawn Master process on port1
     let mut master = spawn_cli_master(
         &ports.port1_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        &format!("file:{}", master_data_file.display()),
     )?;
 
     // Give Master time to initialize
@@ -156,35 +249,52 @@ pub async fn test_single_station_coils() -> Result<()> {
 
     // Check if Master is still running
     if let Some(status) = master.try_wait()? {
-        return Err(anyhow!("Master exited prematurely with status {}", status));
+        // Read stderr for error details
+        let stderr = if let Some(mut stderr) = master.stderr.take() {
+            let mut buf = String::new();
+            use std::io::Read;
+            stderr.read_to_string(&mut buf).unwrap_or_default();
+            buf
+        } else {
+            String::new()
+        };
+        
+        // Cleanup
+        let _ = std::fs::remove_file(&master_data_file);
+        
+        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
     }
 
-    // TODO: Step 2 - Send data to Master via stdin
-    send_data_to_cli(&mut master, &test_data)?;
-
-    // Give Master time to process data
-    sleep_seconds(1).await;
-
-    // TODO: Step 3 - Spawn Slave process on port2
+    // Step 2 - Spawn Slave process on port2
     let mut slave = spawn_cli_slave(
         &ports.port2_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        Some(&format!("file:{}", slave_output_file.display())),
     )?;
 
     // Give Slave time to initialize and read data
     sleep_seconds(3).await;
 
-    // TODO: Step 4 - Read data from Slave stdout
-    let received_data = read_data_from_cli(&mut slave)?;
+    // Step 3 - Read data from Slave output file
+    let received_data = read_data_from_file(&slave_output_file, 10)?;
 
-    // TODO: Step 5 - Verify data matches
+    // Step 4 - Verify data matches
     if test_data != received_data {
         log::error!("❌ Data mismatch!");
         log::error!("  Expected: {:?}", test_data);
         log::error!("  Received: {:?}", received_data);
+        
+        // Cleanup
+        master.kill()?;
+        master.wait()?;
+        slave.kill()?;
+        slave.wait()?;
+        let _ = std::fs::remove_file(&master_data_file);
+        let _ = std::fs::remove_file(&slave_output_file);
+        
         return Err(anyhow!("Data verification failed"));
     }
 
@@ -195,83 +305,109 @@ pub async fn test_single_station_coils() -> Result<()> {
     master.wait()?;
     slave.kill()?;
     slave.wait()?;
+    let _ = std::fs::remove_file(&master_data_file);
+    let _ = std::fs::remove_file(&slave_output_file);
 
     log::info!("✅ Test 01 Coils Mode completed successfully");
     Ok(())
 }
 
-/// Test 02: Discrete Inputs / Writable Coils mode (0x0010, length 10)
+/// Test 02: Discrete Inputs mode (0x0010, length 10)
 ///
-/// Tests bidirectional communication with discrete input/coil registers.
-/// First verifies Master -> Slave, then tests Slave -> Master write.
+/// Tests communication with discrete input registers.
+/// Slave listens and provides discrete input data, another Slave polls and reads it.
 pub async fn test_single_station_discrete_inputs() -> Result<()> {
-    log::info!("🧪 Starting CLI Single-Station Test: 02 Discrete Inputs/Writable Coils Mode");
+    log::info!("🧪 Starting CLI Single-Station Test: 02 Discrete Inputs Mode");
 
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let station_id = 1;
     let start_address = 0x0010;
     let register_count = 10;
-    let register_mode = "discrete_inputs";
+    let register_mode = "discrete";
 
     // Generate test data
     let test_data = generate_random_coils(register_count as usize);
-    log::info!("🎲 Initial test data: {:?}", test_data);
+    log::info!("🎲 Test data: {:?}", test_data);
 
-    // TODO: Step 1 - Spawn Master process on port1
-    let mut master = spawn_cli_master(
+    // Create temporary files for data exchange
+    let temp_dir = std::env::temp_dir();
+    let listener_data_file = temp_dir.join("cli_e2e_listener_discrete_data.json");
+    let poller_output_file = temp_dir.join("cli_e2e_poller_discrete_output.json");
+    
+    // Clean up any existing files
+    let _ = std::fs::remove_file(&listener_data_file);
+    let _ = std::fs::remove_file(&poller_output_file);
+
+    // Write test data to listener's data file
+    write_data_to_file(&listener_data_file, &test_data)?;
+
+    // Step 1 - Spawn Slave Listener on port1 (provides data)
+    let mut listener = spawn_cli_slave_listener(
         &ports.port1_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        &format!("file:{}", listener_data_file.display()),
     )?;
 
     sleep_seconds(2).await;
 
-    // TODO: Step 2 - Send data to Master
-    send_data_to_cli(&mut master, &test_data)?;
-    sleep_seconds(1).await;
+    // Check if Listener is still running
+    if let Some(status) = listener.try_wait()? {
+        let stderr = if let Some(mut stderr) = listener.stderr.take() {
+            let mut buf = String::new();
+            use std::io::Read;
+            stderr.read_to_string(&mut buf).unwrap_or_default();
+            buf
+        } else {
+            String::new()
+        };
+        
+        let _ = std::fs::remove_file(&listener_data_file);
+        return Err(anyhow!("Listener exited prematurely with status {}: {}", status, stderr));
+    }
 
-    // TODO: Step 3 - Spawn Slave process on port2
-    let mut slave = spawn_cli_slave(
+    // Step 2 - Spawn Slave Poller on port2 (reads data)
+    let mut poller = spawn_cli_slave(
         &ports.port2_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        Some(&format!("file:{}", poller_output_file.display())),
     )?;
 
     sleep_seconds(3).await;
 
-    // TODO: Step 4 - Read data from Slave and verify
-    let received_data = read_data_from_cli(&mut slave)?;
+    // Step 3 - Read data from Poller output and verify
+    let received_data = read_data_from_file(&poller_output_file, 10)?;
     if test_data != received_data {
-        log::error!("❌ Phase 1 (Master->Slave) data mismatch!");
-        return Err(anyhow!("Phase 1 verification failed"));
+        log::error!("❌ Data mismatch!");
+        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Received: {:?}", received_data);
+        
+        // Cleanup
+        listener.kill()?;
+        listener.wait()?;
+        poller.kill()?;
+        poller.wait()?;
+        let _ = std::fs::remove_file(&listener_data_file);
+        let _ = std::fs::remove_file(&poller_output_file);
+        
+        return Err(anyhow!("Data verification failed"));
     }
-    log::info!("✅ Phase 1 (Master->Slave) verified");
-
-    // TODO: Step 5 - Test bidirectional write (Slave sends write command to Master)
-    let write_data = generate_random_coils(register_count as usize);
-    log::info!("🎲 Write test data: {:?}", write_data);
-    send_data_to_cli(&mut slave, &write_data)?;
-    sleep_seconds(2).await;
-
-    // TODO: Step 6 - Verify Master received and updated values
-    let master_updated_data = read_data_from_cli(&mut master)?;
-    if write_data != master_updated_data {
-        log::error!("❌ Phase 2 (Slave->Master write) data mismatch!");
-        return Err(anyhow!("Phase 2 verification failed"));
-    }
-    log::info!("✅ Phase 2 (Slave->Master write) verified");
+    log::info!("✅ Data verified successfully!");
 
     // Cleanup
-    master.kill()?;
-    master.wait()?;
-    slave.kill()?;
-    slave.wait()?;
+    listener.kill()?;
+    listener.wait()?;
+    poller.kill()?;
+    poller.wait()?;
+    let _ = std::fs::remove_file(&listener_data_file);
+    let _ = std::fs::remove_file(&poller_output_file);
 
-    log::info!("✅ Test 02 Discrete Inputs/Writable Coils Mode completed successfully");
+    log::info!("✅ Test 02 Discrete Inputs Mode completed successfully");
     Ok(())
 }
 
@@ -292,40 +428,74 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
     let test_data = generate_random_registers(register_count as usize);
     log::info!("🎲 Test data: {:?}", test_data);
 
-    // TODO: Step 1 - Spawn Master process on port1
+    // Create temporary files for data exchange
+    let temp_dir = std::env::temp_dir();
+    let master_data_file = temp_dir.join("cli_e2e_master_holding_data.json");
+    let slave_output_file = temp_dir.join("cli_e2e_slave_holding_output.json");
+    
+    // Clean up any existing files
+    let _ = std::fs::remove_file(&master_data_file);
+    let _ = std::fs::remove_file(&slave_output_file);
+
+    // Write test data to master's data file
+    write_data_to_file(&master_data_file, &test_data)?;
+
+    // Step 1 - Spawn Master process on port1
     let mut master = spawn_cli_master(
         &ports.port1_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        &format!("file:{}", master_data_file.display()),
     )?;
 
     sleep_seconds(2).await;
 
-    // TODO: Step 2 - Send data to Master via stdin
-    send_data_to_cli(&mut master, &test_data)?;
-    sleep_seconds(1).await;
+    // Check if Master is still running
+    if let Some(status) = master.try_wait()? {
+        let stderr = if let Some(mut stderr) = master.stderr.take() {
+            let mut buf = String::new();
+            use std::io::Read;
+            stderr.read_to_string(&mut buf).unwrap_or_default();
+            buf
+        } else {
+            String::new()
+        };
+        
+        let _ = std::fs::remove_file(&master_data_file);
+        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
+    }
 
-    // TODO: Step 3 - Spawn Slave process on port2
+    // Step 2 - Spawn Slave process on port2
     let mut slave = spawn_cli_slave(
         &ports.port2_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        Some(&format!("file:{}", slave_output_file.display())),
     )?;
 
     sleep_seconds(3).await;
 
-    // TODO: Step 4 - Read data from Slave stdout
-    let received_data = read_data_from_cli(&mut slave)?;
+    // Step 3 - Read data from Slave output file
+    let received_data = read_data_from_file(&slave_output_file, 10)?;
 
-    // TODO: Step 5 - Verify data matches
+    // Step 4 - Verify data matches
     if test_data != received_data {
         log::error!("❌ Data mismatch!");
         log::error!("  Expected: {:?}", test_data);
         log::error!("  Received: {:?}", received_data);
+        
+        // Cleanup
+        master.kill()?;
+        master.wait()?;
+        slave.kill()?;
+        slave.wait()?;
+        let _ = std::fs::remove_file(&master_data_file);
+        let _ = std::fs::remove_file(&slave_output_file);
+        
         return Err(anyhow!("Data verification failed"));
     }
 
@@ -336,17 +506,19 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
     master.wait()?;
     slave.kill()?;
     slave.wait()?;
+    let _ = std::fs::remove_file(&master_data_file);
+    let _ = std::fs::remove_file(&slave_output_file);
 
     log::info!("✅ Test 03 Holding Registers Mode completed successfully");
     Ok(())
 }
 
-/// Test 04: Input Registers / Writable Registers mode (0x0030, length 10)
+/// Test 04: Input Registers mode (0x0030, length 10)
 ///
-/// Tests bidirectional communication with input registers.
-/// First verifies Master -> Slave, then tests Slave -> Master write.
+/// Tests communication with input registers.
+/// Slave listens and provides input register data, another Slave polls and reads it.
 pub async fn test_single_station_input_registers() -> Result<()> {
-    log::info!("🧪 Starting CLI Single-Station Test: 04 Input Registers/Writable Registers Mode");
+    log::info!("🧪 Starting CLI Single-Station Test: 04 Input Registers Mode");
 
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
     let station_id = 1;
@@ -356,62 +528,86 @@ pub async fn test_single_station_input_registers() -> Result<()> {
 
     // Generate test data
     let test_data = generate_random_registers(register_count as usize);
-    log::info!("🎲 Initial test data: {:?}", test_data);
+    log::info!("🎲 Test data: {:?}", test_data);
 
-    // TODO: Step 1 - Spawn Master process on port1
-    let mut master = spawn_cli_master(
+    // Create temporary files for data exchange
+    let temp_dir = std::env::temp_dir();
+    let listener_data_file = temp_dir.join("cli_e2e_listener_input_data.json");
+    let poller_output_file = temp_dir.join("cli_e2e_poller_input_output.json");
+    
+    // Clean up any existing files
+    let _ = std::fs::remove_file(&listener_data_file);
+    let _ = std::fs::remove_file(&poller_output_file);
+
+    // Write test data to listener's data file
+    write_data_to_file(&listener_data_file, &test_data)?;
+
+    // Step 1 - Spawn Slave Listener on port1 (provides data)
+    let mut listener = spawn_cli_slave_listener(
         &ports.port1_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        &format!("file:{}", listener_data_file.display()),
     )?;
 
     sleep_seconds(2).await;
 
-    // TODO: Step 2 - Send data to Master
-    send_data_to_cli(&mut master, &test_data)?;
-    sleep_seconds(1).await;
+    // Check if Listener is still running
+    if let Some(status) = listener.try_wait()? {
+        let stderr = if let Some(mut stderr) = listener.stderr.take() {
+            let mut buf = String::new();
+            use std::io::Read;
+            stderr.read_to_string(&mut buf).unwrap_or_default();
+            buf
+        } else {
+            String::new()
+        };
+        
+        let _ = std::fs::remove_file(&listener_data_file);
+        return Err(anyhow!("Listener exited prematurely with status {}: {}", status, stderr));
+    }
 
-    // TODO: Step 3 - Spawn Slave process on port2
-    let mut slave = spawn_cli_slave(
+    // Step 2 - Spawn Slave Poller on port2 (reads data)
+    let mut poller = spawn_cli_slave(
         &ports.port2_name,
         station_id,
         register_mode,
         start_address,
         register_count,
+        Some(&format!("file:{}", poller_output_file.display())),
     )?;
 
     sleep_seconds(3).await;
 
-    // TODO: Step 4 - Read data from Slave and verify
-    let received_data = read_data_from_cli(&mut slave)?;
+    // Step 3 - Read data from Poller and verify
+    let received_data = read_data_from_file(&poller_output_file, 10)?;
     if test_data != received_data {
-        log::error!("❌ Phase 1 (Master->Slave) data mismatch!");
-        return Err(anyhow!("Phase 1 verification failed"));
+        log::error!("❌ Data mismatch!");
+        log::error!("  Expected: {:?}", test_data);
+        log::error!("  Received: {:?}", received_data);
+        
+        // Cleanup
+        listener.kill()?;
+        listener.wait()?;
+        poller.kill()?;
+        poller.wait()?;
+        let _ = std::fs::remove_file(&listener_data_file);
+        let _ = std::fs::remove_file(&poller_output_file);
+        
+        return Err(anyhow!("Data verification failed"));
     }
-    log::info!("✅ Phase 1 (Master->Slave) verified");
-
-    // TODO: Step 5 - Test bidirectional write (Slave sends write command to Master)
-    let write_data = generate_random_registers(register_count as usize);
-    log::info!("🎲 Write test data: {:?}", write_data);
-    send_data_to_cli(&mut slave, &write_data)?;
-    sleep_seconds(2).await;
-
-    // TODO: Step 6 - Verify Master received and updated values
-    let master_updated_data = read_data_from_cli(&mut master)?;
-    if write_data != master_updated_data {
-        log::error!("❌ Phase 2 (Slave->Master write) data mismatch!");
-        return Err(anyhow!("Phase 2 verification failed"));
-    }
-    log::info!("✅ Phase 2 (Slave->Master write) verified");
+    log::info!("✅ Data verified successfully!");
 
     // Cleanup
-    master.kill()?;
-    master.wait()?;
-    slave.kill()?;
-    slave.wait()?;
+    listener.kill()?;
+    listener.wait()?;
+    poller.kill()?;
+    poller.wait()?;
+    let _ = std::fs::remove_file(&listener_data_file);
+    let _ = std::fs::remove_file(&poller_output_file);
 
-    log::info!("✅ Test 04 Input Registers/Writable Registers Mode completed successfully");
+    log::info!("✅ Test 04 Input Registers Mode completed successfully");
     Ok(())
 }
