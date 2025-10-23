@@ -208,7 +208,6 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
                 ),
                 || -> Result<Vec<Span<'static>>> {
-                    let rendered_value_spans: Vec<Span>;
                     let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
                     let current_value = if let Some(item) = stations.get(index) {
                         item.station_id.to_string()
@@ -239,7 +238,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                     } else {
                         format!("0x{current_value} (?)")
                     };
-                    rendered_value_spans = input_spans(hex_display, state)?;
+                    let rendered_value_spans: Vec<Span> = input_spans(hex_display, state)?;
                     Ok(rendered_value_spans)
                 },
             )?);
@@ -251,7 +250,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterMode { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let rendered_value_spans: Vec<Span>;
+                        
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_mode = if let Some(item) = stations.get(index) {
@@ -286,7 +285,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                             TextState::Normal
                         };
 
-                        rendered_value_spans = selector_spans::<RegisterMode>(selected_index, state)?;
+                        let rendered_value_spans: Vec<Span> = selector_spans::<RegisterMode>(selected_index, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -298,7 +297,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterStartAddress { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let rendered_value_spans: Vec<Span>;
+                        
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {
@@ -330,7 +329,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         } else {
                             format!("0x{current_value} (?)")
                         };
-                        rendered_value_spans = input_spans(hex_display, state)?;
+                        let rendered_value_spans: Vec<Span> = input_spans(hex_display, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);
@@ -342,7 +341,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        let rendered_value_spans: Vec<Span>;
+                        
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {
@@ -374,7 +373,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         } else {
                             format!("0x{current_value} (?)")
                         };
-                        rendered_value_spans = input_spans(hex_display, state)?;
+                        let rendered_value_spans: Vec<Span> = input_spans(hex_display, state)?;
                         Ok(rendered_value_spans)
                     },
                 )?);

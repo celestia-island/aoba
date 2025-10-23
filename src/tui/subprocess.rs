@@ -573,7 +573,7 @@ impl SubprocessManager {
         let stations: Vec<crate::cli::config::StationConfig> = read_status(|status| {
             if let Some(port_arc) = status.ports.map.get(port_name) {
                 let port_data = port_arc;
-                let stations_vec = port_stations_to_config(&port_data);
+                let stations_vec = port_stations_to_config(port_data);
                 Ok(stations_vec)
             } else {
                 Ok(vec![]) // Return empty vec if port not found

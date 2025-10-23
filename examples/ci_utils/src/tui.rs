@@ -486,10 +486,14 @@ pub async fn enter_modbus_panel<T: Expect>(
     // This handles the race condition between status update, UI refresh, and terminal capture
     const MAX_ENTER_ATTEMPTS: usize = 10;
     let mut last_error = None;
-    
+
     for attempt in 1..=MAX_ENTER_ATTEMPTS {
-        log::info!("🔄 Attempt {}/{} to enter Modbus panel", attempt, MAX_ENTER_ATTEMPTS);
-        
+        log::info!(
+            "🔄 Attempt {}/{} to enter Modbus panel",
+            attempt,
+            MAX_ENTER_ATTEMPTS
+        );
+
         // Navigate to the target menu item
         if attempt == 1 {
             // First attempt: navigate from current position
@@ -500,27 +504,36 @@ pub async fn enter_modbus_panel<T: Expect>(
                 },
                 crate::auto_cursor::CursorAction::Sleep { ms: 300 },
             ];
-            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("nav_to_business_config_attempt_{}", attempt))
-                .await?;
+            crate::auto_cursor::execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("nav_to_business_config_attempt_{}", attempt),
+            )
+            .await?;
         } else {
             // Subsequent attempts: re-navigate from top to ensure consistent position
             log::info!("  Re-navigating to Business Configuration menu item");
-            let screen = cap.capture(session, &format!("recheck_position_attempt_{}", attempt)).await?;
-            
+            let screen = cap
+                .capture(session, &format!("recheck_position_attempt_{}", attempt))
+                .await?;
+
             // Verify we're still in config panel
             if !screen.contains("Enable Port") {
                 log::warn!("  Lost position in config panel, aborting retry");
                 break;
             }
-            
+
             // Find target again
             let lines: Vec<&str> = screen.lines().collect();
             let target_idx = lines
                 .iter()
                 .enumerate()
-                .find_map(|(idx, line)| line.contains("Enter Business Configuration").then_some(idx))
+                .find_map(|(idx, line)| {
+                    line.contains("Enter Business Configuration").then_some(idx)
+                })
                 .ok_or_else(|| anyhow!("'Enter Business Configuration' not found after retry"))?;
-            
+
             let cursor_idx = lines
                 .iter()
                 .enumerate()
@@ -534,21 +547,24 @@ pub async fn enter_modbus_panel<T: Expect>(
                         || line.contains("> Parity")
                         || line.contains("> Stop bits")
                     {
-                        if !line.contains("COM") && !line.contains("/tmp/") && !line.contains("/dev/") {
+                        if !line.contains("COM")
+                            && !line.contains("/tmp/")
+                            && !line.contains("/dev/")
+                        {
                             return Some(idx);
                         }
                     }
                     None
                 })
                 .unwrap_or(0);
-            
+
             let delta = target_idx.abs_diff(cursor_idx);
             let direction = if target_idx > cursor_idx {
                 crate::key_input::ArrowKey::Down
             } else {
                 crate::key_input::ArrowKey::Up
             };
-            
+
             let actions = vec![
                 crate::auto_cursor::CursorAction::PressArrow {
                     direction,
@@ -556,61 +572,81 @@ pub async fn enter_modbus_panel<T: Expect>(
                 },
                 crate::auto_cursor::CursorAction::Sleep { ms: 300 },
             ];
-            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("nav_to_business_config_retry_{}", attempt))
-                .await?;
+            crate::auto_cursor::execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("nav_to_business_config_retry_{}", attempt),
+            )
+            .await?;
         }
-        
+
         // Press Enter
         log::info!("  Pressing Enter to enter Modbus panel");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::Sleep { ms: 1000 }, // Wait for page transition
         ];
-        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("press_enter_attempt_{}", attempt))
-            .await?;
-        
+        crate::auto_cursor::execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("press_enter_attempt_{}", attempt),
+        )
+        .await?;
+
         // Try to wait for status tree to reflect the page change (if debug mode is enabled)
         log::info!("  Attempting to verify status tree update to ModbusDashboard page");
         let status_available = std::path::Path::new("/tmp/ci_tui_status.json").exists();
-        
+
         let status_check_result = if status_available {
             log::info!("  Status monitoring is available, using status tree verification");
-            tokio::time::timeout(
-                std::time::Duration::from_secs(3),
-                async {
-                    for check_attempt in 1..=10 {
-                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-                        
-                        // Try to read status
-                        if let Ok(status) = crate::read_tui_status() {
-                            if matches!(status.page, crate::status_monitor::TuiPage::ModbusDashboard) {
-                                log::info!("  ✅ Status tree updated to ModbusDashboard (check attempt {})", check_attempt);
-                                return Ok(());
-                            }
-                            log::debug!("  Status page is still: {:?} (check attempt {})", status.page, check_attempt);
-                        } else {
-                            log::debug!("  Could not read status (check attempt {})", check_attempt);
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                for check_attempt in 1..=10 {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+                    // Try to read status
+                    if let Ok(status) = crate::read_tui_status() {
+                        if matches!(status.page, crate::status_monitor::TuiPage::ModbusDashboard) {
+                            log::info!(
+                                "  ✅ Status tree updated to ModbusDashboard (check attempt {})",
+                                check_attempt
+                            );
+                            return Ok(());
                         }
+                        log::debug!(
+                            "  Status page is still: {:?} (check attempt {})",
+                            status.page,
+                            check_attempt
+                        );
+                    } else {
+                        log::debug!("  Could not read status (check attempt {})", check_attempt);
                     }
-                    Err(anyhow!("Status tree did not update to ModbusDashboard"))
                 }
-            ).await
+                Err(anyhow!("Status tree did not update to ModbusDashboard"))
+            })
+            .await
         } else {
             log::info!("  Status monitoring not available (debug mode not enabled), falling back to terminal verification only");
             // Just wait a bit for UI to settle
             tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
             Ok(Ok(()))
         };
-        
+
         match status_check_result {
             Ok(Ok(())) => {
                 // Status tree updated successfully, now verify terminal shows the panel
                 log::info!("  Verifying terminal shows Modbus panel");
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                
-                let screen = cap.capture(session, &format!("verify_modbus_panel_attempt_{}", attempt)).await?;
+
+                let screen = cap
+                    .capture(session, &format!("verify_modbus_panel_attempt_{}", attempt))
+                    .await?;
                 if screen.contains("ModBus Master/Slave Set") {
-                    log::info!("✅ Successfully entered Modbus panel on attempt {}", attempt);
+                    log::info!(
+                        "✅ Successfully entered Modbus panel on attempt {}",
+                        attempt
+                    );
                     crate::helpers::sleep_a_while().await; // Extra stabilization time
                     return Ok(());
                 } else {
@@ -627,19 +663,21 @@ pub async fn enter_modbus_panel<T: Expect>(
                 last_error = Some(anyhow!("Timeout waiting for status update"));
             }
         }
-        
+
         // Delay before next attempt
         if attempt < MAX_ENTER_ATTEMPTS {
             log::info!("  Waiting before retry attempt...");
             tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         }
     }
-    
+
     // All attempts failed
-    Err(last_error.unwrap_or_else(|| anyhow!(
-        "Failed to enter Modbus panel after {} attempts",
-        MAX_ENTER_ATTEMPTS
-    )))
+    Err(last_error.unwrap_or_else(|| {
+        anyhow!(
+            "Failed to enter Modbus panel after {} attempts",
+            MAX_ENTER_ATTEMPTS
+        )
+    }))
 }
 
 /// Update TUI registers with new values (shared implementation)
@@ -682,7 +720,8 @@ pub async fn update_tui_registers<T: Expect>(
             // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"  (multiple registers)
             // "    0x0008              0x0000 ______ ______ ______"  (single register with placeholders)
             // Look for lines with "0x" followed by register address pattern
-            if line.contains("0x00") && (line.matches("0x").count() >= 2 || line.contains("______")) {
+            if line.contains("0x00") && (line.matches("0x").count() >= 2 || line.contains("______"))
+            {
                 found_register = true;
                 log::info!("Found register grid at attempt {}", attempts);
                 break;
