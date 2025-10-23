@@ -3,7 +3,6 @@
 /// Tests communication between two CLI processes with multiple stations configured.
 /// Each test verifies different station configuration scenarios using config files.
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::process::Stdio;
 
@@ -12,69 +11,11 @@ use ci_utils::{
     vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 
-/// CLI Configuration structures (matching src/cli/config.rs)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum StationMode {
-    Master,
-    Slave,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum CommunicationMethod {
-    Stdio,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum PersistenceMode {
-    Persistent,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct RegisterRange {
-    address_start: u16,
-    length: u16,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    initial_values: Vec<u16>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-struct RegisterMap {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    coils: Vec<RegisterRange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    discrete_inputs: Vec<RegisterRange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    holding: Vec<RegisterRange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    input: Vec<RegisterRange>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct StationConfig {
-    id: u8,
-    mode: StationMode,
-    map: RegisterMap,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct CommunicationParams {
-    mode: CommunicationMethod,
-    dynamic_pull: bool,
-    wait_time: Option<f64>,
-    timeout: Option<f64>,
-    persistence: PersistenceMode,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct Config {
-    port_name: String,
-    baud_rate: u32,
-    communication_params: CommunicationParams,
-    stations: Vec<StationConfig>,
-}
+// Import config structures from the main aoba crate instead of duplicating them
+use _bin::cli::config::{
+    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
+    StationConfig, StationMode,
+};
 
 /// Helper to create a CLI config with multiple stations
 fn create_multi_station_config(
