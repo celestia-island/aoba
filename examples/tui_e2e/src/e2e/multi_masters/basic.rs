@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::time::Duration;
 
 use crate::utils::{
-    configure_multiple_stations_with_mode, navigate_to_modbus_panel, test_station_with_retries,
+    configure_multiple_stations, navigate_to_modbus_panel, test_station_with_retries,
 };
 use ci_utils::{
     helpers::sleep_seconds,
@@ -93,16 +93,17 @@ pub async fn test_tui_multi_masters_basic(port1: &str, port2: &str) -> Result<()
     // Navigate to port and enter Modbus panel (without enabling the port yet)
     navigate_to_modbus_panel(&mut tui_session, &mut tui_cap, &port1).await?;
 
-    // Default connection mode is already Master, no need to change
-    log::info!("✅ Connection mode is Master by default");
+    // Configure stations in SLAVE mode (CLI will act as Master to poll them)
+    // The test uses --slave-poll which makes CLI the Master, so TUI must be Slave
+    log::info!("✅ Configuring TUI as Slave (CLI will act as Master and poll)");
 
-    // Use unified configuration function to create and configure all stations
+    // Use unified configuration function to create and configure all stations in Slave mode
     let station_configs: Vec<(u8, u8, u16, usize)> = masters
         .iter()
         .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    crate::utils::configure_multiple_stations_with_mode(&mut tui_session, &mut tui_cap, &station_configs, true).await?;
+    crate::utils::configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
 
     // All Masters configured with data, now save once with Ctrl+S to enable port
     log::info!("📍 Navigating to top of panel before saving...");

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use std::time::Duration;
 
 use crate::utils::{
-    configure_multiple_stations_with_mode, navigate_to_modbus_panel, test_station_with_retries,
+    configure_multiple_stations, navigate_to_modbus_panel, test_station_with_retries,
 };
 use ci_utils::{
     helpers::sleep_seconds,
@@ -88,7 +88,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
         .map(|&(id, typ, _, addr)| (id, typ, addr as u16, REGISTER_LENGTH))
         .collect();
 
-    crate::utils::configure_multiple_stations_with_mode(&mut tui_session, &mut tui_cap, &station_configs, true).await?;
+    crate::utils::configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
 
     // Wait for all configuration writes to complete before saving
     log::info!("⏳ Waiting for configuration to stabilize...");
