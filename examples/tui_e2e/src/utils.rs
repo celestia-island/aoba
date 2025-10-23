@@ -164,10 +164,11 @@ pub async fn create_modbus_stations<T: Expect>(
         log::info!("  Creating station {i}/{station_count}");
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 200 }, // Wait for station creation to complete
+            CursorAction::Sleep { ms: 500 }, // Wait longer for station creation to complete (especially for CI)
             // After creating a station, cursor moves down to the new station
             // We need to go back to "Create Station" button for the next iteration
             CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 200 }, // Small wait after navigation
         ];
         execute_cursor_actions(session, cap, &actions, &format!("create_station_{i}")).await?;
     }
@@ -176,7 +177,7 @@ pub async fn create_modbus_stations<T: Expect>(
     log::info!("🔍 Verifying station #{station_count} exists");
     let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
     let actions = vec![
-        CursorAction::Sleep { ms: 200 }, // Wait for UI to stabilize after creation
+        CursorAction::Sleep { ms: 500 }, // Wait longer for UI to stabilize after creation (especially for CI)
         CursorAction::MatchPattern {
             pattern: station_pattern,
             description: format!("Station #{station_count} exists"),
