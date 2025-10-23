@@ -1,21 +1,21 @@
-use parking_lot::RwLock;
-use std::sync::Arc;
-
 use ratatui::{prelude::*, text::Line};
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types, with_port_read},
-    tui::ui::components::kv_line::render_kv_line,
-    tui::ui::components::styled_label::{
-        input_spans, link_spans, selector_spans, switch_spans, TextState,
+    protocol::status::types,
+    tui::{
+        status::read_status,
+        ui::components::{
+            kv_line::render_kv_line,
+            styled_label::{input_spans, link_spans, selector_spans, switch_spans, TextState},
+        },
     },
 };
 
 use super::utilities::{derive_selection, is_port_occupied_by_this};
 use types::modbus::ParityOption;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
@@ -102,7 +102,7 @@ pub fn render_kv_lines_with_indicators(sel_index: usize) -> Result<Vec<Line<'sta
 fn create_line(
     label: impl ToString,
     selected: bool,
-    port_data: Option<&Arc<RwLock<types::port::PortData>>>,
+    port_data: Option<&types::port::PortData>,
     cursor_type: types::cursor::ConfigPanelCursor,
 ) -> Result<Line<'static>> {
     let input_raw_buffer = read_status(|s| Ok(s.temporarily.input_raw_buffer.clone()))?;
@@ -129,10 +129,9 @@ fn create_line(
             types::cursor::ConfigPanelCursor::ProtocolMode => {
                 // Use selector_spans for protocol mode selection
                 let current_index = if let Some(port) = port_data {
-                    with_port_read(port, |port| match &port.config {
+                    match &port.config {
                         types::port::PortConfig::Modbus { .. } => 0usize, // Only Modbus RTU for now
-                    })
-                    .ok_or_else(|| anyhow::anyhow!("Failed to read port config"))?
+                    }
                 } else {
                     0usize
                 };
@@ -166,14 +165,7 @@ fn create_line(
             }
             types::cursor::ConfigPanelCursor::BaudRate => {
                 if let Some(port) = port_data {
-                    let current_baud = with_port_read(port, |port| {
-                        if let Some(runtime) = port.state.runtime_handle() {
-                            runtime.current_cfg.baud
-                        } else {
-                            9600
-                        }
-                    })
-                    .ok_or(anyhow!("Failed to read port data"))?;
+                    let current_baud = port.serial_config.baud;
 
                     let current_selector = types::modbus::BaudRateSelector::from_u32(current_baud);
                     let current_index = current_selector.to_index();
@@ -238,19 +230,12 @@ fn create_line(
             }
             types::cursor::ConfigPanelCursor::DataBits { .. } => {
                 let current_index = if let Some(port) = port_data {
-                    with_port_read(port, |port| {
-                        if let Some(runtime) = port.state.runtime_handle() {
-                            match runtime.current_cfg.data_bits {
-                                5 => 0usize,
-                                6 => 1usize,
-                                7 => 2usize,
-                                _ => 3usize,
-                            }
-                        } else {
-                            3usize
-                        }
-                    })
-                    .ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
+                    match port.serial_config.data_bits {
+                        5 => 0usize,
+                        6 => 1usize,
+                        7 => 2usize,
+                        _ => 3usize,
+                    }
                 } else {
                     3usize
                 };
@@ -272,17 +257,10 @@ fn create_line(
             }
             types::cursor::ConfigPanelCursor::StopBits => {
                 let current_index = if let Some(port) = port_data {
-                    with_port_read(port, |port| {
-                        if let Some(runtime) = port.state.runtime_handle() {
-                            match runtime.current_cfg.stop_bits {
-                                1 => 0usize,
-                                _ => 1usize,
-                            }
-                        } else {
-                            0usize
-                        }
-                    })
-                    .ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
+                    match port.serial_config.stop_bits {
+                        1 => 0usize,
+                        _ => 1usize,
+                    }
                 } else {
                     0usize
                 };
@@ -304,18 +282,11 @@ fn create_line(
             }
             types::cursor::ConfigPanelCursor::Parity => {
                 let current_index = if let Some(port) = port_data {
-                    with_port_read(port, |port| {
-                        if let Some(runtime) = port.state.runtime_handle() {
-                            match runtime.current_cfg.parity {
-                                serialport::Parity::None => 0usize,
-                                serialport::Parity::Odd => 1usize,
-                                serialport::Parity::Even => 2usize,
-                            }
-                        } else {
-                            0usize
-                        }
-                    })
-                    .ok_or_else(|| anyhow::anyhow!("Failed to read port data"))?
+                    match port.serial_config.parity {
+                        types::port::SerialParity::None => 0usize,
+                        types::port::SerialParity::Odd => 1usize,
+                        types::port::SerialParity::Even => 2usize,
+                    }
                 } else {
                     0usize
                 };

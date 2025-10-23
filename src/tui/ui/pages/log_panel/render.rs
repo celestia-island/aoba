@@ -3,7 +3,7 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::read_status,
+    tui::status::read_status,
     tui::ui::pages::log_panel::components::{
         extract_log_data, render_log_display, render_log_input,
     },
@@ -12,7 +12,7 @@ use crate::{
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     // Check if we're in free view mode to conditionally show the follow hint
     let show_follow_hint = read_status(|status| {
-        if let crate::protocol::status::types::Page::LogPanel { selected_item, .. } = &status.page {
+        if let crate::tui::status::Page::LogPanel { selected_item, .. } = &status.page {
             Ok(selected_item.is_some()) // Show hint only when in manual mode (Some)
         } else {
             Ok(false)

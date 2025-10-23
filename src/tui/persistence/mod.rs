@@ -97,7 +97,7 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
     let json =
         serde_json::to_string_pretty(&persisted).context("Failed to serialize port configs")?;
 
-    fs::write(&path, json).with_context(|| format!("Failed to write config to {:?}", path))?;
+    fs::write(&path, json).with_context(|| format!("Failed to write config to {path:?}"))?;
 
     log::debug!(
         "💾 Saved {} port configurations to {:?}",
@@ -115,12 +115,12 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     let path = get_config_path()?;
 
     if !path.exists() {
-        log::debug!("📂 No saved config found at {:?}", path);
+        log::debug!("📂 No saved config found at {path:?}");
         return Ok(HashMap::new());
     }
 
     let json = fs::read_to_string(&path)
-        .with_context(|| format!("Failed to read config from {:?}", path))?;
+        .with_context(|| format!("Failed to read config from {path:?}"))?;
 
     let persisted: Vec<PersistedPortConfig> =
         serde_json::from_str(&json).context("Failed to deserialize port configs")?;

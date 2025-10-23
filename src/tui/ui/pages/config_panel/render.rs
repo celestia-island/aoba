@@ -4,10 +4,13 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::{read_status, types},
-    tui::ui::{
-        components::boxed_paragraph::render_boxed_paragraph,
-        pages::config_panel::components::render_kv_lines_with_indicators,
+    protocol::status::types,
+    tui::{
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::config_panel::components::render_kv_lines_with_indicators,
+        },
     },
 };
 
@@ -24,10 +27,10 @@ pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
 pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     let content = render_kv_lines_with_indicators(read_status(|status| {
         Ok(match &status.page {
-            types::Page::ModbusDashboard { selected_port, .. }
-            | types::Page::ConfigPanel { selected_port, .. }
-            | types::Page::LogPanel { selected_port, .. } => *selected_port,
-            types::Page::Entry {
+            crate::tui::status::Page::ModbusDashboard { selected_port, .. }
+            | crate::tui::status::Page::ConfigPanel { selected_port, .. }
+            | crate::tui::status::Page::LogPanel { selected_port, .. } => *selected_port,
+            crate::tui::status::Page::Entry {
                 cursor: Some(types::cursor::EntryCursor::Com { index }),
                 ..
             } => *index,
@@ -36,7 +39,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
     })?)?;
 
     let offset = read_status(|status| {
-        if let types::Page::ConfigPanel { view_offset, .. } = &status.page {
+        if let crate::tui::status::Page::ConfigPanel { view_offset, .. } = &status.page {
             Ok(*view_offset)
         } else {
             Ok(0)

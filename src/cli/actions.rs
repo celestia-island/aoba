@@ -75,30 +75,10 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
         if want_json {
             let mut out: Vec<PortInfo> = Vec::new();
 
-            // Get occupied ports from status if available
-            let occupied_ports = crate::protocol::status::read_status(|status| {
-                let mut ports = std::collections::HashSet::new();
-                for (port_name, port_arc) in &status.ports.map {
-                    let port_data = port_arc.read();
-                    if matches!(
-                        &port_data.state,
-                        crate::protocol::status::types::port::PortState::OccupiedByThis {
-                            owner: _
-                        }
-                    ) {
-                        ports.insert(port_name.clone());
-                    }
-                }
-                Ok(ports)
-            })
-            .unwrap_or_default();
-
+            // Note: CLI one-shot commands don't have access to status tree,
+            // so we always report ports as "Free" in this context
             for (p, extra) in ports_enriched.iter() {
-                let status = if occupied_ports.contains(&p.port_name) {
-                    "Occupied"
-                } else {
-                    "Free"
-                };
+                let status = "Free";
 
                 // Attempt to capture annotation if present in port_name (parenthetical)
                 let ann = if p.port_name.contains('(') && p.port_name.contains(')') {
