@@ -169,7 +169,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         let port_basename = std::path::Path::new(&port)
             .file_name()
             .and_then(|n| n.to_str())
-            .unwrap_or(&port);
+            .unwrap_or(port);
         let dump_path =
             std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
 

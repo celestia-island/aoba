@@ -166,13 +166,13 @@ async fn main() -> Result<()> {
         "list_ports" => test_cli_list_ports().await?,
         "list_ports_json" => test_cli_list_ports_json().await?,
         "list_ports_status" => test_cli_list_ports_json_with_status().await?,
-        
+
         // Modbus CLI tests (no vcom needed)
         "modbus_slave_listen_temp" => test_slave_listen_temp().await?,
         "modbus_slave_listen_persist" => test_slave_listen_persist().await?,
         "modbus_master_provide_temp" => test_master_provide_temp().await?,
         "modbus_master_provide_persist" => test_master_provide_persist().await?,
-        
+
         // Modbus E2E tests (require vcom ports)
         "modbus_slave_listen_vcom" => test_slave_listen_with_vcom().await?,
         "modbus_master_provide_vcom" => test_master_provide_with_vcom().await?,
@@ -183,7 +183,7 @@ async fn main() -> Result<()> {
         "modbus_multi_slaves" => test_multi_slaves().await?,
         "modbus_multi_slaves_same_station" => test_multi_slaves_same_station().await?,
         "modbus_multi_slaves_adjacent_registers" => test_multi_slaves_adjacent_registers().await?,
-        
+
         _ => {
             log::error!("❌ Unknown module: {}", module);
             log::error!("Run without --module to see available modules");

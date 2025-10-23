@@ -42,10 +42,11 @@ pub fn cleanup_tui_config_cache() -> Result<()> {
         std::path::PathBuf::from("aoba_tui_config.json"),
         std::path::PathBuf::from("/tmp/aoba_tui_config.json"),
     ];
-    
+
     // Also check ~/.config/aoba/
     if let Ok(home_dir) = std::env::var("HOME") {
-        config_paths.push(std::path::PathBuf::from(home_dir).join(".config/aoba/aoba_tui_config.json"));
+        config_paths
+            .push(std::path::PathBuf::from(home_dir).join(".config/aoba/aoba_tui_config.json"));
     }
 
     let mut removed_count = 0;
@@ -63,14 +64,14 @@ pub fn cleanup_tui_config_cache() -> Result<()> {
             }
         }
     }
-    
+
     // Also clean up any debug status files from previous runs
     let status_files = vec![
         std::path::PathBuf::from("/tmp/ci_tui_status.json"),
         std::path::PathBuf::from("/tmp/ci_cli_vcom1_status.json"),
         std::path::PathBuf::from("/tmp/ci_cli_vcom2_status.json"),
     ];
-    
+
     for status_file in &status_files {
         if status_file.exists() {
             log::debug!("🗑️  Removing old status file: {}", status_file.display());
@@ -79,7 +80,10 @@ pub fn cleanup_tui_config_cache() -> Result<()> {
     }
 
     if removed_count > 0 {
-        log::info!("✅ TUI config cache cleaned ({} files removed)", removed_count);
+        log::info!(
+            "✅ TUI config cache cleaned ({} files removed)",
+            removed_count
+        );
     } else {
         log::debug!("📂 No TUI config cache found, nothing to clean");
     }
@@ -190,9 +194,13 @@ async fn main() -> Result<()> {
     // Run the selected module
     match module {
         "cli_port_release" => test_cli_port_release().await?,
-        "modbus_tui_slave_cli_master" => e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?,
-        "modbus_tui_master_cli_slave" => e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?,
-        
+        "modbus_tui_slave_cli_master" => {
+            e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?
+        }
+        "modbus_tui_master_cli_slave" => {
+            e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?
+        }
+
         _ => {
             log::error!("❌ Unknown module: {}", module);
             log::error!("Run without --module to see available modules");
