@@ -1,4 +1,3 @@
-mod cli_port_cleanup;
 mod e2e;
 mod utils;
 
@@ -6,8 +5,6 @@ use anyhow::Result;
 use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
-
-use cli_port_cleanup::test_cli_port_release;
 
 /// TUI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
@@ -180,9 +177,9 @@ async fn main() -> Result<()> {
         Some(m) => m.as_str(),
         None => {
             log::info!("📋 Available modules:");
-            log::info!("  - cli_port_release");
-            log::info!("  - modbus_tui_slave_cli_master");
-            log::info!("  - modbus_tui_master_cli_slave");
+            log::info!("  Legacy Tests:");
+            log::info!("    - modbus_tui_slave_cli_master");
+            log::info!("    - modbus_tui_master_cli_slave");
             log::info!("  TUI Single-Station Master Mode:");
             log::info!("    - tui_master_coils");
             log::info!("    - tui_master_discrete_inputs");
@@ -211,7 +208,6 @@ async fn main() -> Result<()> {
 
     // Run the selected module
     match module {
-        "cli_port_release" => test_cli_port_release().await?,
         "modbus_tui_slave_cli_master" => {
             e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?
         }

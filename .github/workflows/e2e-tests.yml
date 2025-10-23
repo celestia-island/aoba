@@ -86,6 +86,15 @@ jobs:
           - modbus_multi_slaves
           - modbus_multi_slaves_same_station
           - modbus_multi_slaves_adjacent_registers
+          # CLI Single-Station Register Mode Tests
+          - modbus_single_station_coils
+          - modbus_single_station_discrete_inputs
+          - modbus_single_station_holding
+          - modbus_single_station_input
+          # CLI Multi-Station Tests
+          - modbus_multi_station_mixed_types
+          - modbus_multi_station_spaced_addresses
+          - modbus_multi_station_mixed_ids
 
     steps:
       - uses: actions/checkout@v5
@@ -129,9 +138,24 @@ jobs:
       fail-fast: false
       matrix:
         module:
-          - cli_port_release
-          - modbus_tui_slave_cli_master
-          - modbus_tui_master_cli_slave
+          # TUI Single-Station Master Mode
+          - tui_master_coils
+          - tui_master_discrete_inputs
+          - tui_master_holding
+          - tui_master_input
+          # TUI Single-Station Slave Mode
+          - tui_slave_coils
+          - tui_slave_discrete_inputs
+          - tui_slave_holding
+          - tui_slave_input
+          # TUI Multi-Station Master Mode
+          - tui_multi_master_mixed_types
+          - tui_multi_master_spaced_addresses
+          - tui_multi_master_mixed_ids
+          # TUI Multi-Station Slave Mode
+          - tui_multi_slave_mixed_types
+          - tui_multi_slave_spaced_addresses
+          - tui_multi_slave_mixed_ids
 
     steps:
       - uses: actions/checkout@v5
