@@ -13,6 +13,7 @@ pub async fn test_tui_multi_slaves(port1: &str, port2: &str) -> anyhow::Result<(
 
     // Test 1: Basic multi-slaves with different station IDs
     log::info!("🧪 Test 1/3: Basic multi-slaves with different station IDs");
+    crate::cleanup_tui_config_cache()?;
     test_tui_multi_slaves_basic(port1, port2).await?;
 
     // Wait for cleanup to complete and port to be fully released
@@ -21,6 +22,7 @@ pub async fn test_tui_multi_slaves(port1: &str, port2: &str) -> anyhow::Result<(
 
     // Test 2: Multi-slaves with same station ID but different register types
     log::info!("🧪 Test 2/3: Multi-slaves with same station ID but different register types");
+    crate::cleanup_tui_config_cache()?;
     test_tui_multi_slaves_same_station(port1, port2).await?;
 
     // Wait for cleanup to complete and port to be fully released
@@ -29,6 +31,7 @@ pub async fn test_tui_multi_slaves(port1: &str, port2: &str) -> anyhow::Result<(
 
     // Test 3: Multi-slaves with adjacent registers
     log::info!("🧪 Test 3/3: Multi-slaves with adjacent registers");
+    crate::cleanup_tui_config_cache()?;
     test_tui_multi_slaves_adjacent_registers(port1, port2).await?;
 
     log::info!("✅ TUI Multi-Slaves E2E test suite completed successfully");
