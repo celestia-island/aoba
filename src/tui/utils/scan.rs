@@ -1,176 +1,103 @@
 use anyhow::{anyhow, Result};
-use chrono::Local;
 
 use crate::{
-    protocol::{
-        status::{
-            types::port::{PortData, PortState},
-            with_port_read, with_port_write, write_status,
-        },
-        tty::available_ports_enriched,
-    },
+    protocol::status::types::port::{PortData, PortState},
     tui::utils::bus::CoreToUi,
 };
 
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
 /// because another scan was already in progress.
+///
+/// This function enumerates available serial ports and updates the TUI status with the results.
+/// In CI debug mode (when --debug-ci-e2e-test is set), only virtual ports (vcom) are enumerated.
+/// In normal mode, all available serial ports are enumerated using serialport library.
 pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool) -> Result<bool> {
-    // Return early if scan already in progress, but still send Refreshed to update UI
     if *scan_in_progress {
-        core_tx
-            .send(CoreToUi::Refreshed)
-            .map_err(|err| anyhow!("failed to send Refreshed (scan in progress): {err}"))?;
         return Ok(false);
     }
 
     *scan_in_progress = true;
 
-    // Set busy indicator
-    // We'll collect runtime handles for removed ports while holding the write lock,
-    // but perform the potentially-blocking Stop+wait operations after releasing it.
-    let mut to_stop: Vec<(String, crate::protocol::runtime::PortRuntimeHandle)> = Vec::new();
-    let mut to_remove_names: Vec<String> = Vec::new();
+    // Enumerate ports using platform-specific function that respects CI debug mode
+    let ports = crate::protocol::tty::available_ports_sorted();
 
-    write_status(|status| {
-        status.temporarily.busy.busy = true;
-        Ok(())
-    })?;
+    log::debug!("scan_ports: found {} ports", ports.len());
 
-    let ports = available_ports_enriched();
-    let scan_text = ports
-        .iter()
-        .map(|(info, extra)| format!("{} {:?}", info.port_name, extra))
-        .collect::<Vec<_>>()
-        .join("\n");
+    // Clone port names before moving into closure
+    let port_names_and_types: Vec<(String, String)> = ports
+        .into_iter()
+        .map(|p| (p.port_name.clone(), format!("{:?}", p.port_type)))
+        .collect();
 
-    write_status(|status| {
-        // Update existing s.ports.map in-place to preserve PortData instances
-        // (notably any PortState::OccupiedByThis runtime handles). Insert new
-        // entries for newly discovered ports and remove entries for ports no
-        // longer present.
-        let mut new_order: Vec<String> = Vec::new();
-        let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // Update status with discovered ports
+    crate::tui::status::write_status(|status| {
+        // Build new port order and map
+        let mut new_order = Vec::new();
+        let mut new_map = std::collections::HashMap::new();
 
-        for (info, extra) in ports.iter() {
-            let name = info.port_name.clone();
-            // Update existing PortData in-place if present
-            if let Some(port) = status.ports.map.get(&name) {
-                // update in-place using helper to avoid unwrap panics
-                if with_port_write(port, |port| {
-                    port.extra = extra.clone();
-                    port.port_type = format!("{:?}", info.port_type);
-                    port.port_name = name.clone();
-                })
-                .is_some()
-                {
-                    // updated
-                } else {
-                    log::warn!("Scan_ports: failed to acquire write lock for port {name}");
-                }
+        // First, process enumerated ports
+        for (port_name, port_type) in &port_names_and_types {
+            new_order.push(port_name.clone());
+
+            // Check if port already exists in status
+            if let Some(existing_port) = status.ports.map.get(port_name) {
+                // Port already exists, preserve its entire state (config, logs, etc.)
+                new_map.insert(port_name.clone(), existing_port.clone());
             } else {
-                // Insert a new PortData for newly discovered port (wrap in Arc<RwLock<>>)
-                let pd = PortData {
-                    port_name: name.clone(),
-                    port_type: format!("{:?}", info.port_type),
-                    extra: extra.clone(),
+                // New port discovered, create PortData with default values
+                let port_data = PortData {
+                    port_name: port_name.clone(),
+                    port_type: port_type.clone(),
                     state: PortState::Free,
                     ..Default::default()
                 };
-                status.ports.map.insert(
-                    name.clone(),
-                    std::sync::Arc::new(parking_lot::RwLock::new(pd)),
-                );
+                new_map.insert(port_name.clone(), port_data);
             }
-
-            new_order.push(name.clone());
-            seen.insert(name);
         }
 
-        // Determine ports that disappeared since last scan. We'll collect their
-        // names and any runtime handles that need stopping, then perform stop
-        // outside of this write lock to avoid blocking other writers.
-        let to_remove: Vec<String> = status
-            .ports
-            .map
-            .keys()
-            .filter(|k| !seen.contains(*k))
-            .cloned()
-            .collect();
+        // Second, preserve ports that were in the old map but not enumerated
+        // These might be manually added ports or ports that temporarily disappeared
+        // Only preserve them if they are NOT in Free state or have configuration
+        for (old_port_name, old_port_data) in &status.ports.map {
+            if !new_map.contains_key(old_port_name) {
+                // Port was not in the new enumeration
+                // Preserve it if:
+                // 1. It's occupied (being used)
+                // 2. It has modbus configuration
+                // 3. It has logs
+                use crate::protocol::status::types::port::PortConfig;
+                let has_config = match &old_port_data.config {
+                    PortConfig::Modbus { stations, .. } => !stations.is_empty(),
+                };
 
-        for key in to_remove.iter() {
-            if let Some(port) = status.ports.map.get(key) {
-                if let Some(opt_rt) =
-                    with_port_read(port, |port| port.state.runtime_handle().cloned())
-                {
-                    if let Some(rt) = opt_rt {
-                        // Clone runtime handle for stopping later outside the write lock
-                        to_stop.push((key.clone(), rt));
-                    }
-                } else {
-                    log::warn!("Scan_ports: failed to acquire read lock for port {key}");
+                let should_preserve = !matches!(old_port_data.state, PortState::Free)
+                    || has_config
+                    || !old_port_data.logs.is_empty();
+
+                if should_preserve {
+                    log::debug!(
+                        "scan_ports: preserving non-enumerated port {} (state={:?}, has_config={})",
+                        old_port_name,
+                        old_port_data.state,
+                        has_config
+                    );
+                    new_order.push(old_port_name.clone());
+                    new_map.insert(old_port_name.clone(), old_port_data.clone());
                 }
             }
-            to_remove_names.push(key.clone());
         }
 
-        // Update order for now (may be trimmed again after removals)
+        // Update status with new port list
         status.ports.order = new_order;
+        status.ports.map = new_map;
 
-        status.temporarily.scan.last_scan_time = Some(Local::now());
-        status.temporarily.scan.last_scan_info = scan_text.clone();
-        // Clear busy indicator after scan completes
-        status.temporarily.busy.busy = false;
         Ok(())
     })?;
 
-    // Now perform Stop + wait for each runtime outside the write lock to avoid
-    // blocking other status writers. We still collected the runtime handles
-    // while holding the write lock above.
-    for (name, rt) in to_stop.into_iter() {
-        rt.cmd_tx
-            .send(crate::protocol::runtime::RuntimeCommand::Stop)
-            .map_err(|err| anyhow!("failed to send Stop to runtime {name}: {err}"))?;
-        // Wait for the runtime to emit a Stopped event. Use blocking recv so
-        // that if the channel is disconnected we surface an error to the
-        // caller instead of silently retrying timeouts.
-        match rt.evt_rx.recv() {
-            Ok(evt) => {
-                if let crate::protocol::runtime::RuntimeEvent::Stopped = evt {
-                    // expected, proceed
-                } else {
-                    log::warn!(
-                        "scan_ports: received unexpected event while stopping {name}: {evt:?}"
-                    );
-                }
-            }
-            Err(err) => {
-                return Err(anyhow!("failed to receive Stopped event for {name}: {err}"));
-            }
-        }
-    }
-
-    // After stopping runtimes, remove disappeared ports from the map and
-    // update order to remove references to them.
-    if !to_remove_names.is_empty() {
-        write_status(|status| {
-            for key in to_remove_names.iter() {
-                status.ports.map.remove(key);
-            }
-            // Trim order to remove deleted names
-            status.ports.order.retain(|n| !to_remove_names.contains(n));
-            Ok(())
-        })?;
-    }
-
-    *scan_in_progress = false;
-
-    // After adding ports to status, spawn per-port runtime listeners.
     core_tx
         .send(CoreToUi::Refreshed)
         .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
-    // Log state after scan completes
-    if let Err(err) = crate::tui::log_state_snapshot() {
-        log::warn!("Failed to log state snapshot after scan: {err}");
-    }
+
+    *scan_in_progress = false;
     Ok(true)
 }

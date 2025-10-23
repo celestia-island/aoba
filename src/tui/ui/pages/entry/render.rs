@@ -4,7 +4,7 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    protocol::status::read_status,
+    tui::status::read_status,
     tui::ui::pages::entry::components::{
         derive_selection_from_page, render_details_panel, render_ports_list,
     },

@@ -8,6 +8,7 @@ use std::{
 /// Locate the project's debug binary for a specific bin name and return the path to the executable.
 /// Callers must ensure `cargo build --bin <bin_name>` has already been executed prior to invoking
 /// this helper so that E2E workflows never hide an implicit rebuild.
+/// This function tries both release and debug builds, preferring release if available.
 pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
     // Try to find the workspace root by looking for Cargo.toml with [workspace]
     let workspace_root = std::env::current_dir()?
@@ -31,15 +32,27 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
         bin_name.to_string()
     };
 
-    let bin_path = workspace_root.join("target").join("debug").join(exe_name);
+    // Try release first, then debug
+    let bin_paths = [
+        workspace_root
+            .join("target")
+            .join("release")
+            .join(&exe_name),
+        workspace_root.join("target").join("debug").join(&exe_name),
+    ];
 
-    if !bin_path.exists() {
-        return Err(anyhow!(
-            "Binary not found at: {}. Run `cargo build --bin {}` before triggering E2E tests.",
-            bin_path.display(),
+    let bin_path = bin_paths.iter()
+        .find(|p| p.exists())
+        .ok_or_else(|| anyhow!(
+            "Binary not found at any of: {}. Run `cargo build --bin {}` or `cargo build --release --bin {}` before triggering E2E tests.",
+            bin_paths.iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            bin_name,
             bin_name
-        ));
-    }
+        ))?
+        .to_path_buf(); // Convert &PathBuf to PathBuf
 
     log::info!("✅ Using prebuilt binary: {}", bin_path.display());
     Ok(bin_path)
@@ -64,7 +77,14 @@ pub fn run_binary_sync(args: &[&str]) -> Result<Output> {
 
 /// Spawn a process using `expectrl::spawn` and return a boxed `Expect` trait object.
 /// This is useful for TUI tests that need to interact with the process via a pty.
-pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
+///
+/// # Arguments
+/// * `args` - Command line arguments to pass to the process
+/// * `pty_size` - Optional PTY size (rows, cols). If None, uses default size.
+pub fn spawn_expect_process_with_size(
+    args: &[&str],
+    pty_size: Option<(u16, u16)>,
+) -> Result<impl expectrl::Expect> {
     // Build the debug binary for aoba if needed and spawn it with args.
     let bin_path = build_debug_bin("aoba")?;
 
@@ -73,6 +93,10 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
         bin_path.display(),
         args.join(" ")
     );
+
+    if let Some((rows, cols)) = pty_size {
+        log::info!("   PTY size: {}x{} (rows x cols)", rows, cols);
+    }
 
     // If spawning TUI, set AOBA_LOG_FILE environment variable
     let tui_log_path = if args.contains(&"--tui") {
@@ -105,8 +129,33 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
     cmd.env("LANG", "en_US.UTF-8");
 
     // Use expectrl's spawn with Command
+    #[cfg(not(windows))]
+    let mut session = expectrl::session::Session::spawn(cmd)
+        .map_err(|err| anyhow!("Failed to spawn process via expectrl: {err}"))?;
+
+    #[cfg(windows)]
     let session = expectrl::session::Session::spawn(cmd)
         .map_err(|err| anyhow!("Failed to spawn process via expectrl: {err}"))?;
 
+    // Set PTY size if specified (only available on Unix-like systems)
+    #[cfg(not(windows))]
+    if let Some((rows, cols)) = pty_size {
+        session
+            .get_process_mut()
+            .set_window_size(cols, rows)
+            .map_err(|err| anyhow!("Failed to set PTY window size: {err}"))?;
+    }
+
+    #[cfg(windows)]
+    if pty_size.is_some() {
+        log::warn!("PTY size setting is not supported on Windows platform");
+    }
+
     Ok(session)
+}
+
+/// Spawn a process using `expectrl::spawn` with default PTY size.
+/// For compatibility with existing code.
+pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
+    spawn_expect_process_with_size(args, None)
 }

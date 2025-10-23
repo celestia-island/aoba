@@ -26,6 +26,12 @@ pub trait ExpectKeyExt {
     /// Send Ctrl+S to save
     fn send_ctrl_s(&mut self) -> Result<()>;
 
+    /// Send Ctrl+A to select all
+    fn send_ctrl_a(&mut self) -> Result<()>;
+
+    /// Send Backspace key
+    fn send_backspace(&mut self) -> Result<()>;
+
     /// Send PageUp key
     fn send_page_up(&mut self) -> Result<()>;
 
@@ -85,6 +91,16 @@ impl<T: Expect> ExpectKeyExt for T {
     fn send_ctrl_s(&mut self) -> Result<()> {
         self.send("\x13")
             .map_err(|err| anyhow!("Failed to send Ctrl+S: {err}"))
+    }
+
+    fn send_ctrl_a(&mut self) -> Result<()> {
+        self.send("\x01")
+            .map_err(|err| anyhow!("Failed to send Ctrl+A: {err}"))
+    }
+
+    fn send_backspace(&mut self) -> Result<()> {
+        self.send("\x7f")
+            .map_err(|err| anyhow!("Failed to send Backspace: {err}"))
     }
 
     fn send_page_up(&mut self) -> Result<()> {

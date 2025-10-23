@@ -3,16 +3,13 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{
-        read_status,
-        types::{
-            self,
-            modbus::{ModbusConnectionMode, RegisterMode},
-            port::{PortOwner, PortState, PortSubprocessMode},
-        },
-        with_port_write, write_status,
+    protocol::status::types::{
+        self,
+        modbus::{ModbusConnectionMode, RegisterMode},
+        port::{PortState, PortSubprocessInfo, PortSubprocessMode},
     },
     tui::{
+        status::{read_status, write_status},
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{Bus, UiToCore},
     },
@@ -22,7 +19,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Enter => {
             let current_cursor = read_status(|status| {
-                if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                     Ok(*cursor)
                 } else {
                     Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -110,7 +107,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 log::info!("💾 Esc: Saving pending changes before returning");
 
                 let current_cursor = read_status(|status| {
-                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                         Ok(*cursor)
                     } else {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -169,7 +166,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if let types::ui::InputRawBuffer::Index(current_index) = input_raw_buffer {
                 // Handle selector navigation with proper wrapping
                 let current_cursor = read_status(|status| {
-                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                         Ok(*cursor)
                     } else {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -206,7 +203,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             if let types::ui::InputRawBuffer::Index(current_index) = input_raw_buffer {
                 // Handle selector navigation with proper wrapping
                 let current_cursor = read_status(|status| {
-                    if let types::Page::ModbusDashboard { cursor, .. } = &status.page {
+                    if let crate::tui::status::Page::ModbusDashboard { cursor, .. } = &status.page {
                         Ok(*cursor)
                     } else {
                         Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -250,7 +247,7 @@ fn commit_selector_edit(
     selected_index: usize,
 ) -> Result<Option<String>> {
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
@@ -260,7 +257,7 @@ fn commit_selector_edit(
     let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
 
     if let Some(port_name) = port_name_opt {
-        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+        if let Some(_port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             match cursor {
                 types::cursor::ModbusDashboardCursor::ModbusMode => {
                     // Apply global mode changes to all stations in this port
@@ -271,10 +268,14 @@ fn commit_selector_edit(
                     };
 
                     let mut should_restart = false;
-                    with_port_write(&port, |port| {
+                    write_status(|status| {
+                        let port = status
+                            .ports
+                            .map
+                            .get_mut(&port_name)
+                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                         // evaluate occupancy before taking a mutable borrow of port.config
-                        let was_occupied_by_this =
-                            matches!(port.state, PortState::OccupiedByThis { .. });
+                        let was_occupied_by_this = matches!(port.state, PortState::OccupiedByThis);
 
                         let types::port::PortConfig::Modbus { mode, stations: _ } =
                             &mut port.config;
@@ -293,11 +294,12 @@ fn commit_selector_edit(
                         // Update status indicator if port is running
                         if matches!(
                             port.state,
-                            crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                            crate::protocol::status::types::port::PortState::OccupiedByThis
                         ) {
                             port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                         }
-                    });
+                        Ok(())
+                    })?;
 
                     if should_restart {
                         return Ok(Some(port_name.clone()));
@@ -307,7 +309,12 @@ fn commit_selector_edit(
                     // Apply register mode changes
                     let new_mode = RegisterMode::from_u8((selected_index as u8) + 1);
 
-                    with_port_write(&port, |port| {
+                    write_status(|status| {
+                        let port = status
+                            .ports
+                            .map
+                            .get_mut(&port_name)
+                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &mut port.config;
                         let mut all_items: Vec<_> = stations.iter_mut().collect();
@@ -317,13 +324,14 @@ fn commit_selector_edit(
                                                          // Update status indicator if port is running
                             if matches!(
                                 port.state,
-                                crate::protocol::status::types::port::PortState::OccupiedByThis { .. }
+                                crate::protocol::status::types::port::PortState::OccupiedByThis
                             ) {
                                 port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                             }
                             log::info!("Updated register mode for index {index} to {new_mode:?}");
                         }
-                    });
+                        Ok(())
+                    })?;
                 }
                 _ => {}
             }
@@ -338,7 +346,7 @@ fn commit_text_edit(
     bus: &Bus,
 ) -> Result<()> {
     let selected_port = read_status(|status| {
-        if let types::Page::ModbusDashboard { selected_port, .. } = &status.page {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
         } else {
             Ok(0)
@@ -348,11 +356,16 @@ fn commit_text_edit(
     let port_name_opt = read_status(|status| Ok(status.ports.order.get(selected_port).cloned()))?;
 
     if let Some(port_name) = port_name_opt {
-        if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
+        if let Some(_port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             match cursor {
                 types::cursor::ModbusDashboardCursor::StationId { index } => {
                     if let Ok(station_id) = value.parse::<u8>() {
-                        with_port_write(&port, |port| {
+                        write_status(|status| {
+                            let port = status
+                                .ports
+                                .map
+                                .get_mut(&port_name)
+                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &mut port.config;
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
@@ -360,17 +373,26 @@ fn commit_text_edit(
                                 item.station_id = station_id;
                                 port.config_modified = true; // Mark as modified
                                                              // Update status indicator if port is running
-                                if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                if matches!(
+                                    port.state,
+                                    crate::protocol::status::types::port::PortState::OccupiedByThis
+                                ) {
                                     port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                                 }
                                 log::info!("Updated station ID for index {index} to {station_id}");
                             }
-                        });
+                            Ok(())
+                        })?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterStartAddress { index } => {
                     if let Ok(start_address) = value.parse::<u16>() {
-                        with_port_write(&port, |port| {
+                        write_status(|status| {
+                            let port = status
+                                .ports
+                                .map
+                                .get_mut(&port_name)
+                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &mut port.config;
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
@@ -378,17 +400,26 @@ fn commit_text_edit(
                                 item.register_address = start_address;
                                 port.config_modified = true; // Mark as modified
                                                              // Update status indicator if port is running
-                                if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                if matches!(
+                                    port.state,
+                                    crate::protocol::status::types::port::PortState::OccupiedByThis
+                                ) {
                                     port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                                 }
                                 log::info!("Updated register start address for index {index} to {start_address}");
                             }
-                        });
+                            Ok(())
+                        })?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::RegisterLength { index } => {
                     if let Ok(length) = value.parse::<u16>() {
-                        with_port_write(&port, |port| {
+                        write_status(|status| {
+                            let port = status
+                                .ports
+                                .map
+                                .get_mut(&port_name)
+                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                             let types::port::PortConfig::Modbus { mode: _, stations } =
                                 &mut port.config;
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
@@ -397,12 +428,16 @@ fn commit_text_edit(
                                 item.last_values.resize(length as usize, 0);
                                 port.config_modified = true; // Mark as modified
                                                              // Update status indicator if port is running
-                                if matches!(port.state, crate::protocol::status::types::port::PortState::OccupiedByThis { .. }) {
+                                if matches!(
+                                    port.state,
+                                    crate::protocol::status::types::port::PortState::OccupiedByThis
+                                ) {
                                     port.status_indicator = crate::protocol::status::types::port::PortStatusIndicator::RunningWithChanges;
                                 }
                                 log::info!("Updated register length for index {index} to {length}");
                             }
-                        });
+                            Ok(())
+                        })?;
                     }
                 }
                 types::cursor::ModbusDashboardCursor::Register {
@@ -419,11 +454,16 @@ fn commit_text_edit(
                     };
 
                     if let Ok(mut register_value) = parsed_value {
-                        let mut owner_snapshot: Option<PortOwner> = None;
+                        let mut subprocess_info_snapshot: Option<PortSubprocessInfo> = None;
                         let mut payload: Option<(String, u8, u16, Vec<u16>)> = None;
 
-                        with_port_write(&port, |port| {
-                            let owner_info = port.state.owner().cloned();
+                        write_status(|status| {
+                            let port = status
+                                .ports
+                                .map
+                                .get_mut(&port_name)
+                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            let owner_info = port.subprocess_info.clone();
 
                             let types::port::PortConfig::Modbus { mode, stations } =
                                 &mut port.config;
@@ -462,7 +502,7 @@ fn commit_text_edit(
                                 if matches!(mode, ModbusConnectionMode::Slave { .. }) {
                                     let needs_enqueue = !matches!(
                                         owner_info.as_ref(),
-                                        Some(PortOwner::CliSubprocess(info))
+                                        Some(info)
                                             if info.mode == PortSubprocessMode::MasterProvide
                                     );
 
@@ -472,13 +512,14 @@ fn commit_text_edit(
                                 }
                             }
 
-                            owner_snapshot = owner_info;
-                        });
+                            subprocess_info_snapshot = owner_info;
+                            Ok(())
+                        })?;
 
                         if let (
-                            Some(PortOwner::CliSubprocess(cli_info)),
+                            Some(cli_info),
                             Some((register_type, station_id, start_address, values)),
-                        ) = (&owner_snapshot, &payload)
+                        ) = (&subprocess_info_snapshot, &payload)
                         {
                             log::info!(
                                 "📤 Sending RegisterUpdate to core: port={port_name}, station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
@@ -521,12 +562,10 @@ fn commit_text_edit(
                             }
                         } else {
                             log::debug!(
-                                "🚫 Not sending RegisterUpdate: owner_snapshot={:?}, payload={:?}",
-                                owner_snapshot.as_ref().map(|o| match o {
-                                    PortOwner::CliSubprocess(info) =>
-                                        format!("CliSubprocess(mode={:?})", info.mode),
-                                    _ => "Other".to_string(),
-                                }),
+                                "🚫 Not sending RegisterUpdate: subprocess_info_snapshot={:?}, payload={:?}",
+                                subprocess_info_snapshot
+                                    .as_ref()
+                                    .map(|info| format!("CliSubprocess(mode={:?})", info.mode)),
                                 payload.is_some()
                             );
                         }

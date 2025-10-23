@@ -37,8 +37,7 @@ pub fn check_status_indicator(screen: &str) -> Result<String> {
     }
 
     Err(anyhow!(
-        "No status indicator found in title bar: {}",
-        first_line
+        "No status indicator found in title bar: {first_line}"
     ))
 }
 
@@ -56,7 +55,7 @@ pub async fn verify_port_enabled<T: Expect>(
 
     for attempt in 1..=MAX_ATTEMPTS {
         let screen = cap
-            .capture(session, &format!("{}_{}", capture_name, attempt))
+            .capture(session, &format!("{capture_name}_{attempt}"))
             .await?;
 
         match check_status_indicator(&screen) {
@@ -483,31 +482,164 @@ pub async fn enter_modbus_panel<T: Expect>(
         crate::key_input::ArrowKey::Up
     };
 
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction,
-            count: delta,
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
-        crate::auto_cursor::CursorAction::PressEnter,
-        crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Give page time to load and stabilize rendering
-        crate::auto_cursor::CursorAction::MatchPattern {
-            pattern: Regex::new(r"ModBus Master/Slave Set")?,
-            description: "In Modbus settings".to_string(),
-            line_range: Some((0, 10)), // Expanded range to catch the header even if scrolled
-            col_range: None,
-            retry_action: None, // Retry is handled at a higher level (setup_tui_port)
-        },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_modbus_panel")
-        .await?;
-
-    // Additional sleep after successful entry to allow UI to fully stabilize
-    // This works around a rendering issue where the UI briefly shows incorrect state after page transition
-    log::info!("✅ Entered Modbus panel, waiting for UI to fully stabilize...");
-    crate::helpers::sleep_a_while().await;
-
-    Ok(())
+    // IMPROVED: Use a multi-attempt strategy with status tree verification
+    // This handles the race condition between status update, UI refresh, and terminal capture
+    const MAX_ENTER_ATTEMPTS: usize = 10;
+    let mut last_error = None;
+    
+    for attempt in 1..=MAX_ENTER_ATTEMPTS {
+        log::info!("🔄 Attempt {}/{} to enter Modbus panel", attempt, MAX_ENTER_ATTEMPTS);
+        
+        // Navigate to the target menu item
+        if attempt == 1 {
+            // First attempt: navigate from current position
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction,
+                    count: delta,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("nav_to_business_config_attempt_{}", attempt))
+                .await?;
+        } else {
+            // Subsequent attempts: re-navigate from top to ensure consistent position
+            log::info!("  Re-navigating to Business Configuration menu item");
+            let screen = cap.capture(session, &format!("recheck_position_attempt_{}", attempt)).await?;
+            
+            // Verify we're still in config panel
+            if !screen.contains("Enable Port") {
+                log::warn!("  Lost position in config panel, aborting retry");
+                break;
+            }
+            
+            // Find target again
+            let lines: Vec<&str> = screen.lines().collect();
+            let target_idx = lines
+                .iter()
+                .enumerate()
+                .find_map(|(idx, line)| line.contains("Enter Business Configuration").then_some(idx))
+                .ok_or_else(|| anyhow!("'Enter Business Configuration' not found after retry"))?;
+            
+            let cursor_idx = lines
+                .iter()
+                .enumerate()
+                .find_map(|(idx, line)| {
+                    if line.contains("> Enable Port")
+                        || line.contains("> Protocol Mode")
+                        || line.contains("> Enter Business")
+                        || line.contains("> Enter Log")
+                        || line.contains("> Baud rate")
+                        || line.contains("> Data bits")
+                        || line.contains("> Parity")
+                        || line.contains("> Stop bits")
+                    {
+                        if !line.contains("COM") && !line.contains("/tmp/") && !line.contains("/dev/") {
+                            return Some(idx);
+                        }
+                    }
+                    None
+                })
+                .unwrap_or(0);
+            
+            let delta = target_idx.abs_diff(cursor_idx);
+            let direction = if target_idx > cursor_idx {
+                crate::key_input::ArrowKey::Down
+            } else {
+                crate::key_input::ArrowKey::Up
+            };
+            
+            let actions = vec![
+                crate::auto_cursor::CursorAction::PressArrow {
+                    direction,
+                    count: delta,
+                },
+                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+            ];
+            crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("nav_to_business_config_retry_{}", attempt))
+                .await?;
+        }
+        
+        // Press Enter
+        log::info!("  Pressing Enter to enter Modbus panel");
+        let actions = vec![
+            crate::auto_cursor::CursorAction::PressEnter,
+            crate::auto_cursor::CursorAction::Sleep { ms: 1000 }, // Wait for page transition
+        ];
+        crate::auto_cursor::execute_cursor_actions(session, cap, &actions, &format!("press_enter_attempt_{}", attempt))
+            .await?;
+        
+        // Try to wait for status tree to reflect the page change (if debug mode is enabled)
+        log::info!("  Attempting to verify status tree update to ModbusDashboard page");
+        let status_available = std::path::Path::new("/tmp/ci_tui_status.json").exists();
+        
+        let status_check_result = if status_available {
+            log::info!("  Status monitoring is available, using status tree verification");
+            tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                async {
+                    for check_attempt in 1..=10 {
+                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                        
+                        // Try to read status
+                        if let Ok(status) = crate::read_tui_status() {
+                            if matches!(status.page, crate::status_monitor::TuiPage::ModbusDashboard) {
+                                log::info!("  ✅ Status tree updated to ModbusDashboard (check attempt {})", check_attempt);
+                                return Ok(());
+                            }
+                            log::debug!("  Status page is still: {:?} (check attempt {})", status.page, check_attempt);
+                        } else {
+                            log::debug!("  Could not read status (check attempt {})", check_attempt);
+                        }
+                    }
+                    Err(anyhow!("Status tree did not update to ModbusDashboard"))
+                }
+            ).await
+        } else {
+            log::info!("  Status monitoring not available (debug mode not enabled), falling back to terminal verification only");
+            // Just wait a bit for UI to settle
+            tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+            Ok(Ok(()))
+        };
+        
+        match status_check_result {
+            Ok(Ok(())) => {
+                // Status tree updated successfully, now verify terminal shows the panel
+                log::info!("  Verifying terminal shows Modbus panel");
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                
+                let screen = cap.capture(session, &format!("verify_modbus_panel_attempt_{}", attempt)).await?;
+                if screen.contains("ModBus Master/Slave Set") {
+                    log::info!("✅ Successfully entered Modbus panel on attempt {}", attempt);
+                    crate::helpers::sleep_a_while().await; // Extra stabilization time
+                    return Ok(());
+                } else {
+                    log::warn!("  ⚠️ Status updated but terminal doesn't show Modbus panel yet");
+                    last_error = Some(anyhow!("Terminal not updated despite status change"));
+                }
+            }
+            Ok(Err(e)) => {
+                log::warn!("  ⚠️ Status tree update failed: {}", e);
+                last_error = Some(e);
+            }
+            Err(_) => {
+                log::warn!("  ⚠️ Timeout waiting for status tree update");
+                last_error = Some(anyhow!("Timeout waiting for status update"));
+            }
+        }
+        
+        // Delay before next attempt
+        if attempt < MAX_ENTER_ATTEMPTS {
+            log::info!("  Waiting before retry attempt...");
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        }
+    }
+    
+    // All attempts failed
+    Err(last_error.unwrap_or_else(|| anyhow!(
+        "Failed to enter Modbus panel after {} attempts",
+        MAX_ENTER_ATTEMPTS
+    )))
 }
 
 /// Update TUI registers with new values (shared implementation)
@@ -523,14 +655,11 @@ pub async fn update_tui_registers<T: Expect>(
     // This ensures we always start from the same position regardless of where
     // the cursor was after previous operations (like Ctrl+S).
 
-    log::info!("🔍 Resetting to top of Modbus panel...");
+    log::info!("🔍 Resetting to top of Modbus panel using Ctrl+PgUp...");
 
-    // Navigate up many times to ensure we reach the top
+    // Use Ctrl+PageUp to jump to top of Modbus panel (more reliable than pressing Up 50 times)
     let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 50, // Large count to ensure we reach top
-        },
+        crate::auto_cursor::CursorAction::PressCtrlPageUp,
         crate::auto_cursor::CursorAction::Sleep { ms: 300 },
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
@@ -547,11 +676,13 @@ pub async fn update_tui_registers<T: Expect>(
             .await?;
 
         // Check if current screen shows register values
-        // Look for lines with multiple hex values (register display)
+        // Look for lines with hex addresses and register values
         for line in screen.lines() {
             // Register lines contain hex addresses and values like:
-            // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"
-            if line.contains("0x00") && line.matches("0x").count() >= 3 {
+            // "    0x0000    0xABCD 0x1234 0x5678 0x9ABC"  (multiple registers)
+            // "    0x0008              0x0000 ______ ______ ______"  (single register with placeholders)
+            // Look for lines with "0x" followed by register address pattern
+            if line.contains("0x00") && (line.matches("0x").count() >= 2 || line.contains("______")) {
                 found_register = true;
                 log::info!("Found register grid at attempt {}", attempts);
                 break;
@@ -560,13 +691,10 @@ pub async fn update_tui_registers<T: Expect>(
 
         if !found_register {
             // Navigate down to find registers
-            let actions = vec![
-                crate::auto_cursor::CursorAction::PressArrow {
-                    direction: crate::key_input::ArrowKey::Down,
-                    count: 1,
-                },
-                crate::auto_cursor::CursorAction::Sleep { ms: 100 },
-            ];
+            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+                direction: crate::key_input::ArrowKey::Down,
+                count: 1,
+            }];
             crate::auto_cursor::execute_cursor_actions(
                 session,
                 cap,
@@ -618,13 +746,10 @@ pub async fn update_tui_registers<T: Expect>(
 
         // If we left the grid or screen didn't change, go back down one and stop
         if !still_in_grid || before == after {
-            let actions = vec![
-                crate::auto_cursor::CursorAction::PressArrow {
-                    direction: crate::key_input::ArrowKey::Down,
-                    count: 1,
-                },
-                crate::auto_cursor::CursorAction::Sleep { ms: 200 },
-            ];
+            let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
+                direction: crate::key_input::ArrowKey::Down,
+                count: 1,
+            }];
             crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first_reg")
                 .await?;
             log::info!("Positioned at first register after {} up attempts", attempt);
@@ -641,7 +766,6 @@ pub async fn update_tui_registers<T: Expect>(
             crate::auto_cursor::CursorAction::PressEnter,
             crate::auto_cursor::CursorAction::TypeString(hex_val),
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 50 },
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
@@ -688,24 +812,13 @@ pub async fn update_tui_registers<T: Expect>(
     // before any subsequent operations (like navigating to add another station)
     log::info!("⏱️ Waiting for all register values to be committed...");
     crate::helpers::sleep_a_while().await;
-    crate::helpers::sleep_a_while().await;
-    crate::helpers::sleep_a_while().await; // Extra safety margin
 
-    // Navigate back to top of page for next station configuration
-    // After editing registers, cursor is at the last register. The next call to
-    // configure_tui_master_common expects to be near the top of the Modbus panel (station list).
-    // We need to go up but NOT leave the Modbus panel (which would take us to port config).
-    // The register grid is ~3-4 rows, so Up 10 should be safe to reach station list without leaving panel.
-    log::info!("⬆️ Navigating back to station list within Modbus panel");
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressArrow {
-            direction: crate::key_input::ArrowKey::Up,
-            count: 10, // Moderate count to reach station list without leaving Modbus panel
-        },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_station_list")
-        .await?;
+    // Navigate back to top of Modbus panel for next station configuration
+    // Use Ctrl+PageUp to jump to the absolute top of the panel (Create Station / Connection Mode area).
+    // This is more reliable than counting Up presses, which can vary based on register count.
+    log::info!("⬆️ Jumping back to top of Modbus panel with Ctrl+PageUp");
+    let actions = vec![crate::auto_cursor::CursorAction::PressCtrlPageUp];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "return_to_top").await?;
 
     Ok(())
 }

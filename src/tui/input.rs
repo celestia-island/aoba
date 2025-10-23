@@ -4,8 +4,9 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    protocol::status::{read_status, types, write_status},
+    // removed unused import: protocol::status::types
     tui::{
+        status::{read_status, write_status},
         ui::pages,
         utils::bus::{Bus, UiToCore},
     },
@@ -54,10 +55,10 @@ fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
         }
         crossterm::event::Event::Mouse(event) => {
             match read_status(|status| Ok(status.page.clone())) {
-                Ok(types::Page::Entry { .. }) => {
+                Ok(crate::tui::status::Page::Entry { .. }) => {
                     pages::entry::input::handle_mouse(event, bus)?;
                 }
-                Ok(types::Page::About { .. }) => {
+                Ok(crate::tui::status::Page::About { .. }) => {
                     pages::about::handle_mouse(event, bus)?;
                 }
                 _ => {}
@@ -101,7 +102,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
     }) {
         // Check if any page is in edit mode
         let in_edit_mode = match &page {
-            types::Page::ConfigPanel { .. } => {
+            crate::tui::status::Page::ConfigPanel { .. } => {
                 // Check if we have an active edit cursor - simplified check
                 !input_buffer.is_empty() || matches!(key.code, KeyCode::Enter)
             }
@@ -128,22 +129,22 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
         log::info!(
             "input.rs: Routing input to page handler, page type: {}",
             match &page {
-                types::Page::Entry { .. } => "Entry",
-                types::Page::About { .. } => "About",
-                types::Page::ConfigPanel { .. } => "ConfigPanel",
-                types::Page::ModbusDashboard { .. } => "ModbusDashboard",
-                types::Page::LogPanel { .. } => "LogPanel",
+                crate::tui::status::Page::Entry { .. } => "Entry",
+                crate::tui::status::Page::About { .. } => "About",
+                crate::tui::status::Page::ConfigPanel { .. } => "ConfigPanel",
+                crate::tui::status::Page::ModbusDashboard { .. } => "ModbusDashboard",
+                crate::tui::status::Page::LogPanel { .. } => "LogPanel",
             }
         );
         // Route by exact page variant and construct the page snapshot inline.
         match &page {
-            types::Page::Entry { .. } => {
+            crate::tui::status::Page::Entry { .. } => {
                 pages::entry::handle_input(key, bus)?;
             }
-            types::Page::About { .. } => {
+            crate::tui::status::Page::About { .. } => {
                 pages::about::handle_input(key, bus)?;
             }
-            types::Page::ConfigPanel { .. } => {
+            crate::tui::status::Page::ConfigPanel { .. } => {
                 log::info!(
                     "input.rs: Calling ConfigPanel::handle_input for key={key:?}",
                     key = key.code
@@ -151,10 +152,10 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                 pages::config_panel::handle_input(key, bus)?;
                 log::info!("input.rs: ConfigPanel::handle_input completed");
             }
-            types::Page::ModbusDashboard { .. } => {
+            crate::tui::status::Page::ModbusDashboard { .. } => {
                 pages::modbus_panel::input::handle_input(key, bus)?;
             }
-            types::Page::LogPanel { .. } => {
+            crate::tui::status::Page::LogPanel { .. } => {
                 pages::log_panel::handle_input(key, bus)?;
             }
         }

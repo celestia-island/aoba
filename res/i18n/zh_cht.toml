@@ -141,6 +141,7 @@ status_running_with_changes = "已修改"
 status_saving = "儲存中"
 status_syncing = "同步中"
 status_applied_success = "已應用"
+status_startup_failed = "無法創建端口"
 
 [protocol.modbus]
 edit_suffix = "[編輯: {}]"

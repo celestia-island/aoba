@@ -3,8 +3,11 @@ use anyhow::{anyhow, Result};
 use crossterm::event::KeyEvent;
 
 use crate::{
-    protocol::status::{read_status, types::ui::InputRawBuffer, write_status},
-    tui::utils::bus::Bus,
+    protocol::status::types::ui::InputRawBuffer,
+    tui::{
+        status::{read_status, write_status},
+        utils::bus::Bus,
+    },
 };
 
 /// Handle keys when we are in an input/span edit mode.
