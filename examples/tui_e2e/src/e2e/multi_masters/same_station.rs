@@ -90,6 +90,10 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
 
     configure_multiple_stations(&mut tui_session, &mut tui_cap, &station_configs).await?;
 
+    // Wait for all configuration writes to complete before saving
+    log::info!("⏳ Waiting for configuration to stabilize...");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
     // All Masters configured, now save once with Ctrl+S to enable port
     log::info!("📍 Navigating to top of panel before saving...");
     use ci_utils::auto_cursor::{execute_cursor_actions, CursorAction};
@@ -108,7 +112,7 @@ pub async fn test_tui_multi_masters_same_station(port1: &str, port2: &str) -> Re
     log::info!("💾 Saving all master configurations with Ctrl+S to enable port...");
     let actions = vec![
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 }, // Wait for port to enable and CLI subprocess to start
+        CursorAction::Sleep { ms: 10000 }, // Wait longer for port to enable and CLI subprocess to start (10s)
         CursorAction::DebugBreakpoint {
             description: "after_ctrl_s_save".to_string(),
         },
