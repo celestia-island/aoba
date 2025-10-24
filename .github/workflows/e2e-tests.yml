@@ -9,53 +9,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Single setup job that builds everything and prepares for testing
+  # Single setup job that builds everything and prepares for testing (reusable)
   setup:
-    name: Build and Setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
-
-      - name: Cache cargo registry
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
-      - name: Build main binary
-        run: cargo build --bin aoba
-
-      - name: Build all E2E examples
-        run: |
-          cargo build --package cli_e2e
-          cargo build --package tui_e2e
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: |
-            target/debug/aoba
-            target/debug/cli_e2e
-            target/debug/tui_e2e
+    uses: ./.github/workflows/reusable-setup.yml
+    with:
+      install_rust: true
+      rust_toolchain: stable
+      install_deps: gui
+      socat_init: true
+      build_packages: |
+        aoba
+        cli_e2e
+        tui_e2e
+      upload_artifacts: true
+      artifacts: |
+        target/debug/aoba
+        target/debug/cli_e2e
+        target/debug/tui_e2e
 
   # CLI E2E Basic tests (no vcom needed)
   cli-e2e-basic:
@@ -74,13 +44,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Download build artifacts
+      - &download_artifact
+        name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
           name: build-artifacts
           path: target/debug/
 
-      - name: Make binaries executable
+      - &make_exec_cli
+        name: Make binaries executable
         run: |
           chmod +x target/debug/aoba
           chmod +x target/debug/cli_e2e
@@ -105,21 +77,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
+      - &install_deps_basic
+        name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config socat
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/cli_e2e
+      - *make_exec_cli
 
       - name: Setup virtual serial ports
         run: |
@@ -129,7 +95,8 @@ jobs:
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}
 
-      - name: Cleanup virtual ports
+      - &socat_cleanup
+        name: Cleanup virtual ports
         if: always()
         run: |
           pkill socat || true
@@ -151,21 +118,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config socat
+      - *install_deps_basic
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/cli_e2e
+      - *make_exec_cli
 
       - name: Setup virtual serial ports
         run: |
@@ -199,21 +156,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config socat
+      - *install_deps_basic
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/cli_e2e
+      - *make_exec_cli
 
       - name: Setup virtual serial ports
         run: |
@@ -251,13 +198,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
+      - &make_exec_tui
+        name: Make binaries executable
         run: |
           chmod +x target/debug/aoba
           chmod +x target/debug/tui_e2e
@@ -298,16 +242,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/tui_e2e
+      - *make_exec_tui
 
       - name: Setup virtual serial ports
         run: |
@@ -317,7 +254,8 @@ jobs:
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
 
-      - name: Cleanup virtual ports
+      - &socat_cleanup_aoba
+        name: Cleanup virtual ports
         if: always()
         run: |
           pkill socat || true
@@ -345,16 +283,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/tui_e2e
+      - *make_exec_tui
 
       - name: Setup virtual serial ports
         run: |
@@ -392,16 +323,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: target/debug/
+      - *download_artifact
 
-      - name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/tui_e2e
+      - *make_exec_tui
 
       - name: Setup virtual serial ports
         run: |
