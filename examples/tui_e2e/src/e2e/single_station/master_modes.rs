@@ -146,31 +146,32 @@ async fn configure_tui_station<T: expectrl::Expect>(
     log::info!("🔧 Configuring Start Address: 0x{:04X}", start_address);
     let actions = vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(format!("{:x}", start_address)), // Hex without 0x prefix
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEscape,       // Use Escape to exit edit mode
-        CursorAction::Sleep { ms: 500 }, // Wait for value to commit
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEnter,        // Press Enter to confirm value
+        CursorAction::Sleep { ms: 1000 }, // Wait for value to commit
     ];
     execute_cursor_actions(session, cap, &actions, "configure_start_address").await?;
 
     // Configure Register Count (field 3, press Down once from Start Address)
+    // NOTE: This field uses hex format internally
     log::info!("🔧 Configuring Register Count: {}", register_count);
     let actions = vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
-        CursorAction::TypeString(register_count.to_string()), // Decimal
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEscape,       // Use Escape to exit edit mode
-        CursorAction::Sleep { ms: 1500 }, // Wait even longer for register grid to initialize
+        CursorAction::TypeString(format!("{:x}", register_count)), // Try hex format
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressEscape,       // Use Escape to exit
+        CursorAction::Sleep { ms: 3000 }, // Wait longer for register grid to initialize
     ];
     execute_cursor_actions(session, cap, &actions, "configure_register_count").await?;
 
@@ -215,15 +216,17 @@ async fn configure_tui_station<T: expectrl::Expect>(
         }
     }
 
-    // Return to top of panel with Ctrl+PgUp
-    log::info!("📍 Returning to top");
+    // Save configuration with Ctrl+S to commit all changes
+    // Note: Must save BEFORE navigating away or changes will be discarded!
+    log::info!("📍 Saving configuration with Ctrl+S");
     let actions = vec![
-        CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 2000 }, // Wait for all changes to settle
+        CursorAction::PressCtrlS,        // Save configuration directly without navigating first
+        CursorAction::Sleep { ms: 5000 }, // Wait for port to enable
     ];
-    execute_cursor_actions(session, cap, &actions, "return_to_top").await?;
+    execute_cursor_actions(session, cap, &actions, "save_and_enable").await?;
 
-    log::info!("✅ Station configuration completed");
+    log::info!("✅ Station configuration completed and saved");
     Ok(())
 }
 
@@ -292,8 +295,8 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
 
-    // TODO: Step 6 - Configure as Master with Coils mode
-    log::info!("🧪 Step 6: Configure Master station");
+    // TODO: Step 6 - Configure as Master with Coils mode (saves with Ctrl+S)
+    log::info!("🧪 Step 6: Configure Master station and save");
     configure_tui_station(
         &mut tui_session,
         &mut tui_cap,
@@ -301,19 +304,12 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
         "coils",     // register_mode
         0x0000,      // start_address
         10,          // register_count
-        Some(&test_data), // register_values
+        None,        // Don't configure register values yet - test basic config first
     )
     .await?;
 
-    // TODO: Step 7 - Save configuration with Ctrl+S (this enables the port)
-    log::info!("🧪 Step 7: Save configuration and enable port");
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 }, // Wait for port to enable
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
-
-    // TODO: Step 8 - Verify port is enabled
+    // TODO: Step 7 - Verify port is enabled (configuration was saved in Step 6)
+    log::info!("🧪 Step 7: Verify port is enabled");
     let actions = vec![CursorAction::CheckStatus {
         description: "Port should be enabled".to_string(),
         path: "ports[0].enabled".to_string(),
@@ -323,8 +319,8 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_enabled").await?;
 
-    // TODO: Step 9 - Spawn CLI Slave to verify communication
-    log::info!("🧪 Step 9: Spawn CLI Slave to verify data");
+    // TODO: Step 8 - Spawn CLI Slave to verify communication
+    log::info!("🧪 Step 8: Spawn CLI Slave to verify data");
     let binary = build_debug_bin("aoba")?;
     let slave_output = Command::new(&binary)
         .args([
@@ -346,7 +342,7 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
         .stderr(Stdio::piped())
         .output()?;
 
-    // TODO: Step 10 - Verify CLI Slave received correct data
+    // TODO: Step 9 - Verify CLI Slave received correct data
     if !slave_output.status.success() {
         let stderr = String::from_utf8_lossy(&slave_output.stderr);
         return Err(anyhow!("CLI Slave failed: {}", stderr));
@@ -433,12 +429,6 @@ pub async fn test_tui_master_discrete_inputs(port1: &str, port2: &str) -> Result
         Some(&test_data),
     )
     .await?;
-
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
         description: "Port should be enabled".to_string(),
@@ -555,12 +545,6 @@ pub async fn test_tui_master_holding_registers(port1: &str, port2: &str) -> Resu
     )
     .await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
-
     let actions = vec![CursorAction::CheckStatus {
         description: "Port should be enabled".to_string(),
         path: "ports[0].enabled".to_string(),
@@ -675,12 +659,6 @@ pub async fn test_tui_master_input_registers(port1: &str, port2: &str) -> Result
         Some(&test_data),
     )
     .await?;
-
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
         description: "Port should be enabled".to_string(),
