@@ -183,6 +183,7 @@ async fn main() -> Result<()> {
             log::info!("  - cli_port_release");
             log::info!("  - modbus_tui_slave_cli_master");
             log::info!("  - modbus_tui_master_cli_slave");
+            log::info!("  - modbus_tui_multi_master_mixed_types");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
             return Ok(());
@@ -199,6 +200,9 @@ async fn main() -> Result<()> {
         }
         "modbus_tui_master_cli_slave" => {
             e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?
+        }
+        "modbus_tui_multi_master_mixed_types" => {
+            e2e::test_tui_multi_master_mixed_types(&args.port1, &args.port2).await?
         }
 
         _ => {
