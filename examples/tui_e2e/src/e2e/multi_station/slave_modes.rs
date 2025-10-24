@@ -51,15 +51,17 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
                    i + 1, station_id, register_mode, start_address, register_count);
 
         // Navigate to station using Ctrl+PgUp + PgDown
+        // Ctrl+PgUp lands on AddLine
+        // First 2 PgDown: AddLine → ModbusMode → StationId{0}
+        // Then i more PgDown: StationId{0} → StationId{1} → ... → StationId{i}
         let mut actions = vec![CursorAction::PressCtrlPageUp];
-        for _ in 0..=i {
+        for _ in 0..(i + 2) {
             actions.push(CursorAction::PressPageDown);
         }
         execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{}", i + 1)).await?;
 
-        // Configure Station ID
+        // Configure Station ID (now at StationId field, don't need to navigate Down)
         let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
             CursorAction::PressEnter,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
@@ -69,13 +71,9 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, &format!("station_{}_id", i + 1)).await?;
 
-        // Skip Connection Mode (already set to Slave)
-        let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        ];
-        execute_cursor_actions(session, cap, &actions, &format!("station_{}_skip_mode", i + 1)).await?;
-
-        // Configure Register Type
+        // Navigate to Register Type (one Down from StationId)
+        // Note: In Slave mode, there's no per-station Connection Mode field
+        // The field order is: StationId, RegisterType, StartAddress, RegisterLength
         let register_mode_navigation = match *register_mode {
             "coils" => vec![
                 CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
@@ -91,6 +89,7 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
             ],
             "holding" => vec![
                 CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+                // Holding is the default, no need to change
             ],
             "input" => vec![
                 CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
