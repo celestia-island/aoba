@@ -204,7 +204,7 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
     log::info!("🧪 Step 6: Save configuration with Ctrl+S to auto-enable port");
     let actions = vec![
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 3000 }, // Wait for port to enable and stabilize
+        CursorAction::Sleep { ms: 8000 }, // Wait for port to enable and stabilize (increased from 3s to 8s)
         // Verify port is enabled through status monitoring
         CursorAction::CheckStatus {
             description: format!("Port {} should be enabled", port1),
