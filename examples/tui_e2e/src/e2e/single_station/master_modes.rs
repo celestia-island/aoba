@@ -39,8 +39,8 @@ async fn configure_tui_station<T: expectrl::Expect>(
     // Phase 1: Create station by pressing Enter on "Create Station"
     log::info!("📍 Phase 1: Creating station");
     let actions = vec![
-        CursorAction::PressEnter,        // Create station
-        CursorAction::Sleep { ms: 2000 }, // Wait longer for station to be created
+        CursorAction::PressEnter,        // Create station - cursor moves to Station ID field
+        CursorAction::Sleep { ms: 2000 }, // Wait for station to be created
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
@@ -55,38 +55,17 @@ async fn configure_tui_station<T: expectrl::Expect>(
             col_range: None,
             retry_action: None,
         },
-        CursorAction::PressCtrlPageUp,   // Return to top after verifying
-        CursorAction::Sleep { ms: 300 },
     ];
     execute_cursor_actions(session, cap, &actions, "verify_station_created").await?;
 
-    // Phase 2: Configure connection mode to Master (default is already Master, so just move down once)
-    log::info!("📍 Phase 2: Confirming Master mode (default)");
-    let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 200 },
-        // Master is default, no need to change anything
-        CursorAction::PressCtrlPageUp,   // Move to top
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "confirm_master_mode").await?;
+    // Phase 2: After creating station, cursor should be at Station ID field
+    // We can immediately start configuring fields without navigation
+    log::info!("📍 Phase 2: Configuring station fields (cursor at Station ID)");
 
-    // Phase 3: Configure station fields using absolute positioning
-    log::info!("📍 Phase 3: Configuring station fields");
-    
-    // Navigate to station #1 (Ctrl+PgUp + PgDown once)
-    let actions = vec![
-        CursorAction::PressCtrlPageUp,   // Ensure at top
-        CursorAction::PressPageDown,     // Navigate to station #1
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "navigate_to_station").await?;
-
-    // Configure Station ID (field 0, so press Down once to get to it)
+    // Configure Station ID (cursor already at this field after station creation)
     log::info!("🔧 Configuring Station ID: {}", station_id);
     let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
+        // Cursor is already at Station ID, just enter edit mode
         CursorAction::PressEnter,        // Enter edit mode
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressCtrlA,        // Select all
@@ -153,21 +132,21 @@ async fn configure_tui_station<T: expectrl::Expect>(
         CursorAction::PressBackspace,
         CursorAction::TypeString(format!("{:x}", start_address)), // Hex without 0x prefix
         CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEnter,        // Press Enter to confirm value
+        CursorAction::PressEnter,        // Press Enter to confirm value (also exits edit mode)
         CursorAction::Sleep { ms: 1000 }, // Wait for value to commit
     ];
     execute_cursor_actions(session, cap, &actions, "configure_start_address").await?;
 
     // Configure Register Count (field 3, press Down once from Start Address)
-    // CRITICAL: Must use Enter and wait 2s for value to commit before any navigation
+    // CRITICAL: Must clear field first, use Enter to confirm, wait 2s for commit
     log::info!("🔧 Configuring Register Count: {}", register_count);
     let actions = vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 }, // Wait for edit mode to fully initialize
-        CursorAction::PressCtrlA,
-        CursorAction::PressBackspace,
+        CursorAction::PressCtrlA,        // Select all - CRITICAL to clear existing value
+        CursorAction::PressBackspace,    // Clear
         CursorAction::TypeString(register_count.to_string()), // Decimal format
         CursorAction::Sleep { ms: 1000 }, // Wait for typing to complete
         CursorAction::PressEnter,         // Confirm edit and commit to status tree
