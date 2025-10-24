@@ -81,26 +81,34 @@ async fn configure_tui_station<T: expectrl::Expect>(
     log::info!("🔧 Configuring Register Type: {}", register_mode);
     // Default is "Holding" (index 2), navigate based on desired mode
     // Modes: 0=Coils, 1=DiscreteInputs, 2=Holding, 3=Input
+    // For enum fields, use Enter to confirm selection (not Escape)
     let register_mode_navigation = match register_mode {
         "coils" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow { direction: ArrowKey::Left, count: 2 },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEscape,     // Use Escape to exit edit mode
             CursorAction::Sleep { ms: 500 },
+            CursorAction::PressEnter,        // Enter edit mode
+            CursorAction::Sleep { ms: 1000 }, // Wait for edit mode to activate
+            CursorAction::PressArrow { direction: ArrowKey::Left, count: 2 }, // Navigate to Coils
+            CursorAction::Sleep { ms: 1000 }, // Wait for selection to update
+            CursorAction::PressEnter,        // Confirm selection with Enter
+            CursorAction::Sleep { ms: 2000 }, // Wait for value to commit to status tree
+            CursorAction::CheckStatus {
+                description: "Register type should be Coils".to_string(),
+                path: "ports[0].modbus_masters[0].register_type".to_string(),
+                expected: json!("Coils"),
+                timeout_secs: Some(5),
+                retry_interval_ms: Some(500),
+            },
         ],
         "discrete_inputs" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow { direction: ArrowKey::Left, count: 1 },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEscape,
             CursorAction::Sleep { ms: 500 },
+            CursorAction::PressEnter,        // Enter edit mode
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::PressArrow { direction: ArrowKey::Left, count: 1 }, // Navigate to DiscreteInputs
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::PressEnter,        // Confirm selection with Enter
+            CursorAction::Sleep { ms: 1000 }, // Wait for value to commit
         ],
         "holding" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
@@ -109,13 +117,13 @@ async fn configure_tui_station<T: expectrl::Expect>(
         ],
         "input" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
-            CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEscape,
             CursorAction::Sleep { ms: 500 },
+            CursorAction::PressEnter,        // Enter edit mode
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 }, // Navigate to Input
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::PressEnter,        // Confirm selection with Enter
+            CursorAction::Sleep { ms: 1000 }, // Wait for value to commit
         ],
         _ => return Err(anyhow!("Invalid register mode: {}", register_mode)),
     };
