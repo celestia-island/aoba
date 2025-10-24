@@ -94,28 +94,12 @@ jobs:
           chmod +x scripts/socat_init.sh
           ./scripts/socat_init.sh
 
-      - id: package_artifacts
-        name: Package artifacts (if requested)
-        if: ${{ inputs.upload_artifacts == true && inputs.artifacts != '' }}
-        run: |
-          echo "Packaging artifacts..."
-          TMPDIR=$(mktemp -d)
-          echo "${{ inputs.artifacts }}" | while read path; do
-            if [ -n "$path" ]; then
-              echo "Including $path"
-              cp -r "$path" "$TMPDIR/" || true
-            fi
-          done
-          TAR=$TMPDIR/artifacts.tar.gz
-          tar -C "$TMPDIR" -czf "$TAR" . || true
-          echo "artifact=$TAR" >> $GITHUB_OUTPUT
-
-      - name: Upload artifact archive
+      - name: Upload build artifacts (if requested)
         if: ${{ inputs.upload_artifacts == true && inputs.artifacts != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
-          path: ${{ steps.package_artifacts.outputs.artifact }}
+          path: ${{ inputs.artifacts }}
 
       # set a simple output to indicate we ran
       - name: Set built output
