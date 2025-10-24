@@ -497,13 +497,71 @@ impl SubprocessManager {
         if self.processes.contains_key(&port_name) {
             log::info!("Stopping existing subprocess for port {port_name}");
             self.stop_subprocess(&port_name)?;
+            // Wait a bit for the old subprocess to fully release the port
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
 
-        // Spawn new subprocess
-        let subprocess = ManagedSubprocess::spawn(config)?;
-        self.processes.insert(port_name, subprocess);
+        // Spawn new subprocess with retry logic
+        // The subprocess might fail to open the port if it's not immediately available
+        // after a previous subprocess released it, so we retry a few times
+        const MAX_RETRIES: usize = 3;
+        const RETRY_DELAY_MS: u64 = 500;
+        
+        let mut last_error = None;
+        for attempt in 1..=MAX_RETRIES {
+            log::info!(
+                "Attempting to spawn subprocess for port {port_name} (attempt {attempt}/{MAX_RETRIES})"
+            );
+            
+            match ManagedSubprocess::spawn(config.clone()) {
+                Ok(mut subprocess) => {
+                    // Wait a moment to see if the subprocess starts successfully
+                    // Give it time to initialize IPC and open the serial port
+                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                    
+                    // Check if subprocess is still alive
+                    if subprocess.is_alive() {
+                        log::info!(
+                            "✓ Subprocess for port {port_name} spawned successfully on attempt {attempt}"
+                        );
+                        self.processes.insert(port_name, subprocess);
+                        return Ok(());
+                    } else {
+                        // Subprocess died immediately, likely failed to open port
+                        log::warn!(
+                            "Subprocess for port {port_name} died immediately after spawn (attempt {attempt}/{MAX_RETRIES})"
+                        );
+                        last_error = Some(anyhow::anyhow!(
+                            "Subprocess exited immediately, likely failed to open serial port"
+                        ));
+                        
+                        // Clean up the dead subprocess
+                        drop(subprocess);
+                        
+                        // Wait before retry
+                        if attempt < MAX_RETRIES {
+                            log::info!("Waiting {RETRY_DELAY_MS}ms before retry...");
+                            std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+                        }
+                    }
+                }
+                Err(err) => {
+                    log::warn!(
+                        "Failed to spawn subprocess for port {port_name} on attempt {attempt}/{MAX_RETRIES}: {err}"
+                    );
+                    last_error = Some(err);
+                    
+                    // Wait before retry
+                    if attempt < MAX_RETRIES {
+                        log::info!("Waiting {RETRY_DELAY_MS}ms before retry...");
+                        std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
+                    }
+                }
+            }
+        }
 
-        Ok(())
+        // All retries failed
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Failed to start subprocess after {MAX_RETRIES} attempts")))
     }
 
     /// Stop a subprocess for the given port
