@@ -9,8 +9,18 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  setup-deps:
+    uses: ./.github/workflows/reusable-setup.yml
+    with:
+      install_rust: false
+      install_deps: gui
+      socat_init: false
+      build_packages: ""
+      upload_artifacts: false
+
   check:
     name: Check
+    needs: setup-deps
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -30,10 +40,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
           components: rustfmt, clippy
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev
+      # system dependencies installed by setup-deps job
 
       - name: Cache cargo registry
         uses: actions/cache@v4
