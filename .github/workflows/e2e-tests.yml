@@ -121,6 +121,8 @@ jobs:
           rm -f /tmp/vcom1 /tmp/vcom2 || true
 
   # TUI E2E tests run in parallel as separate jobs
+  # Each test module runs in its own isolated job with fresh socat initialization
+  # This architecture completely avoids socat reset issues between tests
   tui-e2e:
     name: TUI E2E - ${{ matrix.module }}
     needs: setup
@@ -132,6 +134,7 @@ jobs:
           - cli_port_release
           - modbus_tui_slave_cli_master
           - modbus_tui_master_cli_slave
+          - modbus_tui_multi_master_mixed_types
 
     steps:
       - uses: actions/checkout@v5
@@ -152,12 +155,12 @@ jobs:
           chmod +x target/debug/aoba
           chmod +x target/debug/tui_e2e
 
-      - name: Setup virtual serial ports
+      - name: Setup virtual serial ports (fresh for this test)
         run: |
           chmod +x scripts/socat_init.sh
           ./scripts/socat_init.sh
 
-      - name: Run TUI E2E module
+      - name: Run TUI E2E module (isolated execution)
         run: cargo run --package tui_e2e -- --module ${{ matrix.module }}
 
       - name: Cleanup virtual ports
