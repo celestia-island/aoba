@@ -40,15 +40,17 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
                    i + 1, station_id, register_mode, start_address, register_count);
 
         // Navigate to station using Ctrl+PgUp + PgDown
+        // Ctrl+PgUp lands on AddLine
+        // First 2 PgDown: AddLine → ModbusMode → StationId{0}
+        // Then i more PgDown: StationId{0} → StationId{1} → ... → StationId{i}
         let mut actions = vec![CursorAction::PressCtrlPageUp];
-        for _ in 0..=i {
+        for _ in 0..(i + 2) {
             actions.push(CursorAction::PressPageDown);
         }
         execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{}", i + 1)).await?;
 
-        // Configure Station ID (field 0)
+        // Configure Station ID (now at StationId field, don't need to navigate Down)
         let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
             CursorAction::PressEnter,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
@@ -58,7 +60,7 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, &format!("station_{}_id", i + 1)).await?;
 
-        // Configure Register Type (field 1)
+        // Configure Register Type (field 1, one Down from StationId)
         let register_mode_navigation = match *register_mode {
             "coils" => vec![
                 CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
@@ -74,6 +76,7 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
             ],
             "holding" => vec![
                 CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+                // Holding is the default, no need to change
             ],
             "input" => vec![
                 CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
@@ -111,14 +114,22 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
 
         // Configure register values if provided
         if let Some(values) = register_values {
+            // After configuring Register Length, cursor is still on Register Length field
+            // Navigate Down 1 to reach first register for the first value
             for (j, &value) in values.iter().enumerate() {
-                let actions = vec![
-                    CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+                let mut actions = Vec::new();
+                
+                // Only navigate Down for the first register; after that we use Right
+                if j == 0 {
+                    actions.push(CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 });
+                }
+                
+                actions.extend(vec![
                     CursorAction::PressEnter,
                     CursorAction::TypeString(format!("{:x}", value)),
                     CursorAction::PressEnter,
                     CursorAction::Sleep { ms: 100 },
-                ];
+                ]);
                 execute_cursor_actions(session, cap, &actions, &format!("station_{}_reg_{}", i + 1, j)).await?;
 
                 // Move to next register

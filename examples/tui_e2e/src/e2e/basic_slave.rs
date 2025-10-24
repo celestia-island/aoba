@@ -168,24 +168,15 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
             count: 3, // Navigate to register length field (from Station ID)
         },
         CursorAction::Sleep { ms: 500 }, // Wait for cursor to reach register length field
-        CursorAction::DebugBreakpoint {
-            description: "before_edit_register_length".to_string(),
-        },
         CursorAction::PressEnter,         // Enter edit mode
-        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for edit mode to fully initialize
-        CursorAction::DebugBreakpoint {
-            description: "after_enter_edit_mode".to_string(),
-        },
+        CursorAction::Sleep { ms: 500 }, // Wait for edit mode to initialize
+        // Clear existing value before typing new value
+        CursorAction::PressCtrlA,
+        CursorAction::PressBackspace,
         CursorAction::TypeString(REGISTER_LENGTH.to_string()),
-        CursorAction::Sleep { ms: 1000 }, // CRITICAL: Wait for typing to complete and buffer to update
-        CursorAction::DebugBreakpoint {
-            description: "after_type_12".to_string(),
-        },
+        CursorAction::Sleep { ms: 500 }, // Wait for typing to complete
         CursorAction::PressEnter, // Confirm edit and commit to status tree
-        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Wait for value to be committed to global status tree
-        CursorAction::DebugBreakpoint {
-            description: "after_confirm_edit".to_string(),
-        },
+        CursorAction::Sleep { ms: 1000 }, // Wait for value to be committed to global status tree
         // Verify the value was actually committed
         CursorAction::CheckStatus {
             description: format!("Register length should be updated to {}", REGISTER_LENGTH),
