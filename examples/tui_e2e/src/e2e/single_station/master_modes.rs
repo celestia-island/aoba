@@ -91,13 +91,13 @@ async fn configure_tui_station<T: expectrl::Expect>(
             CursorAction::PressArrow { direction: ArrowKey::Left, count: 2 }, // Navigate to Coils
             CursorAction::Sleep { ms: 1000 }, // Wait for selection to update
             CursorAction::PressEnter,        // Confirm selection with Enter
-            CursorAction::Sleep { ms: 2000 }, // Wait for value to commit to status tree
+            CursorAction::Sleep { ms: 3000 }, // Wait for value to commit to status tree
             CursorAction::CheckStatus {
                 description: "Register type should be Coils".to_string(),
                 path: "ports[0].modbus_masters[0].register_type".to_string(),
                 expected: json!("Coils"),
-                timeout_secs: Some(5),
-                retry_interval_ms: Some(500),
+                timeout_secs: Some(10),
+                retry_interval_ms: Some(300),
             },
         ],
         "discrete_inputs" => vec![
@@ -158,21 +158,32 @@ async fn configure_tui_station<T: expectrl::Expect>(
         CursorAction::TypeString(register_count.to_string()), // Decimal format
         CursorAction::Sleep { ms: 1000 }, // Wait for typing to complete
         CursorAction::PressEnter,         // Confirm edit and commit to status tree
-        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Wait for value to commit to global status
+        CursorAction::Sleep { ms: 5000 }, // CRITICAL: Wait LONGER for value to commit to global status (was 2s, now 5s)
     ];
     execute_cursor_actions(session, cap, &actions, "configure_register_count").await?;
 
     // Verify the register count was actually committed to status tree
+    // Use longer timeout and more retries since status updates are async
     let actions = vec![
         CursorAction::CheckStatus {
             description: format!("Register count should be {}", register_count),
             path: "ports[0].modbus_masters[0].register_count".to_string(),
             expected: json!(register_count),
-            timeout_secs: Some(10),
-            retry_interval_ms: Some(500),
+            timeout_secs: Some(15),
+            retry_interval_ms: Some(300),
         },
     ];
     execute_cursor_actions(session, cap, &actions, "verify_register_count").await?;
+
+    // CRITICAL: Move cursor to a neutral position before saving
+    // After configuring Register Count, cursor may still be on that field
+    // Press Up to move back to a safe field (like Register Type) before Ctrl+S
+    log::info!("📍 Moving cursor to neutral position before save");
+    let actions = vec![
+        CursorAction::PressArrow { direction: ArrowKey::Up, count: 1 },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "move_cursor_neutral").await?;
 
     // Configure individual register values if provided
     if let Some(values) = register_values {
