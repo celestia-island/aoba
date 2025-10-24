@@ -206,22 +206,25 @@ fn write_data_to_file(file_path: &std::path::Path, data: &[u16]) -> Result<()> {
 /// Helper to read data from a slave's output file
 fn read_data_from_file(file_path: &std::path::Path, timeout_secs: u64) -> Result<Vec<u16>> {
     use std::time::{Duration, Instant};
-    
+
     let start = Instant::now();
     let timeout = Duration::from_secs(timeout_secs);
-    
+
     // Wait for file to be created and contain data
     loop {
         if start.elapsed() > timeout {
-            return Err(anyhow!("Timeout waiting for data in file {}", file_path.display()));
+            return Err(anyhow!(
+                "Timeout waiting for data in file {}",
+                file_path.display()
+            ));
         }
-        
+
         if file_path.exists() {
             // Try to read the first line
             let file = std::fs::File::open(file_path)?;
             let reader = BufReader::new(file);
             let mut lines = reader.lines();
-            
+
             if let Some(Ok(line)) = lines.next() {
                 // Try to parse the JSON
                 if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
@@ -233,7 +236,11 @@ fn read_data_from_file(file_path: &std::path::Path, timeout_secs: u64) -> Result
                                 .map(|v| v as u16)
                                 .collect();
                             if !data.is_empty() {
-                                log::info!("📥 Read data from file {}: {:?}", file_path.display(), data);
+                                log::info!(
+                                    "📥 Read data from file {}: {:?}",
+                                    file_path.display(),
+                                    data
+                                );
                                 return Ok(data);
                             }
                         }
@@ -241,7 +248,7 @@ fn read_data_from_file(file_path: &std::path::Path, timeout_secs: u64) -> Result
                 }
             }
         }
-        
+
         std::thread::sleep(Duration::from_millis(100));
     }
 }
@@ -267,7 +274,7 @@ pub async fn test_single_station_coils() -> Result<()> {
     let temp_dir = std::env::temp_dir();
     let master_data_file = temp_dir.join("cli_e2e_master_coils_data.json");
     let slave_output_file = temp_dir.join("cli_e2e_slave_coils_output.json");
-    
+
     // Clean up any existing files
     let _ = std::fs::remove_file(&master_data_file);
     let _ = std::fs::remove_file(&slave_output_file);
@@ -299,11 +306,15 @@ pub async fn test_single_station_coils() -> Result<()> {
         } else {
             String::new()
         };
-        
+
         // Cleanup
         let _ = std::fs::remove_file(&master_data_file);
-        
-        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
+
+        return Err(anyhow!(
+            "Master exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave process on port2
@@ -327,7 +338,7 @@ pub async fn test_single_station_coils() -> Result<()> {
         log::error!("❌ Data mismatch!");
         log::error!("  Expected: {:?}", test_data);
         log::error!("  Received: {:?}", received_data);
-        
+
         // Cleanup
         master.kill()?;
         master.wait()?;
@@ -335,7 +346,7 @@ pub async fn test_single_station_coils() -> Result<()> {
         slave.wait()?;
         let _ = std::fs::remove_file(&master_data_file);
         let _ = std::fs::remove_file(&slave_output_file);
-        
+
         return Err(anyhow!("Data verification failed"));
     }
 
@@ -373,7 +384,7 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
     // Create temporary file for poller output
     let temp_dir = std::env::temp_dir();
     let poller_output_file = temp_dir.join("cli_e2e_poller_discrete_output.json");
-    
+
     // Clean up any existing files
     let _ = std::fs::remove_file(&poller_output_file);
 
@@ -398,8 +409,12 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
         } else {
             String::new()
         };
-        
-        return Err(anyhow!("Listener exited prematurely with status {}: {}", status, stderr));
+
+        return Err(anyhow!(
+            "Listener exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave Poller on port2 (reads data)
@@ -420,14 +435,14 @@ pub async fn test_single_station_discrete_inputs() -> Result<()> {
         log::error!("❌ Data mismatch!");
         log::error!("  Expected: {:?}", expected_data);
         log::error!("  Received: {:?}", received_data);
-        
+
         // Cleanup
         listener.kill()?;
         listener.wait()?;
         poller.kill()?;
         poller.wait()?;
         let _ = std::fs::remove_file(&poller_output_file);
-        
+
         return Err(anyhow!("Data verification failed"));
     }
     log::info!("✅ Data verified successfully!");
@@ -464,7 +479,7 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
     let temp_dir = std::env::temp_dir();
     let master_data_file = temp_dir.join("cli_e2e_master_holding_data.json");
     let slave_output_file = temp_dir.join("cli_e2e_slave_holding_output.json");
-    
+
     // Clean up any existing files
     let _ = std::fs::remove_file(&master_data_file);
     let _ = std::fs::remove_file(&slave_output_file);
@@ -494,9 +509,13 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
         } else {
             String::new()
         };
-        
+
         let _ = std::fs::remove_file(&master_data_file);
-        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
+        return Err(anyhow!(
+            "Master exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave process on port2
@@ -519,7 +538,7 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
         log::error!("❌ Data mismatch!");
         log::error!("  Expected: {:?}", test_data);
         log::error!("  Received: {:?}", received_data);
-        
+
         // Cleanup
         master.kill()?;
         master.wait()?;
@@ -527,7 +546,7 @@ pub async fn test_single_station_holding_registers() -> Result<()> {
         slave.wait()?;
         let _ = std::fs::remove_file(&master_data_file);
         let _ = std::fs::remove_file(&slave_output_file);
-        
+
         return Err(anyhow!("Data verification failed"));
     }
 
@@ -568,7 +587,7 @@ pub async fn test_single_station_input_registers() -> Result<()> {
     // Create temporary file for poller output
     let temp_dir = std::env::temp_dir();
     let poller_output_file = temp_dir.join("cli_e2e_poller_input_output.json");
-    
+
     // Clean up any existing files
     let _ = std::fs::remove_file(&poller_output_file);
 
@@ -593,8 +612,12 @@ pub async fn test_single_station_input_registers() -> Result<()> {
         } else {
             String::new()
         };
-        
-        return Err(anyhow!("Listener exited prematurely with status {}: {}", status, stderr));
+
+        return Err(anyhow!(
+            "Listener exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave Poller on port2 (reads data)
@@ -615,14 +638,14 @@ pub async fn test_single_station_input_registers() -> Result<()> {
         log::error!("❌ Data mismatch!");
         log::error!("  Expected: {:?}", expected_data);
         log::error!("  Received: {:?}", received_data);
-        
+
         // Cleanup
         listener.kill()?;
         listener.wait()?;
         poller.kill()?;
         poller.wait()?;
         let _ = std::fs::remove_file(&poller_output_file);
-        
+
         return Err(anyhow!("Data verification failed"));
     }
     log::info!("✅ Data verified successfully!");
