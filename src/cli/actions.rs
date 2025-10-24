@@ -256,8 +256,6 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
 
 /// Start the ports defined in the configuration
 fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std::error::Error>> {
-    let _tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
-
     log::info!(
         "Starting port: {} with {} stations",
         config.port_name,
@@ -305,14 +303,180 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
                 range.length
             );
         }
-
-        // TODO: Implement station startup logic based on mode
-        // For now, we just log the station information
     }
 
-    // TODO: Wait for all tasks to finish
-    // Currently this only logs information; the real implementation should spawn async tasks
-
     log::info!("Configuration started successfully");
-    Ok(())
+
+    // Start the actual runtime with the config
+    // We need to spawn a blocking task since we're already in an async context
+    let config_clone = config.clone();
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            if let Err(e) = run_config_runtime(&config_clone).await {
+                log::error!("Config runtime error: {}", e);
+            }
+        });
+    });
+
+    // Keep the main thread alive
+    loop {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
+/// Run the configuration in an async runtime
+async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+    use rmodbus::server::context::ModbusContext;
+    use std::sync::{Arc, Mutex};
+    use std::io::Write;
+
+    // Open the serial port
+    let port_handle = serialport::new(&config.port_name, config.baud_rate)
+        .timeout(std::time::Duration::from_millis(100))
+        .open()
+        .map_err(|e| format!("Failed to open port {}: {}", config.port_name, e))?;
+
+    let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Initialize storage for all stations
+    let storage = Arc::new(Mutex::new(
+        rmodbus::server::storage::ModbusStorageSmall::default(),
+    ));
+
+    // Populate initial values for master stations
+    for station in &config.stations {
+        if matches!(station.mode, super::config::StationMode::Master) {
+            let mut storage_lock = storage.lock().unwrap();
+            
+            // Set initial values for coils
+            for range in &station.map.coils {
+                for (i, &val) in range.initial_values.iter().enumerate() {
+                    let addr = range.address_start + i as u16;
+                    if let Err(e) = storage_lock.set_coil(addr, val != 0) {
+                        log::warn!("Failed to set coil at {}: {}", addr, e);
+                    }
+                }
+            }
+            
+            // Set initial values for discrete inputs
+            for range in &station.map.discrete_inputs {
+                for (i, &val) in range.initial_values.iter().enumerate() {
+                    let addr = range.address_start + i as u16;
+                    if let Err(e) = storage_lock.set_discrete(addr, val != 0) {
+                        log::warn!("Failed to set discrete input at {}: {}", addr, e);
+                    }
+                }
+            }
+            
+            // Set initial values for holding registers
+            for range in &station.map.holding {
+                for (i, &val) in range.initial_values.iter().enumerate() {
+                    let addr = range.address_start + i as u16;
+                    if let Err(e) = storage_lock.set_holding(addr, val) {
+                        log::warn!("Failed to set holding register at {}: {}", addr, e);
+                    }
+                }
+            }
+            
+            // Set initial values for input registers
+            for range in &station.map.input {
+                for (i, &val) in range.initial_values.iter().enumerate() {
+                    let addr = range.address_start + i as u16;
+                    if let Err(e) = storage_lock.set_input(addr, val) {
+                        log::warn!("Failed to set input register at {}: {}", addr, e);
+                    }
+                }
+            }
+        }
+    }
+
+    log::info!("Starting persistent Modbus server/client loop for config mode");
+
+    // Run the main loop
+    loop {
+        // Process Modbus frames
+        let mut buffer = [0u8; 256];
+        let mut port = port_arc.lock().unwrap();
+        
+        match port.read(&mut buffer) {
+            Ok(n) if n > 0 => {
+                drop(port); // Release lock before processing
+                
+                // Process the frame
+                let request = &buffer[..n];
+                if let Some(response) = process_modbus_frame(request, &storage, &config.stations) {
+                    let mut port = port_arc.lock().unwrap();
+                    if let Err(e) = port.write_all(&response) {
+                        log::error!("Failed to write response: {}", e);
+                    }
+                }
+            }
+            Ok(_) => {
+                // No data, sleep briefly
+                drop(port);
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                // Timeout is expected, just continue
+                drop(port);
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            Err(e) => {
+                log::error!("Error reading from port: {}", e);
+                drop(port);
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            }
+        }
+    }
+}
+
+/// Process a Modbus frame and generate a response
+fn process_modbus_frame(
+    request: &[u8],
+    storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
+    stations: &[super::config::StationConfig],
+) -> Option<Vec<u8>> {
+    use rmodbus::{server::ModbusFrame, ModbusProto};
+
+    if request.len() < 2 {
+        return None;
+    }
+
+    let station_id = request[0];
+    
+    // Find if we have a station with this ID configured as slave/listener
+    let has_station = stations.iter().any(|s| {
+        s.id == station_id && matches!(s.mode, super::config::StationMode::Slave)
+    });
+
+    if !has_station {
+        // Not our station, ignore
+        return None;
+    }
+
+    // Process the request using rmodbus
+    let storage_lock = storage.lock().unwrap();
+    
+    // Parse and respond to the request
+    let mut response = Vec::new();
+    let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response);
+    
+    if let Err(e) = frame.parse() {
+        log::warn!("Failed to parse Modbus frame: {:?}", e);
+        return None;
+    }
+    
+    if let Err(e) = frame.process_read(&*storage_lock) {
+        log::warn!("Failed to process Modbus read: {:?}", e);
+        return None;
+    }
+    
+    drop(storage_lock);
+    
+    if response.is_empty() {
+        None
+    } else {
+        Some(response)
+    }
 }

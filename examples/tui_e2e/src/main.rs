@@ -1,4 +1,3 @@
-mod cli_port_cleanup;
 mod e2e;
 mod utils;
 
@@ -6,8 +5,6 @@ use anyhow::Result;
 use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
-
-use cli_port_cleanup::test_cli_port_release;
 
 /// TUI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
@@ -180,9 +177,27 @@ async fn main() -> Result<()> {
         Some(m) => m.as_str(),
         None => {
             log::info!("📋 Available modules:");
-            log::info!("  - cli_port_release");
-            log::info!("  - modbus_tui_slave_cli_master");
-            log::info!("  - modbus_tui_master_cli_slave");
+            log::info!("  Legacy Tests:");
+            log::info!("    - modbus_tui_slave_cli_master");
+            log::info!("    - modbus_tui_master_cli_slave");
+            log::info!("  TUI Single-Station Master Mode:");
+            log::info!("    - tui_master_coils");
+            log::info!("    - tui_master_discrete_inputs");
+            log::info!("    - tui_master_holding");
+            log::info!("    - tui_master_input");
+            log::info!("  TUI Single-Station Slave Mode:");
+            log::info!("    - tui_slave_coils");
+            log::info!("    - tui_slave_discrete_inputs");
+            log::info!("    - tui_slave_holding");
+            log::info!("    - tui_slave_input");
+            log::info!("  TUI Multi-Station Master Mode:");
+            log::info!("    - tui_multi_master_mixed_types");
+            log::info!("    - tui_multi_master_spaced_addresses");
+            log::info!("    - tui_multi_master_mixed_ids");
+            log::info!("  TUI Multi-Station Slave Mode:");
+            log::info!("    - tui_multi_slave_mixed_types");
+            log::info!("    - tui_multi_slave_spaced_addresses");
+            log::info!("    - tui_multi_slave_mixed_ids");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
             return Ok(());
@@ -193,12 +208,55 @@ async fn main() -> Result<()> {
 
     // Run the selected module
     match module {
-        "cli_port_release" => test_cli_port_release().await?,
         "modbus_tui_slave_cli_master" => {
             e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?
         }
         "modbus_tui_master_cli_slave" => {
             e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?
+        }
+
+        // TUI Single-Station Master Mode Tests
+        "tui_master_coils" => e2e::test_tui_master_coils(&args.port1, &args.port2).await?,
+        "tui_master_discrete_inputs" => {
+            e2e::test_tui_master_discrete_inputs(&args.port1, &args.port2).await?
+        }
+        "tui_master_holding" => {
+            e2e::test_tui_master_holding_registers(&args.port1, &args.port2).await?
+        }
+        "tui_master_input" => {
+            e2e::test_tui_master_input_registers(&args.port1, &args.port2).await?
+        }
+
+        // TUI Single-Station Slave Mode Tests
+        "tui_slave_coils" => e2e::test_tui_slave_coils(&args.port1, &args.port2).await?,
+        "tui_slave_discrete_inputs" => {
+            e2e::test_tui_slave_discrete_inputs(&args.port1, &args.port2).await?
+        }
+        "tui_slave_holding" => {
+            e2e::test_tui_slave_holding_registers(&args.port1, &args.port2).await?
+        }
+        "tui_slave_input" => e2e::test_tui_slave_input_registers(&args.port1, &args.port2).await?,
+
+        // TUI Multi-Station Master Mode Tests
+        "tui_multi_master_mixed_types" => {
+            e2e::test_tui_multi_master_mixed_register_types(&args.port1, &args.port2).await?
+        }
+        "tui_multi_master_spaced_addresses" => {
+            e2e::test_tui_multi_master_spaced_addresses(&args.port1, &args.port2).await?
+        }
+        "tui_multi_master_mixed_ids" => {
+            e2e::test_tui_multi_master_mixed_station_ids(&args.port1, &args.port2).await?
+        }
+
+        // TUI Multi-Station Slave Mode Tests
+        "tui_multi_slave_mixed_types" => {
+            e2e::test_tui_multi_slave_mixed_register_types(&args.port1, &args.port2).await?
+        }
+        "tui_multi_slave_spaced_addresses" => {
+            e2e::test_tui_multi_slave_spaced_addresses(&args.port1, &args.port2).await?
+        }
+        "tui_multi_slave_mixed_ids" => {
+            e2e::test_tui_multi_slave_mixed_station_ids(&args.port1, &args.port2).await?
         }
 
         _ => {
