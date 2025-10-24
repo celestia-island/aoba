@@ -170,8 +170,11 @@ pub async fn test_tui_slave_with_cli_master_continuous(port1: &str, port2: &str)
         CursorAction::Sleep { ms: 500 }, // Wait for cursor to reach register length field
         CursorAction::PressEnter,         // Enter edit mode
         CursorAction::Sleep { ms: 500 }, // Wait for edit mode to initialize
-        // Clear existing value before typing new value
-        CursorAction::PressCtrlA,
+        // Clear existing value before typing new value (default is "1", use multiple backspaces to ensure clearing)
+        CursorAction::PressBackspace,
+        CursorAction::PressBackspace,
+        CursorAction::PressBackspace,
+        CursorAction::PressBackspace,
         CursorAction::PressBackspace,
         CursorAction::TypeString(REGISTER_LENGTH.to_string()),
         CursorAction::Sleep { ms: 500 }, // Wait for typing to complete

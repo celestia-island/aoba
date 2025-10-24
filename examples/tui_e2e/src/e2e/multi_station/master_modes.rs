@@ -52,7 +52,11 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
         // Configure Station ID (now at StationId field, don't need to navigate Down)
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::PressCtrlA,
+            // Clear existing value (default is "1", use multiple backspaces)
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
             CursorAction::PressBackspace,
             CursorAction::TypeString(station_id.to_string()),
             CursorAction::PressEnter,
@@ -92,7 +96,11 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
         let actions = vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
             CursorAction::PressEnter,
-            CursorAction::PressCtrlA,
+            // Clear existing value (default is "0", use multiple backspaces)
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
             CursorAction::PressBackspace,
             CursorAction::TypeString(format!("{:x}", start_address)),
             CursorAction::PressEnter,
@@ -104,7 +112,11 @@ async fn configure_multiple_tui_master_stations<T: expectrl::Expect>(
         let actions = vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
             CursorAction::PressEnter,
-            CursorAction::PressCtrlA,
+            // Clear existing value (default is "1", use multiple backspaces)
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
+            CursorAction::PressBackspace,
             CursorAction::PressBackspace,
             CursorAction::TypeString(register_count.to_string()),
             CursorAction::PressEnter,
