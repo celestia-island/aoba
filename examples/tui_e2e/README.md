@@ -155,4 +155,4 @@ Ensure you're resetting socat between test runs. In CI, each test gets a fresh e
 Check that:
 1. socat is running: `ps aux | grep socat`
 2. Ports exist: `ls -la /tmp/vcom*`
-3. Permissions are correct: `ls -la /dev/pts/*`
+3. Permissions are correct: `ls -la /dev/pts/ 2>/dev/null || echo 'No pseudo-terminals found'`

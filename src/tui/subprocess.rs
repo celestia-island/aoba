@@ -491,6 +491,12 @@ impl SubprocessManager {
 
     /// Start a subprocess for the given port with the given configuration
     pub fn start_subprocess(&mut self, config: CliSubprocessConfig) -> Result<()> {
+        // Timing constants for subprocess management
+        const PORT_RELEASE_DELAY_MS: u64 = 500;  // Wait for old subprocess to release port
+        const SUBPROCESS_INIT_DELAY_MS: u64 = 1000;  // Wait for subprocess to initialize
+        const MAX_RETRIES: usize = 3;
+        const RETRY_DELAY_MS: u64 = 500;
+        
         let port_name = config.port_name.clone();
 
         // If a subprocess already exists for this port, stop it first
@@ -498,15 +504,12 @@ impl SubprocessManager {
             log::info!("Stopping existing subprocess for port {port_name}");
             self.stop_subprocess(&port_name)?;
             // Wait a bit for the old subprocess to fully release the port
-            std::thread::sleep(std::time::Duration::from_millis(500));
+            std::thread::sleep(std::time::Duration::from_millis(PORT_RELEASE_DELAY_MS));
         }
 
         // Spawn new subprocess with retry logic
         // The subprocess might fail to open the port if it's not immediately available
         // after a previous subprocess released it, so we retry a few times
-        const MAX_RETRIES: usize = 3;
-        const RETRY_DELAY_MS: u64 = 500;
-        
         let mut last_error = None;
         for attempt in 1..=MAX_RETRIES {
             log::info!(
@@ -517,7 +520,7 @@ impl SubprocessManager {
                 Ok(mut subprocess) => {
                     // Wait a moment to see if the subprocess starts successfully
                     // Give it time to initialize IPC and open the serial port
-                    std::thread::sleep(std::time::Duration::from_millis(1000));
+                    std::thread::sleep(std::time::Duration::from_millis(SUBPROCESS_INIT_DELAY_MS));
                     
                     // Check if subprocess is still alive
                     if subprocess.is_alive() {
@@ -561,7 +564,7 @@ impl SubprocessManager {
         }
 
         // All retries failed
-        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Failed to start subprocess after {MAX_RETRIES} attempts")))
+        Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Failed to start subprocess after {} attempts", MAX_RETRIES)))
     }
 
     /// Stop a subprocess for the given port
