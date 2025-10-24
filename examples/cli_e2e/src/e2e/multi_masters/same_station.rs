@@ -63,47 +63,42 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
 
     // Start configuration mode
     log::info!("🧪 Starting multi-masters with same station configuration...");
-    let process = Command::new(&binary)
+    let mut process = Command::new(&binary)
         .arg("--config")
         .arg(&config_file)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
-    // Wait a bit to allow the process to start
+    // Wait a bit to allow the process to start and initialize
     tokio::time::sleep(Duration::from_secs(3)).await;
 
-    // Wait for the process to complete
-    let output = process.wait_with_output()?;
-
-    // Check whether the process exited successfully
-    if output.status.success() {
-        log::info!("✅ Multi-masters with same station configuration completed successfully");
-
-        // Check whether the output contains the configuration loaded successfully message
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        if stdout.contains("Configuration loaded successfully")
-            || stderr.contains("Configuration loaded successfully")
-        {
-            log::info!("✅ Configuration loading message found");
-        } else {
-            log::warn!("⚠️ Configuration loading message not found in output");
-            log::debug!("stdout: {stdout}");
-            log::debug!("stderr: {stderr}");
+    // Check if process is still running (config mode runs persistently)
+    match process.try_wait()? {
+        None => {
+            // Process is still running, which is expected for persistent config mode
+            log::info!("✅ Multi-masters with same station configuration process started successfully and is running");
         }
-    } else {
-        log::warn!(
-            "⚠️ Multi-masters with same station configuration failed with status: {}",
-            output.status
-        );
-        log::warn!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-        log::warn!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        return Err(anyhow::anyhow!(
-            "Multi-masters with same station configuration failed"
-        ));
+        Some(status) => {
+            // Process exited unexpectedly
+            let output = process.wait_with_output()?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            log::error!("❌ Process exited prematurely with status: {}", status);
+            log::error!("stdout: {}", stdout);
+            log::error!("stderr: {}", stderr);
+            
+            // Clean up and return error
+            std::fs::remove_file(&config_file)?;
+            return Err(anyhow::anyhow!("Multi-masters with same station configuration process exited prematurely"));
+        }
     }
+
+    // Kill the process since it runs persistently
+    process.kill()?;
+    process.wait()?;
+    log::info!("✅ Stopped multi-masters with same station configuration process");
 
     // Clean up temporary files
     std::fs::remove_file(&config_file)?;
