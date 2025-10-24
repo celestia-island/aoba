@@ -612,3 +612,111 @@ When configuring multiple Modbus stations:
 - **Timing**: Allow sufficient delays between field edits (1000-2000ms after Enter to exit edit mode)
 - **Verification**: Check each station's configuration before pressing Ctrl+S to save
 - **Known Issue**: PgDown navigation may not position cursor correctly on all stations; verify with debug breakpoints
+
+## E2E Test Matrix Structure
+
+### Overview
+
+The E2E test suite is organized into a comprehensive matrix covering CLI and TUI modes with various register types and station configurations. All tests follow the principle of independence - each test is a standalone unit and should not be combined with others.
+
+### Test Organization
+
+#### CLI E2E Tests (`examples/cli_e2e`)
+
+**Single-Station Tests** (`e2e/single_station/register_modes.rs`)
+- Test all 4 Modbus register modes with Master/Slave communication via stdio pipes
+- Modes: 01 Coils, 02 DiscreteInputs (writable), 03 Holding, 04 Input (writable)
+- Address ranges: 0x0000-0x0030 (spaced by 0x0010)
+- Bidirectional write testing for modes 02 and 04
+
+**Multi-Station Tests** (`e2e/multi_station/two_stations.rs`)
+- Test 2-station configurations with various scenarios
+- Mixed register types (Coils + Holding)
+- Spaced addresses (0x0000 and 0x00A0)
+- Mixed station IDs (1 and 5)
+
+#### TUI E2E Tests (`examples/tui_e2e`)
+
+**Single-Station Master Mode** (`e2e/single_station/master_modes.rs`)
+- TUI acts as Modbus Master, CLI acts as Slave
+- Tests all 4 register modes
+- Includes `configure_tui_station` helper following CLAUDE.md workflow
+- Full status monitoring and verification
+
+**Single-Station Slave Mode** (`e2e/single_station/slave_modes.rs`)
+- TUI acts as Modbus Slave, CLI acts as Master
+- Tests all 4 register modes
+- Bidirectional write testing for writable modes
+
+**Multi-Station Master Mode** (`e2e/multi_station/master_modes.rs`)
+- TUI Master with 2 stations
+- Mixed types, spaced addresses, mixed IDs
+
+**Multi-Station Slave Mode** (`e2e/multi_station/slave_modes.rs`)
+- TUI Slave with 2 stations
+- Mixed types (WritableCoils + WritableRegisters)
+- Spaced addresses, mixed IDs (2 and 6)
+
+### Running Tests
+
+```bash
+# CLI single-station tests
+cargo run --package cli_e2e -- --module modbus_single_station_coils
+cargo run --package cli_e2e -- --module modbus_single_station_discrete_inputs
+cargo run --package cli_e2e -- --module modbus_single_station_holding
+cargo run --package cli_e2e -- --module modbus_single_station_input
+
+# CLI multi-station tests
+cargo run --package cli_e2e -- --module modbus_multi_station_mixed_types
+cargo run --package cli_e2e -- --module modbus_multi_station_spaced_addresses
+cargo run --package cli_e2e -- --module modbus_multi_station_mixed_ids
+
+# TUI single-station Master tests
+cargo run --package tui_e2e -- --module tui_master_coils
+cargo run --package tui_e2e -- --module tui_master_discrete_inputs
+cargo run --package tui_e2e -- --module tui_master_holding
+cargo run --package tui_e2e -- --module tui_master_input
+
+# TUI single-station Slave tests
+cargo run --package tui_e2e -- --module tui_slave_coils
+cargo run --package tui_e2e -- --module tui_slave_discrete_inputs
+cargo run --package tui_e2e -- --module tui_slave_holding
+cargo run --package tui_e2e -- --module tui_slave_input
+
+# TUI multi-station Master tests
+cargo run --package tui_e2e -- --module tui_multi_master_mixed_types
+cargo run --package tui_e2e -- --module tui_multi_master_spaced_addresses
+cargo run --package tui_e2e -- --module tui_multi_master_mixed_ids
+
+# TUI multi-station Slave tests
+cargo run --package tui_e2e -- --module tui_multi_slave_mixed_types
+cargo run --package tui_e2e -- --module tui_multi_slave_spaced_addresses
+cargo run --package tui_e2e -- --module tui_multi_slave_mixed_ids
+```
+
+### Test Implementation Guidelines
+
+1. **Station Configuration Workflow** (TUI tests)
+   - Follow the step-by-step process in CLAUDE.md
+   - Use `configure_tui_station` helper for consistency
+   - Always verify status tree after configuration steps
+
+2. **Register Value Configuration**
+   - Set individual register values using hex format (without 0x prefix)
+   - Verify each value with `CheckStatus` action
+   - Use `Ctrl+PgUp` to return to top after configuration
+
+3. **Port Enable Mechanism**
+   - Port is enabled automatically when saving config with `Ctrl+S`
+   - Status changes from `Disabled` → `Running` after save
+   - Wait at least 5 seconds after `Ctrl+S` for port stabilization
+
+4. **Data Verification**
+   - CLI tests: Use stdio pipes and JSON parsing
+   - TUI tests: Combine status monitoring with CLI slave/master verification
+   - Always verify bidirectional communication for writable modes
+
+5. **Clean State**
+   - Remove TUI config cache before each test: `~/.config/aoba/*.json`
+   - Clean up debug status files: `/tmp/ci_tui_status.json`, `/tmp/ci_cli_*_status.json`
+   - Run `socat_init.sh` to reset virtual serial ports if needed
