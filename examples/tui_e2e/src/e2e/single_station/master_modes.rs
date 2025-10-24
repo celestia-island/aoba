@@ -159,21 +159,33 @@ async fn configure_tui_station<T: expectrl::Expect>(
     execute_cursor_actions(session, cap, &actions, "configure_start_address").await?;
 
     // Configure Register Count (field 3, press Down once from Start Address)
-    // NOTE: This field uses hex format internally
+    // CRITICAL: Must use Enter and wait 2s for value to commit before any navigation
     log::info!("🔧 Configuring Register Count: {}", register_count);
     let actions = vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep { ms: 1000 }, // Wait for edit mode to fully initialize
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
-        CursorAction::TypeString(format!("{:x}", register_count)), // Try hex format
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEscape,       // Use Escape to exit
-        CursorAction::Sleep { ms: 3000 }, // Wait longer for register grid to initialize
+        CursorAction::TypeString(register_count.to_string()), // Decimal format
+        CursorAction::Sleep { ms: 1000 }, // Wait for typing to complete
+        CursorAction::PressEnter,         // Confirm edit and commit to status tree
+        CursorAction::Sleep { ms: 2000 }, // CRITICAL: Wait for value to commit to global status
     ];
     execute_cursor_actions(session, cap, &actions, "configure_register_count").await?;
+
+    // Verify the register count was actually committed to status tree
+    let actions = vec![
+        CursorAction::CheckStatus {
+            description: format!("Register count should be {}", register_count),
+            path: "ports[0].modbus_masters[0].register_count".to_string(),
+            expected: json!(register_count),
+            timeout_secs: Some(10),
+            retry_interval_ms: Some(500),
+        },
+    ];
+    execute_cursor_actions(session, cap, &actions, "verify_register_count").await?;
 
     // Configure individual register values if provided
     if let Some(values) = register_values {
@@ -304,7 +316,7 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
         "coils",     // register_mode
         0x0000,      // start_address
         10,          // register_count
-        None,        // Don't configure register values yet - test basic config first
+        Some(&test_data), // register_values
     )
     .await?;
 
