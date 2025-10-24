@@ -27,7 +27,7 @@ fn create_multi_station_config(
 
     for (id, reg_type, addr, len, values) in stations_info {
         let mut map = RegisterMap::default();
-        
+
         let range = RegisterRange {
             address_start: *addr,
             length: *len,
@@ -74,9 +74,18 @@ fn spawn_cli_with_config(config: &Config) -> Result<std::process::Child> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    log::info!("✅ Spawned CLI process with {} stations on port {}", config.stations.len(), config.port_name);
+    log::info!(
+        "✅ Spawned CLI process with {} stations on port {}",
+        config.stations.len(),
+        config.port_name
+    );
     for (i, station) in config.stations.iter().enumerate() {
-        log::info!("  Station {}: ID={}, mode={:?}", i + 1, station.id, station.mode);
+        log::info!(
+            "  Station {}: ID={}, mode={:?}",
+            i + 1,
+            station.id,
+            station.mode
+        );
     }
 
     Ok(child)
@@ -114,11 +123,8 @@ pub async fn test_multi_station_mixed_register_types() -> Result<()> {
         (1u8, "coils", 0x0000u16, 10u16, vec![]),
         (1u8, "holding", 0x0000u16, 10u16, vec![]),
     ];
-    let slave_config = create_multi_station_config(
-        &ports.port2_name,
-        StationMode::Slave,
-        &slave_stations_info,
-    );
+    let slave_config =
+        create_multi_station_config(&ports.port2_name, StationMode::Slave, &slave_stations_info);
 
     // Step 1 - Spawn Master process
     let mut master = spawn_cli_with_config(&master_config)?;
@@ -134,7 +140,11 @@ pub async fn test_multi_station_mixed_register_types() -> Result<()> {
         } else {
             String::new()
         };
-        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
+        return Err(anyhow!(
+            "Master exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave process
@@ -151,11 +161,15 @@ pub async fn test_multi_station_mixed_register_types() -> Result<()> {
         } else {
             String::new()
         };
-        
+
         master.kill()?;
         master.wait()?;
-        
-        return Err(anyhow!("Slave exited prematurely with status {}: {}", status, stderr));
+
+        return Err(anyhow!(
+            "Slave exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 3 - Read output from slave stdout to verify communication
@@ -163,12 +177,12 @@ pub async fn test_multi_station_mixed_register_types() -> Result<()> {
     if let Some(stdout) = slave.stdout.as_mut() {
         let mut reader = BufReader::new(stdout);
         let mut line = String::new();
-        
+
         // Try to read one line of output (with timeout)
         use std::time::{Duration, Instant};
         let start = Instant::now();
         let mut found_output = false;
-        
+
         while start.elapsed() < Duration::from_secs(5) {
             if reader.read_line(&mut line).is_ok() && !line.is_empty() {
                 log::info!("📥 Received output from slave: {}", line.trim());
@@ -177,7 +191,7 @@ pub async fn test_multi_station_mixed_register_types() -> Result<()> {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        
+
         if !found_output {
             log::warn!("⚠️  No output received from slave within timeout");
         }
@@ -227,11 +241,8 @@ pub async fn test_multi_station_spaced_addresses() -> Result<()> {
         (1u8, "holding", 0x0000u16, 10u16, vec![]),
         (1u8, "holding", 0x00A0u16, 10u16, vec![]),
     ];
-    let slave_config = create_multi_station_config(
-        &ports.port2_name,
-        StationMode::Slave,
-        &slave_stations_info,
-    );
+    let slave_config =
+        create_multi_station_config(&ports.port2_name, StationMode::Slave, &slave_stations_info);
 
     // Step 1 - Spawn Master process
     let mut master = spawn_cli_with_config(&master_config)?;
@@ -246,7 +257,11 @@ pub async fn test_multi_station_spaced_addresses() -> Result<()> {
         } else {
             String::new()
         };
-        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
+        return Err(anyhow!(
+            "Master exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave process
@@ -262,22 +277,26 @@ pub async fn test_multi_station_spaced_addresses() -> Result<()> {
         } else {
             String::new()
         };
-        
+
         master.kill()?;
         master.wait()?;
-        
-        return Err(anyhow!("Slave exited prematurely with status {}: {}", status, stderr));
+
+        return Err(anyhow!(
+            "Slave exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 3 - Verify communication
     if let Some(stdout) = slave.stdout.as_mut() {
         let mut reader = BufReader::new(stdout);
         let mut line = String::new();
-        
+
         use std::time::{Duration, Instant};
         let start = Instant::now();
         let mut found_output = false;
-        
+
         while start.elapsed() < Duration::from_secs(5) {
             if reader.read_line(&mut line).is_ok() && !line.is_empty() {
                 log::info!("📥 Received output from slave: {}", line.trim());
@@ -286,7 +305,7 @@ pub async fn test_multi_station_spaced_addresses() -> Result<()> {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        
+
         if !found_output {
             log::warn!("⚠️  No output received from slave within timeout");
         }
@@ -336,11 +355,8 @@ pub async fn test_multi_station_mixed_station_ids() -> Result<()> {
         (1u8, "holding", 0x0000u16, 10u16, vec![]),
         (5u8, "holding", 0x0000u16, 10u16, vec![]),
     ];
-    let slave_config = create_multi_station_config(
-        &ports.port2_name,
-        StationMode::Slave,
-        &slave_stations_info,
-    );
+    let slave_config =
+        create_multi_station_config(&ports.port2_name, StationMode::Slave, &slave_stations_info);
 
     // Step 1 - Spawn Master process
     let mut master = spawn_cli_with_config(&master_config)?;
@@ -355,7 +371,11 @@ pub async fn test_multi_station_mixed_station_ids() -> Result<()> {
         } else {
             String::new()
         };
-        return Err(anyhow!("Master exited prematurely with status {}: {}", status, stderr));
+        return Err(anyhow!(
+            "Master exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 2 - Spawn Slave process
@@ -371,22 +391,26 @@ pub async fn test_multi_station_mixed_station_ids() -> Result<()> {
         } else {
             String::new()
         };
-        
+
         master.kill()?;
         master.wait()?;
-        
-        return Err(anyhow!("Slave exited prematurely with status {}: {}", status, stderr));
+
+        return Err(anyhow!(
+            "Slave exited prematurely with status {}: {}",
+            status,
+            stderr
+        ));
     }
 
     // Step 3 - Verify communication
     if let Some(stdout) = slave.stdout.as_mut() {
         let mut reader = BufReader::new(stdout);
         let mut line = String::new();
-        
+
         use std::time::{Duration, Instant};
         let start = Instant::now();
         let mut found_output = false;
-        
+
         while start.elapsed() < Duration::from_secs(5) {
             if reader.read_line(&mut line).is_ok() && !line.is_empty() {
                 log::info!("📥 Received output from slave: {}", line.trim());
@@ -395,7 +419,7 @@ pub async fn test_multi_station_mixed_station_ids() -> Result<()> {
             }
             std::thread::sleep(Duration::from_millis(100));
         }
-        
+
         if !found_output {
             log::warn!("⚠️  No output received from slave within timeout");
         }
