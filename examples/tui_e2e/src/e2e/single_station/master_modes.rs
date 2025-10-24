@@ -41,9 +41,6 @@ async fn configure_tui_station<T: expectrl::Expect>(
     let actions = vec![
         CursorAction::PressEnter,        // Create station
         CursorAction::Sleep { ms: 2000 }, // Wait longer for station to be created
-        CursorAction::DebugBreakpoint {
-            description: "after_create_station".to_string(),
-        },
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
@@ -108,22 +105,22 @@ async fn configure_tui_station<T: expectrl::Expect>(
     let register_mode_navigation = match register_mode {
         "coils" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow { direction: ArrowKey::Left, count: 2 },
-            CursorAction::Sleep { ms: 200 },
-            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEscape,     // Use Escape to exit edit mode
             CursorAction::Sleep { ms: 500 },
         ],
         "discrete_inputs" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow { direction: ArrowKey::Left, count: 1 },
-            CursorAction::Sleep { ms: 200 },
-            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEscape,
             CursorAction::Sleep { ms: 500 },
         ],
         "holding" => vec![
@@ -133,12 +130,12 @@ async fn configure_tui_station<T: expectrl::Expect>(
         ],
         "input" => vec![
             CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
-            CursorAction::Sleep { ms: 200 },
-            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressEscape,
             CursorAction::Sleep { ms: 500 },
         ],
         _ => return Err(anyhow!("Invalid register mode: {}", register_mode)),
@@ -150,18 +147,14 @@ async fn configure_tui_station<T: expectrl::Expect>(
     let actions = vec![
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
-        CursorAction::DebugBreakpoint { description: "before_start_addr_enter".to_string() },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 300 },
-        CursorAction::DebugBreakpoint { description: "after_start_addr_enter".to_string() },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(format!("{:x}", start_address)), // Hex without 0x prefix
         CursorAction::Sleep { ms: 300 },
-        CursorAction::DebugBreakpoint { description: "after_start_addr_typed".to_string() },
-        CursorAction::PressEscape,       // Use Escape to exit edit mode instead of Enter
-        CursorAction::Sleep { ms: 500 }, // Wait longer for value to commit
-        CursorAction::DebugBreakpoint { description: "after_start_addr_escape".to_string() },
+        CursorAction::PressEscape,       // Use Escape to exit edit mode
+        CursorAction::Sleep { ms: 500 }, // Wait for value to commit
     ];
     execute_cursor_actions(session, cap, &actions, "configure_start_address").await?;
 
@@ -315,14 +308,8 @@ pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {
     // TODO: Step 7 - Save configuration with Ctrl+S (this enables the port)
     log::info!("🧪 Step 7: Save configuration and enable port");
     let actions = vec![
-        CursorAction::DebugBreakpoint {
-            description: "before_ctrl_s".to_string(),
-        },
         CursorAction::PressCtrlS,
         CursorAction::Sleep { ms: 5000 }, // Wait for port to enable
-        CursorAction::DebugBreakpoint {
-            description: "after_ctrl_s".to_string(),
-        },
     ];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
