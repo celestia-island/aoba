@@ -227,14 +227,12 @@ async fn configure_tui_station<T: expectrl::Expect>(
     }
 
     // Save configuration with Ctrl+S to commit all changes to disk
-    // Then press Escape to leave the panel and trigger port enable (ToggleRuntime)
+    // Ctrl+S automatically triggers ToggleRuntime to enable the port (no need for Escape)
     // CRITICAL: Do NOT navigate away (e.g., Ctrl+PgUp) before Ctrl+S - it discards changes!
-    log::info!("📍 Saving configuration with Ctrl+S and Escape");
+    log::info!("📍 Saving configuration with Ctrl+S (auto-enables port)");
     let actions = vec![
         CursorAction::Sleep { ms: 1000 },  // Wait for all changes to settle
-        CursorAction::PressCtrlS,          // Save configuration to disk
-        CursorAction::Sleep { ms: 1000 },  // Wait for save to complete
-        CursorAction::PressEscape,         // Leave panel - this triggers ToggleRuntime to enable port!
+        CursorAction::PressCtrlS,          // Save config & enable port (calls ToggleRuntime internally)
         CursorAction::Sleep { ms: 5000 },  // Wait for port to enable and subprocess to spawn
     ];
     execute_cursor_actions(session, cap, &actions, "save_and_enable").await?;
