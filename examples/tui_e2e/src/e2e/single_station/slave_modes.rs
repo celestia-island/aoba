@@ -35,10 +35,7 @@ async fn configure_tui_slave_station<T: expectrl::Expect>(
     );
 
     // Create station
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-    ];
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
     // Configure Station ID
@@ -58,12 +55,12 @@ async fn configure_tui_slave_station<T: expectrl::Expect>(
 
     // Configure Connection Mode to Slave
     let actions = vec![
-        CursorAction::PressEnter,        // Enter edit mode
+        CursorAction::PressEnter, // Enter edit mode
         CursorAction::PressArrow {
-            direction: ArrowKey::Left,    // Move from Master (0) to Slave (1)
+            direction: ArrowKey::Left, // Move from Master (0) to Slave (1)
             count: 1,
         },
-        CursorAction::PressEnter,        // Confirm
+        CursorAction::PressEnter, // Confirm
         CursorAction::Sleep { ms: 200 },
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
@@ -197,20 +194,9 @@ pub async fn test_tui_slave_coils(port1: &str, port2: &str) -> Result<()> {
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
 
-    configure_tui_slave_station(
-        &mut tui_session,
-        &mut tui_cap,
-        1,
-        "coils",
-        0x0000,
-        10,
-    )
-    .await?;
+    configure_tui_slave_station(&mut tui_session, &mut tui_cap, 1, "coils", 0x0000, 10).await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
@@ -333,10 +319,7 @@ pub async fn test_tui_slave_discrete_inputs(port1: &str, port2: &str) -> Result<
     )
     .await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
@@ -445,20 +428,9 @@ pub async fn test_tui_slave_holding_registers(port1: &str, port2: &str) -> Resul
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
 
-    configure_tui_slave_station(
-        &mut tui_session,
-        &mut tui_cap,
-        1,
-        "holding",
-        0x0020,
-        10,
-    )
-    .await?;
+    configure_tui_slave_station(&mut tui_session, &mut tui_cap, 1, "holding", 0x0020, 10).await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
@@ -567,20 +539,9 @@ pub async fn test_tui_slave_input_registers(port1: &str, port2: &str) -> Result<
     }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "verify_clean").await?;
 
-    configure_tui_slave_station(
-        &mut tui_session,
-        &mut tui_cap,
-        1,
-        "input",
-        0x0030,
-        10,
-    )
-    .await?;
+    configure_tui_slave_station(&mut tui_session, &mut tui_cap, 1, "input", 0x0030, 10).await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {

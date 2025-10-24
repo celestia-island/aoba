@@ -27,18 +27,25 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
     // Phase 1: Create all stations first
     for i in 0..stations.len() {
         let actions = vec![
-            CursorAction::PressEnter,        // Create station
+            CursorAction::PressEnter, // Create station
             CursorAction::Sleep { ms: 1000 },
-            CursorAction::PressCtrlPageUp,   // Return to Create Station button
+            CursorAction::PressCtrlPageUp, // Return to Create Station button
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("create_station_{}", i + 1)).await?;
+        execute_cursor_actions(session, cap, &actions, &format!("create_station_{}", i + 1))
+            .await?;
     }
 
     // Configure Connection Mode to Slave (for first station, applies to all)
     let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
         CursorAction::PressEnter,
-        CursorAction::PressArrow { direction: ArrowKey::Left, count: 1 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Left,
+            count: 1,
+        },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 200 },
         CursorAction::PressCtrlPageUp,
@@ -46,20 +53,32 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
     execute_cursor_actions(session, cap, &actions, "set_slave_mode").await?;
 
     // Phase 2: Configure each station
-    for (i, (station_id, register_mode, start_address, register_count)) in stations.iter().enumerate() {
-        log::info!("🔧 Configuring slave station {}: ID={}, mode={}, addr=0x{:04X}, count={}", 
-                   i + 1, station_id, register_mode, start_address, register_count);
+    for (i, (station_id, register_mode, start_address, register_count)) in
+        stations.iter().enumerate()
+    {
+        log::info!(
+            "🔧 Configuring slave station {}: ID={}, mode={}, addr=0x{:04X}, count={}",
+            i + 1,
+            station_id,
+            register_mode,
+            start_address,
+            register_count
+        );
 
         // Navigate to station using Ctrl+PgUp + PgDown
         let mut actions = vec![CursorAction::PressCtrlPageUp];
         for _ in 0..=i {
             actions.push(CursorAction::PressPageDown);
         }
-        execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{}", i + 1)).await?;
+        execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{}", i + 1))
+            .await?;
 
         // Configure Station ID
         let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
             CursorAction::PressEnter,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
@@ -70,41 +89,76 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
         execute_cursor_actions(session, cap, &actions, &format!("station_{}_id", i + 1)).await?;
 
         // Skip Connection Mode (already set to Slave)
-        let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        ];
-        execute_cursor_actions(session, cap, &actions, &format!("station_{}_skip_mode", i + 1)).await?;
+        let actions = vec![CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        }];
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("station_{}_skip_mode", i + 1),
+        )
+        .await?;
 
         // Configure Register Type
         let register_mode_navigation = match *register_mode {
             "coils" => vec![
-                CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
                 CursorAction::PressEnter,
-                CursorAction::PressArrow { direction: ArrowKey::Left, count: 2 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Left,
+                    count: 2,
+                },
                 CursorAction::PressEnter,
             ],
             "discrete_inputs" => vec![
-                CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
                 CursorAction::PressEnter,
-                CursorAction::PressArrow { direction: ArrowKey::Left, count: 1 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Left,
+                    count: 1,
+                },
                 CursorAction::PressEnter,
             ],
-            "holding" => vec![
-                CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-            ],
+            "holding" => vec![CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            }],
             "input" => vec![
-                CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
                 CursorAction::PressEnter,
-                CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 },
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Right,
+                    count: 1,
+                },
                 CursorAction::PressEnter,
             ],
             _ => return Err(anyhow!("Invalid register mode: {}", register_mode)),
         };
-        execute_cursor_actions(session, cap, &register_mode_navigation, &format!("station_{}_type", i + 1)).await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &register_mode_navigation,
+            &format!("station_{}_type", i + 1),
+        )
+        .await?;
 
         // Configure Start Address
         let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
             CursorAction::PressEnter,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
@@ -116,7 +170,10 @@ async fn configure_multiple_tui_slave_stations<T: expectrl::Expect>(
 
         // Configure Register Count
         let actions = vec![
-            CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
             CursorAction::PressEnter,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
@@ -190,10 +247,7 @@ pub async fn test_tui_multi_slave_mixed_register_types(port1: &str, port2: &str)
     ];
     configure_multiple_tui_slave_stations(&mut tui_session, &mut tui_cap, &stations).await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
@@ -257,10 +311,7 @@ pub async fn test_tui_multi_slave_spaced_addresses(port1: &str, port2: &str) -> 
     ];
     configure_multiple_tui_slave_stations(&mut tui_session, &mut tui_cap, &stations).await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {
@@ -324,10 +375,7 @@ pub async fn test_tui_multi_slave_mixed_station_ids(port1: &str, port2: &str) ->
     ];
     configure_multiple_tui_slave_stations(&mut tui_session, &mut tui_cap, &stations).await?;
 
-    let actions = vec![
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 5000 },
-    ];
+    let actions = vec![CursorAction::PressCtrlS, CursorAction::Sleep { ms: 5000 }];
     execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "save_config").await?;
 
     let actions = vec![CursorAction::CheckStatus {

@@ -326,10 +326,12 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
 }
 
 /// Run the configuration in an async runtime
-async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+async fn run_config_runtime(
+    config: &super::config::Config,
+) -> Result<(), Box<dyn std::error::Error>> {
     use rmodbus::server::context::ModbusContext;
-    use std::sync::{Arc, Mutex};
     use std::io::Write;
+    use std::sync::{Arc, Mutex};
 
     // Open the serial port
     let port_handle = serialport::new(&config.port_name, config.baud_rate)
@@ -348,7 +350,7 @@ async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dy
     for station in &config.stations {
         if matches!(station.mode, super::config::StationMode::Master) {
             let mut storage_lock = storage.lock().unwrap();
-            
+
             // Set initial values for coils
             for range in &station.map.coils {
                 for (i, &val) in range.initial_values.iter().enumerate() {
@@ -358,7 +360,7 @@ async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dy
                     }
                 }
             }
-            
+
             // Set initial values for discrete inputs
             for range in &station.map.discrete_inputs {
                 for (i, &val) in range.initial_values.iter().enumerate() {
@@ -368,7 +370,7 @@ async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dy
                     }
                 }
             }
-            
+
             // Set initial values for holding registers
             for range in &station.map.holding {
                 for (i, &val) in range.initial_values.iter().enumerate() {
@@ -378,7 +380,7 @@ async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dy
                     }
                 }
             }
-            
+
             // Set initial values for input registers
             for range in &station.map.input {
                 for (i, &val) in range.initial_values.iter().enumerate() {
@@ -398,11 +400,11 @@ async fn run_config_runtime(config: &super::config::Config) -> Result<(), Box<dy
         // Process Modbus frames
         let mut buffer = [0u8; 256];
         let mut port = port_arc.lock().unwrap();
-        
+
         match port.read(&mut buffer) {
             Ok(n) if n > 0 => {
                 drop(port); // Release lock before processing
-                
+
                 // Process the frame
                 let request = &buffer[..n];
                 if let Some(response) = process_modbus_frame(request, &storage, &config.stations) {
@@ -444,11 +446,11 @@ fn process_modbus_frame(
     }
 
     let station_id = request[0];
-    
+
     // Find if we have a station with this ID configured as slave/listener
-    let has_station = stations.iter().any(|s| {
-        s.id == station_id && matches!(s.mode, super::config::StationMode::Slave)
-    });
+    let has_station = stations
+        .iter()
+        .any(|s| s.id == station_id && matches!(s.mode, super::config::StationMode::Slave));
 
     if !has_station {
         // Not our station, ignore
@@ -457,23 +459,23 @@ fn process_modbus_frame(
 
     // Process the request using rmodbus
     let storage_lock = storage.lock().unwrap();
-    
+
     // Parse and respond to the request
     let mut response = Vec::new();
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response);
-    
+
     if let Err(e) = frame.parse() {
         log::warn!("Failed to parse Modbus frame: {:?}", e);
         return None;
     }
-    
+
     if let Err(e) = frame.process_read(&*storage_lock) {
         log::warn!("Failed to process Modbus read: {:?}", e);
         return None;
     }
-    
+
     drop(storage_lock);
-    
+
     if response.is_empty() {
         None
     } else {

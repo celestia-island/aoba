@@ -93,21 +93,25 @@ pub async fn test_multi_masters() -> Result<()> {
     match process.try_wait()? {
         None => {
             // Process is still running, which is expected for persistent config mode
-            log::info!("✅ Multi-masters configuration process started successfully and is running");
+            log::info!(
+                "✅ Multi-masters configuration process started successfully and is running"
+            );
         }
         Some(status) => {
             // Process exited unexpectedly
             let output = process.wait_with_output()?;
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
-            
+
             log::error!("❌ Process exited prematurely with status: {}", status);
             log::error!("stdout: {}", stdout);
             log::error!("stderr: {}", stderr);
-            
+
             // Clean up and return error
             std::fs::remove_file(&config_file)?;
-            return Err(anyhow::anyhow!("Multi-masters configuration process exited prematurely"));
+            return Err(anyhow::anyhow!(
+                "Multi-masters configuration process exited prematurely"
+            ));
         }
     }
 
