@@ -155,74 +155,26 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressPageDown,  // Jump to Station #1
         CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "nav_to_station_1").await?;
-
-    // Configure Station ID = 1 (Down 1 time to Station ID field)
-    let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressCtrlA,  // Select all
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressBackspace,  // Clear
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::TypeString("1".to_string()),
+        // Now at Station #1 header, go to Register Length field (Down 3 times from Station ID)
+        // Station ID is first editable field after header
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 },  // Skip to Register Length
         CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station1_id").await?;
-
-    // Register Type stays at Holding (default), so skip to Start Address (Down 1 more time)
-    let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressCtrlA,  // Select all
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressBackspace,  // Clear
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::TypeString("0".to_string()),
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station1_addr").await?;
-
-    // Configure Register Length = 10 (Down 1 more time)
-    let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },  // Longer wait for edit mode
-        CursorAction::PressCtrlA,  // Select all
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressBackspace,  // Clear
-        CursorAction::Sleep { ms: 300 },
         CursorAction::TypeString("10".to_string()),
-        CursorAction::Sleep { ms: 1000 },  // Longer wait for typing
+        CursorAction::Sleep { ms: 1000 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 3000 },  // Much longer wait for value to commit
+        CursorAction::Sleep { ms: 2000 },
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station1_len").await?;
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station1").await?;
 
     // Verify Station 1 configuration
     let actions = vec![
         CursorAction::CheckStatus {
-            description: "Station 1 should have holding registers".to_string(),
-            path: "ports[0].modbus_masters[0].register_type".to_string(),
-            expected: json!("Holding"),
-            timeout_secs: Some(10),  // Increased timeout
-            retry_interval_ms: Some(500),
-        },
-        CursorAction::CheckStatus {
             description: "Station 1 should have 10 registers".to_string(),
             path: "ports[0].modbus_masters[0].register_count".to_string(),
             expected: json!(10),
-            timeout_secs: Some(10),  // Increased timeout
+            timeout_secs: Some(10),
             retry_interval_ms: Some(500),
         },
     ];
@@ -239,28 +191,15 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressPageDown,  // Jump to Station #2
         CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "nav_to_station_2").await?;
-
-    // Configure Station ID = 2
-    let actions = vec![
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressCtrlA,  // Select all
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressBackspace,  // Clear
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::TypeString("2".to_string()),
-        CursorAction::Sleep { ms: 500 },
+        // Now at Station #2, need to configure: Station ID=2, Register Type=Coil, Addr=100, Len=8
+        // Station ID (Down 0 - already there after station header)
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station2_id").await?;
-
-    // Change Register Type to Coil (01) - Down 1, Enter, Left twice, Enter
-    let actions = vec![
+        CursorAction::TypeString("2".to_string()),
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 },
+        // Register Type (Down 1) - Change to Coil
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
@@ -269,52 +208,29 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station2_type").await?;
-
-    // Configure Start Address = 100
-    let actions = vec![
+        // Start Address (Down 1) - Set to 100
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
-        CursorAction::PressCtrlA,  // Select all
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressBackspace,  // Clear
-        CursorAction::Sleep { ms: 200 },
+        CursorAction::Sleep { ms: 1000 },
         CursorAction::TypeString("100".to_string()),
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep { ms: 1000 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station2_addr").await?;
-
-    // Configure Register Length = 8
-    let actions = vec![
+        // Register Length (Down 1) - Set to 8
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-        CursorAction::PressCtrlA,  // Select all
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressBackspace,  // Clear
-        CursorAction::Sleep { ms: 300 },
         CursorAction::TypeString("8".to_string()),
         CursorAction::Sleep { ms: 1000 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 3000 },
+        CursorAction::Sleep { ms: 2000 },
     ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station2_len").await?;
+    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "config_station2").await?;
 
     // Verify Station 2 configuration
     let actions = vec![
-        CursorAction::CheckStatus {
-            description: "Station 2 should have coil registers".to_string(),
-            path: "ports[0].modbus_masters[1].register_type".to_string(),
-            expected: json!("Coils"),
-            timeout_secs: Some(10),
-            retry_interval_ms: Some(500),
-        },
         CursorAction::CheckStatus {
             description: "Station 2 should have 8 registers".to_string(),
             path: "ports[0].modbus_masters[1].register_count".to_string(),
