@@ -150,15 +150,24 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
     log::info!("🧪 Step 6: Configuring Station #1 (Holding registers)");
     
     // Navigate to Station 1: Ctrl+PgUp, then PgDown once
+    // After PgDown, based on testing, cursor lands at Station ID field
+    // Field order: Station ID (0) -> Register Type (1) -> Start Address (2) -> Register Length (3) -> Registers grid (4)
+    // Need Down 3 to reach Register Length from Station ID
+    // But testing shows Down 3 goes to Start Address, so maybe there's a hidden field or the count is off
+    // Let's try a different approach: navigate to the position and add a debug breakpoint
     let actions = vec![
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressPageDown,  // Jump to Station #1
         CursorAction::Sleep { ms: 500 },
-        // Now at Station #1 header, go to Register Length field (Down 3 times from Station ID)
-        // Station ID is first editable field after header
-        CursorAction::PressArrow { direction: ArrowKey::Down, count: 3 },  // Skip to Register Length
-        CursorAction::Sleep { ms: 500 },
+        // Try Down 1 at a time and check each position
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
+        CursorAction::Sleep { ms: 300 },
+        // Should now be at Register Length after Down 3
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
         CursorAction::TypeString("10".to_string()),
@@ -184,6 +193,8 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
     log::info!("🧪 Step 7: Configuring Station #2 (Coil registers)");
     
     // Navigate to Station 2: Ctrl+PgUp, then PgDown twice
+    // After second PgDown, cursor is at Station ID of Station #2 (same as Station #1)
+    // Configure all fields: Station ID, Register Type, Start Address, Register Length
     let actions = vec![
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 300 },
@@ -191,15 +202,14 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressPageDown,  // Jump to Station #2
         CursorAction::Sleep { ms: 500 },
-        // Now at Station #2, need to configure: Station ID=2, Register Type=Coil, Addr=100, Len=8
-        // Station ID (Down 0 - already there after station header)
+        // Cursor is now at Station ID of Station #2
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
         CursorAction::TypeString("2".to_string()),
         CursorAction::Sleep { ms: 1000 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-        // Register Type (Down 1) - Change to Coil
+        // Now go Down 1 to Register Type, change to Coil
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
@@ -208,7 +218,7 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-        // Start Address (Down 1) - Set to 100
+        // Go Down 1 to Start Address, set to 100
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
@@ -217,7 +227,7 @@ pub async fn test_tui_multi_master_mixed_types(port1: &str, port2: &str) -> Resu
         CursorAction::Sleep { ms: 1000 },
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 1000 },
-        // Register Length (Down 1) - Set to 8
+        // Go Down 1 to Register Length, set to 8
         CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
