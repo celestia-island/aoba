@@ -11,20 +11,60 @@ env:
 jobs:
   # Single setup job that builds everything and prepares for testing (reusable)
   setup:
-    uses: ./.github/workflows/reusable-setup.yml
-    with:
-      install_rust: true
-      rust_toolchain: stable
-      install_deps: gui
-      build_packages: |
-        aoba
-        cli_e2e
-        tui_e2e
-      upload_artifacts: true
-      artifacts: |
-        target/debug/aoba
-        target/debug/cli_e2e
-        target/debug/tui_e2e
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      built: ${{ steps.set-built-output.outputs.built }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install system dependencies (gui)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build packages
+        run: |
+          echo "Building packages:"
+          echo "aoba"
+          echo "cli_e2e"
+          echo "tui_e2e"
+          cargo build --package aoba
+          cargo build --package cli_e2e
+          cargo build --package tui_e2e
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            target/debug/aoba
+            target/debug/cli_e2e
+            target/debug/tui_e2e
+
+      # set a simple output to indicate we ran
+      - name: Set built output
+        id: set-built-output
+        run: |
+          echo "built=true" >> $GITHUB_OUTPUT
 
   # CLI E2E Basic tests (no vcom needed)
   cli-e2e-basic:
@@ -44,19 +84,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: ./.github/actions/test-prep
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          need_gui_deps: false
-          need_ports: ${{ matrix.module == 'modbus_basic_master_slave' }}
+          name: build-artifacts
+          path: target/debug/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/cli_e2e
+
+      - name: Install socat
+        if: matrix.module == 'modbus_basic_master_slave'
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        if: matrix.module == 'modbus_basic_master_slave'
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}
-
-      - name: Cleanup virtual ports
-        if: matrix.module == 'modbus_basic_master_slave' && always()
-        run: |
-          pkill socat || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
 
   # CLI E2E Config Mode tests (multi-masters and multi-slaves)
   cli-e2e-config-mode:
@@ -76,19 +126,27 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: ./.github/actions/test-prep
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          need_gui_deps: false
-          need_ports: true
+          name: build-artifacts
+          path: target/debug/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/cli_e2e
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}
-
-      - name: Cleanup virtual ports
-        if: always()
-        run: |
-          pkill socat || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
 
   # TUI E2E Single-Station Master Mode tests
   tui-e2e-single-master:
@@ -107,19 +165,27 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: ./.github/actions/test-prep
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          need_gui_deps: true
-          need_ports: true
+          name: build-artifacts
+          path: target/debug/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/tui_e2e
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
-
-      - name: Cleanup virtual ports
-        if: always()
-        run: |
-          pkill socat || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
 
   # TUI E2E Single-Station Slave Mode tests
   tui-e2e-single-slave:
@@ -138,20 +204,27 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: ./.github/actions/test-prep
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          need_gui_deps: true
-          need_ports: true
+          name: build-artifacts
+          path: target/debug/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/tui_e2e
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
-
-      - name: Cleanup virtual ports
-        if: always()
-        run: |
-          pkill socat || true
-          pkill aoba || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
 
   # TUI E2E Multi-Station Master Mode tests
   tui-e2e-multi-master:
@@ -169,20 +242,27 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: ./.github/actions/test-prep
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          need_gui_deps: true
-          need_ports: true
+          name: build-artifacts
+          path: target/debug/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/tui_e2e
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
-
-      - name: Cleanup virtual ports
-        if: always()
-        run: |
-          pkill socat || true
-          pkill aoba || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
 
   # TUI E2E Multi-Station Slave Mode tests
   tui-e2e-multi-slave:
@@ -200,17 +280,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: ./.github/actions/test-prep
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
         with:
-          need_gui_deps: true
-          need_ports: true
+          name: build-artifacts
+          path: target/debug/
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/tui_e2e
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
-
-      - name: Cleanup virtual ports
-        if: always()
-        run: |
-          pkill socat || true
-          pkill aoba || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
