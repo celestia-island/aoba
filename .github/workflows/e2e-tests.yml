@@ -16,7 +16,6 @@ jobs:
       install_rust: true
       rust_toolchain: stable
       install_deps: gui
-      socat_init: true
       build_packages: |
         aoba
         cli_e2e
@@ -40,100 +39,21 @@ jobs:
           - list_ports
           - list_ports_json
           - list_ports_status
+          - modbus_basic_master_slave
 
     steps:
       - uses: actions/checkout@v5
 
-      - &download_artifact
-        name: Download build artifacts
-        uses: actions/download-artifact@v4
+      - uses: ./.github/actions/test-prep
         with:
-          name: build-artifacts
-          path: target/debug/
-
-      - &make_exec_cli
-        name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/cli_e2e
-
-      - name: Run CLI E2E module
-        run: ./target/debug/cli_e2e --module ${{ matrix.module }}
-
-  # CLI E2E Single-Station tests
-  cli-e2e-single-station:
-    name: CLI E2E Single-Station - ${{ matrix.module }}
-    needs: setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        module:
-          - modbus_single_station_coils
-          - modbus_single_station_discrete_inputs
-          - modbus_single_station_holding
-          - modbus_single_station_input
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - &install_deps_basic
-        name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config socat
-
-      - *download_artifact
-
-      - *make_exec_cli
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
-
-      - name: Run CLI E2E module
-        run: ./target/debug/cli_e2e --module ${{ matrix.module }}
-
-      - &socat_cleanup
-        name: Cleanup virtual ports
-        if: always()
-        run: |
-          pkill socat || true
-          rm -f /tmp/vcom1 /tmp/vcom2 || true
-
-  # CLI E2E Multi-Station tests
-  cli-e2e-multi-station:
-    name: CLI E2E Multi-Station - ${{ matrix.module }}
-    needs: setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        module:
-          - modbus_multi_station_mixed_types
-          - modbus_multi_station_spaced_addresses
-          - modbus_multi_station_mixed_ids
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - *install_deps_basic
-
-      - *download_artifact
-
-      - *make_exec_cli
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+          need_gui_deps: false
+          need_ports: ${{ matrix.module == 'modbus_basic_master_slave' }}
 
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}
 
       - name: Cleanup virtual ports
-        if: always()
+        if: matrix.module == 'modbus_basic_master_slave' && always()
         run: |
           pkill socat || true
           rm -f /tmp/vcom1 /tmp/vcom2 || true
@@ -156,16 +76,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - *install_deps_basic
-
-      - *download_artifact
-
-      - *make_exec_cli
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+      - uses: ./.github/actions/test-prep
+        with:
+          need_gui_deps: false
+          need_ports: true
 
       - name: Run CLI E2E module
         run: ./target/debug/cli_e2e --module ${{ matrix.module }}
@@ -193,23 +107,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
-
-      - *download_artifact
-
-      - &make_exec_tui
-        name: Make binaries executable
-        run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/tui_e2e
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+      - uses: ./.github/actions/test-prep
+        with:
+          need_gui_deps: true
+          need_ports: true
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
@@ -237,25 +138,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
-
-      - *download_artifact
-
-      - *make_exec_tui
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+      - uses: ./.github/actions/test-prep
+        with:
+          need_gui_deps: true
+          need_ports: true
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
 
-      - &socat_cleanup_aoba
-        name: Cleanup virtual ports
+      - name: Cleanup virtual ports
         if: always()
         run: |
           pkill socat || true
@@ -278,19 +169,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
-
-      - *download_artifact
-
-      - *make_exec_tui
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+      - uses: ./.github/actions/test-prep
+        with:
+          need_gui_deps: true
+          need_ports: true
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
@@ -318,19 +200,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
-
-      - *download_artifact
-
-      - *make_exec_tui
-
-      - name: Setup virtual serial ports
-        run: |
-          chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
+      - uses: ./.github/actions/test-prep
+        with:
+          need_gui_deps: true
+          need_ports: true
 
       - name: Run TUI E2E module
         run: ./target/debug/tui_e2e --module ${{ matrix.module }}
