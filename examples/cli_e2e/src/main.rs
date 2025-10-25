@@ -1,5 +1,3 @@
-// TODO: Temporarily commented out - needs update to new config structure
-// mod config_mode;
 mod e2e;
 mod help;
 mod list_ports;

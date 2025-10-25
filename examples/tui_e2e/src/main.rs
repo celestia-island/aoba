@@ -1,5 +1,4 @@
 mod e2e;
-mod utils;
 
 use anyhow::Result;
 use clap::Parser;
