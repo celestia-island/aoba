@@ -2,7 +2,6 @@
 ///
 /// Tests TUI acting as Modbus Slave with multiple stations configured.
 use anyhow::{anyhow, Result};
-use std::process::{Command, Stdio};
 
 use ci_utils::{
     auto_cursor::{execute_cursor_actions, CursorAction},
@@ -11,7 +10,7 @@ use ci_utils::{
     key_input::ArrowKey,
     ports::{port_exists, vcom_matchers_with_ports},
     snapshot::{TerminalCapture, TerminalSize},
-    terminal::{build_debug_bin, spawn_expect_process},
+    terminal::spawn_expect_process,
     tui::enter_modbus_panel,
 };
 use serde_json::json;
