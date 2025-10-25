@@ -78,16 +78,7 @@ pub async fn execute_cursor_actions<T: Expect>(
     actions: &[CursorAction],
     session_name: &str,
 ) -> Result<()> {
-    log::info!(
-        "🤖 Executing {} cursor actions for {}",
-        actions.len(),
-        session_name
-    );
-
     for (idx, action) in actions.iter().enumerate() {
-        log::info!("📍 Action {} of {}: starting", idx + 1, actions.len());
-        log::debug!("Action {} / {}: {:?}", idx + 1, actions.len(), action);
-
         match action {
             CursorAction::MatchPattern {
                 pattern,
@@ -96,8 +87,6 @@ pub async fn execute_cursor_actions<T: Expect>(
                 col_range,
                 retry_action,
             } => {
-                log::info!("🔍 Matching pattern '{description}' with nested retry logic");
-
                 const INNER_RETRIES: usize = 3; // Number of screen captures before executing retry_action
                 const OUTER_RETRIES: usize = 3; // Number of times to execute retry_action
                 const RETRY_INTERVAL_MS: u64 = 1000;
@@ -156,13 +145,9 @@ pub async fn execute_cursor_actions<T: Expect>(
 
                         // Try to match pattern
                         if pattern.is_match(&search_text) {
-                            log::info!(
-                                "✓ Pattern '{description}' matched successfully on attempt {total_attempts} (outer {outer_attempt}, inner {inner_attempt})"
-                            );
                             matched = true;
                             break;
                         } else {
-                            log::debug!("Pattern '{description}' not matched on attempt {total_attempts}, retrying in {RETRY_INTERVAL_MS}ms...");
                             tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
                                 .await;
                         }
@@ -176,10 +161,6 @@ pub async fn execute_cursor_actions<T: Expect>(
                     // If we have retry_action and haven't exhausted outer retries, execute it
                     if let Some(ref retry_actions) = retry_action {
                         if outer_attempt < OUTER_RETRIES {
-                            log::info!(
-                                "🔄 Pattern '{description}' not matched after {INNER_RETRIES} attempts, executing retry_action (outer attempt {outer_attempt}/{OUTER_RETRIES})..."
-                            );
-
                             // Recursively execute retry_action using Box::pin for async recursion
                             Box::pin(execute_cursor_actions(
                                 session,
@@ -188,8 +169,6 @@ pub async fn execute_cursor_actions<T: Expect>(
                                 &format!("{session_name}_retry_{outer_attempt}"),
                             ))
                             .await?;
-
-                            log::info!("✓ Retry action completed, resuming pattern matching...");
 
                             // Add a small delay after retry_action before next attempt
                             tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
@@ -202,9 +181,10 @@ pub async fn execute_cursor_actions<T: Expect>(
                 }
 
                 if !matched {
-                    // All retries failed - dump screen and return error
+                    // All retries failed - dump screen and return error with step position
                     log::error!(
-                        "❌ Pattern '{description}' NOT FOUND after {total_attempts} total attempts ({OUTER_RETRIES} outer × {INNER_RETRIES} inner)"
+                        "❌ Action Step {} FAILED: Pattern '{description}' NOT FOUND after {total_attempts} total attempts ({OUTER_RETRIES} outer × {INNER_RETRIES} inner)",
+                        idx + 1
                     );
                     log::error!("Expected pattern: {:?}", pattern.as_str());
 
@@ -220,12 +200,12 @@ pub async fn execute_cursor_actions<T: Expect>(
                     log::error!("\n{last_screen}\n");
 
                     return Err(anyhow!(
-                        "Pattern '{description}' not found in {session_name} after {total_attempts} attempts (lines {start_line}..={end_line}, cols {col_range:?})",
+                        "Action Step {}: Pattern '{description}' not found in {session_name} after {total_attempts} attempts (lines {start_line}..={end_line}, cols {col_range:?})",
+                        idx + 1
                     ));
                 }
             }
             CursorAction::PressArrow { direction, count } => {
-                log::info!("⬆️⬇️ Pressing {direction:?} {count} times");
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
@@ -233,79 +213,66 @@ pub async fn execute_cursor_actions<T: Expect>(
                 sleep_a_while().await;
             }
             CursorAction::PressEnter => {
-                log::info!("↩️ Pressing Enter");
                 session.send_enter()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressEscape => {
-                log::info!("⎋ Pressing Escape");
                 session.send_escape()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressTab => {
-                log::info!("⇥ Pressing Tab");
                 session.send_tab()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::CtrlC => {
-                log::info!("🛑 Pressing Ctrl+C to exit");
                 session.send_ctrl_c()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressCtrlS => {
-                log::info!("💾 Pressing Ctrl+S to save");
                 session.send_ctrl_s()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressCtrlA => {
-                log::info!("🔤 Pressing Ctrl+A to select all");
                 session.send_ctrl_a()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressBackspace => {
-                log::info!("⌫ Pressing Backspace");
                 session.send_backspace()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressPageUp => {
-                log::info!("⬆️📄 Pressing PageUp");
                 session.send_page_up()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressPageDown => {
-                log::info!("⬇️📄 Pressing PageDown");
                 session.send_page_down()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressCtrlPageUp => {
-                log::info!("⬆️📄 Pressing Ctrl+PageUp");
                 session.send_ctrl_page_up()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::PressCtrlPageDown => {
-                log::info!("⬇️📄 Pressing Ctrl+PageDown");
                 session.send_ctrl_page_down()?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::TypeChar(ch) => {
-                log::info!("⌨️ Typing character '{ch}'");
                 session.send_char(*ch)?;
                 // Auto sleep after keypress
                 sleep_a_while().await;
             }
             CursorAction::TypeString(s) => {
-                log::info!("⌨️ Typing string '{s}'");
                 for ch in s.chars() {
                     session.send_char(ch)?;
                 }
@@ -313,7 +280,6 @@ pub async fn execute_cursor_actions<T: Expect>(
                 sleep_a_while().await;
             }
             CursorAction::Sleep { ms } => {
-                log::info!("💤 Sleeping for {ms} ms");
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
             }
             CursorAction::DebugBreakpoint { description } => {
@@ -339,58 +305,48 @@ pub async fn execute_cursor_actions<T: Expect>(
                 timeout_secs,
                 retry_interval_ms,
             } => {
-                log::info!("🔍 Checking status: {description}");
-                log::debug!("   Path: {path}");
-                log::debug!("   Expected: {expected}");
-
                 let timeout = timeout_secs.unwrap_or(10);
                 let interval = retry_interval_ms.unwrap_or(500);
 
-                match check_status_path(path, expected, timeout, interval).await {
-                    Ok(_) => {
-                        log::info!("✅ Status check passed: {description}");
-                    }
-                    Err(e) => {
-                        log::error!("❌ Status check FAILED for '{description}': {e}");
+                if let Err(e) = check_status_path(path, expected, timeout, interval).await {
+                    log::error!(
+                        "❌ Action Step {} FAILED: Status check FAILED for '{description}': {e}",
+                        idx + 1
+                    );
 
-                        // Capture terminal screen for debugging
-                        log::error!("📺 Capturing terminal screen for debugging...");
-                        match cap
-                            .capture(
-                                session,
-                                &format!("status_check_failed_{}", description.replace(' ', "_")),
-                            )
-                            .await
-                        {
-                            Ok(screen) => {
-                                log::error!("Current terminal content:");
-                                log::error!("\n{}\n", screen);
-                            }
-                            Err(cap_err) => {
-                                log::error!("Failed to capture terminal: {}", cap_err);
-                            }
+                    // Capture terminal screen for debugging
+                    log::error!("📺 Capturing terminal screen for debugging...");
+                    match cap
+                        .capture(
+                            session,
+                            &format!("status_check_failed_{}", description.replace(' ', "_")),
+                        )
+                        .await
+                    {
+                        Ok(screen) => {
+                            log::error!("Current terminal content:");
+                            log::error!("\n{}\n", screen);
                         }
-
-                        // Dump all available status files
-                        log::error!("📋 Dumping all available status files:");
-                        dump_all_status_files();
-
-                        return Err(anyhow!("Status check failed for '{description}': {e}"));
+                        Err(cap_err) => {
+                            log::error!("Failed to capture terminal: {}", cap_err);
+                        }
                     }
+
+                    // Dump all available status files
+                    log::error!("📋 Dumping all available status files:");
+                    dump_all_status_files();
+
+                    return Err(anyhow!(
+                        "Action Step {}: Status check failed for '{description}': {e}",
+                        idx + 1
+                    ));
                 }
             }
         }
 
-        log::info!(
-            "📍 Action {} of {}: completed, sleeping",
-            idx + 1,
-            actions.len()
-        );
         sleep_a_while().await;
-        log::info!("📍 Action {} of {}: sleep done", idx + 1, actions.len());
     }
 
-    log::info!("✓ All cursor actions executed successfully for {session_name}");
     Ok(())
 }
 
