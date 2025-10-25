@@ -97,7 +97,7 @@ impl TerminalCapture {
         if out.trim().is_empty() {
             // First-time capture: poll in a non-blocking loop until the TUI paints something
             // or we give up after a handful of retries. This avoids the long expect timeout.
-            const MAX_ATTEMPTS: usize = 10;
+            const MAX_ATTEMPTS: usize = 3;
             for attempt in 0..MAX_ATTEMPTS {
                 match session.check(ExpectRegex("(?s).+")) {
                     Ok(captures) => {
