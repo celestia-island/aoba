@@ -177,9 +177,6 @@ async fn main() -> Result<()> {
         Some(m) => m.as_str(),
         None => {
             log::info!("📋 Available modules:");
-            log::info!("  Legacy Tests:");
-            log::info!("    - modbus_tui_slave_cli_master");
-            log::info!("    - modbus_tui_master_cli_slave");
             log::info!("  TUI Single-Station Master Mode:");
             log::info!("    - tui_master_coils");
             log::info!("    - tui_master_discrete_inputs");
@@ -208,13 +205,6 @@ async fn main() -> Result<()> {
 
     // Run the selected module
     match module {
-        "modbus_tui_slave_cli_master" => {
-            e2e::test_tui_slave_with_cli_master_continuous(&args.port1, &args.port2).await?
-        }
-        "modbus_tui_master_cli_slave" => {
-            e2e::test_tui_master_with_cli_slave_continuous(&args.port1, &args.port2).await?
-        }
-
         // TUI Single-Station Master Mode Tests
         "tui_master_coils" => e2e::test_tui_master_coils(&args.port1, &args.port2).await?,
         "tui_master_discrete_inputs" => {
