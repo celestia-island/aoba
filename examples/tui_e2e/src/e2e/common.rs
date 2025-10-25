@@ -303,14 +303,15 @@ pub async fn configure_tui_station<T: Expect>(
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
+        CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(config.register_count.to_string()),
+        CursorAction::Sleep { ms: 500 }, // Wait after typing
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 5000 }, // Wait for value to commit to status
+        CursorAction::Sleep { ms: 8000 }, // Increased wait for value to commit to status
     ];
     execute_cursor_actions(session, cap, &actions, "config_register_count").await?;
 
@@ -830,14 +831,15 @@ pub async fn configure_multiple_stations<T: Expect>(
                 direction: ArrowKey::Down,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep { ms: 500 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 },
+            CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
             CursorAction::TypeString(config.register_count.to_string()),
+            CursorAction::Sleep { ms: 500 }, // Wait after typing
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 5000 },
+            CursorAction::Sleep { ms: 8000 }, // Increased wait for value to commit
         ];
         execute_cursor_actions(session, cap, &actions, &format!("config_register_count_{}", station_num))
             .await?;
