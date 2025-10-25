@@ -209,12 +209,17 @@ pub async fn configure_tui_station<T: Expect>(
         },
         CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(config.station_id.to_string()),
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
     ];
     execute_cursor_actions(session, cap, &actions, "config_station_id").await?;
 
@@ -238,13 +243,7 @@ pub async fn configure_tui_station<T: Expect>(
     log::info!("Configuring Register Type: {:?}", config.register_mode);
     let (direction, count) = config.register_mode.arrow_from_default();
     
-    let mut actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
-    ];
+    let mut actions = vec![];
     
     if count > 0 {
         actions.extend(vec![
@@ -253,12 +252,18 @@ pub async fn configure_tui_station<T: Expect>(
             CursorAction::PressArrow { direction, count },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 },
+            CursorAction::Sleep { ms: 500 },
         ]);
-    } else {
-        // Holding is default, just move to next field
-        actions.push(CursorAction::Sleep { ms: 300 });
     }
+    
+    // Move to next field
+    actions.extend(vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ]);
     
     execute_cursor_actions(session, cap, &actions, "config_register_type").await?;
 
@@ -280,38 +285,33 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Phase 6: Configure Start Address (field 2)
     log::info!("Configuring Start Address: 0x{:04X}", config.start_address);
+    
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(format!("{:x}", config.start_address)),
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
+        CursorAction::Sleep { ms: 1000 }, // Increased wait after confirmation
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 }, // Increased wait after moving
     ];
     execute_cursor_actions(session, cap, &actions, "config_start_address").await?;
 
     // Phase 7: Configure Register Count (field 3)
     log::info!("Configuring Register Count: {}", config.register_count);
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode
+        CursorAction::Sleep { ms: 1000 }, // Wait for edit mode to be fully ready
         CursorAction::PressCtrlA,
         CursorAction::PressBackspace,
         CursorAction::TypeString(config.register_count.to_string()),
-        CursorAction::Sleep { ms: 500 }, // Wait after typing
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 8000 }, // Increased wait for value to commit to status
+        CursorAction::Sleep { ms: 5000 }, // Wait for value to commit to status tree
     ];
     execute_cursor_actions(session, cap, &actions, "config_register_count").await?;
 
@@ -358,22 +358,8 @@ pub async fn configure_tui_station<T: Expect>(
             ];
             execute_cursor_actions(session, cap, &actions, &format!("set_register_{}", i)).await?;
 
-            // Verify value in status tree
-            let expected_value = json!(*value);
-            let status_path = if config.is_master {
-                format!("ports[0].modbus_masters[0].registers[{}]", i)
-            } else {
-                format!("ports[0].modbus_slaves[0].registers[{}]", i)
-            };
-            let actions = vec![CursorAction::CheckStatus {
-                description: format!("Register[{}] should be 0x{:04X}", i, value),
-                path: status_path,
-                expected: expected_value,
-                timeout_secs: Some(10),
-                retry_interval_ms: Some(500),
-            }];
-            execute_cursor_actions(session, cap, &actions, &format!("verify_register_{}", i))
-                .await?;
+            // Note: Register values are not exposed in status JSON, so we can't verify them here
+            // They will be verified later when CLI polls the master
 
             // Move to next register if not last
             if i < values.len() - 1 {
@@ -450,9 +436,9 @@ pub async fn run_single_station_master_test(
     // Configure station
     configure_tui_station(&mut session, &mut cap, port1, &config_with_data).await?;
 
-    // Wait for CLI subprocess to start
-    log::info!("Waiting for CLI subprocess to initialize...");
-    sleep_seconds(3).await;
+    // Wait for CLI subprocess to start and data to be ready
+    log::info!("Waiting for CLI subprocess to initialize and data to stabilize...");
+    sleep_seconds(5).await;
 
     // Verify with CLI Slave
     log::info!("Verifying data with CLI Slave on {}...", port2);
@@ -767,12 +753,17 @@ pub async fn configure_multiple_stations<T: Expect>(
             },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep { ms: 300 },
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
             CursorAction::TypeString(config.station_id.to_string()),
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 },
+            CursorAction::Sleep { ms: 500 },
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 300 },
         ];
         execute_cursor_actions(session, cap, &actions, &format!("config_station_id_{}", station_num))
             .await?;
@@ -781,13 +772,7 @@ pub async fn configure_multiple_stations<T: Expect>(
         log::info!("  Configuring Register Type: {:?}", config.register_mode);
         let (direction, count) = config.register_mode.arrow_from_default();
         
-        let mut actions = vec![
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 1,
-            },
-            CursorAction::Sleep { ms: 300 },
-        ];
+        let mut actions = vec![];
         
         if count > 0 {
             actions.extend(vec![
@@ -796,11 +781,18 @@ pub async fn configure_multiple_stations<T: Expect>(
                 CursorAction::PressArrow { direction, count },
                 CursorAction::Sleep { ms: 300 },
                 CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 1000 },
+                CursorAction::Sleep { ms: 500 },
             ]);
-        } else {
-            actions.push(CursorAction::Sleep { ms: 300 });
         }
+        
+        // Move to next field
+        actions.extend(vec![
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 300 },
+        ]);
         
         execute_cursor_actions(session, cap, &actions, &format!("config_register_type_{}", station_num))
             .await?;
@@ -808,18 +800,18 @@ pub async fn configure_multiple_stations<T: Expect>(
         // Configure Start Address (field 2)
         log::info!("  Configuring Start Address: 0x{:04X}", config.start_address);
         let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 300 },
+            CursorAction::PressCtrlA,
+            CursorAction::PressBackspace,
+            CursorAction::TypeString(format!("{:x}", config.start_address)),
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
                 count: 1,
             },
             CursorAction::Sleep { ms: 300 },
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
-            CursorAction::PressCtrlA,
-            CursorAction::PressBackspace,
-            CursorAction::TypeString(format!("{:x}", config.start_address)),
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 },
         ];
         execute_cursor_actions(session, cap, &actions, &format!("config_start_address_{}", station_num))
             .await?;
@@ -827,19 +819,13 @@ pub async fn configure_multiple_stations<T: Expect>(
         // Configure Register Count (field 3)
         log::info!("  Configuring Register Count: {}", config.register_count);
         let actions = vec![
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 1,
-            },
-            CursorAction::Sleep { ms: 500 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode
+            CursorAction::Sleep { ms: 1000 }, // Wait for edit mode
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
             CursorAction::TypeString(config.register_count.to_string()),
-            CursorAction::Sleep { ms: 500 }, // Wait after typing
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 8000 }, // Increased wait for value to commit
+            CursorAction::Sleep { ms: 5000 }, // Wait for value to commit
         ];
         execute_cursor_actions(session, cap, &actions, &format!("config_register_count_{}", station_num))
             .await?;
