@@ -615,13 +615,26 @@ pub async fn enter_modbus_panel<T: Expect>(
                             );
                             return Ok(());
                         }
-                        log::debug!(
-                            "  Status page is still: {:?} (check attempt {})",
-                            status.page,
-                            check_attempt
-                        );
+                        // Use warn level for the first few attempts and the last few attempts to help debugging
+                        if check_attempt <= 3 || check_attempt >= 18 {
+                            log::warn!(
+                                "  Status page is still: {:?} (check attempt {}/20)",
+                                status.page,
+                                check_attempt
+                            );
+                        } else {
+                            log::debug!(
+                                "  Status page is still: {:?} (check attempt {}/20)",
+                                status.page,
+                                check_attempt
+                            );
+                        }
                     } else {
-                        log::debug!("  Could not read status (check attempt {})", check_attempt);
+                        if check_attempt <= 3 || check_attempt >= 18 {
+                            log::warn!("  Could not read status (check attempt {}/20)", check_attempt);
+                        } else {
+                            log::debug!("  Could not read status (check attempt {}/20)", check_attempt);
+                        }
                     }
                 }
                 Err(anyhow!("Status tree did not update to ModbusDashboard"))
