@@ -585,7 +585,7 @@ pub async fn enter_modbus_panel<T: Expect>(
         log::info!("  Pressing Enter to enter Modbus panel");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 1000 }, // Wait for page transition
+            crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Increased wait for page transition in CI
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
