@@ -251,7 +251,7 @@ pub async fn configure_tui_station<T: Expect>(
             CursorAction::PressArrow { direction, count },
             CursorAction::Sleep { ms: 300 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep { ms: 1000 }, // Increased from 500ms to ensure selection is saved
         ]);
     }
     
@@ -265,6 +265,11 @@ pub async fn configure_tui_station<T: Expect>(
     ]);
     
     execute_cursor_actions(session, cap, &actions, "config_register_type").await?;
+
+    // Capture milestone: Register Type configured
+    log::info!("📸 Milestone: Register Type configured");
+    let screen = cap.capture(session, "milestone_register_type_configured").await?;
+    log::info!("Terminal snapshot:\n{}", screen);
 
     // Note: Skipping immediate status verification for register type
     // Final configuration verification will check all fields including register type
@@ -290,6 +295,11 @@ pub async fn configure_tui_station<T: Expect>(
     ];
     execute_cursor_actions(session, cap, &actions, "config_start_address").await?;
 
+    // Capture milestone: Start Address configured
+    log::info!("📸 Milestone: Start Address configured");
+    let screen = cap.capture(session, "milestone_start_address_configured").await?;
+    log::info!("Terminal snapshot:\n{}", screen);
+
     // Phase 7: Configure Register Count (field 3)
     log::info!("Configuring Register Count: {}", config.register_count);
     let actions = vec![
@@ -302,6 +312,11 @@ pub async fn configure_tui_station<T: Expect>(
         CursorAction::Sleep { ms: 5000 }, // Wait for value to commit to status tree
     ];
     execute_cursor_actions(session, cap, &actions, "config_register_count").await?;
+
+    // Capture milestone: Register Count configured
+    log::info!("📸 Milestone: Register Count configured");
+    let screen = cap.capture(session, "milestone_register_count_configured").await?;
+    log::info!("Terminal snapshot:\n{}", screen);
 
     // Verify Register Count via status
     let expected_count = json!(config.register_count);
