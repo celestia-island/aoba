@@ -331,7 +331,8 @@ async fn run_config_runtime(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use rmodbus::server::context::ModbusContext;
     use std::io::Write;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     // Open the serial port
     let port_handle = serialport::new(&config.port_name, config.baud_rate)
@@ -342,7 +343,7 @@ async fn run_config_runtime(
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Initialize storage for all stations
-    let storage = Arc::new(Mutex::new(
+    let storage = std::sync::Arc::new(std::sync::Mutex::new(
         rmodbus::server::storage::ModbusStorageSmall::default(),
     ));
 
@@ -399,7 +400,7 @@ async fn run_config_runtime(
     loop {
         // Process Modbus frames
         let mut buffer = [0u8; 256];
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock().await;
 
         match port.read(&mut buffer) {
             Ok(n) if n > 0 => {
@@ -408,7 +409,7 @@ async fn run_config_runtime(
                 // Process the frame
                 let request = &buffer[..n];
                 if let Some(response) = process_modbus_frame(request, &storage, &config.stations) {
-                    let mut port = port_arc.lock().unwrap();
+                    let mut port = port_arc.lock().await;
                     if let Err(e) = port.write_all(&response) {
                         log::error!("Failed to write response: {e}");
                     }

@@ -30,7 +30,7 @@ pub enum RegisterMode {
 
 impl RegisterMode {
     /// Get the register mode string for CLI commands
-    pub fn to_cli_mode(&self) -> &'static str {
+    pub fn as_cli_mode(&self) -> &'static str {
         match self {
             RegisterMode::Coils => "coils",
             RegisterMode::DiscreteInputs => "discrete_inputs",
@@ -567,7 +567,7 @@ pub async fn verify_master_data(
         "--register-length",
         &config.register_count.to_string(),
         "--register-mode",
-        config.register_mode.to_cli_mode(),
+        config.register_mode.as_cli_mode(),
         "--baud-rate",
         "9600",
         "--json",
@@ -755,7 +755,7 @@ pub async fn send_data_from_cli_master(
         "--register-address",
         &config.start_address.to_string(),
         "--register-mode",
-        config.register_mode.to_cli_mode(),
+        config.register_mode.as_cli_mode(),
         "--baud-rate",
         "9600",
         "--data-source",
