@@ -138,15 +138,19 @@ pub async fn configure_tui_station<T: Expect>(
 ) -> Result<()> {
     log::info!("⚙️  Configuring TUI station: {:?}", config);
 
-    // Phase 1: Create station
+    // Phase 1: Create station and reset cursor to known position
     log::info!("Creating station...");
     let actions = vec![
         CursorAction::PressEnter, // Create station
         CursorAction::Sleep { ms: 2000 },
+        // CRITICAL: After creating station, immediately reset to top
+        // This ensures cursor is at "Create Station" button in a known state
+        CursorAction::PressCtrlPageUp,
+        CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "create_station").await?;
 
-    // Verify station was created
+    // Verify station was created by checking terminal content
     let station_pattern = Regex::new(r"#1(?:\D|$)")?;
     let actions = vec![CursorAction::MatchPattern {
         pattern: station_pattern,
@@ -158,15 +162,14 @@ pub async fn configure_tui_station<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "verify_station_created").await?;
 
     // Phase 2: Configure connection mode (Master/Slave)
+    // Start from known position (top = "Create Station" button)
     log::info!(
         "Configuring connection mode: {}",
         if config.is_master { "Master" } else { "Slave" }
     );
     
-    // Reset to top and move to Connection Mode field
+    // Navigate from top to Connection Mode field (one Down from "Create Station")
     let actions = vec![
-        CursorAction::PressCtrlPageUp, // Reset to top
-        CursorAction::Sleep { ms: 300 },
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
@@ -211,14 +214,27 @@ pub async fn configure_tui_station<T: Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, "verify_slave_mode").await?;
         log::info!("✅ Connection Mode verified as Slave");
+        
+        // Reset to top after mode change to ensure known cursor position
+        let actions = vec![
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave").await?;
+    } else {
+        // For Master mode, also reset to top for consistency
+        let actions = vec![
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reset_to_top_master").await?;
     }
 
     // Phase 3: Navigate to station fields
+    // Starting from known position: top = "Create Station" button
     log::info!("Navigating to station fields...");
     let actions = vec![
-        CursorAction::PressCtrlPageUp, // Go to top
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressPageDown, // Navigate to station #1
+        CursorAction::PressPageDown, // Navigate to station #1 section
         CursorAction::Sleep { ms: 500 },
     ];
     execute_cursor_actions(session, cap, &actions, "nav_to_station").await?;
@@ -295,19 +311,22 @@ pub async fn configure_tui_station<T: Expect>(
     
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 500 }, // Wait for edit mode
         CursorAction::PressCtrlA,
+        CursorAction::Sleep { ms: 200 },
         CursorAction::PressBackspace,
+        CursorAction::Sleep { ms: 200 },
         // NOTE: Start Address field parses as DECIMAL, not hex
         // So we type the decimal value, not hex string
         CursorAction::TypeString(config.start_address.to_string()),
+        CursorAction::Sleep { ms: 300 },
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 }, // Increased wait after confirmation
+        CursorAction::Sleep { ms: 1500 }, // Increased wait for value to commit
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 500 }, // Increased wait after moving
+        CursorAction::Sleep { ms: 500 }, // Wait after moving to next field
     ];
     execute_cursor_actions(session, cap, &actions, "config_start_address").await?;
 
@@ -316,22 +335,8 @@ pub async fn configure_tui_station<T: Expect>(
     let screen = cap.capture(session, "milestone_start_address_configured").await?;
     log::info!("Terminal snapshot:\n{}", screen);
 
-    // Verify Start Address via status (to ensure decimal input was correctly parsed)
-    let expected_address = json!(config.start_address);
-    let addr_status_path = if config.is_master {
-        "ports[0].modbus_masters[0].start_address"
-    } else {
-        "ports[0].modbus_slaves[0].start_address"
-    };
-    let actions = vec![CursorAction::CheckStatus {
-        description: format!("Start address should be {} (0x{:04X} in decimal)", config.start_address, config.start_address),
-        path: addr_status_path.to_string(),
-        expected: expected_address,
-        timeout_secs: Some(10),
-        retry_interval_ms: Some(500),
-    }];
-    execute_cursor_actions(session, cap, &actions, "verify_start_address").await?;
-    log::info!("✅ Start address verified: {} (entered as decimal, confirmed in status)", config.start_address);
+    // Note: Start Address will be verified after save via final status check
+    // Values are only committed to status tree after Ctrl+S
 
     // Phase 7: Configure Register Count (field 3)
     log::info!("Configuring Register Count: {}", config.register_count);
@@ -354,21 +359,8 @@ pub async fn configure_tui_station<T: Expect>(
     let screen = cap.capture(session, "milestone_register_count_configured").await?;
     log::info!("Terminal snapshot:\n{}", screen);
 
-    // Verify Register Count via status
-    let expected_count = json!(config.register_count);
-    let status_path = if config.is_master {
-        "ports[0].modbus_masters[0].register_count"
-    } else {
-        "ports[0].modbus_slaves[0].register_count"
-    };
-    let actions = vec![CursorAction::CheckStatus {
-        description: format!("Register count should be {}", config.register_count),
-        path: status_path.to_string(),
-        expected: expected_count,
-        timeout_secs: Some(15),
-        retry_interval_ms: Some(500),
-    }];
-    execute_cursor_actions(session, cap, &actions, "verify_register_count").await?;
+    // Note: Register Count will be verified after save via final status check
+    // Values are only committed to status tree after Ctrl+S
 
     // Phase 8: Configure register values if provided
     if let Some(values) = &config.register_values {
@@ -867,6 +859,20 @@ pub async fn configure_multiple_stations<T: Expect>(
         ];
         execute_cursor_actions(session, cap, &actions, "verify_slave_mode_multi").await?;
         log::info!("✅ Connection Mode verified as Slave for multi-station configuration");
+        
+        // Reset to top after mode change to ensure known cursor position
+        let actions = vec![
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave_multi").await?;
+    } else {
+        // For Master mode or mixed modes, ensure we're at top for consistency
+        let actions = vec![
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reset_to_top_multi").await?;
     }
 
     // Phase 2: Configure each station individually
