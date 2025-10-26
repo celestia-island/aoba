@@ -160,21 +160,13 @@ pub async fn configure_tui_station<T: Expect>(
     if !config.is_master {
         log::info!("Switching from Master to Slave mode...");
         
-        // Debug: Capture screen before mode switch
-        log::info!("📸 DEBUG: Screen before mode switch");
-        let screen = cap.capture(session, "debug_before_mode_switch").await?;
-        log::info!("Terminal snapshot:\n{}", screen);
-        
+        // Connection Mode is a simple toggle - just press Right arrow to switch
         let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 }, // Increased delay
             CursorAction::PressArrow {
-                direction: ArrowKey::Left,
+                direction: ArrowKey::Right,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 1000 }, // Increased delay
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 2000 }, // Increased delay
+            CursorAction::Sleep { ms: 2000 },
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave").await?;
         
