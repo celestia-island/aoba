@@ -180,14 +180,14 @@ pub async fn configure_tui_station<T: Expect>(
         log::info!("Switching from Master to Slave mode...");
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep { ms: 500 }, // Increased delay to ensure edit mode is active
             CursorAction::PressArrow {
                 direction: ArrowKey::Left,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep { ms: 500 }, // Increased delay after arrow press
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 },
+            CursorAction::Sleep { ms: 2000 }, // Increased delay to ensure mode change is committed
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave").await?;
         
@@ -195,6 +195,22 @@ pub async fn configure_tui_station<T: Expect>(
         log::info!("📸 Milestone: Mode switched to Slave");
         let screen = cap.capture(session, "milestone_mode_slave").await?;
         log::info!("Terminal snapshot:\n{}", screen);
+        
+        // CRITICAL: Verify the mode was actually switched to Slave
+        // This verification checks the terminal display to ensure "Slave" is visible
+        log::info!("Verifying Connection Mode was switched to Slave...");
+        let pattern = Regex::new(r"(?i)slave")?;
+        let actions = vec![
+            CursorAction::MatchPattern {
+                pattern,
+                description: "Connection Mode should show 'Slave'".to_string(),
+                line_range: None,
+                col_range: None,
+                retry_action: None,
+            },
+        ];
+        execute_cursor_actions(session, cap, &actions, "verify_slave_mode").await?;
+        log::info!("✅ Connection Mode verified as Slave");
     }
 
     // Phase 3: Navigate to station fields
@@ -300,16 +316,36 @@ pub async fn configure_tui_station<T: Expect>(
     let screen = cap.capture(session, "milestone_start_address_configured").await?;
     log::info!("Terminal snapshot:\n{}", screen);
 
+    // Verify Start Address via status (to ensure decimal input was correctly parsed)
+    let expected_address = json!(config.start_address);
+    let addr_status_path = if config.is_master {
+        "ports[0].modbus_masters[0].start_address"
+    } else {
+        "ports[0].modbus_slaves[0].start_address"
+    };
+    let actions = vec![CursorAction::CheckStatus {
+        description: format!("Start address should be {} (0x{:04X} in decimal)", config.start_address, config.start_address),
+        path: addr_status_path.to_string(),
+        expected: expected_address,
+        timeout_secs: Some(10),
+        retry_interval_ms: Some(500),
+    }];
+    execute_cursor_actions(session, cap, &actions, "verify_start_address").await?;
+    log::info!("✅ Start address verified: {} (entered as decimal, confirmed in status)", config.start_address);
+
     // Phase 7: Configure Register Count (field 3)
     log::info!("Configuring Register Count: {}", config.register_count);
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 }, // Wait for edit mode to be fully ready
+        CursorAction::Sleep { ms: 1500 }, // Increased wait for edit mode to be fully ready
         CursorAction::PressCtrlA,
+        CursorAction::Sleep { ms: 200 }, // Small delay after Ctrl+A
         CursorAction::PressBackspace,
+        CursorAction::Sleep { ms: 200 }, // Small delay after clearing
         CursorAction::TypeString(config.register_count.to_string()),
+        CursorAction::Sleep { ms: 300 }, // Small delay after typing
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 5000 }, // Wait for value to commit to status tree
+        CursorAction::Sleep { ms: 3000 }, // Wait for value to commit to status tree
     ];
     execute_cursor_actions(session, cap, &actions, "config_register_count").await?;
 
