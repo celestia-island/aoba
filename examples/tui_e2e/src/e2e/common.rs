@@ -138,10 +138,92 @@ pub async fn configure_tui_station<T: Expect>(
 ) -> Result<()> {
     log::info!("⚙️  Configuring TUI station: {:?}", config);
 
-    // Phase 1: Create station and reset cursor to known position
+    // Phase 1: Configure connection mode (Master/Slave) FIRST, before creating station
+    // This ensures the station is created with the correct mode from the start
+    log::info!(
+        "Configuring connection mode: {}",
+        if config.is_master { "Master" } else { "Slave" }
+    );
+    
+    // Navigate from current position to Connection Mode field
+    // We should be at "Create Station" button at the start
+    let actions = vec![
+        CursorAction::PressArrow {
+            direction: ArrowKey::Down,
+            count: 1,
+        },
+        CursorAction::Sleep { ms: 500 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "move_to_connection_mode").await?;
+
+    // Switch to Slave if needed (default is Master)
+    if !config.is_master {
+        log::info!("Switching from Master to Slave mode...");
+        
+        // Debug: Capture screen before mode switch
+        log::info!("📸 DEBUG: Screen before mode switch");
+        let screen = cap.capture(session, "debug_before_mode_switch").await?;
+        log::info!("Terminal snapshot:\n{}", screen);
+        
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 1000 }, // Increased delay
+            CursorAction::PressArrow {
+                direction: ArrowKey::Left,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 1000 }, // Increased delay
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 2000 }, // Increased delay
+        ];
+        execute_cursor_actions(session, cap, &actions, "switch_to_slave").await?;
+        
+        // Capture milestone: Mode switched to Slave
+        log::info!("📸 Milestone: Mode switched to Slave");
+        let screen = cap.capture(session, "milestone_mode_slave").await?;
+        log::info!("Terminal snapshot:\n{}", screen);
+        
+        // CRITICAL: Verify the mode was actually switched to Slave
+        // This verification checks the terminal display to ensure "Slave" is visible
+        // on the Connection Mode line specifically
+        log::info!("Verifying Connection Mode was switched to Slave...");
+        let pattern = Regex::new(r"Connection Mode\s+Slave")?;
+        let actions = vec![
+            CursorAction::MatchPattern {
+                pattern,
+                description: "Connection Mode line should show 'Slave'".to_string(),
+                line_range: None,
+                col_range: None,
+                retry_action: None,
+            },
+        ];
+        execute_cursor_actions(session, cap, &actions, "verify_slave_mode").await?;
+        log::info!("✅ Connection Mode verified as Slave (UI display)");
+        
+        // ADDITIONAL: Wait longer for internal state to update
+        // The UI might show "Slave" before the internal state is fully committed
+        sleep_seconds(2).await;
+        
+        // Reset to top after mode change to ensure known cursor position
+        let actions = vec![
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave").await?;
+    } else {
+        // For Master mode, also reset to top for consistency
+        let actions = vec![
+            CursorAction::PressCtrlPageUp,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "reset_to_top_master").await?;
+    }
+
+    // Phase 2: Create station AFTER mode is configured
+    // This ensures the station is created with the correct mode
     log::info!("Creating station...");
     let actions = vec![
-        CursorAction::PressEnter, // Create station
+        CursorAction::PressEnter, // Create station (cursor should be at "Create Station" button)
         CursorAction::Sleep { ms: 2000 },
         // CRITICAL: After creating station, immediately reset to top
         // This ensures cursor is at "Create Station" button in a known state
@@ -160,75 +242,6 @@ pub async fn configure_tui_station<T: Expect>(
         retry_action: None,
     }];
     execute_cursor_actions(session, cap, &actions, "verify_station_created").await?;
-
-    // Phase 2: Configure connection mode (Master/Slave)
-    // Start from known position (top = "Create Station" button)
-    log::info!(
-        "Configuring connection mode: {}",
-        if config.is_master { "Master" } else { "Slave" }
-    );
-    
-    // Navigate from top to Connection Mode field (one Down from "Create Station")
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "move_to_connection_mode").await?;
-
-    // Switch to Slave if needed (default is Master)
-    if !config.is_master {
-        log::info!("Switching from Master to Slave mode...");
-        let actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 }, // Increased delay to ensure edit mode is active
-            CursorAction::PressArrow {
-                direction: ArrowKey::Left,
-                count: 1,
-            },
-            CursorAction::Sleep { ms: 500 }, // Increased delay after arrow press
-            CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 2000 }, // Increased delay to ensure mode change is committed
-        ];
-        execute_cursor_actions(session, cap, &actions, "switch_to_slave").await?;
-        
-        // Capture milestone: Mode switched to Slave
-        log::info!("📸 Milestone: Mode switched to Slave");
-        let screen = cap.capture(session, "milestone_mode_slave").await?;
-        log::info!("Terminal snapshot:\n{}", screen);
-        
-        // CRITICAL: Verify the mode was actually switched to Slave
-        // This verification checks the terminal display to ensure "Slave" is visible
-        log::info!("Verifying Connection Mode was switched to Slave...");
-        let pattern = Regex::new(r"(?i)slave")?;
-        let actions = vec![
-            CursorAction::MatchPattern {
-                pattern,
-                description: "Connection Mode should show 'Slave'".to_string(),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
-        ];
-        execute_cursor_actions(session, cap, &actions, "verify_slave_mode").await?;
-        log::info!("✅ Connection Mode verified as Slave");
-        
-        // Reset to top after mode change to ensure known cursor position
-        let actions = vec![
-            CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
-        ];
-        execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave").await?;
-    } else {
-        // For Master mode, also reset to top for consistency
-        let actions = vec![
-            CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
-        ];
-        execute_cursor_actions(session, cap, &actions, "reset_to_top_master").await?;
-    }
 
     // Phase 3: Navigate to station fields
     // Starting from known position: top = "Create Station" button
