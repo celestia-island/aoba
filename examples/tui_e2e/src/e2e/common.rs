@@ -252,25 +252,26 @@ pub async fn configure_tui_station<T: Expect>(
     execute_cursor_actions(session, cap, &actions, "nav_to_station").await?;
 
     // Phase 4: Configure Station ID (field 0)
+    // Note: Station ID defaults to 1 when station is created, so usually no change needed
+    // But we configure it anyway to ensure consistency
     log::info!("Configuring Station ID: {}", config.station_id);
     let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressCtrlA,
-        CursorAction::PressBackspace,
-        CursorAction::TypeString(config.station_id.to_string()),
-        CursorAction::PressEnter,
+        CursorAction::PressCtrlPageUp,  // Reset to top
         CursorAction::Sleep { ms: 500 },
-        CursorAction::PressArrow {
+        CursorAction::PressPageDown,    // Jump to station section
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressArrow {      // Move to Station ID field
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 1000 }, // Wait for cursor to settle
+        CursorAction::PressEnter,       // Enter edit mode
+        CursorAction::Sleep { ms: 3000 }, // Wait long for edit mode to be fully ready
+        // Just type directly - the TUI auto-selects the field content on edit
+        CursorAction::TypeString(config.station_id.to_string()),
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter,       // Confirm
+        CursorAction::Sleep { ms: 2000 }, // Wait for value to commit
     ];
     execute_cursor_actions(session, cap, &actions, "config_station_id").await?;
 
@@ -279,55 +280,32 @@ pub async fn configure_tui_station<T: Expect>(
     let screen = cap.capture(session, "milestone_station_id_configured").await?;
     log::info!("Terminal snapshot:\n{}", screen);
 
-    // Note: Skipping immediate status verification for station ID
-    // Final configuration verification will check all fields
-    
-    // CRITICAL: Re-establish cursor position before Register Type configuration
-    // Sometimes the cursor position seems to drift, so we reset to known position
-    log::info!("Re-establishing cursor position before Register Type configuration...");
-    let actions = vec![
-        CursorAction::PressCtrlPageUp,  // Reset to top
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressPageDown,    // Jump to station section
-        CursorAction::Sleep { ms: 300 },
-        CursorAction::PressArrow {      // Move down twice (skip station header, move to Station ID, then to Register Type)
-            direction: ArrowKey::Down,
-            count: 2,
-        },
-        CursorAction::Sleep { ms: 300 },
-    ];
-    execute_cursor_actions(session, cap, &actions, "reestablish_cursor_before_regtype").await?;
-
     // Phase 5: Configure Register Type (field 1)
     log::info!("Configuring Register Type: {:?}", config.register_mode);
     let (direction, count) = config.register_mode.arrow_from_default();
     
-    // Debug: Capture screen before configuring register type
-    let screen_before_regtype = cap.capture(session, "before_register_type_config").await?;
-    log::info!("📸 Screen before Register Type configuration (direction: {:?}, count: {}):\n{}", 
-        direction, count, screen_before_regtype);
-    
-    let mut actions = vec![];
+    let mut actions = vec![
+        CursorAction::PressCtrlPageUp,  // Reset to top
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressPageDown,    // Jump to station section
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressArrow {      // Move to Register Type field
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::Sleep { ms: 1000 },
+    ];
     
     if count > 0 {
         actions.extend(vec![
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep { ms: 1000 }, // Wait for edit mode
             CursorAction::PressArrow { direction, count },
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep { ms: 1000 },
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 }, // Increased from 500ms to ensure selection is saved
+            CursorAction::Sleep { ms: 2000 }, // Wait for selection to be saved
         ]);
     }
-    
-    // Move to next field
-    actions.extend(vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 300 },
-    ]);
     
     execute_cursor_actions(session, cap, &actions, "config_register_type").await?;
 
@@ -342,24 +320,24 @@ pub async fn configure_tui_station<T: Expect>(
     // Phase 6: Configure Start Address (field 2)
     log::info!("Configuring Start Address: 0x{:04X}", config.start_address);
     
+    // Navigate from top to ensure cursor is in the right position
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode to be fully ready
-        CursorAction::PressCtrlA,
-        CursorAction::Sleep { ms: 500 }, // Increased delay after select all
-        CursorAction::PressBackspace,
-        CursorAction::Sleep { ms: 500 }, // Increased delay after clearing
-        // NOTE: Start Address field parses as DECIMAL, not hex
-        // So we type the decimal value, not hex string
-        CursorAction::TypeString(config.start_address.to_string()),
-        CursorAction::Sleep { ms: 1000 }, // Increased delay after typing
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // Increased wait for value to commit
-        CursorAction::PressArrow {
+        CursorAction::PressCtrlPageUp,  // Reset to top
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressPageDown,    // Jump to station section
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressArrow {      // Move to Start Address field
             direction: ArrowKey::Down,
-            count: 1,
+            count: 3,
         },
-        CursorAction::Sleep { ms: 1000 }, // Increased wait after moving to next field
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter,       // Enter edit mode
+        CursorAction::Sleep { ms: 3000 }, // Wait long for edit mode to be fully ready
+        // Type the DECIMAL value - the TUI parses start address as decimal
+        CursorAction::TypeString(config.start_address.to_string()),
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter,       // Confirm
+        CursorAction::Sleep { ms: 2000 },
     ];
     execute_cursor_actions(session, cap, &actions, "config_start_address").await?;
 
@@ -373,16 +351,24 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Phase 7: Configure Register Count (field 3)
     log::info!("Configuring Register Count: {}", config.register_count);
+    
+    // Navigate from top to ensure cursor is in the right position
     let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode to be fully ready
-        CursorAction::PressCtrlA,
-        CursorAction::Sleep { ms: 500 }, // Increased delay after Ctrl+A
-        CursorAction::PressBackspace,
-        CursorAction::Sleep { ms: 500 }, // Increased delay after clearing
+        CursorAction::PressCtrlPageUp,  // Reset to top
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressPageDown,    // Jump to station section
+        CursorAction::Sleep { ms: 500 },
+        CursorAction::PressArrow {      // Move to Register Length field
+            direction: ArrowKey::Down,
+            count: 4,
+        },
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter,       // Enter edit mode
+        CursorAction::Sleep { ms: 3000 }, // Wait long for edit mode
+        // Just type directly - TUI auto-selects field content
         CursorAction::TypeString(config.register_count.to_string()),
-        CursorAction::Sleep { ms: 1000 }, // Increased delay after typing
-        CursorAction::PressEnter,
+        CursorAction::Sleep { ms: 1000 },
+        CursorAction::PressEnter,       // Confirm
         CursorAction::Sleep { ms: 3000 }, // Wait for value to commit to status tree
     ];
     execute_cursor_actions(session, cap, &actions, "config_register_count").await?;
