@@ -1,3 +1,169 @@
+//! TUI End-to-End Test Framework
+//!
+//! This is a comprehensive E2E test suite for AOBA's TUI (Terminal User Interface) Modbus functionality.
+//!
+//! # Overview
+//!
+//! This test framework provides automated testing for:
+//! - **Single-station** Master/Slave operations with all register types
+//! - **Multi-station** configurations with mixed types, addresses, and IDs
+//! - **Transaction retry** mechanism for reliable CI/CD testing
+//! - **Safe rollback** with multi-layer checkpoints
+//!
+//! # Architecture
+//!
+//! The framework is organized into several key components:
+//!
+//! - **`e2e::common`**: Core testing utilities (see `cargo doc` for detailed API documentation)
+//!   - Transaction retry system with configurable attempts and delays
+//!   - Safe rollback with adaptive Escape handling to prevent over-navigation
+//!   - Station configuration helpers for single and multi-station setups
+//!   - Data verification helpers for Master/Slave operations
+//!
+//! - **`e2e::single_station`**: Single-station test modules
+//!   - `master_modes`: Master tests for Coils, DiscreteInputs, Holding, Input registers
+//!   - `slave_modes`: Slave tests for all register types
+//!
+//! - **`e2e::multi_station`**: Multi-station test modules
+//!   - `master_modes`: Tests for mixed types, spaced addresses, mixed station IDs
+//!   - `slave_modes`: Slave-mode multi-station configurations
+//!
+//! # Quick Start
+//!
+//! List all available test modules:
+//!
+//! ```bash
+//! cargo run --package tui_e2e
+//! ```
+//!
+//! Run a specific test module:
+//!
+//! ```bash
+//! # Test Master mode with Coils registers
+//! cargo run --package tui_e2e -- --module tui_master_coils
+//!
+//! # Test Slave mode with Holding registers
+//! cargo run --package tui_e2e -- --module tui_slave_holding
+//!
+//! # Custom serial ports
+//! cargo run --package tui_e2e -- --module tui_master_coils \
+//!     --port1 /tmp/vcom1 --port2 /tmp/vcom2
+//!
+//! # Enable debug mode for detailed logging
+//! cargo run --package tui_e2e -- --module tui_master_coils --debug
+//! ```
+//!
+//! # Available Test Modules
+//!
+//! ## Single-Station Tests
+//!
+//! **Master Mode:**
+//! - `tui_master_coils` - Test Coils (01) registers
+//! - `tui_master_discrete_inputs` - Test Discrete Inputs (02) registers
+//! - `tui_master_holding` - Test Holding (03) registers
+//! - `tui_master_input` - Test Input (04) registers
+//!
+//! **Slave Mode:**
+//! - `tui_slave_coils` - Test Coils registers as Slave
+//! - `tui_slave_discrete_inputs` - Test Discrete Inputs as Slave
+//! - `tui_slave_holding` - Test Holding registers as Slave
+//! - `tui_slave_input` - Test Input registers as Slave
+//!
+//! ## Multi-Station Tests
+//!
+//! **Master Mode:**
+//! - `tui_multi_master_mixed_types` - Multiple stations with different register types
+//! - `tui_multi_master_spaced_addresses` - Stations with non-contiguous addresses
+//! - `tui_multi_master_mixed_ids` - Stations with different station IDs
+//!
+//! **Slave Mode:**
+//! - `tui_multi_slave_mixed_types` - Multi-station Slave with mixed types
+//! - `tui_multi_slave_spaced_addresses` - Multi-station with address gaps
+//! - `tui_multi_slave_mixed_ids` - Multi-station with different IDs
+//!
+//! # Documentation
+//!
+//! All implementation details are documented as inline comments in the source code.
+//! To view the complete API documentation with examples and architecture diagrams:
+//!
+//! ```bash
+//! cargo doc --open
+//! ```
+//!
+//! Navigate to `aoba::examples::tui_e2e::e2e::common` to see detailed documentation for:
+//! - Transaction retry mechanism with adaptive Escape handling
+//! - Safe rollback with multi-layer checkpoints
+//! - Configuration workflows for single and multi-station setups
+//! - Test orchestrators with comprehensive examples
+//! - All public functions with usage patterns
+//!
+//! # Testing Best Practices
+//!
+//! ## CI Environment Considerations
+//!
+//! The test framework is designed to work reliably in CI environments where
+//! terminal responses are 2-4x slower than local development:
+//!
+//! - Edit mode operations use 800ms delays (vs 200ms locally)
+//! - Transaction retry with up to 3 attempts per operation
+//! - Safe rollback prevents over-escaping to wrong pages
+//!
+//! ## Timing Guidelines
+//!
+//! | Operation | Local | CI | Reason |
+//! |-----------|-------|-----|--------|
+//! | Edit mode entry | 200ms | 800ms | Wait for cursor to appear |
+//! | Edit mode exit | 200ms | 800ms | Wait for value to sync |
+//! | Register Count commit | 500ms | 1000ms | UI update required |
+//! | Ctrl+S sync | 2s | 5s | Status tree synchronization |
+//!
+//! ## Troubleshooting
+//!
+//! ### Test Fails with "Over-escaped to Entry page"
+//!
+//! **Cause**: Rollback pressed Escape too many times
+//!
+//! **Solution**: The safe rollback mechanism should prevent this. If it still occurs:
+//! 1. Check if custom rollback actions are pressing extra Escapes
+//! 2. Verify navigation reset sequence is correct
+//! 3. Enable debug mode to see detailed checkpoint logs
+//!
+//! ### Configuration Not Applied
+//!
+//! **Cause**: Values not synced to status tree
+//!
+//! **Solution**:
+//! 1. Ensure sufficient delays after field edits
+//! 2. Verify Ctrl+S was executed
+//! 3. Check status file: `/tmp/ci_tui_status.json`
+//! 4. Use `CheckStatus` to wait for specific values
+//!
+//! ### Station Already Exists Error
+//!
+//! **Cause**: Previous test left configuration cache
+//!
+//! **Solution**: The framework automatically calls `cleanup_tui_config_cache()`.
+//! If issue persists, manually remove:
+//! - `aoba_tui_config.json` (current directory)
+//! - `/tmp/aoba_tui_config.json`
+//! - `~/.config/aoba/aoba_tui_config.json`
+//!
+//! ## Debug Tools
+//!
+//! Enable debug mode to see:
+//! - Detailed checkpoint verification logs
+//! - Screen captures at each step
+//! - Retry attempt notifications
+//!
+//! Debug screenshots are saved to `/tmp/tui_e2e_debug/`
+//!
+//! # See Also
+//!
+//! - `src/e2e/common.rs` - Core implementation with comprehensive inline documentation
+//! - `../../docs/zh-chs/CLI_MODBUS.md` - CLI Modbus usage (for reference)
+//! - `../../scripts/socat_init.sh` - Virtual serial port setup script
+//! - `../ci_utils/` - Testing utilities (terminal capture, cursor actions, status monitoring)
+
 mod e2e;
 
 use anyhow::Result;
