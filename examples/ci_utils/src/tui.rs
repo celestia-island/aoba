@@ -603,8 +603,8 @@ pub async fn enter_modbus_panel<T: Expect>(
             log::info!("  Status monitoring is available, using status tree verification");
             // Increased timeout to 10 seconds for CI environments which may be slower
             tokio::time::timeout(std::time::Duration::from_secs(10), async {
-                for check_attempt in 1..=20 {
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                for check_attempt in 1..=3 {
+                    tokio::time::sleep(std::time::Duration::from_millis(3333)).await;
 
                     // Try to read status
                     if let Ok(status) = crate::read_tui_status() {
@@ -615,26 +615,12 @@ pub async fn enter_modbus_panel<T: Expect>(
                             );
                             return Ok(());
                         }
-                        // Use warn level for the first few attempts and the last few attempts to help debugging
-                        if check_attempt <= 3 || check_attempt >= 18 {
-                            log::warn!(
-                                "  Status page is still: {:?} (check attempt {}/20)",
-                                status.page,
-                                check_attempt
-                            );
-                        } else {
-                            log::debug!(
-                                "  Status page is still: {:?} (check attempt {}/20)",
-                                status.page,
-                                check_attempt
-                            );
-                        }
-                    } else {
-                        if check_attempt <= 3 || check_attempt >= 18 {
-                            log::warn!("  Could not read status (check attempt {}/20)", check_attempt);
-                        } else {
-                            log::debug!("  Could not read status (check attempt {}/20)", check_attempt);
-                        }
+                    }
+
+                    if check_attempt == 3 {
+                        log::warn!(
+                            "  Status page did not update to ModbusDashboard after 3 attempts"
+                        );
                     }
                 }
                 Err(anyhow!("Status tree did not update to ModbusDashboard"))
@@ -675,20 +661,20 @@ pub async fn enter_modbus_panel<T: Expect>(
             Err(_) => {
                 log::warn!("  ⚠️ Timeout waiting for status tree update");
                 log::info!("  Falling back to terminal verification as last resort");
-                
+
                 // Even though status tree didn't update, the page might have actually transitioned
                 // Check the terminal to see if we're now in ModbusDashboard
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                 let screen = cap
                     .capture(session, &format!("fallback_verify_attempt_{}", attempt))
                     .await?;
-                
+
                 if screen.contains("ModBus Master/Slave Set") {
                     log::info!("  ✅ Terminal shows Modbus panel despite status tree timeout");
                     log::info!("  This suggests a status tree synchronization issue, not a page transition failure");
                     return Ok(());
                 }
-                
+
                 last_error = Some(anyhow!("Timeout waiting for status update"));
             }
         }
