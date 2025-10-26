@@ -275,9 +275,9 @@ pub async fn execute_cursor_actions<T: Expect>(
             CursorAction::TypeString(s) => {
                 for ch in s.chars() {
                     session.send_char(ch)?;
+                    // Sleep after each character to ensure TUI processes input properly
+                    sleep_a_while().await;
                 }
-                // Auto sleep after keypress
-                sleep_a_while().await;
             }
             CursorAction::Sleep { ms } => {
                 tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
