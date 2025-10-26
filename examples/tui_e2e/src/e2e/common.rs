@@ -2,7 +2,6 @@
 ///
 /// This module provides reusable helper functions and configuration structures
 /// to simplify test implementation and reduce code duplication.
-
 use anyhow::{anyhow, Result};
 use ci_utils::*;
 use expectrl::Expect;
@@ -23,10 +22,10 @@ pub struct StationConfig {
 /// Register mode enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RegisterMode {
-    Coils,           // 01 Coils
-    DiscreteInputs,  // 02 Discrete Inputs (writable coils)
-    Holding,         // 03 Holding Registers
-    Input,           // 04 Input Registers (writable registers)
+    Coils,          // 01 Coils
+    DiscreteInputs, // 02 Discrete Inputs (writable coils)
+    Holding,        // 03 Holding Registers
+    Input,          // 04 Input Registers (writable registers)
 }
 
 impl RegisterMode {
@@ -69,15 +68,12 @@ impl RegisterMode {
 
 /// Setup TUI test environment
 /// Returns (TUI session, terminal capture)
-pub async fn setup_tui_test(
-    port1: &str,
-    _port2: &str,
-) -> Result<(impl Expect, TerminalCapture)> {
-    log::info!("🔧 Setting up TUI test environment for port {}", port1);
+pub async fn setup_tui_test(port1: &str, _port2: &str) -> Result<(impl Expect, TerminalCapture)> {
+    log::info!("🔧 Setting up TUI test environment for port {port1}");
 
     // Verify port exists
     if !port_exists(port1) {
-        return Err(anyhow!("Port {} does not exist", port1));
+        return Err(anyhow!("Port {port1} does not exist"));
     }
 
     // Spawn TUI with debug mode enabled
@@ -94,12 +90,14 @@ pub async fn setup_tui_test(
 
     // Navigate to ConfigPanel
     log::info!("Navigating to ConfigPanel...");
-    let actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1000 },
-    ];
-    execute_cursor_actions(&mut tui_session, &mut tui_cap, &actions, "enter_config_panel")
-        .await?;
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
+    execute_cursor_actions(
+        &mut tui_session,
+        &mut tui_cap,
+        &actions,
+        "enter_config_panel",
+    )
+    .await?;
 
     // Wait for ConfigPanel page
     wait_for_tui_page("ConfigPanel", 10, None).await?;
@@ -114,7 +112,7 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
     cap: &mut TerminalCapture,
     port1: &str,
 ) -> Result<()> {
-    log::info!("🗺️  Navigating to port {} and entering Modbus panel...", port1);
+    log::info!("🗺️  Navigating to port {port1} and entering Modbus panel...");
 
     // Navigate to the port
     navigate_to_vcom(session, cap, port1).await?;
@@ -137,7 +135,7 @@ pub async fn configure_tui_station<T: Expect>(
     _port1: &str,
     config: &StationConfig,
 ) -> Result<()> {
-    log::info!("⚙️  Configuring TUI station: {:?}", config);
+    log::info!("⚙️  Configuring TUI station: {config:?}");
 
     // Phase 1: Configure connection mode (Master/Slave) FIRST, before creating station
     // This ensures the station is created with the correct mode from the start
@@ -145,7 +143,7 @@ pub async fn configure_tui_station<T: Expect>(
         "Configuring connection mode: {}",
         if config.is_master { "Master" } else { "Slave" }
     );
-    
+
     // Navigate from current position to Connection Mode field
     // We should be at "Create Station" button at the start
     let actions = vec![
@@ -160,7 +158,7 @@ pub async fn configure_tui_station<T: Expect>(
     // Switch to Slave if needed (default is Master)
     if !config.is_master {
         log::info!("Switching from Master to Slave mode...");
-        
+
         // Connection Mode is a simple toggle - just press Right arrow to switch
         let actions = vec![
             CursorAction::PressArrow {
@@ -170,33 +168,31 @@ pub async fn configure_tui_station<T: Expect>(
             CursorAction::Sleep { ms: 2000 },
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave").await?;
-        
+
         // Capture milestone: Mode switched to Slave
         log::info!("📸 Milestone: Mode switched to Slave");
         let screen = cap.capture(session, "milestone_mode_slave").await?;
-        log::info!("Terminal snapshot:\n{}", screen);
-        
+        log::info!("Terminal snapshot:\n{screen}");
+
         // CRITICAL: Verify the mode was actually switched to Slave
         // This verification checks the terminal display to ensure "Slave" is visible
         // on the Connection Mode line specifically
         log::info!("Verifying Connection Mode was switched to Slave...");
         let pattern = Regex::new(r"Connection Mode\s+Slave")?;
-        let actions = vec![
-            CursorAction::MatchPattern {
-                pattern,
-                description: "Connection Mode line should show 'Slave'".to_string(),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
-        ];
+        let actions = vec![CursorAction::MatchPattern {
+            pattern,
+            description: "Connection Mode line should show 'Slave'".to_string(),
+            line_range: None,
+            col_range: None,
+            retry_action: None,
+        }];
         execute_cursor_actions(session, cap, &actions, "verify_slave_mode").await?;
         log::info!("✅ Connection Mode verified as Slave (UI display)");
-        
+
         // ADDITIONAL: Wait longer for internal state to update
         // The UI might show "Slave" before the internal state is fully committed
         sleep_seconds(2).await;
-        
+
         // Reset to top after mode change to ensure known cursor position
         let actions = vec![
             CursorAction::PressCtrlPageUp,
@@ -270,8 +266,10 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Capture milestone: Station ID configured
     log::info!("📸 Milestone: Station ID configured");
-    let screen = cap.capture(session, "milestone_station_id_configured").await?;
-    log::info!("Terminal snapshot:\n{}", screen);
+    let screen = cap
+        .capture(session, "milestone_station_id_configured")
+        .await?;
+    log::info!("Terminal snapshot:\n{screen}");
 
     // Note: Skipping immediate status verification for station ID
     // Final configuration verification will check all fields
@@ -279,9 +277,9 @@ pub async fn configure_tui_station<T: Expect>(
     // Phase 5: Configure Register Type (field 1)
     log::info!("Configuring Register Type: {:?}", config.register_mode);
     let (direction, count) = config.register_mode.arrow_from_default();
-    
+
     let mut actions = vec![];
-    
+
     if count > 0 {
         actions.extend(vec![
             CursorAction::PressEnter,
@@ -292,7 +290,7 @@ pub async fn configure_tui_station<T: Expect>(
             CursorAction::Sleep { ms: 1000 }, // Increased from 500ms to ensure selection is saved
         ]);
     }
-    
+
     // Move to next field
     actions.extend(vec![
         CursorAction::PressArrow {
@@ -301,20 +299,22 @@ pub async fn configure_tui_station<T: Expect>(
         },
         CursorAction::Sleep { ms: 300 },
     ]);
-    
+
     execute_cursor_actions(session, cap, &actions, "config_register_type").await?;
 
     // Capture milestone: Register Type configured
     log::info!("📸 Milestone: Register Type configured");
-    let screen = cap.capture(session, "milestone_register_type_configured").await?;
-    log::info!("Terminal snapshot:\n{}", screen);
+    let screen = cap
+        .capture(session, "milestone_register_type_configured")
+        .await?;
+    log::info!("Terminal snapshot:\n{screen}");
 
     // Note: Skipping immediate status verification for register type
     // Final configuration verification will check all fields including register type
 
     // Phase 6: Configure Start Address (field 2)
     log::info!("Configuring Start Address: 0x{:04X}", config.start_address);
-    
+
     let actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 500 }, // Wait for edit mode
@@ -338,8 +338,10 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Capture milestone: Start Address configured
     log::info!("📸 Milestone: Start Address configured");
-    let screen = cap.capture(session, "milestone_start_address_configured").await?;
-    log::info!("Terminal snapshot:\n{}", screen);
+    let screen = cap
+        .capture(session, "milestone_start_address_configured")
+        .await?;
+    log::info!("Terminal snapshot:\n{screen}");
 
     // Note: Start Address will be verified after save via final status check
     // Values are only committed to status tree after Ctrl+S
@@ -362,8 +364,10 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Capture milestone: Register Count configured
     log::info!("📸 Milestone: Register Count configured");
-    let screen = cap.capture(session, "milestone_register_count_configured").await?;
-    log::info!("Terminal snapshot:\n{}", screen);
+    let screen = cap
+        .capture(session, "milestone_register_count_configured")
+        .await?;
+    log::info!("Terminal snapshot:\n{screen}");
 
     // Note: Register Count will be verified after save via final status check
     // Values are only committed to status tree after Ctrl+S
@@ -384,16 +388,16 @@ pub async fn configure_tui_station<T: Expect>(
 
         // Configure each register value
         for (i, value) in values.iter().enumerate() {
-            log::info!("Setting register[{}] = 0x{:04X}", i, value);
+            log::info!("Setting register[{i}] = 0x{value:04X}");
 
             let actions = vec![
                 CursorAction::PressEnter,
                 CursorAction::Sleep { ms: 300 },
-                CursorAction::TypeString(format!("{:x}", value)),
+                CursorAction::TypeString(format!("{value:x}")),
                 CursorAction::PressEnter,
                 CursorAction::Sleep { ms: 500 },
             ];
-            execute_cursor_actions(session, cap, &actions, &format!("set_register_{}", i)).await?;
+            execute_cursor_actions(session, cap, &actions, &format!("set_register_{i}")).await?;
 
             // Note: Register values are not exposed in status JSON, so we can't verify them here
             // They will be verified later when CLI polls the master
@@ -404,7 +408,7 @@ pub async fn configure_tui_station<T: Expect>(
                     direction: ArrowKey::Right,
                     count: 1,
                 }];
-                execute_cursor_actions(session, cap, &actions, &format!("next_register_{}", i))
+                execute_cursor_actions(session, cap, &actions, &format!("next_register_{i}"))
                     .await?;
             }
         }
@@ -415,11 +419,13 @@ pub async fn configure_tui_station<T: Expect>(
             CursorAction::Sleep { ms: 500 },
         ];
         execute_cursor_actions(session, cap, &actions, "return_to_top_after_values").await?;
-        
+
         // Capture milestone: Register values configured
         log::info!("📸 Milestone: Register values configured");
-        let screen = cap.capture(session, "milestone_register_values_configured").await?;
-        log::info!("Terminal snapshot:\n{}", screen);
+        let screen = cap
+            .capture(session, "milestone_register_values_configured")
+            .await?;
+        log::info!("Terminal snapshot:\n{screen}");
     }
 
     // Phase 9: Save configuration
@@ -431,11 +437,11 @@ pub async fn configure_tui_station<T: Expect>(
         CursorAction::Sleep { ms: 3000 }, // Wait for save operation
     ];
     execute_cursor_actions(session, cap, &actions, "save_config").await?;
-    
+
     // Capture milestone: Configuration saved
     log::info!("📸 Milestone: Configuration saved");
     let screen = cap.capture(session, "milestone_config_saved").await?;
-    log::info!("Terminal snapshot:\n{}", screen);
+    log::info!("Terminal snapshot:\n{screen}");
 
     log::info!("✅ Station configuration saved successfully");
     Ok(())
@@ -448,17 +454,20 @@ pub async fn run_single_station_master_test(
     config: StationConfig,
 ) -> Result<()> {
     log::info!("🧪 Running single-station Master test");
-    log::info!("   Port1: {} (TUI Master)", port1);
-    log::info!("   Port2: {} (CLI Slave)", port2);
-    log::info!("   Config: {:?}", config);
+    log::info!("   Port1: {port1} (TUI Master)");
+    log::info!("   Port2: {port2} (CLI Slave)");
+    log::info!("   Config: {config:?}");
 
     // Generate test data
-    let test_data = if matches!(config.register_mode, RegisterMode::Coils | RegisterMode::DiscreteInputs) {
+    let test_data = if matches!(
+        config.register_mode,
+        RegisterMode::Coils | RegisterMode::DiscreteInputs
+    ) {
         generate_random_coils(config.register_count as usize)
     } else {
         generate_random_registers(config.register_count as usize)
     };
-    log::info!("Generated test data: {:?}", test_data);
+    log::info!("Generated test data: {test_data:?}");
 
     // Create config with test data
     let mut config_with_data = config.clone();
@@ -480,25 +489,47 @@ pub async fn run_single_station_master_test(
     // Check TUI status to verify configuration was saved
     log::info!("🔍 DEBUG: Checking TUI status to verify configuration...");
     if let Ok(status) = read_tui_status() {
-        log::info!("🔍 DEBUG: TUI masters count: {}", status.ports[0].modbus_masters.len());
+        log::info!(
+            "🔍 DEBUG: TUI masters count: {}",
+            status.ports[0].modbus_masters.len()
+        );
         if !status.ports[0].modbus_masters.is_empty() {
             let master = &status.ports[0].modbus_masters[0];
-            log::info!("🔍 DEBUG: Master config - ID:{}, Type:{}, Addr:{}, Count:{}", 
-                master.station_id, master.register_type, master.start_address, master.register_count);
-            
+            log::info!(
+                "🔍 DEBUG: Master config - ID:{}, Type:{}, Addr:{}, Count:{}",
+                master.station_id,
+                master.register_type,
+                master.start_address,
+                master.register_count
+            );
+
             // Verify configuration matches expected
             if master.station_id != config.station_id {
-                return Err(anyhow!("Station ID mismatch: expected {}, got {}", config.station_id, master.station_id));
+                return Err(anyhow!(
+                    "Station ID mismatch: expected {}, got {}",
+                    config.station_id,
+                    master.station_id
+                ));
             }
             if master.start_address != config.start_address {
-                return Err(anyhow!("Start address mismatch: expected {}, got {}", config.start_address, master.start_address));
+                return Err(anyhow!(
+                    "Start address mismatch: expected {}, got {}",
+                    config.start_address,
+                    master.start_address
+                ));
             }
             if master.register_count != config.register_count as usize {
-                return Err(anyhow!("Register count mismatch: expected {}, got {}", config.register_count, master.register_count));
+                return Err(anyhow!(
+                    "Register count mismatch: expected {}, got {}",
+                    config.register_count,
+                    master.register_count
+                ));
             }
             log::info!("✅ Configuration verified: all fields match expected values");
         } else {
-            return Err(anyhow!("No master configuration found in TUI status after save"));
+            return Err(anyhow!(
+                "No master configuration found in TUI status after save"
+            ));
         }
     } else {
         return Err(anyhow!("Could not read TUI status file after save"));
@@ -520,12 +551,12 @@ pub async fn verify_master_data(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("📡 Polling data from Master...");
-    log::info!("🔍 DEBUG: CLI slave-poll starting on port {}", port2);
-    log::info!("🔍 DEBUG: Expected data: {:?}", expected_data);
+    log::info!("🔍 DEBUG: CLI slave-poll starting on port {port2}");
+    log::info!("🔍 DEBUG: Expected data: {expected_data:?}");
 
     let binary = build_debug_bin("aoba")?;
-    log::info!("🔍 DEBUG: Using binary: {:?}", binary);
-    
+    log::info!("🔍 DEBUG: Using binary: {binary:?}");
+
     let args = [
         "--slave-poll",
         port2,
@@ -541,15 +572,16 @@ pub async fn verify_master_data(
         "9600",
         "--json",
     ];
-    log::info!("🔍 DEBUG: CLI args: {:?}", args);
-    
-    let output = std::process::Command::new(&binary)
-        .args(args)
-        .output()?;
+    log::info!("🔍 DEBUG: CLI args: {args:?}");
+
+    let output = std::process::Command::new(&binary).args(args).output()?;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
-    log::info!("🔍 DEBUG: CLI stderr: {}", String::from_utf8_lossy(&output.stderr));
-    
+    log::info!(
+        "🔍 DEBUG: CLI stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
     if !output.status.success() {
         return Err(anyhow!(
             "CLI slave-poll failed: {}",
@@ -558,20 +590,20 @@ pub async fn verify_master_data(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    log::info!("CLI output: {}", stdout);
+    log::info!("CLI output: {stdout}");
 
     // Parse JSON output and verify values
     let json: serde_json::Value = serde_json::from_str(&stdout)?;
-    log::info!("🔍 DEBUG: Parsed JSON: {:?}", json);
-    
+    log::info!("🔍 DEBUG: Parsed JSON: {json:?}");
+
     if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
         let received_values: Vec<u16> = values
             .iter()
             .filter_map(|v| v.as_u64().map(|n| n as u16))
             .collect();
 
-        log::info!("🔍 DEBUG: Received values: {:?}", received_values);
-        
+        log::info!("🔍 DEBUG: Received values: {received_values:?}");
+
         if received_values.len() != expected_data.len() {
             return Err(anyhow!(
                 "Value count mismatch: expected {}, got {}",
@@ -580,14 +612,13 @@ pub async fn verify_master_data(
             ));
         }
 
-        for (i, (expected, received)) in expected_data.iter().zip(received_values.iter()).enumerate() {
+        for (i, (expected, received)) in
+            expected_data.iter().zip(received_values.iter()).enumerate()
+        {
             if expected != received {
-                log::error!("🔍 DEBUG: Mismatch at index {}: expected 0x{:04X}, got 0x{:04X}", i, expected, received);
+                log::error!("🔍 DEBUG: Mismatch at index {i}: expected 0x{expected:04X}, got 0x{received:04X}");
                 return Err(anyhow!(
-                    "Value[{}] mismatch: expected 0x{:04X}, got 0x{:04X}",
-                    i,
-                    expected,
-                    received
+                    "Value[{i}] mismatch: expected 0x{expected:04X}, got 0x{received:04X}"
                 ));
             }
         }
@@ -608,17 +639,20 @@ pub async fn run_single_station_slave_test(
     config: StationConfig,
 ) -> Result<()> {
     log::info!("🧪 Running single-station Slave test");
-    log::info!("   Port1: {} (TUI Slave)", port1);
-    log::info!("   Port2: {} (CLI Master)", port2);
-    log::info!("   Config: {:?}", config);
+    log::info!("   Port1: {port1} (TUI Slave)");
+    log::info!("   Port2: {port2} (CLI Master)");
+    log::info!("   Config: {config:?}");
 
     // Generate test data
-    let test_data = if matches!(config.register_mode, RegisterMode::Coils | RegisterMode::DiscreteInputs) {
+    let test_data = if matches!(
+        config.register_mode,
+        RegisterMode::Coils | RegisterMode::DiscreteInputs
+    ) {
         generate_random_coils(config.register_count as usize)
     } else {
         generate_random_registers(config.register_count as usize)
     };
-    log::info!("Generated test data: {:?}", test_data);
+    log::info!("Generated test data: {test_data:?}");
 
     // Setup TUI
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
@@ -632,27 +666,49 @@ pub async fn run_single_station_slave_test(
     // Check TUI status after configuration
     log::info!("🔍 DEBUG: Checking TUI status after Slave configuration...");
     sleep_seconds(2).await;
-    
+
     if let Ok(status) = read_tui_status() {
-        log::info!("🔍 DEBUG: TUI slaves count: {}", status.ports[0].modbus_slaves.len());
+        log::info!(
+            "🔍 DEBUG: TUI slaves count: {}",
+            status.ports[0].modbus_slaves.len()
+        );
         if !status.ports[0].modbus_slaves.is_empty() {
             let slave = &status.ports[0].modbus_slaves[0];
-            log::info!("🔍 DEBUG: Slave config - ID:{}, Type:{}, Addr:{}, Count:{}", 
-                slave.station_id, slave.register_type, slave.start_address, slave.register_count);
-            
+            log::info!(
+                "🔍 DEBUG: Slave config - ID:{}, Type:{}, Addr:{}, Count:{}",
+                slave.station_id,
+                slave.register_type,
+                slave.start_address,
+                slave.register_count
+            );
+
             // Verify configuration
             if slave.station_id != config.station_id {
-                return Err(anyhow!("Station ID mismatch: expected {}, got {}", config.station_id, slave.station_id));
+                return Err(anyhow!(
+                    "Station ID mismatch: expected {}, got {}",
+                    config.station_id,
+                    slave.station_id
+                ));
             }
             if slave.start_address != config.start_address {
-                return Err(anyhow!("Start address mismatch: expected {}, got {}", config.start_address, slave.start_address));
+                return Err(anyhow!(
+                    "Start address mismatch: expected {}, got {}",
+                    config.start_address,
+                    slave.start_address
+                ));
             }
             if slave.register_count != config.register_count as usize {
-                return Err(anyhow!("Register count mismatch: expected {}, got {}", config.register_count, slave.register_count));
+                return Err(anyhow!(
+                    "Register count mismatch: expected {}, got {}",
+                    config.register_count,
+                    slave.register_count
+                ));
             }
             log::info!("✅ Configuration verified: all fields match expected values");
         } else {
-            return Err(anyhow!("No slave configuration found in TUI status after save"));
+            return Err(anyhow!(
+                "No slave configuration found in TUI status after save"
+            ));
         }
     } else {
         return Err(anyhow!("Could not read TUI status file after save"));
@@ -674,19 +730,23 @@ pub async fn send_data_from_cli_master(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("📡 Sending data from CLI Master...");
-    log::info!("🔍 DEBUG: CLI master-provide starting on port {}", port2);
-    log::info!("🔍 DEBUG: Test data to send: {:?}", test_data);
+    log::info!("🔍 DEBUG: CLI master-provide starting on port {port2}");
+    log::info!("🔍 DEBUG: Test data to send: {test_data:?}");
 
     // Create data file
     let temp_dir = std::env::temp_dir();
     let data_file = temp_dir.join(format!("tui_e2e_data_{}.json", std::process::id()));
     let values_json = serde_json::to_string(&json!({ "values": test_data }))?;
     std::fs::write(&data_file, &values_json)?;
-    log::info!("🔍 DEBUG: Created data file: {} with content: {}", data_file.display(), values_json);
+    log::info!(
+        "🔍 DEBUG: Created data file: {} with content: {}",
+        data_file.display(),
+        values_json
+    );
 
     let binary = build_debug_bin("aoba")?;
-    log::info!("🔍 DEBUG: Using binary: {:?}", binary);
-    
+    log::info!("🔍 DEBUG: Using binary: {binary:?}");
+
     let args = [
         "--master-provide",
         port2,
@@ -701,15 +761,22 @@ pub async fn send_data_from_cli_master(
         "--data-source",
         &format!("file:{}", data_file.display()),
     ];
-    log::info!("🔍 DEBUG: CLI master-provide args: {:?}", args);
-    
-    let output = std::process::Command::new(&binary)
-        .args(args)
-        .output()?;
+    log::info!("🔍 DEBUG: CLI master-provide args: {args:?}");
 
-    log::info!("🔍 DEBUG: CLI master-provide exit status: {:?}", output.status);
-    log::info!("🔍 DEBUG: CLI master-provide stdout: {}", String::from_utf8_lossy(&output.stdout));
-    log::info!("🔍 DEBUG: CLI master-provide stderr: {}", String::from_utf8_lossy(&output.stderr));
+    let output = std::process::Command::new(&binary).args(args).output()?;
+
+    log::info!(
+        "🔍 DEBUG: CLI master-provide exit status: {:?}",
+        output.status
+    );
+    log::info!(
+        "🔍 DEBUG: CLI master-provide stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    log::info!(
+        "🔍 DEBUG: CLI master-provide stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     // Clean up data file
     let _ = std::fs::remove_file(&data_file);
@@ -734,7 +801,7 @@ pub async fn verify_slave_data<T: Expect>(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("🔍 Verifying data in TUI Slave...");
-    log::info!("🔍 DEBUG: Expected data: {:?}", expected_data);
+    log::info!("🔍 DEBUG: Expected data: {expected_data:?}");
 
     // Wait a bit for data to be received
     sleep_seconds(2).await;
@@ -742,21 +809,29 @@ pub async fn verify_slave_data<T: Expect>(
     // For slave mode, we verify that the TUI received data by checking the log count
     // The actual register values are stored internally but not exposed in the status JSON
     let status = read_tui_status()?;
-    
+
     log::info!("🔍 DEBUG: TUI status after receiving data:");
     log::info!("🔍 DEBUG: - Port enabled: {}", status.ports[0].enabled);
     log::info!("🔍 DEBUG: - Port state: {:?}", status.ports[0].state);
-    log::info!("🔍 DEBUG: - Slaves count: {}", status.ports[0].modbus_slaves.len());
+    log::info!(
+        "🔍 DEBUG: - Slaves count: {}",
+        status.ports[0].modbus_slaves.len()
+    );
     log::info!("🔍 DEBUG: - Log count: {}", status.ports[0].log_count);
-    
+
     // Verify the station configuration exists
     if config.is_master {
         if status.ports[0].modbus_masters.is_empty() {
             return Err(anyhow!("No master stations found in status"));
         }
         let master = &status.ports[0].modbus_masters[0];
-        log::info!("🔍 DEBUG: Master station - ID:{}, Type:{}, Addr:{}, Count:{}", 
-            master.station_id, master.register_type, master.start_address, master.register_count);
+        log::info!(
+            "🔍 DEBUG: Master station - ID:{}, Type:{}, Addr:{}, Count:{}",
+            master.station_id,
+            master.register_type,
+            master.start_address,
+            master.register_count
+        );
         if master.station_id != config.station_id {
             return Err(anyhow!(
                 "Station ID mismatch: expected {}, got {}",
@@ -769,8 +844,13 @@ pub async fn verify_slave_data<T: Expect>(
             return Err(anyhow!("No slave stations found in status"));
         }
         let slave = &status.ports[0].modbus_slaves[0];
-        log::info!("🔍 DEBUG: Slave station - ID:{}, Type:{}, Addr:{}, Count:{}", 
-            slave.station_id, slave.register_type, slave.start_address, slave.register_count);
+        log::info!(
+            "🔍 DEBUG: Slave station - ID:{}, Type:{}, Addr:{}, Count:{}",
+            slave.station_id,
+            slave.register_type,
+            slave.start_address,
+            slave.register_count
+        );
         if slave.station_id != config.station_id {
             return Err(anyhow!(
                 "Station ID mismatch: expected {}, got {}",
@@ -786,12 +866,12 @@ pub async fn verify_slave_data<T: Expect>(
         log::warn!("⚠️ No logs found - communication may not have happened");
         log::warn!("🔍 DEBUG: This indicates the CLI Master's data did not reach the TUI Slave");
     } else {
-        log::info!("✅ Found {} log entries - communication verified", log_count);
+        log::info!("✅ Found {log_count} log entries - communication verified");
     }
 
-    log::info!("✅ TUI Slave verification complete (log count: {})", log_count);
+    log::info!("✅ TUI Slave verification complete (log count: {log_count})");
     log::info!("   Note: Register values are stored internally but not exposed in status JSON");
-    log::info!("   Expected data: {:?}", expected_data);
+    log::info!("   Expected data: {expected_data:?}");
     Ok(())
 }
 
@@ -851,22 +931,20 @@ pub async fn configure_multiple_stations<T: Expect>(
             CursorAction::Sleep { ms: 2000 }, // Increased delay to ensure mode change is committed
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave_mode").await?;
-        
+
         // Verify the mode was actually switched to Slave
         log::info!("Verifying Connection Mode was switched to Slave...");
         let pattern = Regex::new(r"(?i)slave")?;
-        let actions = vec![
-            CursorAction::MatchPattern {
-                pattern,
-                description: "Connection Mode should show 'Slave'".to_string(),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
-        ];
+        let actions = vec![CursorAction::MatchPattern {
+            pattern,
+            description: "Connection Mode should show 'Slave'".to_string(),
+            line_range: None,
+            col_range: None,
+            retry_action: None,
+        }];
         execute_cursor_actions(session, cap, &actions, "verify_slave_mode_multi").await?;
         log::info!("✅ Connection Mode verified as Slave for multi-station configuration");
-        
+
         // Reset to top after mode change to ensure known cursor position
         let actions = vec![
             CursorAction::PressCtrlPageUp,
@@ -886,7 +964,7 @@ pub async fn configure_multiple_stations<T: Expect>(
     log::info!("Phase 2: Configuring each station...");
     for (i, config) in configs.iter().enumerate() {
         let station_num = i + 1;
-        log::info!("Configuring station {}...", station_num);
+        log::info!("Configuring station {station_num}...");
 
         // Navigate to station using Ctrl+PgUp + PgDown
         let mut actions = vec![
@@ -897,8 +975,13 @@ pub async fn configure_multiple_stations<T: Expect>(
             actions.push(CursorAction::PressPageDown);
             actions.push(CursorAction::Sleep { ms: 300 });
         }
-        execute_cursor_actions(session, cap, &actions, &format!("nav_to_station_{}", station_num))
-            .await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("nav_to_station_{station_num}"),
+        )
+        .await?;
 
         // Configure Station ID (field 0)
         log::info!("  Configuring Station ID: {}", config.station_id);
@@ -921,15 +1004,20 @@ pub async fn configure_multiple_stations<T: Expect>(
             },
             CursorAction::Sleep { ms: 300 },
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("config_station_id_{}", station_num))
-            .await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("config_station_id_{station_num}"),
+        )
+        .await?;
 
         // Configure Register Type (field 1)
         log::info!("  Configuring Register Type: {:?}", config.register_mode);
         let (direction, count) = config.register_mode.arrow_from_default();
-        
+
         let mut actions = vec![];
-        
+
         if count > 0 {
             actions.extend(vec![
                 CursorAction::PressEnter,
@@ -940,7 +1028,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                 CursorAction::Sleep { ms: 500 },
             ]);
         }
-        
+
         // Move to next field
         actions.extend(vec![
             CursorAction::PressArrow {
@@ -949,12 +1037,20 @@ pub async fn configure_multiple_stations<T: Expect>(
             },
             CursorAction::Sleep { ms: 300 },
         ]);
-        
-        execute_cursor_actions(session, cap, &actions, &format!("config_register_type_{}", station_num))
-            .await?;
+
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("config_register_type_{station_num}"),
+        )
+        .await?;
 
         // Configure Start Address (field 2)
-        log::info!("  Configuring Start Address: 0x{:04X}", config.start_address);
+        log::info!(
+            "  Configuring Start Address: 0x{:04X}",
+            config.start_address
+        );
         let actions = vec![
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 300 },
@@ -970,8 +1066,13 @@ pub async fn configure_multiple_stations<T: Expect>(
             },
             CursorAction::Sleep { ms: 300 },
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("config_start_address_{}", station_num))
-            .await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("config_start_address_{station_num}"),
+        )
+        .await?;
 
         // Configure Register Count (field 3)
         log::info!("  Configuring Register Count: {}", config.register_count);
@@ -987,8 +1088,13 @@ pub async fn configure_multiple_stations<T: Expect>(
             CursorAction::PressEnter,
             CursorAction::Sleep { ms: 3000 }, // Wait for value to commit to status tree
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("config_register_count_{}", station_num))
-            .await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("config_register_count_{station_num}"),
+        )
+        .await?;
 
         // Configure register values if provided
         if let Some(values) = &config.register_values {
@@ -1001,14 +1107,19 @@ pub async fn configure_multiple_stations<T: Expect>(
                 },
                 CursorAction::Sleep { ms: 500 },
             ];
-            execute_cursor_actions(session, cap, &actions, &format!("enter_register_grid_{}", station_num))
-                .await?;
+            execute_cursor_actions(
+                session,
+                cap,
+                &actions,
+                &format!("enter_register_grid_{station_num}"),
+            )
+            .await?;
 
             for (reg_i, value) in values.iter().enumerate() {
                 let actions = vec![
                     CursorAction::PressEnter,
                     CursorAction::Sleep { ms: 300 },
-                    CursorAction::TypeString(format!("{:x}", value)),
+                    CursorAction::TypeString(format!("{value:x}")),
                     CursorAction::PressEnter,
                     CursorAction::Sleep { ms: 500 },
                 ];
@@ -1016,7 +1127,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                     session,
                     cap,
                     &actions,
-                    &format!("set_station_{}_register_{}", station_num, reg_i),
+                    &format!("set_station_{station_num}_register_{reg_i}"),
                 )
                 .await?;
 
@@ -1029,7 +1140,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                         session,
                         cap,
                         &actions,
-                        &format!("next_register_station_{}_{}", station_num, reg_i),
+                        &format!("next_register_station_{station_num}_{reg_i}"),
                     )
                     .await?;
                 }
@@ -1041,8 +1152,13 @@ pub async fn configure_multiple_stations<T: Expect>(
             CursorAction::PressCtrlPageUp,
             CursorAction::Sleep { ms: 500 },
         ];
-        execute_cursor_actions(session, cap, &actions, &format!("return_to_top_station_{}", station_num))
-            .await?;
+        execute_cursor_actions(
+            session,
+            cap,
+            &actions,
+            &format!("return_to_top_station_{station_num}"),
+        )
+        .await?;
     }
 
     // Phase 3: Save configuration and enable port
@@ -1063,7 +1179,7 @@ pub async fn configure_multiple_stations<T: Expect>(
             log::info!("✅ Port enabled successfully");
         }
         Err(e) => {
-            log::warn!("⚠️  Port enable check timed out: {}", e);
+            log::warn!("⚠️  Port enable check timed out: {e}");
             log::warn!("⚠️  This is expected for multi-station configurations - continuing anyway");
             // For multi-station, port may take longer to enable or may need manual trigger
             // We'll continue with the test rather than failing here
@@ -1080,17 +1196,27 @@ pub async fn run_multi_station_master_test(
     port2: &str,
     configs: Vec<StationConfig>,
 ) -> Result<()> {
-    log::info!("🧪 Running multi-station Master test with {} stations", configs.len());
+    log::info!(
+        "🧪 Running multi-station Master test with {} stations",
+        configs.len()
+    );
 
     // Generate test data for each station
     let mut configs_with_data = Vec::new();
     for config in configs {
-        let test_data = if matches!(config.register_mode, RegisterMode::Coils | RegisterMode::DiscreteInputs) {
+        let test_data = if matches!(
+            config.register_mode,
+            RegisterMode::Coils | RegisterMode::DiscreteInputs
+        ) {
             generate_random_coils(config.register_count as usize)
         } else {
             generate_random_registers(config.register_count as usize)
         };
-        log::info!("Generated test data for station {}: {:?}", config.station_id, test_data);
+        log::info!(
+            "Generated test data for station {}: {:?}",
+            config.station_id,
+            test_data
+        );
 
         let mut config_with_data = config.clone();
         config_with_data.register_values = Some(test_data);
@@ -1113,12 +1239,7 @@ pub async fn run_multi_station_master_test(
     // Verify each station
     for config in &configs_with_data {
         log::info!("Verifying station {} data...", config.station_id);
-        verify_master_data(
-            port2,
-            config.register_values.as_ref().unwrap(),
-            config,
-        )
-        .await?;
+        verify_master_data(port2, config.register_values.as_ref().unwrap(), config).await?;
     }
 
     log::info!("✅ Multi-station Master test passed");
@@ -1131,7 +1252,10 @@ pub async fn run_multi_station_slave_test(
     port2: &str,
     configs: Vec<StationConfig>,
 ) -> Result<()> {
-    log::info!("🧪 Running multi-station Slave test with {} stations", configs.len());
+    log::info!(
+        "🧪 Running multi-station Slave test with {} stations",
+        configs.len()
+    );
 
     // Setup TUI
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
@@ -1147,13 +1271,20 @@ pub async fn run_multi_station_slave_test(
     sleep_seconds(3).await;
 
     // Send data to each station and verify
-    for (_station_idx, config) in configs.iter().enumerate() {
-        let test_data = if matches!(config.register_mode, RegisterMode::Coils | RegisterMode::DiscreteInputs) {
+    for config in configs.iter() {
+        let test_data = if matches!(
+            config.register_mode,
+            RegisterMode::Coils | RegisterMode::DiscreteInputs
+        ) {
             generate_random_coils(config.register_count as usize)
         } else {
             generate_random_registers(config.register_count as usize)
         };
-        log::info!("Generated test data for station {}: {:?}", config.station_id, test_data);
+        log::info!(
+            "Generated test data for station {}: {:?}",
+            config.station_id,
+            test_data
+        );
 
         log::info!("Sending data to station {}...", config.station_id);
         send_data_from_cli_master(port2, &test_data, config).await?;
@@ -1167,11 +1298,11 @@ pub async fn run_multi_station_slave_test(
     // Verify communication happened by checking log count
     let status = read_tui_status()?;
     let log_count = status.ports[0].log_count;
-    
+
     if log_count == 0 {
         log::warn!("⚠️ No logs found - communication may not have happened");
     } else {
-        log::info!("✅ Found {} log entries - communication verified", log_count);
+        log::info!("✅ Found {log_count} log entries - communication verified");
     }
 
     // Verify all stations are configured

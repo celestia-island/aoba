@@ -325,10 +325,10 @@ pub async fn execute_cursor_actions<T: Expect>(
                     {
                         Ok(screen) => {
                             log::error!("Current terminal content:");
-                            log::error!("\n{}\n", screen);
+                            log::error!("\n{screen}\n");
                         }
                         Err(cap_err) => {
-                            log::error!("Failed to capture terminal: {}", cap_err);
+                            log::error!("Failed to capture terminal: {cap_err}");
                         }
                     }
 
@@ -356,21 +356,21 @@ fn dump_all_status_files() {
     log::error!("📄 /tmp/ci_tui_status.json:");
     match std::fs::read_to_string("/tmp/ci_tui_status.json") {
         Ok(content) => {
-            log::error!("{}", content);
+            log::error!("{content}");
         }
         Err(e) => {
-            log::error!("  (not available: {})", e);
+            log::error!("  (not available: {e})");
         }
     }
 
     // CLI status files - check for common port names (only vcom1/vcom2 in CI)
     let common_ports = vec!["vcom1", "vcom2"];
     for port in common_ports {
-        let cli_path = format!("/tmp/ci_cli_{}_status.json", port);
-        log::error!("📄 {}:", cli_path);
+        let cli_path = format!("/tmp/ci_cli_{port}_status.json");
+        log::error!("📄 {cli_path}:");
         match std::fs::read_to_string(&cli_path) {
             Ok(content) => {
-                log::error!("{}", content);
+                log::error!("{content}");
             }
             Err(_) => {
                 // Silently skip if file doesn't exist (expected for unused ports)
@@ -387,14 +387,14 @@ fn dump_all_status_files() {
                         let path = entry.path();
                         log::error!("📄 {}:", path.display());
                         if let Ok(content) = std::fs::read_to_string(&path) {
-                            log::error!("{}", content);
+                            log::error!("{content}");
                         }
                     }
                 }
             }
         }
         Err(e) => {
-            log::error!("Failed to read /tmp directory: {}", e);
+            log::error!("Failed to read /tmp directory: {e}");
         }
     }
 }
@@ -418,19 +418,16 @@ async fn check_status_path(
     let json_path_str = if path.starts_with('$') {
         path.to_string()
     } else {
-        format!("$.{}", path)
+        format!("$.{path}")
     };
 
     let json_path = JsonPath::parse(&json_path_str)
-        .map_err(|e| anyhow!("Invalid JSONPath '{}': {}", json_path_str, e))?;
+        .map_err(|e| anyhow!("Invalid JSONPath '{json_path_str}': {e}"))?;
 
     loop {
-        if start.elapsed() > timeout.into() {
+        if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for status path '{}' to equal {:?} (waited {}s)",
-                path,
-                expected,
-                timeout_secs
+                "Timeout waiting for status path '{path}' to equal {expected:?} (waited {timeout_secs}s)"
             ));
         }
 
@@ -439,7 +436,7 @@ async fn check_status_path(
             Ok(status) => {
                 // Serialize status to JSON for path lookup
                 let status_json = serde_json::to_value(&status)
-                    .map_err(|e| anyhow!("Failed to serialize status: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to serialize status: {e}"))?;
 
                 // Query the JSON path using the library
                 let nodes = json_path.query(&status_json);
@@ -449,27 +446,22 @@ async fn check_status_path(
                     Ok(actual) => {
                         if actual == expected {
                             log::debug!(
-                                "✓ Status path '{}' matches expected value: {:?}",
-                                path,
-                                expected
+                                "✓ Status path '{path}' matches expected value: {expected:?}"
                             );
                             return Ok(());
                         } else {
                             log::debug!(
-                                "Status path '{}' is {:?}, waiting for {:?}",
-                                path,
-                                actual,
-                                expected
+                                "Status path '{path}' is {actual:?}, waiting for {expected:?}"
                             );
                         }
                     }
                     Err(e) => {
-                        log::debug!("Failed to find unique value at path '{}': {}", path, e);
+                        log::debug!("Failed to find unique value at path '{path}': {e}");
                     }
                 }
             }
             Err(e) => {
-                log::debug!("Failed to read TUI status: {}", e);
+                log::debug!("Failed to read TUI status: {e}");
             }
         }
 

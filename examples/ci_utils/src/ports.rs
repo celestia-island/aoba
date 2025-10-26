@@ -204,26 +204,18 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
     // On Windows, check if the test ports are available
     #[cfg(windows)]
     {
-        log::info!("Checking for ports: {} and {}", port1, port2);
+        log::info!("Checking for ports: {port1} and {port2}");
 
         let port1_exists = port_exists(port1);
         let port2_exists = port_exists(port2);
 
         log::info!(
-            "Port existence check: {} exists={}, {} exists={}",
-            port1,
-            port1_exists,
-            port2,
-            port2_exists
+            "Port existence check: {port1} exists={port1_exists}, {port2} exists={port2_exists}"
         );
 
         if !port1_exists || !port2_exists {
             log::info!(
-                "Virtual serial port tests disabled on Windows: {} exists={}, {} exists={}",
-                port1,
-                port1_exists,
-                port2,
-                port2_exists
+                "Virtual serial port tests disabled on Windows: {port1} exists={port1_exists}, {port2} exists={port2_exists}"
             );
             return false;
         }

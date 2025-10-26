@@ -250,7 +250,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterMode { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        
+
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_mode = if let Some(item) = stations.get(index) {
@@ -297,7 +297,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterStartAddress { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        
+
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {
@@ -341,7 +341,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                         types::cursor::ModbusDashboardCursor::RegisterLength { index: i } if i == index
                     ),
                     || -> Result<Vec<Span<'static>>> {
-                        
+
                         let types::port::PortConfig::Modbus { mode: _, stations } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {

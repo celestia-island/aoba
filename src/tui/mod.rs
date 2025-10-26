@@ -171,8 +171,7 @@ fn initialize_cli_data_source(
         }
         if station.register_mode != register_mode {
             log::warn!(
-                "initialize_cli_data_source: skipping station with different register mode (expected {:?})",
-                register_mode
+                "initialize_cli_data_source: skipping station with different register mode (expected {register_mode:?})"
             );
             continue;
         }

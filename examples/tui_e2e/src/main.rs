@@ -49,7 +49,7 @@ pub fn cleanup_tui_config_cache() -> Result<()> {
     for config_path in &config_paths {
         if config_path.exists() {
             log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
-            match std::fs::remove_file(&config_path) {
+            match std::fs::remove_file(config_path) {
                 Ok(_) => {
                     removed_count += 1;
                     log::info!("✅ Removed: {}", config_path.display());
@@ -71,15 +71,12 @@ pub fn cleanup_tui_config_cache() -> Result<()> {
     for status_file in &status_files {
         if status_file.exists() {
             log::debug!("🗑️  Removing old status file: {}", status_file.display());
-            let _ = std::fs::remove_file(&status_file);
+            let _ = std::fs::remove_file(status_file);
         }
     }
 
     if removed_count > 0 {
-        log::info!(
-            "✅ TUI config cache cleaned ({} files removed)",
-            removed_count
-        );
+        log::info!("✅ TUI config cache cleaned ({removed_count} files removed)");
     } else {
         log::debug!("📂 No TUI config cache found, nothing to clean");
     }
@@ -93,7 +90,7 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     #[cfg(windows)]
     {
         log::info!("🧪 Windows platform: skipping virtual serial port setup (socat not available)");
-        return Ok(false);
+        Ok(false)
     }
 
     #[cfg(not(windows))]
@@ -200,7 +197,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    log::info!("🧪 Running module: {}", module);
+    log::info!("🧪 Running module: {module}");
 
     // Run the selected module
     match module {
@@ -249,13 +246,13 @@ async fn main() -> Result<()> {
         }
 
         _ => {
-            log::error!("❌ Unknown module: {}", module);
+            log::error!("❌ Unknown module: {module}");
             log::error!("Run without --module to see available modules");
-            return Err(anyhow::anyhow!("Unknown module: {}", module));
+            return Err(anyhow::anyhow!("Unknown module: {module}"));
         }
     }
 
-    log::info!("✅ Module '{}' completed successfully!", module);
+    log::info!("✅ Module '{module}' completed successfully!");
 
     Ok(())
 }

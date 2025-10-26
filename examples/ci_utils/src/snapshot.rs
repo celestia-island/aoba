@@ -128,7 +128,7 @@ impl TerminalCapture {
             }
 
             if out.trim().is_empty() {
-                log::warn!("⚠️ Screen still empty after {} attempts", MAX_ATTEMPTS);
+                log::warn!("⚠️ Screen still empty after {MAX_ATTEMPTS} attempts");
             }
         } else if let Ok(captures) = session.check(ExpectRegex("(?s).+")) {
             let bytes = captures.as_bytes();

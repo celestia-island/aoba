@@ -1,9 +1,8 @@
+use super::super::common::*;
 /// TUI E2E tests for multi-station (2 stations) Master mode configurations
 ///
 /// Tests TUI acting as Modbus Master with multiple stations configured.
-
 use anyhow::Result;
-use super::super::common::*;
 
 /// Test: Mixed Register Types - Station 1 Coils, Station 2 Holding
 /// Both stations: ID=1, addr=0x0000, len=10
