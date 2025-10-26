@@ -41,6 +41,7 @@ impl RegisterMode {
     }
 
     /// Get the display name as shown in TUI
+    #[allow(dead_code)]
     pub fn display_name(&self) -> &'static str {
         match self {
             RegisterMode::Coils => "Coils",
@@ -133,7 +134,7 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
 pub async fn configure_tui_station<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    port1: &str,
+    _port1: &str,
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("⚙️  Configuring TUI station: {:?}", config);
@@ -720,6 +721,7 @@ pub async fn send_data_from_cli_master(
 }
 
 /// Verify data received by TUI Slave via status monitoring
+#[allow(dead_code)]
 pub async fn verify_slave_data<T: Expect>(
     _session: &mut T,
     _cap: &mut TerminalCapture,
