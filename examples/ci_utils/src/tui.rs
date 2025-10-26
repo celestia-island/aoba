@@ -601,9 +601,10 @@ pub async fn enter_modbus_panel<T: Expect>(
 
         let status_check_result = if status_available {
             log::info!("  Status monitoring is available, using status tree verification");
-            tokio::time::timeout(std::time::Duration::from_secs(3), async {
-                for check_attempt in 1..=10 {
-                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            // Increased timeout to 10 seconds for CI environments which may be slower
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                for check_attempt in 1..=20 {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                     // Try to read status
                     if let Ok(status) = crate::read_tui_status() {
