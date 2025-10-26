@@ -140,15 +140,27 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Phase 1: Create station and reset cursor to known position
     log::info!("Creating station...");
+    
+    // Debug: Capture screen before creating station
+    let screen_before = cap.capture(session, "before_create_station").await?;
+    log::info!("📸 Screen before creating station:\n{}", screen_before);
+    
     let actions = vec![
         CursorAction::PressEnter, // Create station
-        CursorAction::Sleep { ms: 2000 },
-        // CRITICAL: After creating station, immediately reset to top
-        // This ensures cursor is at "Create Station" button in a known state
+        CursorAction::Sleep { ms: 5000 }, // Increased from 2000ms - station creation may be slow
+    ];
+    execute_cursor_actions(session, cap, &actions, "press_enter_create").await?;
+    
+    // Debug: Capture screen after pressing Enter
+    let screen_after_enter = cap.capture(session, "after_press_enter").await?;
+    log::info!("📸 Screen after pressing Enter:\n{}", screen_after_enter);
+    
+    // Reset cursor to known position
+    let actions = vec![
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep { ms: 500 },
     ];
-    execute_cursor_actions(session, cap, &actions, "create_station").await?;
+    execute_cursor_actions(session, cap, &actions, "reset_to_top").await?;
 
     // Verify station was created by checking terminal content
     let station_pattern = Regex::new(r"#1(?:\D|$)")?;
@@ -157,7 +169,7 @@ pub async fn configure_tui_station<T: Expect>(
         description: "Station #1 exists".to_string(),
         line_range: None,
         col_range: None,
-        retry_action: None,
+        retry_action: Some(vec![CursorAction::Sleep { ms: 1000 }]), // Add retry with wait
     }];
     execute_cursor_actions(session, cap, &actions, "verify_station_created").await?;
 
@@ -269,10 +281,31 @@ pub async fn configure_tui_station<T: Expect>(
 
     // Note: Skipping immediate status verification for station ID
     // Final configuration verification will check all fields
+    
+    // CRITICAL: Re-establish cursor position before Register Type configuration
+    // Sometimes the cursor position seems to drift, so we reset to known position
+    log::info!("Re-establishing cursor position before Register Type configuration...");
+    let actions = vec![
+        CursorAction::PressCtrlPageUp,  // Reset to top
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressPageDown,    // Jump to station section
+        CursorAction::Sleep { ms: 300 },
+        CursorAction::PressArrow {      // Move down twice (skip station header, move to Station ID, then to Register Type)
+            direction: ArrowKey::Down,
+            count: 2,
+        },
+        CursorAction::Sleep { ms: 300 },
+    ];
+    execute_cursor_actions(session, cap, &actions, "reestablish_cursor_before_regtype").await?;
 
     // Phase 5: Configure Register Type (field 1)
     log::info!("Configuring Register Type: {:?}", config.register_mode);
     let (direction, count) = config.register_mode.arrow_from_default();
+    
+    // Debug: Capture screen before configuring register type
+    let screen_before_regtype = cap.capture(session, "before_register_type_config").await?;
+    log::info!("📸 Screen before Register Type configuration (direction: {:?}, count: {}):\n{}", 
+        direction, count, screen_before_regtype);
     
     let mut actions = vec![];
     
@@ -311,22 +344,22 @@ pub async fn configure_tui_station<T: Expect>(
     
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 500 }, // Wait for edit mode
+        CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode to be fully ready
         CursorAction::PressCtrlA,
-        CursorAction::Sleep { ms: 200 },
+        CursorAction::Sleep { ms: 500 }, // Increased delay after select all
         CursorAction::PressBackspace,
-        CursorAction::Sleep { ms: 200 },
+        CursorAction::Sleep { ms: 500 }, // Increased delay after clearing
         // NOTE: Start Address field parses as DECIMAL, not hex
         // So we type the decimal value, not hex string
         CursorAction::TypeString(config.start_address.to_string()),
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep { ms: 1000 }, // Increased delay after typing
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 }, // Increased wait for value to commit
+        CursorAction::Sleep { ms: 2000 }, // Increased wait for value to commit
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 500 }, // Wait after moving to next field
+        CursorAction::Sleep { ms: 1000 }, // Increased wait after moving to next field
     ];
     execute_cursor_actions(session, cap, &actions, "config_start_address").await?;
 
@@ -342,13 +375,13 @@ pub async fn configure_tui_station<T: Expect>(
     log::info!("Configuring Register Count: {}", config.register_count);
     let actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 }, // Increased wait for edit mode to be fully ready
+        CursorAction::Sleep { ms: 2000 }, // Increased wait for edit mode to be fully ready
         CursorAction::PressCtrlA,
-        CursorAction::Sleep { ms: 200 }, // Small delay after Ctrl+A
+        CursorAction::Sleep { ms: 500 }, // Increased delay after Ctrl+A
         CursorAction::PressBackspace,
-        CursorAction::Sleep { ms: 200 }, // Small delay after clearing
+        CursorAction::Sleep { ms: 500 }, // Increased delay after clearing
         CursorAction::TypeString(config.register_count.to_string()),
-        CursorAction::Sleep { ms: 300 }, // Small delay after typing
+        CursorAction::Sleep { ms: 1000 }, // Increased delay after typing
         CursorAction::PressEnter,
         CursorAction::Sleep { ms: 3000 }, // Wait for value to commit to status tree
     ];
