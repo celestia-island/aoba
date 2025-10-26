@@ -438,10 +438,28 @@ pub async fn run_single_station_master_test(
 
     // Wait for CLI subprocess to start and data to be ready
     log::info!("Waiting for CLI subprocess to initialize and data to stabilize...");
+    log::info!("🔍 DEBUG: TUI Master subprocess should be running on {}", port1);
     sleep_seconds(5).await;
+
+    // Check TUI status before polling
+    log::info!("🔍 DEBUG: Checking TUI status before CLI polling...");
+    if let Ok(status) = read_tui_status() {
+        log::info!("🔍 DEBUG: TUI port enabled: {}", status.ports[0].enabled);
+        log::info!("🔍 DEBUG: TUI port state: {:?}", status.ports[0].state);
+        log::info!("🔍 DEBUG: TUI masters count: {}", status.ports[0].modbus_masters.len());
+        if !status.ports[0].modbus_masters.is_empty() {
+            let master = &status.ports[0].modbus_masters[0];
+            log::info!("🔍 DEBUG: Master config - ID:{}, Type:{}, Addr:{}, Count:{}", 
+                master.station_id, master.register_type, master.start_address, master.register_count);
+        }
+    } else {
+        log::warn!("⚠️ DEBUG: Could not read TUI status file");
+    }
 
     // Verify with CLI Slave
     log::info!("Verifying data with CLI Slave on {}...", port2);
+    log::info!("🔍 DEBUG: CLI will poll station_id={}, address={}, count={}, mode={}", 
+        config.station_id, config.start_address, config.register_count, config.register_mode.to_cli_mode());
     verify_master_data(port2, &test_data, &config).await?;
 
     log::info!("✅ Single-station Master test passed");
@@ -455,26 +473,36 @@ pub async fn verify_master_data(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("📡 Polling data from Master...");
+    log::info!("🔍 DEBUG: CLI slave-poll starting on port {}", port2);
+    log::info!("🔍 DEBUG: Expected data: {:?}", expected_data);
 
     let binary = build_debug_bin("aoba")?;
+    log::info!("🔍 DEBUG: Using binary: {:?}", binary);
+    
+    let args = [
+        "--slave-poll",
+        port2,
+        "--station-id",
+        &config.station_id.to_string(),
+        "--register-address",
+        &config.start_address.to_string(),
+        "--register-length",
+        &config.register_count.to_string(),
+        "--register-mode",
+        config.register_mode.to_cli_mode(),
+        "--baud-rate",
+        "9600",
+        "--json",
+    ];
+    log::info!("🔍 DEBUG: CLI args: {:?}", args);
+    
     let output = std::process::Command::new(&binary)
-        .args([
-            "--slave-poll",
-            port2,
-            "--station-id",
-            &config.station_id.to_string(),
-            "--register-address",
-            &config.start_address.to_string(),
-            "--register-length",
-            &config.register_count.to_string(),
-            "--register-mode",
-            config.register_mode.to_cli_mode(),
-            "--baud-rate",
-            "9600",
-            "--json",
-        ])
+        .args(args)
         .output()?;
 
+    log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
+    log::info!("🔍 DEBUG: CLI stderr: {}", String::from_utf8_lossy(&output.stderr));
+    
     if !output.status.success() {
         return Err(anyhow!(
             "CLI slave-poll failed: {}",
@@ -487,12 +515,16 @@ pub async fn verify_master_data(
 
     // Parse JSON output and verify values
     let json: serde_json::Value = serde_json::from_str(&stdout)?;
+    log::info!("🔍 DEBUG: Parsed JSON: {:?}", json);
+    
     if let Some(values) = json.get("values").and_then(|v| v.as_array()) {
         let received_values: Vec<u16> = values
             .iter()
             .filter_map(|v| v.as_u64().map(|n| n as u16))
             .collect();
 
+        log::info!("🔍 DEBUG: Received values: {:?}", received_values);
+        
         if received_values.len() != expected_data.len() {
             return Err(anyhow!(
                 "Value count mismatch: expected {}, got {}",
@@ -503,6 +535,7 @@ pub async fn verify_master_data(
 
         for (i, (expected, received)) in expected_data.iter().zip(received_values.iter()).enumerate() {
             if expected != received {
+                log::error!("🔍 DEBUG: Mismatch at index {}: expected 0x{:04X}, got 0x{:04X}", i, expected, received);
                 return Err(anyhow!(
                     "Value[{}] mismatch: expected 0x{:04X}, got 0x{:04X}",
                     i,
@@ -549,13 +582,35 @@ pub async fn run_single_station_slave_test(
     // Configure station (without register values for Slave)
     configure_tui_station(&mut session, &mut cap, port1, &config).await?;
 
+    // Check TUI status after configuration
+    log::info!("🔍 DEBUG: Checking TUI status after Slave configuration...");
+    if let Ok(status) = read_tui_status() {
+        log::info!("🔍 DEBUG: TUI port enabled: {}", status.ports[0].enabled);
+        log::info!("🔍 DEBUG: TUI port state: {:?}", status.ports[0].state);
+        log::info!("🔍 DEBUG: TUI slaves count: {}", status.ports[0].modbus_slaves.len());
+        if !status.ports[0].modbus_slaves.is_empty() {
+            let slave = &status.ports[0].modbus_slaves[0];
+            log::info!("🔍 DEBUG: Slave config - ID:{}, Type:{}, Addr:{}, Count:{}", 
+                slave.station_id, slave.register_type, slave.start_address, slave.register_count);
+        }
+    } else {
+        log::warn!("⚠️ DEBUG: Could not read TUI status file");
+    }
+
     // Wait for CLI subprocess to start
     log::info!("Waiting for CLI subprocess to initialize...");
+    log::info!("🔍 DEBUG: TUI Slave subprocess should be listening on {}", port1);
     sleep_seconds(3).await;
 
     // Send data from CLI Master
     log::info!("Sending data from CLI Master on {}...", port2);
+    log::info!("🔍 DEBUG: CLI Master will write to station_id={}, address={}, count={}, mode={}", 
+        config.station_id, config.start_address, config.register_count, config.register_mode.to_cli_mode());
     send_data_from_cli_master(port2, &test_data, &config).await?;
+
+    // Wait for data to propagate
+    log::info!("🔍 DEBUG: Waiting for data to propagate from CLI Master to TUI Slave...");
+    sleep_seconds(2).await;
 
     // Verify data in TUI Slave
     log::info!("Verifying data in TUI Slave...");
@@ -572,30 +627,42 @@ pub async fn send_data_from_cli_master(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("📡 Sending data from CLI Master...");
+    log::info!("🔍 DEBUG: CLI master-provide starting on port {}", port2);
+    log::info!("🔍 DEBUG: Test data to send: {:?}", test_data);
 
     // Create data file
     let temp_dir = std::env::temp_dir();
     let data_file = temp_dir.join(format!("tui_e2e_data_{}.json", std::process::id()));
     let values_json = serde_json::to_string(&json!({ "values": test_data }))?;
-    std::fs::write(&data_file, values_json)?;
+    std::fs::write(&data_file, &values_json)?;
+    log::info!("🔍 DEBUG: Created data file: {} with content: {}", data_file.display(), values_json);
 
     let binary = build_debug_bin("aoba")?;
+    log::info!("🔍 DEBUG: Using binary: {:?}", binary);
+    
+    let args = [
+        "--master-provide",
+        port2,
+        "--station-id",
+        &config.station_id.to_string(),
+        "--register-address",
+        &config.start_address.to_string(),
+        "--register-mode",
+        config.register_mode.to_cli_mode(),
+        "--baud-rate",
+        "9600",
+        "--data-source",
+        &format!("file:{}", data_file.display()),
+    ];
+    log::info!("🔍 DEBUG: CLI master-provide args: {:?}", args);
+    
     let output = std::process::Command::new(&binary)
-        .args([
-            "--master-provide",
-            port2,
-            "--station-id",
-            &config.station_id.to_string(),
-            "--register-address",
-            &config.start_address.to_string(),
-            "--register-mode",
-            config.register_mode.to_cli_mode(),
-            "--baud-rate",
-            "9600",
-            "--data-source",
-            &format!("file:{}", data_file.display()),
-        ])
+        .args(args)
         .output()?;
+
+    log::info!("🔍 DEBUG: CLI master-provide exit status: {:?}", output.status);
+    log::info!("🔍 DEBUG: CLI master-provide stdout: {}", String::from_utf8_lossy(&output.stdout));
+    log::info!("🔍 DEBUG: CLI master-provide stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     // Clean up data file
     let _ = std::fs::remove_file(&data_file);
@@ -619,6 +686,7 @@ pub async fn verify_slave_data<T: Expect>(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("🔍 Verifying data in TUI Slave...");
+    log::info!("🔍 DEBUG: Expected data: {:?}", expected_data);
 
     // Wait a bit for data to be received
     sleep_seconds(2).await;
@@ -627,12 +695,20 @@ pub async fn verify_slave_data<T: Expect>(
     // The actual register values are stored internally but not exposed in the status JSON
     let status = read_tui_status()?;
     
+    log::info!("🔍 DEBUG: TUI status after receiving data:");
+    log::info!("🔍 DEBUG: - Port enabled: {}", status.ports[0].enabled);
+    log::info!("🔍 DEBUG: - Port state: {:?}", status.ports[0].state);
+    log::info!("🔍 DEBUG: - Slaves count: {}", status.ports[0].modbus_slaves.len());
+    log::info!("🔍 DEBUG: - Log count: {}", status.ports[0].log_count);
+    
     // Verify the station configuration exists
     if config.is_master {
         if status.ports[0].modbus_masters.is_empty() {
             return Err(anyhow!("No master stations found in status"));
         }
         let master = &status.ports[0].modbus_masters[0];
+        log::info!("🔍 DEBUG: Master station - ID:{}, Type:{}, Addr:{}, Count:{}", 
+            master.station_id, master.register_type, master.start_address, master.register_count);
         if master.station_id != config.station_id {
             return Err(anyhow!(
                 "Station ID mismatch: expected {}, got {}",
@@ -645,6 +721,8 @@ pub async fn verify_slave_data<T: Expect>(
             return Err(anyhow!("No slave stations found in status"));
         }
         let slave = &status.ports[0].modbus_slaves[0];
+        log::info!("🔍 DEBUG: Slave station - ID:{}, Type:{}, Addr:{}, Count:{}", 
+            slave.station_id, slave.register_type, slave.start_address, slave.register_count);
         if slave.station_id != config.station_id {
             return Err(anyhow!(
                 "Station ID mismatch: expected {}, got {}",
@@ -658,6 +736,7 @@ pub async fn verify_slave_data<T: Expect>(
     let log_count = status.ports[0].log_count;
     if log_count == 0 {
         log::warn!("⚠️ No logs found - communication may not have happened");
+        log::warn!("🔍 DEBUG: This indicates the CLI Master's data did not reach the TUI Slave");
     } else {
         log::info!("✅ Found {} log entries - communication verified", log_count);
     }
