@@ -181,5 +181,12 @@ pub fn parse_args() -> ArgMatches {
                 .action(clap::ArgAction::SetTrue)
                 .hide(true), // Hidden from normal help output
         )
+        .arg(
+            Arg::new("no-config-cache")
+                .long("no-config-cache")
+                .help("Disable configuration cache (do not load/save aoba_tui_config.json). Useful for E2E tests.")
+                .action(clap::ArgAction::SetTrue)
+                .hide(false), // Visible in help
+        )
         .get_matches()
 }

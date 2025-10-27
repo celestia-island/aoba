@@ -193,58 +193,34 @@ struct Args {
     debug: bool,
 }
 
-/// Clean up TUI configuration cache file to ensure clean test state
+/// Clean up debug status files from previous test runs
 ///
-/// TUI saves port configurations to aoba_tui_config.json and auto-loads them on startup.
-/// This can cause tests to inherit state from previous runs, leading to unexpected behavior
-/// in multi-station creation tests. This function removes the cache before each test.
-pub fn cleanup_tui_config_cache() -> Result<()> {
-    // Paths to check for config files
-    let mut config_paths = vec![
-        std::path::PathBuf::from("aoba_tui_config.json"),
-        std::path::PathBuf::from("/tmp/aoba_tui_config.json"),
-    ];
-
-    // Also check ~/.config/aoba/
-    if let Ok(home_dir) = std::env::var("HOME") {
-        config_paths
-            .push(std::path::PathBuf::from(home_dir).join(".config/aoba/aoba_tui_config.json"));
-    }
-
-    let mut removed_count = 0;
-    for config_path in &config_paths {
-        if config_path.exists() {
-            log::info!("🗑️  Removing TUI config cache: {}", config_path.display());
-            match std::fs::remove_file(config_path) {
-                Ok(_) => {
-                    removed_count += 1;
-                    log::info!("✅ Removed: {}", config_path.display());
-                }
-                Err(e) => {
-                    log::warn!("⚠️  Failed to remove {}: {}", config_path.display(), e);
-                }
-            }
-        }
-    }
-
-    // Also clean up any debug status files from previous runs
+/// With `--no-config-cache` flag, TUI no longer saves/loads aoba_tui_config.json,
+/// so this function now only cleans up debug status files to ensure clean test state.
+///
+/// **Note**: Configuration cache cleanup is no longer needed since tests use
+/// `--no-config-cache` flag. See `setup_tui_test()` in common.rs.
+pub fn cleanup_debug_status_files() -> Result<()> {
+    // Clean up debug status files from previous runs
     let status_files = vec![
         std::path::PathBuf::from("/tmp/ci_tui_status.json"),
         std::path::PathBuf::from("/tmp/ci_cli_vcom1_status.json"),
         std::path::PathBuf::from("/tmp/ci_cli_vcom2_status.json"),
     ];
 
+    let mut removed_count = 0;
     for status_file in &status_files {
         if status_file.exists() {
             log::debug!("🗑️  Removing old status file: {}", status_file.display());
-            let _ = std::fs::remove_file(status_file);
+            match std::fs::remove_file(status_file) {
+                Ok(_) => removed_count += 1,
+                Err(e) => log::warn!("⚠️  Failed to remove {}: {}", status_file.display(), e),
+            }
         }
     }
 
     if removed_count > 0 {
-        log::info!("✅ TUI config cache cleaned ({removed_count} files removed)");
-    } else {
-        log::debug!("📂 No TUI config cache found, nothing to clean");
+        log::debug!("✅ Cleaned {} debug status files", removed_count);
     }
 
     Ok(())
@@ -330,9 +306,9 @@ async fn main() -> Result<()> {
         args.port2
     );
 
-    // Clean up TUI config cache before any tests to ensure clean state
-    log::info!("🧪 Cleaning up TUI configuration cache...");
-    cleanup_tui_config_cache()?;
+    // Clean up debug status files from previous runs
+    log::debug!("🧪 Cleaning up debug status files...");
+    cleanup_debug_status_files()?;
 
     // If no module specified, show available modules and exit
     let module = match &args.module {
