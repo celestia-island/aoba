@@ -6,15 +6,48 @@
 //! should NOT use this persistence layer to avoid communication conflicts and race
 //! conditions. The configuration file is stored in the working directory as
 //! `aoba_tui_config.json` to ensure cross-platform compatibility.
+//!
+//! ## --no-config-cache flag
+//!
+//! When TUI is started with `--no-config-cache`, all save/load operations are
+//! skipped. This is useful for E2E tests to ensure clean state without cache
+//! interference. Call `set_no_cache(true)` early in TUI startup to enable this.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::protocol::status::types::modbus::ModbusRegisterItem;
 use crate::protocol::status::types::port::PortConfig;
+
+/// Global flag to disable config cache (set via --no-config-cache)
+static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);
+
+/// Set the no-cache flag (should be called early in TUI startup)
+///
+/// # Parameters
+/// - `enabled`: true to disable cache, false to enable cache
+///
+/// # Example
+/// ```rust,ignore
+/// // In TUI startup (src/tui/mod.rs):
+/// let no_cache = matches.get_flag("no-config-cache");
+/// persistence::set_no_cache(no_cache);
+/// ```
+pub fn set_no_cache(enabled: bool) {
+    NO_CONFIG_CACHE.store(enabled, Ordering::SeqCst);
+    if enabled {
+        log::info!("🚫 Config cache disabled (--no-config-cache)");
+    }
+}
+
+/// Get the current no-cache flag value
+fn is_no_cache() -> bool {
+    NO_CONFIG_CACHE.load(Ordering::SeqCst)
+}
 
 /// Represents a persisted port configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,7 +93,18 @@ fn get_config_path() -> Result<PathBuf> {
 ///
 /// This function saves TUI port configurations to the working directory.
 /// CLI processes should NOT call this function.
+///
+/// Save is automatically skipped if `--no-config-cache` flag is set.
+///
+/// # Returns
+/// - `Ok(())` if save succeeded or was skipped
+/// - `Err` if save failed
 pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
+    if is_no_cache() {
+        log::debug!("⏭️  Skipping config save (--no-config-cache enabled)");
+        return Ok(());
+    }
+
     let path = get_config_path()?;
 
     let persisted: Vec<PersistedPortConfig> = configs
@@ -111,7 +155,18 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
 ///
 /// This function loads TUI port configurations from the working directory.
 /// CLI processes should NOT call this function.
+///
+/// Load is automatically skipped if `--no-config-cache` flag is set.
+///
+/// # Returns
+/// - `Ok(HashMap)` with loaded configs, or empty HashMap if skipped/not found
+/// - `Err` if load failed
 pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
+    if is_no_cache() {
+        log::debug!("⏭️  Skipping config load (--no-config-cache enabled)");
+        return Ok(HashMap::new());
+    }
+
     let path = get_config_path()?;
 
     if !path.exists() {

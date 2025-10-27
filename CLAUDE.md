@@ -28,6 +28,16 @@ cargo run --package aoba -- --tui --debug-ci-e2e-test
 
 This will create `/tmp/ci_tui_status.json` with periodic status dumps (every 500ms).
 
+**For E2E tests**, also add `--no-config-cache` to prevent configuration persistence:
+
+```bash
+cargo run --package aoba -- --tui --debug-ci-e2e-test --no-config-cache
+```
+
+The `--no-config-cache` flag disables loading and saving of `aoba_tui_config.json`,
+ensuring each test starts with a clean state without interference from previous runs.
+This is **automatically used** by the TUI E2E test framework in `setup_tui_test()`.
+
 #### For CLI Subprocesses
 
 CLI subprocesses automatically inherit debug mode when spawned by a TUI process in debug mode. The `--debug-ci-e2e-test` flag is injected automatically.
@@ -276,6 +286,7 @@ let actions = vec![
 **Connection Mode Configuration:**
 
 After creating stations, press Down arrow once to move to "Connection Mode" field. The TUI defaults to **Master** mode:
+
 - If Master mode is needed: No action required (already at default)
 - If Slave mode is needed: Press `Enter`, `Left`, `Enter` to switch from Master to Slave
 
@@ -339,11 +350,13 @@ After configuring station fields (ID, Type, Address, Count), you can optionally 
 #### Status Verification Path Format
 
 For master stations:
+
 ```
 ports[0].modbus_masters[station_index].registers[register_index]
 ```
 
 For slave stations:
+
 ```
 ports[0].modbus_slaves[station_index].registers[register_index]
 ```
@@ -479,6 +492,7 @@ The TUI uses a multi-threaded architecture that can cause timing issues in E2E t
 3. **Rendering Thread**: Draws UI based on global status, polls with 100ms timeout
 
 When a menu action like pressing Enter on "Enter Business Configuration" occurs:
+
 1. Input handler updates status immediately (`Page::ConfigPanel` → `Page::ModbusDashboard`)
 2. Sends `Refresh` message to rendering thread via channel
 3. Rendering thread processes message on next poll cycle (up to 100ms latency)
@@ -489,6 +503,7 @@ When a menu action like pressing Enter on "Enter Business Configuration" occurs:
 #### Best Practices for Menu Navigation
 
 **DO**: Use status tree verification for page transitions
+
 ```rust
 // Navigate to menu item and press Enter
 execute_cursor_actions(&mut session, &mut cap, &actions, "press_enter").await?;
@@ -502,6 +517,7 @@ assert!(screen.contains("ModBus Master/Slave Set"));
 ```
 
 **DON'T**: Rely solely on terminal pattern matching immediately after navigation
+
 ```rust
 // ❌ WRONG: May capture before rendering completes
 let actions = vec![
@@ -561,6 +577,7 @@ pub async fn enter_menu_with_retry<T: Expect>(
 #### Synchronization Points
 
 Always use status tree verification at these synchronization points:
+
 - **Page Navigation**: After pressing Enter on menu items
 - **Port Enable/Disable**: After toggling port state
 - **Configuration Save**: After pressing Ctrl+S
@@ -596,6 +613,7 @@ Started status dump thread, writing to /tmp/ci_tui_status.json
 #### Intermittent menu navigation failures
 
 If menu navigation (e.g., "Enter Business Configuration") fails intermittently:
+
 - **Root Cause**: Race condition between status update and terminal rendering
 - **Solution**: Use multi-attempt retry with status tree verification (see "Menu Navigation Timing" section)
 - **Implementation**: The `enter_modbus_panel` function now includes:
@@ -608,6 +626,7 @@ If menu navigation (e.g., "Enter Business Configuration") fails intermittently:
 #### Multi-station configuration issues
 
 When configuring multiple Modbus stations:
+
 - **Navigation**: Use `Ctrl+PgUp` to reset to top, then `PgDown` to jump to specific stations
 - **Timing**: Allow sufficient delays between field edits (1000-2000ms after Enter to exit edit mode)
 - **Verification**: Check each station's configuration before pressing Ctrl+S to save
@@ -624,12 +643,14 @@ The E2E test suite is organized into a comprehensive matrix covering CLI and TUI
 #### CLI E2E Tests (`examples/cli_e2e`)
 
 **Single-Station Tests** (`e2e/single_station/register_modes.rs`)
+
 - Test all 4 Modbus register modes with Master/Slave communication via stdio pipes
 - Modes: 01 Coils, 02 DiscreteInputs (writable), 03 Holding, 04 Input (writable)
 - Address ranges: 0x0000-0x0030 (spaced by 0x0010)
 - Bidirectional write testing for modes 02 and 04
 
 **Multi-Station Tests** (`e2e/multi_station/two_stations.rs`)
+
 - Test 2-station configurations with various scenarios
 - Mixed register types (Coils + Holding)
 - Spaced addresses (0x0000 and 0x00A0)
@@ -638,21 +659,25 @@ The E2E test suite is organized into a comprehensive matrix covering CLI and TUI
 #### TUI E2E Tests (`examples/tui_e2e`)
 
 **Single-Station Master Mode** (`e2e/single_station/master_modes.rs`)
+
 - TUI acts as Modbus Master, CLI acts as Slave
 - Tests all 4 register modes
 - Includes `configure_tui_station` helper following CLAUDE.md workflow
 - Full status monitoring and verification
 
 **Single-Station Slave Mode** (`e2e/single_station/slave_modes.rs`)
+
 - TUI acts as Modbus Slave, CLI acts as Master
 - Tests all 4 register modes
 - Bidirectional write testing for writable modes
 
 **Multi-Station Master Mode** (`e2e/multi_station/master_modes.rs`)
+
 - TUI Master with 2 stations
 - Mixed types, spaced addresses, mixed IDs
 
 **Multi-Station Slave Mode** (`e2e/multi_station/slave_modes.rs`)
+
 - TUI Slave with 2 stations
 - Mixed types (WritableCoils + WritableRegisters)
 - Spaced addresses, mixed IDs (2 and 6)

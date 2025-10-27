@@ -314,7 +314,7 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             if let Err(e) = run_config_runtime(&config_clone).await {
-                log::error!("Config runtime error: {}", e);
+                log::error!("Config runtime error: {e}");
             }
         });
     });
@@ -331,7 +331,8 @@ async fn run_config_runtime(
 ) -> Result<(), Box<dyn std::error::Error>> {
     use rmodbus::server::context::ModbusContext;
     use std::io::Write;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
 
     // Open the serial port
     let port_handle = serialport::new(&config.port_name, config.baud_rate)
@@ -342,7 +343,7 @@ async fn run_config_runtime(
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Initialize storage for all stations
-    let storage = Arc::new(Mutex::new(
+    let storage = std::sync::Arc::new(std::sync::Mutex::new(
         rmodbus::server::storage::ModbusStorageSmall::default(),
     ));
 
@@ -356,7 +357,7 @@ async fn run_config_runtime(
                 for (i, &val) in range.initial_values.iter().enumerate() {
                     let addr = range.address_start + i as u16;
                     if let Err(e) = storage_lock.set_coil(addr, val != 0) {
-                        log::warn!("Failed to set coil at {}: {}", addr, e);
+                        log::warn!("Failed to set coil at {addr}: {e}");
                     }
                 }
             }
@@ -366,7 +367,7 @@ async fn run_config_runtime(
                 for (i, &val) in range.initial_values.iter().enumerate() {
                     let addr = range.address_start + i as u16;
                     if let Err(e) = storage_lock.set_discrete(addr, val != 0) {
-                        log::warn!("Failed to set discrete input at {}: {}", addr, e);
+                        log::warn!("Failed to set discrete input at {addr}: {e}");
                     }
                 }
             }
@@ -376,7 +377,7 @@ async fn run_config_runtime(
                 for (i, &val) in range.initial_values.iter().enumerate() {
                     let addr = range.address_start + i as u16;
                     if let Err(e) = storage_lock.set_holding(addr, val) {
-                        log::warn!("Failed to set holding register at {}: {}", addr, e);
+                        log::warn!("Failed to set holding register at {addr}: {e}");
                     }
                 }
             }
@@ -386,7 +387,7 @@ async fn run_config_runtime(
                 for (i, &val) in range.initial_values.iter().enumerate() {
                     let addr = range.address_start + i as u16;
                     if let Err(e) = storage_lock.set_input(addr, val) {
-                        log::warn!("Failed to set input register at {}: {}", addr, e);
+                        log::warn!("Failed to set input register at {addr}: {e}");
                     }
                 }
             }
@@ -399,7 +400,7 @@ async fn run_config_runtime(
     loop {
         // Process Modbus frames
         let mut buffer = [0u8; 256];
-        let mut port = port_arc.lock().unwrap();
+        let mut port = port_arc.lock().await;
 
         match port.read(&mut buffer) {
             Ok(n) if n > 0 => {
@@ -408,9 +409,9 @@ async fn run_config_runtime(
                 // Process the frame
                 let request = &buffer[..n];
                 if let Some(response) = process_modbus_frame(request, &storage, &config.stations) {
-                    let mut port = port_arc.lock().unwrap();
+                    let mut port = port_arc.lock().await;
                     if let Err(e) = port.write_all(&response) {
-                        log::error!("Failed to write response: {}", e);
+                        log::error!("Failed to write response: {e}");
                     }
                 }
             }
@@ -425,7 +426,7 @@ async fn run_config_runtime(
                 tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             }
             Err(e) => {
-                log::error!("Error reading from port: {}", e);
+                log::error!("Error reading from port: {e}");
                 drop(port);
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
@@ -465,12 +466,12 @@ fn process_modbus_frame(
     let mut frame = ModbusFrame::new(station_id, request, ModbusProto::Rtu, &mut response);
 
     if let Err(e) = frame.parse() {
-        log::warn!("Failed to parse Modbus frame: {:?}", e);
+        log::warn!("Failed to parse Modbus frame: {e:?}");
         return None;
     }
 
     if let Err(e) = frame.process_read(&*storage_lock) {
-        log::warn!("Failed to process Modbus read: {:?}", e);
+        log::warn!("Failed to process Modbus read: {e:?}");
         return None;
     }
 

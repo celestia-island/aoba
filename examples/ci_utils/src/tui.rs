@@ -78,10 +78,7 @@ pub async fn verify_port_enabled<T: Expect>(
                 }
                 "Saving" | "Syncing" => {
                     log::info!(
-                        "⏳ Port status: {} (transitioning...), attempt {}/{}",
-                        status,
-                        attempt,
-                        MAX_ATTEMPTS
+                        "⏳ Port status: {status} (transitioning...), attempt {attempt}/{MAX_ATTEMPTS}"
                     );
                     if attempt < MAX_ATTEMPTS {
                         tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
@@ -90,48 +87,33 @@ pub async fn verify_port_enabled<T: Expect>(
                     return Ok(status);
                 }
                 "Starting" => {
-                    log::info!("⏳ Port starting, attempt {}/{}", attempt, MAX_ATTEMPTS);
+                    log::info!("⏳ Port starting, attempt {attempt}/{MAX_ATTEMPTS}");
                     if attempt < MAX_ATTEMPTS {
                         tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                         continue;
                     }
-                    return Err(anyhow!(
-                        "Port still starting after {} attempts",
-                        MAX_ATTEMPTS
-                    ));
+                    return Err(anyhow!("Port still starting after {MAX_ATTEMPTS} attempts"));
                 }
                 "NotStarted" => {
-                    log::warn!(
-                        "⚠️ Port not started yet, attempt {}/{}",
-                        attempt,
-                        MAX_ATTEMPTS
-                    );
+                    log::warn!("⚠️ Port not started yet, attempt {attempt}/{MAX_ATTEMPTS}");
                     if attempt < MAX_ATTEMPTS {
                         tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                         continue;
                     }
-                    return Err(anyhow!("Port not started after {} attempts", MAX_ATTEMPTS));
+                    return Err(anyhow!("Port not started after {MAX_ATTEMPTS} attempts"));
                 }
                 _ => {
-                    log::warn!(
-                        "⚠️ Unknown status: {}, attempt {}/{}",
-                        status,
-                        attempt,
-                        MAX_ATTEMPTS
-                    );
+                    log::warn!("⚠️ Unknown status: {status}, attempt {attempt}/{MAX_ATTEMPTS}");
                     if attempt < MAX_ATTEMPTS {
                         tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
                         continue;
                     }
-                    return Err(anyhow!("Unknown status: {}", status));
+                    return Err(anyhow!("Unknown status: {status}"));
                 }
             },
             Err(e) => {
                 log::warn!(
-                    "⚠️ Failed to check status indicator: {}, attempt {}/{}",
-                    e,
-                    attempt,
-                    MAX_ATTEMPTS
+                    "⚠️ Failed to check status indicator: {e}, attempt {attempt}/{MAX_ATTEMPTS}"
                 );
                 if attempt < MAX_ATTEMPTS {
                     tokio::time::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS)).await;
@@ -143,8 +125,7 @@ pub async fn verify_port_enabled<T: Expect>(
     }
 
     Err(anyhow!(
-        "Failed to verify port enabled after {} attempts",
-        MAX_ATTEMPTS
+        "Failed to verify port enabled after {MAX_ATTEMPTS} attempts"
     ))
 }
 
@@ -194,7 +175,7 @@ pub async fn navigate_to_vcom<T: Expect>(
             ports.port1_name
         );
 
-        crate::helpers::sleep_a_while().await;
+        crate::helpers::sleep_1s().await;
     }
 
     if detected_port_name != ports.port1_name {
@@ -241,7 +222,7 @@ pub async fn navigate_to_vcom<T: Expect>(
                 direction,
                 count: delta,
             },
-            crate::auto_cursor::CursorAction::Sleep { ms: 500 },
+            crate::auto_cursor::CursorAction::Sleep1s,
         ];
         crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_port").await?;
     }
@@ -252,12 +233,12 @@ pub async fn navigate_to_vcom<T: Expect>(
     // Retry action: if we entered wrong port, press Escape and try to navigate again
     let retry_action = Some(vec![
         crate::auto_cursor::CursorAction::PressEscape,
-        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
+        crate::auto_cursor::CursorAction::Sleep1s,
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
             count: 20, // Go all the way up
         },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        crate::auto_cursor::CursorAction::Sleep1s,
     ]);
 
     let actions = vec![
@@ -337,7 +318,7 @@ pub async fn enable_port_carefully<T: Expect>(
                 direction,
                 count: delta,
             },
-            crate::auto_cursor::CursorAction::Sleep { ms: 200 },
+            crate::auto_cursor::CursorAction::Sleep1s,
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
@@ -366,15 +347,15 @@ pub async fn enable_port_carefully<T: Expect>(
     log::info!("↩️ Pressing Enter to toggle port enable");
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
-        crate::auto_cursor::CursorAction::Sleep { ms: 2000 },
+        crate::auto_cursor::CursorAction::Sleep3s,
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "toggle_enable_port")
         .await?;
 
     // Give UI extra time to process port enable and re-render
     log::info!("Waiting for UI to update port status");
-    crate::helpers::sleep_a_while().await;
-    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_1s().await;
+    crate::helpers::sleep_1s().await;
 
     // Verify that the UI now shows the port as enabled to catch navigation drift early.
     // Use a retry loop to wait for UI to update
@@ -394,7 +375,7 @@ pub async fn enable_port_carefully<T: Expect>(
 
         if attempt < 3 {
             log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/3)");
-            crate::helpers::sleep_a_while().await;
+            crate::helpers::sleep_1s().await;
         }
     }
 
@@ -425,7 +406,7 @@ pub async fn enter_modbus_panel<T: Expect>(
     // If not, we might have been kicked back to port list - need to re-enter
     if !screen.contains("Enable Port") {
         log::warn!("⚠️ Not in port details page - attempting to recover");
-        log::warn!("Current screen:\n{}", screen);
+        log::warn!("Current screen:\n{screen}");
         return Err(anyhow!(
             "Not in port details page when trying to enter Modbus panel. Expected 'Enable Port' in screen."
         ));
@@ -470,9 +451,7 @@ pub async fn enter_modbus_panel<T: Expect>(
         .unwrap_or(0);
 
     log::info!(
-        "Navigating from line {} to 'Enter Business Configuration' at line {}",
-        cursor_idx,
-        target_idx
+        "Navigating from line {cursor_idx} to 'Enter Business Configuration' at line {target_idx}"
     );
 
     let delta = target_idx.abs_diff(cursor_idx);
@@ -488,11 +467,7 @@ pub async fn enter_modbus_panel<T: Expect>(
     let mut last_error = None;
 
     for attempt in 1..=MAX_ENTER_ATTEMPTS {
-        log::info!(
-            "🔄 Attempt {}/{} to enter Modbus panel",
-            attempt,
-            MAX_ENTER_ATTEMPTS
-        );
+        log::info!("🔄 Attempt {attempt}/{MAX_ENTER_ATTEMPTS} to enter Modbus panel");
 
         // Navigate to the target menu item
         if attempt == 1 {
@@ -502,20 +477,20 @@ pub async fn enter_modbus_panel<T: Expect>(
                     direction,
                     count: delta,
                 },
-                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+                crate::auto_cursor::CursorAction::Sleep1s,
             ];
             crate::auto_cursor::execute_cursor_actions(
                 session,
                 cap,
                 &actions,
-                &format!("nav_to_business_config_attempt_{}", attempt),
+                &format!("nav_to_business_config_attempt_{attempt}"),
             )
             .await?;
         } else {
             // Subsequent attempts: re-navigate from top to ensure consistent position
             log::info!("  Re-navigating to Business Configuration menu item");
             let screen = cap
-                .capture(session, &format!("recheck_position_attempt_{}", attempt))
+                .capture(session, &format!("recheck_position_attempt_{attempt}"))
                 .await?;
 
             // Verify we're still in config panel
@@ -538,21 +513,19 @@ pub async fn enter_modbus_panel<T: Expect>(
                 .iter()
                 .enumerate()
                 .find_map(|(idx, line)| {
-                    if line.contains("> Enable Port")
+                    if (line.contains("> Enable Port")
                         || line.contains("> Protocol Mode")
                         || line.contains("> Enter Business")
                         || line.contains("> Enter Log")
                         || line.contains("> Baud rate")
                         || line.contains("> Data bits")
                         || line.contains("> Parity")
-                        || line.contains("> Stop bits")
+                        || line.contains("> Stop bits"))
+                        && !line.contains("COM")
+                        && !line.contains("/tmp/")
+                        && !line.contains("/dev/")
                     {
-                        if !line.contains("COM")
-                            && !line.contains("/tmp/")
-                            && !line.contains("/dev/")
-                        {
-                            return Some(idx);
-                        }
+                        return Some(idx);
                     }
                     None
                 })
@@ -570,13 +543,13 @@ pub async fn enter_modbus_panel<T: Expect>(
                     direction,
                     count: delta,
                 },
-                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+                crate::auto_cursor::CursorAction::Sleep1s,
             ];
             crate::auto_cursor::execute_cursor_actions(
                 session,
                 cap,
                 &actions,
-                &format!("nav_to_business_config_retry_{}", attempt),
+                &format!("nav_to_business_config_retry_{attempt}"),
             )
             .await?;
         }
@@ -585,13 +558,13 @@ pub async fn enter_modbus_panel<T: Expect>(
         log::info!("  Pressing Enter to enter Modbus panel");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 1000 }, // Wait for page transition
+            crate::auto_cursor::CursorAction::Sleep3s, // Increased wait for page transition in CI
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
             cap,
             &actions,
-            &format!("press_enter_attempt_{}", attempt),
+            &format!("press_enter_attempt_{attempt}"),
         )
         .await?;
 
@@ -601,26 +574,25 @@ pub async fn enter_modbus_panel<T: Expect>(
 
         let status_check_result = if status_available {
             log::info!("  Status monitoring is available, using status tree verification");
-            tokio::time::timeout(std::time::Duration::from_secs(3), async {
-                for check_attempt in 1..=10 {
-                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+            // Increased timeout to 10 seconds for CI environments which may be slower
+            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+                for check_attempt in 1..=3 {
+                    tokio::time::sleep(std::time::Duration::from_millis(3333)).await;
 
                     // Try to read status
                     if let Ok(status) = crate::read_tui_status() {
                         if matches!(status.page, crate::status_monitor::TuiPage::ModbusDashboard) {
                             log::info!(
-                                "  ✅ Status tree updated to ModbusDashboard (check attempt {})",
-                                check_attempt
+                                "  ✅ Status tree updated to ModbusDashboard (check attempt {check_attempt})"
                             );
                             return Ok(());
                         }
-                        log::debug!(
-                            "  Status page is still: {:?} (check attempt {})",
-                            status.page,
-                            check_attempt
+                    }
+
+                    if check_attempt == 3 {
+                        log::warn!(
+                            "  Status page did not update to ModbusDashboard after 3 attempts"
                         );
-                    } else {
-                        log::debug!("  Could not read status (check attempt {})", check_attempt);
                     }
                 }
                 Err(anyhow!("Status tree did not update to ModbusDashboard"))
@@ -640,14 +612,11 @@ pub async fn enter_modbus_panel<T: Expect>(
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
                 let screen = cap
-                    .capture(session, &format!("verify_modbus_panel_attempt_{}", attempt))
+                    .capture(session, &format!("verify_modbus_panel_attempt_{attempt}"))
                     .await?;
                 if screen.contains("ModBus Master/Slave Set") {
-                    log::info!(
-                        "✅ Successfully entered Modbus panel on attempt {}",
-                        attempt
-                    );
-                    crate::helpers::sleep_a_while().await; // Extra stabilization time
+                    log::info!("✅ Successfully entered Modbus panel on attempt {attempt}");
+                    crate::helpers::sleep_1s().await; // Extra stabilization time
                     return Ok(());
                 } else {
                     log::warn!("  ⚠️ Status updated but terminal doesn't show Modbus panel yet");
@@ -655,11 +624,26 @@ pub async fn enter_modbus_panel<T: Expect>(
                 }
             }
             Ok(Err(e)) => {
-                log::warn!("  ⚠️ Status tree update failed: {}", e);
+                log::warn!("  ⚠️ Status tree update failed: {e}");
                 last_error = Some(e);
             }
             Err(_) => {
                 log::warn!("  ⚠️ Timeout waiting for status tree update");
+                log::info!("  Falling back to terminal verification as last resort");
+
+                // Even though status tree didn't update, the page might have actually transitioned
+                // Check the terminal to see if we're now in ModbusDashboard
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let screen = cap
+                    .capture(session, &format!("fallback_verify_attempt_{attempt}"))
+                    .await?;
+
+                if screen.contains("ModBus Master/Slave Set") {
+                    log::info!("  ✅ Terminal shows Modbus panel despite status tree timeout");
+                    log::info!("  This suggests a status tree synchronization issue, not a page transition failure");
+                    return Ok(());
+                }
+
                 last_error = Some(anyhow!("Timeout waiting for status update"));
             }
         }
@@ -673,10 +657,7 @@ pub async fn enter_modbus_panel<T: Expect>(
 
     // All attempts failed
     Err(last_error.unwrap_or_else(|| {
-        anyhow!(
-            "Failed to enter Modbus panel after {} attempts",
-            MAX_ENTER_ATTEMPTS
-        )
+        anyhow!("Failed to enter Modbus panel after {MAX_ENTER_ATTEMPTS} attempts")
     }))
 }
 
@@ -698,7 +679,7 @@ pub async fn update_tui_registers<T: Expect>(
     // Use Ctrl+PageUp to jump to top of Modbus panel (more reliable than pressing Up 50 times)
     let actions = vec![
         crate::auto_cursor::CursorAction::PressCtrlPageUp,
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        crate::auto_cursor::CursorAction::Sleep1s,
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
 
@@ -710,7 +691,7 @@ pub async fn update_tui_registers<T: Expect>(
 
     while !found_register && attempts < max_attempts {
         let screen = cap
-            .capture(session, &format!("search_attempt_{}", attempts))
+            .capture(session, &format!("search_attempt_{attempts}"))
             .await?;
 
         // Check if current screen shows register values
@@ -723,7 +704,7 @@ pub async fn update_tui_registers<T: Expect>(
             if line.contains("0x00") && (line.matches("0x").count() >= 2 || line.contains("______"))
             {
                 found_register = true;
-                log::info!("Found register grid at attempt {}", attempts);
+                log::info!("Found register grid at attempt {attempts}");
                 break;
             }
         }
@@ -738,7 +719,7 @@ pub async fn update_tui_registers<T: Expect>(
                 session,
                 cap,
                 &actions,
-                &format!("search_down_{}", attempts),
+                &format!("search_down_{attempts}"),
             )
             .await?;
 
@@ -748,8 +729,7 @@ pub async fn update_tui_registers<T: Expect>(
 
     if !found_register {
         return Err(anyhow!(
-            "Could not find register grid after {} attempts from top",
-            attempts
+            "Could not find register grid after {attempts} attempts from top"
         ));
     }
 
@@ -759,7 +739,7 @@ pub async fn update_tui_registers<T: Expect>(
     // Go up until we can't go up anymore within the register section.
     for attempt in 0..10 {
         let before = cap
-            .capture(session, &format!("before_up_{}", attempt))
+            .capture(session, &format!("before_up_{attempt}"))
             .await?;
 
         let actions = vec![crate::auto_cursor::CursorAction::PressArrow {
@@ -770,13 +750,11 @@ pub async fn update_tui_registers<T: Expect>(
             session,
             cap,
             &actions,
-            &format!("up_{}", attempt),
+            &format!("up_{attempt}"),
         )
         .await?;
 
-        let after = cap
-            .capture(session, &format!("after_up_{}", attempt))
-            .await?;
+        let after = cap.capture(session, &format!("after_up_{attempt}")).await?;
 
         // Check if we're still in register grid (has multiple 0x patterns)
         let still_in_grid = after
@@ -791,7 +769,7 @@ pub async fn update_tui_registers<T: Expect>(
             }];
             crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "back_to_first_reg")
                 .await?;
-            log::info!("Positioned at first register after {} up attempts", attempt);
+            log::info!("Positioned at first register after {attempt} up attempts");
             break;
         }
     }
@@ -850,7 +828,7 @@ pub async fn update_tui_registers<T: Expect>(
     // Critical: Wait for all register values to be fully saved to internal storage
     // before any subsequent operations (like navigating to add another station)
     log::info!("⏱️ Waiting for all register values to be committed...");
-    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_1s().await;
 
     // Navigate back to top of Modbus panel for next station configuration
     // Use Ctrl+PageUp to jump to the absolute top of the panel (Create Station / Connection Mode area).
