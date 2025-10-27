@@ -8,6 +8,12 @@ use super::{
 };
 use ci_utils::*;
 
+/// Timeout for CLI subprocess operations in seconds
+///
+/// CLI master-poll and slave-poll should complete in 5-10 seconds under normal conditions.
+/// Using 30 seconds to account for slow CI environments while still catching hung processes.
+const CLI_SUBPROCESS_TIMEOUT_SECS: u64 = 30;
+
 /// Run a complete single-station Master test with TUI Master and CLI Slave.
 ///
 /// # Purpose
@@ -508,17 +514,16 @@ pub async fn verify_master_data(
 
     // Wrap the CLI command execution in a timeout to prevent indefinite hangs in CI
     // CLI slave-poll should complete in 5-10 seconds under normal conditions
-    // Use 30 seconds timeout to account for slow CI environments
-    const CLI_TIMEOUT_SECS: u64 = 30;
+    // Using CLI_SUBPROCESS_TIMEOUT_SECS to account for slow CI environments
     
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(CLI_TIMEOUT_SECS),
+        std::time::Duration::from_secs(CLI_SUBPROCESS_TIMEOUT_SECS),
         tokio::task::spawn_blocking(move || {
             std::process::Command::new(&binary).args(&args_vec).output()
         }),
     )
     .await
-    .map_err(|_| anyhow!("CLI slave-poll timed out after {} seconds", CLI_TIMEOUT_SECS))?
+    .map_err(|_| anyhow!("CLI slave-poll timed out after {} seconds", CLI_SUBPROCESS_TIMEOUT_SECS))?
     .map_err(|e| anyhow!("Failed to spawn CLI slave-poll task: {}", e))??;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
@@ -1025,17 +1030,16 @@ pub async fn send_data_from_cli_master(
 
     // Wrap the CLI command execution in a timeout to prevent indefinite hangs in CI
     // CLI master-poll should complete in 5-10 seconds under normal conditions
-    // Use 30 seconds timeout to account for slow CI environments
-    const CLI_TIMEOUT_SECS: u64 = 30;
+    // Using CLI_SUBPROCESS_TIMEOUT_SECS to account for slow CI environments
     
     let output = tokio::time::timeout(
-        std::time::Duration::from_secs(CLI_TIMEOUT_SECS),
+        std::time::Duration::from_secs(CLI_SUBPROCESS_TIMEOUT_SECS),
         tokio::task::spawn_blocking(move || {
             std::process::Command::new(&binary).args(&args_vec).output()
         }),
     )
     .await
-    .map_err(|_| anyhow!("CLI master-poll timed out after {} seconds", CLI_TIMEOUT_SECS))?
+    .map_err(|_| anyhow!("CLI master-poll timed out after {} seconds", CLI_SUBPROCESS_TIMEOUT_SECS))?
     .map_err(|e| anyhow!("Failed to spawn CLI master-poll task: {}", e))??;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
