@@ -293,6 +293,11 @@ pub async fn run_single_station_master_test(
     log::info!("   ✓ Data entry successful");
     log::info!("   ✓ Save operation completed");
     log::info!("   ✓ All configuration fields verified");
+    
+    // Explicitly terminate TUI session to ensure clean shutdown
+    // This is critical in CI environments to prevent zombie processes
+    terminate_session(session, "TUI").await?;
+    
     Ok(())
 }
 
@@ -798,6 +803,10 @@ pub async fn run_single_station_slave_test(
     log::info!("   ✓ Data entry successful");
     log::info!("   ✓ Save operation completed");
     log::info!("   ✓ CLI Master received correct data");
+    
+    // Explicitly terminate TUI session to ensure clean shutdown
+    terminate_session(session, "TUI").await?;
+    
     Ok(())
 }
 
@@ -1749,6 +1758,10 @@ pub async fn run_multi_station_master_test(
     log::info!("   ✓ All Masters configured correctly");
     log::info!("   ✓ All Master-Slave polling combinations tested");
     log::info!("   ✓ All data verification passed");
+    
+    // Explicitly terminate TUI session to ensure clean shutdown
+    terminate_session(session, "TUI").await?;
+    
     Ok(())
 }
 
@@ -1968,5 +1981,9 @@ pub async fn run_multi_station_slave_test(
     log::info!("   ✓ All Slaves configured correctly");
     log::info!("   ✓ All CLI Master to Slave write operations tested");
     log::info!("   ✓ All data verification passed");
+    
+    // Explicitly terminate TUI session to ensure clean shutdown
+    terminate_session(session, "TUI").await?;
+    
     Ok(())
 }
