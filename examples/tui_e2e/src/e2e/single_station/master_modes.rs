@@ -1,8 +1,9 @@
-use super::super::common::*;
 /// TUI E2E tests for single-station Master mode with different register modes
 ///
 /// Tests TUI acting as Modbus Master (server) with E2E process as CLI Slave (client).
 use anyhow::Result;
+
+use super::super::common::{run_single_station_master_test, RegisterMode, StationConfig};
 
 /// Test 01: TUI Master with Coils mode (0x0000, length 10)
 pub async fn test_tui_master_coils(port1: &str, port2: &str) -> Result<()> {

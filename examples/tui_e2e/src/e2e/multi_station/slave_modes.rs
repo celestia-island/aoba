@@ -1,8 +1,9 @@
-use super::super::common::*;
 /// TUI E2E tests for multi-station (2 stations) Slave mode configurations
 ///
 /// Tests TUI acting as Modbus Slave with multiple stations configured.
 use anyhow::Result;
+
+use super::super::common::{run_multi_station_slave_test, RegisterMode, StationConfig};
 
 /// Test: Mixed Register Types - Station 1 Coils, Station 2 Holding
 /// Both stations: ID=1, addr=0x0000, len=10
@@ -28,7 +29,7 @@ pub async fn test_tui_multi_slave_mixed_register_types(port1: &str, port2: &str)
         },
     ];
 
-    run_multi_station_slave_test(port1, port2, configs).await
+    run_multi_station_slave_test(port1, port2, &configs).await
 }
 
 /// Test: Spaced Addresses - Station 1 at 0x0000, Station 2 at 0x0100
@@ -55,7 +56,7 @@ pub async fn test_tui_multi_slave_spaced_addresses(port1: &str, port2: &str) -> 
         },
     ];
 
-    run_multi_station_slave_test(port1, port2, configs).await
+    run_multi_station_slave_test(port1, port2, &configs).await
 }
 
 /// Test: Mixed Station IDs - Station 1 ID=1, Station 2 ID=2
@@ -82,5 +83,5 @@ pub async fn test_tui_multi_slave_mixed_station_ids(port1: &str, port2: &str) ->
         },
     ];
 
-    run_multi_station_slave_test(port1, port2, configs).await
+    run_multi_station_slave_test(port1, port2, &configs).await
 }

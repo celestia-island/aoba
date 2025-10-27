@@ -18,7 +18,7 @@ pub mod verify;
 pub use auto_cursor::{execute_cursor_actions, CursorAction};
 pub use cli::{create_modbus_command, run_cli_slave_poll};
 pub use data::{generate_random_coils, generate_random_registers};
-pub use helpers::{sleep_1s, sleep_3s, sleep_seconds};
+pub use helpers::{sleep_1s, sleep_3s};
 pub use key_input::{ArrowKey, ExpectKeyExt};
 pub use log_parser::{
     get_latest_state, get_port_state, parse_state_dumps, verify_port_exists, wait_for_page,
