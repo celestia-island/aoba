@@ -488,24 +488,38 @@ pub async fn verify_master_data(
     let binary = build_debug_bin("aoba")?;
     log::info!("🔍 DEBUG: Using binary: {binary:?}");
 
-    let args = [
-        "--slave-poll",
-        port2,
-        "--station-id",
-        &config.station_id.to_string(),
-        "--register-address",
-        &config.start_address.to_string(),
-        "--register-length",
-        &config.register_count.to_string(),
-        "--register-mode",
-        config.register_mode.as_cli_mode(),
-        "--baud-rate",
-        "9600",
-        "--json",
+    // Create owned args vec to avoid lifetime issues with spawn_blocking
+    let args_vec: Vec<String> = vec![
+        "--slave-poll".to_string(),
+        port2.to_string(),
+        "--station-id".to_string(),
+        config.station_id.to_string(),
+        "--register-address".to_string(),
+        config.start_address.to_string(),
+        "--register-length".to_string(),
+        config.register_count.to_string(),
+        "--register-mode".to_string(),
+        config.register_mode.as_cli_mode().to_string(),
+        "--baud-rate".to_string(),
+        "9600".to_string(),
+        "--json".to_string(),
     ];
-    log::info!("🔍 DEBUG: CLI args: {args:?}");
+    log::info!("🔍 DEBUG: CLI args: {args_vec:?}");
 
-    let output = std::process::Command::new(&binary).args(args).output()?;
+    // Wrap the CLI command execution in a timeout to prevent indefinite hangs in CI
+    // CLI slave-poll should complete in 5-10 seconds under normal conditions
+    // Use 30 seconds timeout to account for slow CI environments
+    const CLI_TIMEOUT_SECS: u64 = 30;
+    
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(CLI_TIMEOUT_SECS),
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new(&binary).args(&args_vec).output()
+        }),
+    )
+    .await
+    .map_err(|_| anyhow!("CLI slave-poll timed out after {} seconds", CLI_TIMEOUT_SECS))?
+    .map_err(|e| anyhow!("Failed to spawn CLI slave-poll task: {}", e))??;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
     log::info!(
@@ -991,24 +1005,38 @@ pub async fn send_data_from_cli_master(
     let binary = build_debug_bin("aoba")?;
     log::info!("🔍 DEBUG: Using binary: {binary:?}");
 
-    let args = [
-        "--master-poll",
-        port2,
-        "--station-id",
-        &config.station_id.to_string(),
-        "--register-address",
-        &config.start_address.to_string(),
-        "--register-length",
-        &config.register_count.to_string(),
-        "--register-mode",
-        config.register_mode.as_cli_mode(),
-        "--baud-rate",
-        "9600",
-        "--json",
+    // Create owned args vec to avoid lifetime issues with spawn_blocking
+    let args_vec: Vec<String> = vec![
+        "--master-poll".to_string(),
+        port2.to_string(),
+        "--station-id".to_string(),
+        config.station_id.to_string(),
+        "--register-address".to_string(),
+        config.start_address.to_string(),
+        "--register-length".to_string(),
+        config.register_count.to_string(),
+        "--register-mode".to_string(),
+        config.register_mode.as_cli_mode().to_string(),
+        "--baud-rate".to_string(),
+        "9600".to_string(),
+        "--json".to_string(),
     ];
-    log::info!("🔍 DEBUG: CLI args: {args:?}");
+    log::info!("🔍 DEBUG: CLI args: {args_vec:?}");
 
-    let output = std::process::Command::new(&binary).args(args).output()?;
+    // Wrap the CLI command execution in a timeout to prevent indefinite hangs in CI
+    // CLI master-poll should complete in 5-10 seconds under normal conditions
+    // Use 30 seconds timeout to account for slow CI environments
+    const CLI_TIMEOUT_SECS: u64 = 30;
+    
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(CLI_TIMEOUT_SECS),
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new(&binary).args(&args_vec).output()
+        }),
+    )
+    .await
+    .map_err(|_| anyhow!("CLI master-poll timed out after {} seconds", CLI_TIMEOUT_SECS))?
+    .map_err(|e| anyhow!("Failed to spawn CLI master-poll task: {}", e))??;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
     log::info!(
