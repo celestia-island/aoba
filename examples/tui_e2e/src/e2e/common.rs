@@ -1935,15 +1935,29 @@ pub async fn configure_tui_station<T: Expect>(
     if !config.is_master {
         log::info!("Switching from Master to Slave mode...");
 
-        // Connection Mode is a simple toggle - just press Right arrow to switch
+        // Enter edit mode for Connection Mode selector
+        let actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "enter_connection_mode_edit").await?;
+
+        // Press Right arrow to switch from Master (index 0) to Slave (index 1)
         let actions = vec![
             CursorAction::PressArrow {
                 direction: ArrowKey::Right,
                 count: 1,
             },
+            CursorAction::Sleep { ms: 500 },
+        ];
+        execute_cursor_actions(session, cap, &actions, "switch_to_slave_index").await?;
+
+        // Confirm the selection by pressing Enter
+        let actions = vec![
+            CursorAction::PressEnter,
             CursorAction::Sleep { ms: 2000 },
         ];
-        execute_cursor_actions(session, cap, &actions, "switch_to_slave").await?;
+        execute_cursor_actions(session, cap, &actions, "confirm_slave_mode").await?;
 
         // Capture milestone: Mode switched to Slave
         log::info!("📸 Milestone: Mode switched to Slave");
