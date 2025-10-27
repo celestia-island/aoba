@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use expectrl::Expect;
 
-use crate::{sleep_a_while, ArrowKey, ExpectKeyExt, TerminalCapture};
+use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, TerminalCapture};
 
 /// Action instruction for automated cursor navigation
 #[derive(Debug, Clone)]
@@ -37,8 +37,10 @@ pub enum CursorAction {
     TypeChar(char),
     /// Type a string
     TypeString(String),
-    /// Wait for a fixed duration
-    Sleep { ms: u64 },
+    /// Wait for 1 second (1000ms)
+    Sleep1s,
+    /// Wait for 3 seconds (3000ms)
+    Sleep3s,
     /// Match a pattern within specified line and column range
     /// If match fails after retries, optionally execute retry_action and retry again
     /// Implements nested retry: 3 attempts -> execute retry_action -> repeat 3 times (total 9 attempts)
@@ -210,77 +212,80 @@ pub async fn execute_cursor_actions<T: Expect>(
                     session.send_arrow(*direction)?;
                 }
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressEnter => {
                 session.send_enter()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressEscape => {
                 session.send_escape()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressTab => {
                 session.send_tab()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::CtrlC => {
                 session.send_ctrl_c()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlS => {
                 session.send_ctrl_s()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlA => {
                 session.send_ctrl_a()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressBackspace => {
                 session.send_backspace()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressPageUp => {
                 session.send_page_up()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressPageDown => {
                 session.send_page_down()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlPageUp => {
                 session.send_ctrl_page_up()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlPageDown => {
                 session.send_ctrl_page_down()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::TypeChar(ch) => {
                 session.send_char(*ch)?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::TypeString(s) => {
                 for ch in s.chars() {
                     session.send_char(ch)?;
                     // Sleep after each character to ensure TUI processes input properly
-                    sleep_a_while().await;
+                    sleep_1s().await;
                 }
             }
-            CursorAction::Sleep { ms } => {
-                tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
+            CursorAction::Sleep1s => {
+                sleep_1s().await;
+            }
+            CursorAction::Sleep3s => {
+                sleep_3s().await;
             }
             CursorAction::DebugBreakpoint { description } => {
                 // Check if debug mode is enabled (set by main program based on --debug flag)
@@ -344,7 +349,7 @@ pub async fn execute_cursor_actions<T: Expect>(
             }
         }
 
-        sleep_a_while().await;
+        sleep_1s().await;
     }
 
     Ok(())

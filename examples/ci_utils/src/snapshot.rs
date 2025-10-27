@@ -3,7 +3,7 @@ use anyhow::Result;
 use expectrl::{Expect, Regex as ExpectRegex};
 use vt100::Parser;
 
-use crate::helpers::sleep_a_while;
+use crate::helpers::sleep_1s;
 
 /// Standard terminal sizes for E2E tests
 #[derive(Debug, Clone, Copy)]
@@ -123,7 +123,7 @@ impl TerminalCapture {
 
                 // Give the TUI a moment to draw before polling again.
                 if attempt + 1 < MAX_ATTEMPTS {
-                    sleep_a_while().await;
+                    sleep_1s().await;
                 }
             }
 
@@ -144,7 +144,7 @@ impl TerminalCapture {
         }
 
         // Add a small delay after capture to let the terminal stabilize
-        sleep_a_while().await;
+        sleep_1s().await;
 
         Ok(out)
     }

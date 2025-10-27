@@ -49,17 +49,17 @@
 ///     "station_id",
 ///     &[
 ///         CursorAction::PressEnter,
-///         CursorAction::Sleep { ms: 800 },
+///         CursorAction::Sleep1s,
 ///         CursorAction::PressCtrlA,
 ///         CursorAction::TypeString("1".to_string()),
 ///         CursorAction::PressEnter,
-///         CursorAction::Sleep { ms: 800 },
+///         CursorAction::Sleep1s,
 ///     ],
 ///     true,  // check_not_in_edit: verify we exit edit mode
 ///     Some(r">\s*1\s*<"),  // expected_pattern: verify value is 1
 ///     &[
 ///         CursorAction::PressCtrlPageUp,
-///         CursorAction::Sleep { ms: 500 },
+///         CursorAction::Sleep1s,
 ///     ],
 /// ).await?;
 /// # Ok(())
@@ -87,13 +87,13 @@
 ///     "create_station",
 ///     &[
 ///         CursorAction::PressEnter,
-///         CursorAction::Sleep { ms: 2000 },
+///         CursorAction::Sleep3s,
 ///     ],
 ///     |screen| {
 ///         Ok(screen.contains("#1") || screen.contains("Station 1"))
 ///     },
-///     Some(&[CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 500 }]),
-///     &[CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 500 }],
+///     Some(&[CursorAction::PressCtrlPageUp, CursorAction::Sleep1s]),
+///     &[CursorAction::PressCtrlPageUp, CursorAction::Sleep1s],
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -202,7 +202,7 @@
 ///     "navigate_to_field",
 ///     &[
 ///         CursorAction::PressPageDown,
-///         CursorAction::Sleep { ms: 500 },
+///         CursorAction::Sleep1s,
 ///         CursorAction::PressArrow {
 ///             direction: ci_utils::ArrowKey::Down,
 ///             count: 2,
@@ -213,7 +213,7 @@
 ///         Ok(screen.contains("Register Type") && screen.contains("> "))
 ///     },
 ///     None,  // Use default safe rollback
-///     &[CursorAction::PressCtrlPageUp, CursorAction::Sleep { ms: 500 }],
+///     &[CursorAction::PressCtrlPageUp, CursorAction::Sleep1s],
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -308,7 +308,7 @@ const PAGE_PATTERN_ENTRY: &str = r"Welcome|Press\s+Enter";
 /// - `edit_actions`: Action sequence for editing the field
 ///   - Should include: Enter, delays, input, Enter
 /// - `reset_navigation`: Actions to reset cursor position after rollback
-///   - Example: `[PressCtrlPageUp, Sleep { ms: 500 }]`
+///   - Example: `[PressCtrlPageUp, Sleep1s]`
 /// - `expected_pattern`: Regex pattern to match expected value
 ///   - Example: `r">\s*1\s*<"` verifies Station ID is 1
 /// - `check_not_in_edit`: Optional regex to detect stuck-in-edit-mode
@@ -335,15 +335,15 @@ const PAGE_PATTERN_ENTRY: &str = r"Welcome|Press\s+Enter";
 ///     "start_address",
 ///     vec![
 ///         CursorAction::PressEnter,
-///         CursorAction::Sleep { ms: 800 },
+///         CursorAction::Sleep1s,
 ///         CursorAction::PressCtrlA,
 ///         CursorAction::TypeString(format!("{:x}", 0x0000)),
 ///         CursorAction::PressEnter,
-///         CursorAction::Sleep { ms: 800 },
+///         CursorAction::Sleep1s,
 ///     ],
 ///     vec![
 ///         CursorAction::PressCtrlPageUp,
-///         CursorAction::Sleep { ms: 500 },
+///         CursorAction::Sleep1s,
 ///     ],
 ///     r">\s*0x0000\s*<",        // Expected: "> 0x0000 <"
 ///     Some(r">\s*\[?\s*_"),     // Check for cursor: "> _ <"
@@ -418,7 +418,7 @@ async fn execute_field_edit_with_retry<T: Expect>(
             execute_cursor_actions(session, cap, reset_navigation, "reset_navigation").await?;
 
             // Wait before retry
-            sleep_seconds(RETRY_WAIT_MS / 1000).await;
+            sleep_1s().await;
         } else {
             return Err(anyhow!(
                 "Field '{}' edit failed after {} attempts",
@@ -565,7 +565,7 @@ async fn perform_safe_rollback<T: Expect>(
     execute_cursor_actions(
         session,
         cap,
-        &[CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }],
+        &[CursorAction::PressEscape, CursorAction::Sleep1s],
         &format!("{}_rollback_1", context),
     )
     .await?;
@@ -601,7 +601,7 @@ async fn perform_safe_rollback<T: Expect>(
         execute_cursor_actions(
             session,
             cap,
-            &[CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }],
+            &[CursorAction::PressEscape, CursorAction::Sleep1s],
             &format!("{}_rollback_2", context),
         )
         .await?;
@@ -695,7 +695,7 @@ async fn perform_safe_rollback<T: Expect>(
 ///     "create_station",
 ///     &[
 ///         CursorAction::PressEnter,      // Create new station
-///         CursorAction::Sleep { ms: 1000 },
+///         CursorAction::Sleep1s,
 ///     ],
 ///     |screen| {
 ///         // Verify station was created with correct ID
@@ -761,7 +761,7 @@ async fn perform_safe_rollback<T: Expect>(
 ///     &[
 ///         CursorAction::PressChar('d'),          // Delete key
 ///         CursorAction::PressEnter,              // Confirm
-///         CursorAction::Sleep { ms: 500 },
+///         CursorAction::Sleep1s,
 ///     ],
 ///     |screen| {
 ///         // Check for deletion confirmation
@@ -908,7 +908,7 @@ where
             execute_cursor_actions(session, cap, reset_navigation, "reset_navigation").await?;
 
             // Wait before retry
-            sleep_seconds(RETRY_WAIT_MS / 1000).await;
+            sleep_1s().await;
         } else {
             return Err(anyhow!(
                 "Operation '{}' failed after {} attempts",
@@ -1402,7 +1402,7 @@ pub async fn setup_tui_test(port1: &str, _port2: &str) -> Result<(impl Expect, T
     let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
 
     // Wait for TUI to initialize
-    sleep_seconds(3).await;
+    sleep_3s().await;
 
     // Wait for TUI to reach Entry page
     log::info!("Waiting for TUI Entry page...");
@@ -1410,7 +1410,7 @@ pub async fn setup_tui_test(port1: &str, _port2: &str) -> Result<(impl Expect, T
 
     // Navigate to ConfigPanel
     log::info!("Navigating to ConfigPanel...");
-    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }];
+    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
     execute_cursor_actions(
         &mut tui_session,
         &mut tui_cap,
@@ -1609,7 +1609,7 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
         session,
         cap,
         "entry_to_config_panel",
-        &[CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }],
+        &[CursorAction::PressEnter, CursorAction::Sleep3s],
         |screen| {
             if screen.contains("Welcome") || screen.contains("Press Enter") {
                 Ok(false) // Still on Entry page
@@ -1632,7 +1632,7 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
         session,
         cap,
         "enter_modbus_panel",
-        &[CursorAction::PressEnter, CursorAction::Sleep { ms: 1500 }],
+        &[CursorAction::PressEnter, CursorAction::Sleep3s],
         |screen| {
             if screen.contains("Station") || screen.contains("Create") {
                 Ok(true) // Successfully in Modbus panel
@@ -1642,8 +1642,8 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
                 Ok(false)
             }
         },
-        Some(&[CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }]),
-        &[CursorAction::Sleep { ms: 500 }], // Reset: just wait
+        Some(&[CursorAction::PressEscape, CursorAction::Sleep1s]),
+        &[CursorAction::Sleep1s], // Reset: just wait
     )
     .await?;
 
@@ -1900,7 +1900,7 @@ pub async fn configure_tui_station<T: Expect>(
     log::info!("Phase 0: Resetting cursor to AddLine (Create Station button)...");
     let actions = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
     ];
     execute_cursor_actions(session, cap, &actions, "reset_to_addline").await?;
 
@@ -1927,7 +1927,7 @@ pub async fn configure_tui_station<T: Expect>(
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
     ];
     execute_cursor_actions(session, cap, &actions, "move_to_connection_mode").await?;
 
@@ -1936,7 +1936,7 @@ pub async fn configure_tui_station<T: Expect>(
         log::info!("Switching from Master to Slave mode...");
 
         // Enter edit mode for Connection Mode selector
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
         execute_cursor_actions(session, cap, &actions, "enter_connection_mode_edit").await?;
 
         // Press Right arrow to switch from Master (index 0) to Slave (index 1)
@@ -1945,12 +1945,12 @@ pub async fn configure_tui_station<T: Expect>(
                 direction: ArrowKey::Right,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave_index").await?;
 
         // Confirm the selection by pressing Enter
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 2000 }];
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep3s];
         execute_cursor_actions(session, cap, &actions, "confirm_slave_mode").await?;
 
         // Capture milestone: Mode switched to Slave
@@ -1975,19 +1975,19 @@ pub async fn configure_tui_station<T: Expect>(
 
         // ADDITIONAL: Wait longer for internal state to update
         // The UI might show "Slave" before the internal state is fully committed
-        sleep_seconds(2).await;
+        sleep_3s().await;
 
         // Reset to top after mode change to ensure known cursor position
         let actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave").await?;
     } else {
         // For Master mode, also reset to top for consistency
         let actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "reset_to_top_master").await?;
     }
@@ -2006,7 +2006,7 @@ pub async fn configure_tui_station<T: Expect>(
             "create_station",
             &[
                 CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 2000 },
+                CursorAction::Sleep3s,
                 // DO NOT press Ctrl+PgUp here!
                 // The TUI automatically moves cursor to the new station's StationId field
                 // after creation, which is exactly where we want to be for Phase 3
@@ -2024,11 +2024,11 @@ pub async fn configure_tui_station<T: Expect>(
             Some(&[
                 // Custom rollback: reset to top (AddLine) to retry creation
                 CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
             ]),
             &[
                 CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
             ],
         )
         .await?;
@@ -2040,14 +2040,14 @@ pub async fn configure_tui_station<T: Expect>(
             cap,
             &[
                 CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressPageDown,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressArrow {
                     direction: ArrowKey::Down,
                     count: 1,
                 },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ],
             "navigate_to_existing_station",
         )
@@ -2074,27 +2074,27 @@ pub async fn configure_tui_station<T: Expect>(
 
     let station_id_actions = vec![
         CursorAction::PressEnter,        // Enter edit mode
-        CursorAction::Sleep { ms: 800 }, // Increased wait for edit mode
+        CursorAction::Sleep1s, // Increased wait for edit mode
         CursorAction::PressCtrlA,        // Select all
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
         CursorAction::PressBackspace, // Clear
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
         CursorAction::TypeString(config.station_id.to_string()), // Type new value
-        CursorAction::Sleep { ms: 500 },                         // Wait for typing to complete
+        CursorAction::Sleep1s,                         // Wait for typing to complete
         CursorAction::PressEnter,                                // Confirm
-        CursorAction::Sleep { ms: 1500 }, // Wait longer for commit and UI update
+        CursorAction::Sleep3s, // Wait longer for commit and UI update
     ];
 
     let reset_to_station_id = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressPageDown,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
     ];
 
     // Edit Station ID field WITHOUT moving to next field
@@ -2120,7 +2120,7 @@ pub async fn configure_tui_station<T: Expect>(
                 direction: ArrowKey::Down,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ],
         "move_to_register_type",
     )
@@ -2148,33 +2148,33 @@ pub async fn configure_tui_station<T: Expect>(
             "configure_register_type",
             &[
                 CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressArrow { direction, count },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
                 CursorAction::PressEnter,
-                CursorAction::Sleep { ms: 1500 },
+                CursorAction::Sleep3s,
                 CursorAction::PressArrow {
                     direction: ArrowKey::Down,
                     count: 1,
                 },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ],
             |screen| {
                 // Verify we moved to next field (Start Address)
                 let has_address_field = screen.contains("Address") || screen.contains("0x");
                 Ok(has_address_field)
             },
-            Some(&[CursorAction::PressEscape, CursorAction::Sleep { ms: 500 }]),
+            Some(&[CursorAction::PressEscape, CursorAction::Sleep1s]),
             &[
                 CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressPageDown,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressArrow {
                     direction: ArrowKey::Down,
                     count: 2,
                 },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ],
         )
         .await?;
@@ -2189,7 +2189,7 @@ pub async fn configure_tui_station<T: Expect>(
                     direction: ArrowKey::Down,
                     count: 1,
                 },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ],
             |screen| {
                 let has_address_field = screen.contains("Address") || screen.contains("0x");
@@ -2198,14 +2198,14 @@ pub async fn configure_tui_station<T: Expect>(
             None,
             &[
                 CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressPageDown,
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
                 CursorAction::PressArrow {
                     direction: ArrowKey::Down,
                     count: 1,
                 },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ],
         )
         .await?;
@@ -2219,32 +2219,32 @@ pub async fn configure_tui_station<T: Expect>(
     // Start Address should be entered in decimal format
     let start_address_actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 800 },
+        CursorAction::Sleep1s,
         CursorAction::PressCtrlA,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
         CursorAction::PressBackspace,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
         CursorAction::TypeString(config.start_address.to_string()),
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
+        CursorAction::Sleep3s,
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
     ];
 
     let reset_to_start_address = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressPageDown,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 3,
         },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
     ];
 
     execute_field_edit_with_retry(
@@ -2273,34 +2273,34 @@ pub async fn configure_tui_station<T: Expect>(
 
     let register_count_actions = vec![
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 1500 },
+        CursorAction::Sleep3s,
         CursorAction::PressCtrlA,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
         CursorAction::PressBackspace,
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
         CursorAction::TypeString(config.register_count.to_string()),
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressEnter,
-        CursorAction::Sleep { ms: 2000 }, // Wait for register grid to render (reduced from 3000ms)
+        CursorAction::Sleep3s, // Wait for register grid to render (reduced from 3000ms)
         // CRITICAL: Move cursor away from Register Length field to commit the value
         // Without this Down arrow, the field stays in a pending/editing state
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
     ];
 
     let reset_to_register_count = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressPageDown,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 4,
         },
-        CursorAction::Sleep { ms: 300 },
+        CursorAction::Sleep1s,
     ];
 
     // After setting Register Count and pressing Down, we should be in the register grid
@@ -2347,7 +2347,7 @@ pub async fn configure_tui_station<T: Expect>(
                     direction: ArrowKey::Down,
                     count: 1,
                 },
-                CursorAction::Sleep { ms: 500 },
+                CursorAction::Sleep1s,
             ];
             execute_cursor_actions(session, cap, &actions, "nav_to_first_register_value").await?;
 
@@ -2366,17 +2366,17 @@ pub async fn configure_tui_station<T: Expect>(
                 // Edit the current register value
                 let actions = vec![
                     CursorAction::PressEnter, // Enter edit mode
-                    CursorAction::Sleep { ms: 500 },
+                    CursorAction::Sleep1s,
                     CursorAction::PressCtrlA, // Select all
-                    CursorAction::Sleep { ms: 200 },
+                    CursorAction::Sleep1s,
                     CursorAction::PressBackspace, // Clear
-                    CursorAction::Sleep { ms: 200 },
+                    CursorAction::Sleep1s,
                     // NOTE: TUI register fields accept hexadecimal input
                     // Format as "0xXXXX" for proper hex interpretation
                     CursorAction::TypeString(format!("0x{:04X}", value)),
-                    CursorAction::Sleep { ms: 500 },
+                    CursorAction::Sleep1s,
                     CursorAction::PressEnter,        // Confirm
-                    CursorAction::Sleep { ms: 800 }, // Wait for commit
+                    CursorAction::Sleep1s, // Wait for commit
                 ];
                 execute_cursor_actions(
                     session,
@@ -2400,14 +2400,14 @@ pub async fn configure_tui_station<T: Expect>(
                                 direction: ArrowKey::Down,
                                 count: 1,
                             },
-                            CursorAction::Sleep { ms: 300 },
+                            CursorAction::Sleep1s,
                             // After Down, cursor should be at address field of next row
                             // Press Right once to get to first register value
                             CursorAction::PressArrow {
                                 direction: ArrowKey::Right,
                                 count: 1,
                             },
-                            CursorAction::Sleep { ms: 300 },
+                            CursorAction::Sleep1s,
                         ];
                         execute_cursor_actions(
                             session,
@@ -2424,7 +2424,7 @@ pub async fn configure_tui_station<T: Expect>(
                                 direction: ArrowKey::Right,
                                 count: 1,
                             },
-                            CursorAction::Sleep { ms: 300 },
+                            CursorAction::Sleep1s,
                         ];
                         execute_cursor_actions(
                             session,
@@ -2461,9 +2461,9 @@ pub async fn configure_tui_station<T: Expect>(
     // Instead, verify via status file in next phase
     let save_actions = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 6000 }, // Wait longer for save and port enable
+        CursorAction::Sleep3s, // Wait longer for save and port enable
     ];
 
     execute_cursor_actions(session, cap, &save_actions, "save_configuration").await?;
@@ -2475,7 +2475,7 @@ pub async fn configure_tui_station<T: Expect>(
     log::info!("Verifying configuration was saved to status file...");
 
     // Wait for status file to be updated
-    sleep_seconds(2).await;
+    sleep_3s().await;
 
     // Check if configuration exists in status file
     let status = read_tui_status().map_err(|e| {
@@ -2525,7 +2525,7 @@ pub async fn configure_tui_station<T: Expect>(
     // The TUI spawns a CLI subprocess which creates its own status file
     if config.is_master {
         log::info!("Waiting for CLI Master subprocess to start...");
-        sleep_seconds(2).await;
+        sleep_3s().await;
 
         // Check if CLI status file exists
         let cli_status_path = format!(
@@ -2791,7 +2791,7 @@ pub async fn run_single_station_master_test(
 
     // Wait a moment and check final status
     log::info!("Checking final TUI configuration status...");
-    sleep_seconds(2).await;
+    sleep_3s().await;
 
     // Check TUI status to verify configuration was saved
     log::info!("🔍 DEBUG: Checking TUI status to verify configuration...");
@@ -3339,7 +3339,7 @@ pub async fn run_single_station_slave_test(
 
     // Check TUI status after configuration
     log::info!("🔍 DEBUG: Checking TUI status after Slave configuration...");
-    sleep_seconds(2).await;
+    sleep_3s().await;
 
     if let Ok(status) = read_tui_status() {
         log::info!(
@@ -3845,7 +3845,7 @@ pub async fn verify_slave_data<T: Expect>(
     log::info!("🔍 DEBUG: Expected data: {expected_data:?}");
 
     // Wait a bit for data to be received
-    sleep_seconds(2).await;
+    sleep_3s().await;
 
     // For slave mode, we verify that the TUI received data by checking the log count
     // The actual register values are stored internally but not exposed in the status JSON
@@ -4158,7 +4158,7 @@ pub async fn configure_multiple_stations<T: Expect>(
     log::info!("Phase 0: Resetting cursor to AddLine...");
     let actions = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
     ];
     execute_cursor_actions(session, cap, &actions, "reset_to_addline").await?;
 
@@ -4181,14 +4181,14 @@ pub async fn configure_multiple_stations<T: Expect>(
             // Navigate back to AddLine
             let actions = vec![
                 CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ];
             execute_cursor_actions(session, cap, &actions, &format!("nav_to_addline_{}", i + 2))
                 .await?;
 
             let actions = vec![
                 CursorAction::PressEnter, // Create station (TUI auto-moves cursor to StationId)
-                CursorAction::Sleep { ms: 1000 },
+                CursorAction::Sleep1s,
                 // DO NOT press Ctrl+PgUp here! TUI auto-positions cursor at new station's fields
             ];
             execute_cursor_actions(session, cap, &actions, &format!("create_station_{}", i + 2))
@@ -4218,17 +4218,17 @@ pub async fn configure_multiple_stations<T: Expect>(
         // First, navigate to Connection Mode field (reset to AddLine, then Down 1)
         let actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "nav_to_connection_mode").await?;
 
         // Enter edit mode for Connection Mode selector
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }];
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
         execute_cursor_actions(session, cap, &actions, "enter_connection_mode_edit").await?;
 
         // Switch to Slave mode (Right arrow to toggle from Master to Slave)
@@ -4237,12 +4237,12 @@ pub async fn configure_multiple_stations<T: Expect>(
                 direction: ArrowKey::Right,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "switch_to_slave_index").await?;
 
         // Confirm the selection by pressing Enter
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep { ms: 2000 }];
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep3s];
         execute_cursor_actions(session, cap, &actions, "confirm_slave_mode").await?;
 
         // Verify the mode was actually switched to Slave
@@ -4256,14 +4256,14 @@ pub async fn configure_multiple_stations<T: Expect>(
         // Reset to top after mode change to ensure known cursor position
         let actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave_multi").await?;
     } else {
         // For Master mode or mixed modes, ensure we're at top for consistency
         let actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(session, cap, &actions, "reset_to_top_multi").await?;
     }
@@ -4280,12 +4280,12 @@ pub async fn configure_multiple_stations<T: Expect>(
         // For station 2 (i=1): Ctrl+PgUp + PgDown 3 times
         let mut actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep1s,
         ];
         for _ in 0..(i + 2) {
             // Fixed: need i+2 presses to reach station i+1
             actions.push(CursorAction::PressPageDown);
-            actions.push(CursorAction::Sleep { ms: 300 });
+            actions.push(CursorAction::Sleep1s);
         }
         execute_cursor_actions(
             session,
@@ -4302,14 +4302,14 @@ pub async fn configure_multiple_stations<T: Expect>(
                 direction: ArrowKey::Down,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep1s,
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep1s,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
             CursorAction::TypeString(config.station_id.to_string()),
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
             // DON'T move to next field here - Register Type config will handle navigation
         ];
         execute_cursor_actions(
@@ -4339,7 +4339,7 @@ pub async fn configure_multiple_stations<T: Expect>(
             execute_cursor_actions(
                 session,
                 cap,
-                &[CursorAction::PressEnter, CursorAction::Sleep { ms: 500 }],
+                &[CursorAction::PressEnter, CursorAction::Sleep1s],
                 &format!("enter_register_type_selector_station_{}", station_num),
             )
             .await?;
@@ -4350,7 +4350,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                 cap,
                 &[
                     CursorAction::PressArrow { direction, count },
-                    CursorAction::Sleep { ms: 500 },
+                    CursorAction::Sleep1s,
                 ],
                 &format!("select_register_type_station_{}", station_num),
             )
@@ -4360,7 +4360,7 @@ pub async fn configure_multiple_stations<T: Expect>(
             execute_cursor_actions(
                 session,
                 cap,
-                &[CursorAction::PressEnter, CursorAction::Sleep { ms: 1000 }],
+                &[CursorAction::PressEnter, CursorAction::Sleep1s],
                 &format!("confirm_register_type_station_{}", station_num),
             )
             .await?;
@@ -4378,7 +4378,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                     direction: ArrowKey::Down,
                     count: 1,
                 },
-                CursorAction::Sleep { ms: 300 },
+                CursorAction::Sleep1s,
             ],
             &format!("move_to_start_address_station_{}", station_num),
         )
@@ -4391,18 +4391,18 @@ pub async fn configure_multiple_stations<T: Expect>(
         );
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep1s,
             CursorAction::PressCtrlA,
             CursorAction::PressBackspace,
             // NOTE: Start Address field parses as DECIMAL, not hex
             CursorAction::TypeString(config.start_address.to_string()),
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
             CursorAction::PressArrow {
                 direction: ArrowKey::Down,
                 count: 1,
             },
-            CursorAction::Sleep { ms: 300 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(
             session,
@@ -4419,15 +4419,15 @@ pub async fn configure_multiple_stations<T: Expect>(
         // Similar to previous fields, we trust TUI's automatic navigation
         let actions = vec![
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
             CursorAction::PressCtrlA,
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep1s,
             CursorAction::PressBackspace,
-            CursorAction::Sleep { ms: 200 },
+            CursorAction::Sleep1s,
             CursorAction::TypeString(config.register_count.to_string()),
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
             CursorAction::PressEnter,
-            CursorAction::Sleep { ms: 1000 }, // Wait for commit
+            CursorAction::Sleep1s, // Wait for commit
         ];
         execute_cursor_actions(
             session,
@@ -4456,7 +4456,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                         direction: ArrowKey::Down,
                         count: 1,
                     },
-                    CursorAction::Sleep { ms: 500 },
+                    CursorAction::Sleep1s,
                 ];
                 execute_cursor_actions(
                     session,
@@ -4479,17 +4479,17 @@ pub async fn configure_multiple_stations<T: Expect>(
                     // Edit the current register value
                     let actions = vec![
                         CursorAction::PressEnter, // Enter edit mode
-                        CursorAction::Sleep { ms: 500 },
+                        CursorAction::Sleep1s,
                         CursorAction::PressCtrlA, // Select all
-                        CursorAction::Sleep { ms: 200 },
+                        CursorAction::Sleep1s,
                         CursorAction::PressBackspace, // Clear
-                        CursorAction::Sleep { ms: 200 },
+                        CursorAction::Sleep1s,
                         // NOTE: TUI register fields accept hexadecimal input
                         // Format as "0xXXXX" for proper hex interpretation
                         CursorAction::TypeString(format!("0x{:04X}", value)),
-                        CursorAction::Sleep { ms: 500 },
+                        CursorAction::Sleep1s,
                         CursorAction::PressEnter,        // Confirm
-                        CursorAction::Sleep { ms: 800 }, // Wait for commit
+                        CursorAction::Sleep1s, // Wait for commit
                     ];
                     execute_cursor_actions(
                         session,
@@ -4511,12 +4511,12 @@ pub async fn configure_multiple_stations<T: Expect>(
                                     direction: ArrowKey::Down,
                                     count: 1,
                                 },
-                                CursorAction::Sleep { ms: 300 },
+                                CursorAction::Sleep1s,
                                 CursorAction::PressArrow {
                                     direction: ArrowKey::Right,
                                     count: 1,
                                 },
-                                CursorAction::Sleep { ms: 300 },
+                                CursorAction::Sleep1s,
                             ];
                             execute_cursor_actions(
                                 session,
@@ -4533,7 +4533,7 @@ pub async fn configure_multiple_stations<T: Expect>(
                                     direction: ArrowKey::Right,
                                     count: 1,
                                 },
-                                CursorAction::Sleep { ms: 300 },
+                                CursorAction::Sleep1s,
                             ];
                             execute_cursor_actions(
                                 session,
@@ -4555,7 +4555,7 @@ pub async fn configure_multiple_stations<T: Expect>(
         // Return to top after configuring this station
         let actions = vec![
             CursorAction::PressCtrlPageUp,
-            CursorAction::Sleep { ms: 500 },
+            CursorAction::Sleep1s,
         ];
         execute_cursor_actions(
             session,
@@ -4570,15 +4570,15 @@ pub async fn configure_multiple_stations<T: Expect>(
     log::info!("Phase 3: Saving configuration with Ctrl+S...");
     let actions = vec![
         CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep1s,
         CursorAction::PressCtrlS,
-        CursorAction::Sleep { ms: 6000 }, // Increased wait time for multi-station save
+        CursorAction::Sleep3s, // Increased wait time for multi-station save
     ];
     execute_cursor_actions(session, cap, &actions, "save_multi_station_config").await?;
 
     // Verify configuration was saved
     log::info!("Verifying configuration was saved to status file...");
-    sleep_seconds(2).await;
+    sleep_3s().await;
 
     let status = read_tui_status().map_err(|e| {
         anyhow!(
@@ -4895,7 +4895,7 @@ pub async fn run_multi_station_master_test(
 
     // Wait for CLI subprocess to start
     log::info!("Waiting for CLI subprocess to initialize...");
-    sleep_seconds(3).await;
+    sleep_3s().await;
 
     // TODO: Verify each station's data after implementing register value configuration
     // For now, we only verify that the configuration was saved correctly
@@ -5188,7 +5188,7 @@ pub async fn run_multi_station_slave_test(
 
     // Wait for CLI subprocess to start
     log::info!("Waiting for CLI subprocess to initialize...");
-    sleep_seconds(3).await;
+    sleep_3s().await;
 
     // Verify all stations are configured
     let status = read_tui_status()?;

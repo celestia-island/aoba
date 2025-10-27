@@ -175,7 +175,7 @@ pub async fn navigate_to_vcom<T: Expect>(
             ports.port1_name
         );
 
-        crate::helpers::sleep_a_while().await;
+        crate::helpers::sleep_1s().await;
     }
 
     if detected_port_name != ports.port1_name {
@@ -222,7 +222,7 @@ pub async fn navigate_to_vcom<T: Expect>(
                 direction,
                 count: delta,
             },
-            crate::auto_cursor::CursorAction::Sleep { ms: 500 },
+            crate::auto_cursor::CursorAction::Sleep1s,
         ];
         crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_port").await?;
     }
@@ -233,12 +233,12 @@ pub async fn navigate_to_vcom<T: Expect>(
     // Retry action: if we entered wrong port, press Escape and try to navigate again
     let retry_action = Some(vec![
         crate::auto_cursor::CursorAction::PressEscape,
-        crate::auto_cursor::CursorAction::Sleep { ms: 500 },
+        crate::auto_cursor::CursorAction::Sleep1s,
         crate::auto_cursor::CursorAction::PressArrow {
             direction: crate::key_input::ArrowKey::Up,
             count: 20, // Go all the way up
         },
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        crate::auto_cursor::CursorAction::Sleep1s,
     ]);
 
     let actions = vec![
@@ -318,7 +318,7 @@ pub async fn enable_port_carefully<T: Expect>(
                 direction,
                 count: delta,
             },
-            crate::auto_cursor::CursorAction::Sleep { ms: 200 },
+            crate::auto_cursor::CursorAction::Sleep1s,
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
@@ -347,15 +347,15 @@ pub async fn enable_port_carefully<T: Expect>(
     log::info!("↩️ Pressing Enter to toggle port enable");
     let actions = vec![
         crate::auto_cursor::CursorAction::PressEnter,
-        crate::auto_cursor::CursorAction::Sleep { ms: 2000 },
+        crate::auto_cursor::CursorAction::Sleep3s,
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "toggle_enable_port")
         .await?;
 
     // Give UI extra time to process port enable and re-render
     log::info!("Waiting for UI to update port status");
-    crate::helpers::sleep_a_while().await;
-    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_1s().await;
+    crate::helpers::sleep_1s().await;
 
     // Verify that the UI now shows the port as enabled to catch navigation drift early.
     // Use a retry loop to wait for UI to update
@@ -375,7 +375,7 @@ pub async fn enable_port_carefully<T: Expect>(
 
         if attempt < 3 {
             log::info!("Port not shown as enabled yet, waiting (attempt {attempt}/3)");
-            crate::helpers::sleep_a_while().await;
+            crate::helpers::sleep_1s().await;
         }
     }
 
@@ -477,7 +477,7 @@ pub async fn enter_modbus_panel<T: Expect>(
                     direction,
                     count: delta,
                 },
-                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+                crate::auto_cursor::CursorAction::Sleep1s,
             ];
             crate::auto_cursor::execute_cursor_actions(
                 session,
@@ -543,7 +543,7 @@ pub async fn enter_modbus_panel<T: Expect>(
                     direction,
                     count: delta,
                 },
-                crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+                crate::auto_cursor::CursorAction::Sleep1s,
             ];
             crate::auto_cursor::execute_cursor_actions(
                 session,
@@ -558,7 +558,7 @@ pub async fn enter_modbus_panel<T: Expect>(
         log::info!("  Pressing Enter to enter Modbus panel");
         let actions = vec![
             crate::auto_cursor::CursorAction::PressEnter,
-            crate::auto_cursor::CursorAction::Sleep { ms: 2000 }, // Increased wait for page transition in CI
+            crate::auto_cursor::CursorAction::Sleep3s, // Increased wait for page transition in CI
         ];
         crate::auto_cursor::execute_cursor_actions(
             session,
@@ -616,7 +616,7 @@ pub async fn enter_modbus_panel<T: Expect>(
                     .await?;
                 if screen.contains("ModBus Master/Slave Set") {
                     log::info!("✅ Successfully entered Modbus panel on attempt {attempt}");
-                    crate::helpers::sleep_a_while().await; // Extra stabilization time
+                    crate::helpers::sleep_1s().await; // Extra stabilization time
                     return Ok(());
                 } else {
                     log::warn!("  ⚠️ Status updated but terminal doesn't show Modbus panel yet");
@@ -679,7 +679,7 @@ pub async fn update_tui_registers<T: Expect>(
     // Use Ctrl+PageUp to jump to top of Modbus panel (more reliable than pressing Up 50 times)
     let actions = vec![
         crate::auto_cursor::CursorAction::PressCtrlPageUp,
-        crate::auto_cursor::CursorAction::Sleep { ms: 300 },
+        crate::auto_cursor::CursorAction::Sleep1s,
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "nav_to_top").await?;
 
@@ -828,7 +828,7 @@ pub async fn update_tui_registers<T: Expect>(
     // Critical: Wait for all register values to be fully saved to internal storage
     // before any subsequent operations (like navigating to add another station)
     log::info!("⏱️ Waiting for all register values to be committed...");
-    crate::helpers::sleep_a_while().await;
+    crate::helpers::sleep_1s().await;
 
     // Navigate back to top of Modbus panel for next station configuration
     // Use Ctrl+PageUp to jump to the absolute top of the panel (Create Station / Connection Mode area).
