@@ -367,7 +367,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                     let port = p;
                     let types::port::PortConfig::Modbus { stations, .. } = &port.config;
                     let count = stations.len();
-                    log::debug!("🟦 Port {} has {} stations", name, count);
+                    log::debug!("🟦 Port {name} has {count} stations");
                     !stations.is_empty()
                 })
                 .unwrap_or(false);
@@ -381,10 +381,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
 
             log::info!(
-                "🟦 Should restart: {}, Should auto-enable: {}, Has stations: {}",
-                should_restart,
-                should_auto_enable,
-                has_stations
+                "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}"
             );
             (should_restart, should_auto_enable, has_stations)
         } else {
@@ -424,7 +421,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 
     // Save configuration before leaving the page
     if let Err(e) = save_current_configs() {
-        log::warn!("Failed to save port configurations: {}", e);
+        log::warn!("Failed to save port configurations: {e}");
     }
 
     write_status(|status| {
@@ -521,7 +518,7 @@ fn create_new_modbus_entry(_bus: &Bus) -> Result<()> {
 
             // Save configuration to disk
             if let Err(e) = save_current_configs() {
-                log::warn!("Failed to save port configurations: {}", e);
+                log::warn!("Failed to save port configurations: {e}");
             }
 
             // NOTE: Removed automatic restart when creating new station

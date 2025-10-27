@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use expectrl::Expect;
 
-use crate::{sleep_a_while, ArrowKey, ExpectKeyExt, TerminalCapture};
+use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, TerminalCapture};
 
 /// Action instruction for automated cursor navigation
 #[derive(Debug, Clone)]
@@ -37,8 +37,10 @@ pub enum CursorAction {
     TypeChar(char),
     /// Type a string
     TypeString(String),
-    /// Wait for a fixed duration
-    Sleep { ms: u64 },
+    /// Wait for 1 second (1000ms)
+    Sleep1s,
+    /// Wait for 3 seconds (3000ms)
+    Sleep3s,
     /// Match a pattern within specified line and column range
     /// If match fails after retries, optionally execute retry_action and retry again
     /// Implements nested retry: 3 attempts -> execute retry_action -> repeat 3 times (total 9 attempts)
@@ -210,77 +212,80 @@ pub async fn execute_cursor_actions<T: Expect>(
                     session.send_arrow(*direction)?;
                 }
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressEnter => {
                 session.send_enter()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressEscape => {
                 session.send_escape()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressTab => {
                 session.send_tab()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::CtrlC => {
                 session.send_ctrl_c()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlS => {
                 session.send_ctrl_s()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlA => {
                 session.send_ctrl_a()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressBackspace => {
                 session.send_backspace()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressPageUp => {
                 session.send_page_up()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressPageDown => {
                 session.send_page_down()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlPageUp => {
                 session.send_ctrl_page_up()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::PressCtrlPageDown => {
                 session.send_ctrl_page_down()?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::TypeChar(ch) => {
                 session.send_char(*ch)?;
                 // Auto sleep after keypress
-                sleep_a_while().await;
+                sleep_1s().await;
             }
             CursorAction::TypeString(s) => {
                 for ch in s.chars() {
                     session.send_char(ch)?;
+                    // Sleep after each character to ensure TUI processes input properly
+                    sleep_1s().await;
                 }
-                // Auto sleep after keypress
-                sleep_a_while().await;
             }
-            CursorAction::Sleep { ms } => {
-                tokio::time::sleep(std::time::Duration::from_millis(*ms)).await;
+            CursorAction::Sleep1s => {
+                sleep_1s().await;
+            }
+            CursorAction::Sleep3s => {
+                sleep_3s().await;
             }
             CursorAction::DebugBreakpoint { description } => {
                 // Check if debug mode is enabled (set by main program based on --debug flag)
@@ -325,10 +330,10 @@ pub async fn execute_cursor_actions<T: Expect>(
                     {
                         Ok(screen) => {
                             log::error!("Current terminal content:");
-                            log::error!("\n{}\n", screen);
+                            log::error!("\n{screen}\n");
                         }
                         Err(cap_err) => {
-                            log::error!("Failed to capture terminal: {}", cap_err);
+                            log::error!("Failed to capture terminal: {cap_err}");
                         }
                     }
 
@@ -344,7 +349,7 @@ pub async fn execute_cursor_actions<T: Expect>(
             }
         }
 
-        sleep_a_while().await;
+        sleep_1s().await;
     }
 
     Ok(())
@@ -356,21 +361,21 @@ fn dump_all_status_files() {
     log::error!("📄 /tmp/ci_tui_status.json:");
     match std::fs::read_to_string("/tmp/ci_tui_status.json") {
         Ok(content) => {
-            log::error!("{}", content);
+            log::error!("{content}");
         }
         Err(e) => {
-            log::error!("  (not available: {})", e);
+            log::error!("  (not available: {e})");
         }
     }
 
     // CLI status files - check for common port names (only vcom1/vcom2 in CI)
     let common_ports = vec!["vcom1", "vcom2"];
     for port in common_ports {
-        let cli_path = format!("/tmp/ci_cli_{}_status.json", port);
-        log::error!("📄 {}:", cli_path);
+        let cli_path = format!("/tmp/ci_cli_{port}_status.json");
+        log::error!("📄 {cli_path}:");
         match std::fs::read_to_string(&cli_path) {
             Ok(content) => {
-                log::error!("{}", content);
+                log::error!("{content}");
             }
             Err(_) => {
                 // Silently skip if file doesn't exist (expected for unused ports)
@@ -387,14 +392,14 @@ fn dump_all_status_files() {
                         let path = entry.path();
                         log::error!("📄 {}:", path.display());
                         if let Ok(content) = std::fs::read_to_string(&path) {
-                            log::error!("{}", content);
+                            log::error!("{content}");
                         }
                     }
                 }
             }
         }
         Err(e) => {
-            log::error!("Failed to read /tmp directory: {}", e);
+            log::error!("Failed to read /tmp directory: {e}");
         }
     }
 }
@@ -418,19 +423,16 @@ async fn check_status_path(
     let json_path_str = if path.starts_with('$') {
         path.to_string()
     } else {
-        format!("$.{}", path)
+        format!("$.{path}")
     };
 
     let json_path = JsonPath::parse(&json_path_str)
-        .map_err(|e| anyhow!("Invalid JSONPath '{}': {}", json_path_str, e))?;
+        .map_err(|e| anyhow!("Invalid JSONPath '{json_path_str}': {e}"))?;
 
     loop {
-        if start.elapsed() > timeout.into() {
+        if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for status path '{}' to equal {:?} (waited {}s)",
-                path,
-                expected,
-                timeout_secs
+                "Timeout waiting for status path '{path}' to equal {expected:?} (waited {timeout_secs}s)"
             ));
         }
 
@@ -439,7 +441,7 @@ async fn check_status_path(
             Ok(status) => {
                 // Serialize status to JSON for path lookup
                 let status_json = serde_json::to_value(&status)
-                    .map_err(|e| anyhow!("Failed to serialize status: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to serialize status: {e}"))?;
 
                 // Query the JSON path using the library
                 let nodes = json_path.query(&status_json);
@@ -449,27 +451,22 @@ async fn check_status_path(
                     Ok(actual) => {
                         if actual == expected {
                             log::debug!(
-                                "✓ Status path '{}' matches expected value: {:?}",
-                                path,
-                                expected
+                                "✓ Status path '{path}' matches expected value: {expected:?}"
                             );
                             return Ok(());
                         } else {
                             log::debug!(
-                                "Status path '{}' is {:?}, waiting for {:?}",
-                                path,
-                                actual,
-                                expected
+                                "Status path '{path}' is {actual:?}, waiting for {expected:?}"
                             );
                         }
                     }
                     Err(e) => {
-                        log::debug!("Failed to find unique value at path '{}': {}", path, e);
+                        log::debug!("Failed to find unique value at path '{path}': {e}");
                     }
                 }
             }
             Err(e) => {
-                log::debug!("Failed to read TUI status: {}", e);
+                log::debug!("Failed to read TUI status: {e}");
             }
         }
 

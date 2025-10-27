@@ -103,8 +103,7 @@ pub fn read_tui_status() -> Result<TuiStatus> {
     let content = std::fs::read_to_string(&path)
         .map_err(|err| anyhow!("Failed to read TUI status file {}: {}", path.display(), err))?;
 
-    serde_json::from_str(&content)
-        .map_err(|err| anyhow!("Failed to parse TUI status JSON: {}", err))
+    serde_json::from_str(&content).map_err(|err| anyhow!("Failed to parse TUI status JSON: {err}"))
 }
 
 /// Read and parse CLI status from /tmp/ci_cli_{port}_status.json
@@ -116,12 +115,11 @@ pub fn read_cli_status(port: &str) -> Result<CliStatus> {
         .and_then(|n| n.to_str())
         .unwrap_or(port);
 
-    let path = PathBuf::from(format!("/tmp/ci_cli_{}_status.json", port_basename));
+    let path = PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
     let content = std::fs::read_to_string(&path)
         .map_err(|err| anyhow!("Failed to read CLI status file {}: {}", path.display(), err))?;
 
-    serde_json::from_str(&content)
-        .map_err(|err| anyhow!("Failed to parse CLI status JSON: {}", err))
+    serde_json::from_str(&content).map_err(|err| anyhow!("Failed to parse CLI status JSON: {err}"))
 }
 
 /// Wait for TUI to reach a specific page with timeout and retry logic
@@ -143,7 +141,7 @@ pub async fn wait_for_tui_page(
     let interval = retry_interval_ms.unwrap_or(500);
 
     loop {
-        if start.elapsed() > timeout.into() {
+        if start.elapsed() > timeout {
             return Err(anyhow!(
                 "Timeout waiting for TUI page '{expected_page}' (waited {timeout_secs}s)"
             ));
@@ -185,11 +183,9 @@ pub async fn wait_for_port_enabled(
     let interval = retry_interval_ms.unwrap_or(500);
 
     loop {
-        if start.elapsed() > timeout.into() {
+        if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for port '{}' to be enabled (waited {}s)",
-                port_name,
-                timeout_secs
+                "Timeout waiting for port '{port_name}' to be enabled (waited {timeout_secs}s)"
             ));
         }
 
@@ -231,13 +227,9 @@ pub async fn wait_for_modbus_config(
     let role = if is_master { "master" } else { "slave" };
 
     loop {
-        if start.elapsed() > timeout.into() {
+        if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for port '{}' to have {} station {} (waited {}s)",
-                port_name,
-                role,
-                station_id,
-                timeout_secs
+                "Timeout waiting for port '{port_name}' to have {role} station {station_id} (waited {timeout_secs}s)"
             ));
         }
 
@@ -255,21 +247,13 @@ pub async fn wait_for_modbus_config(
                     };
 
                     if found {
-                        log::info!(
-                            "✅ Port '{}' has {} station {}",
-                            port_name,
-                            role,
-                            station_id
-                        );
+                        log::info!("✅ Port '{port_name}' has {role} station {station_id}");
                         return Ok(status);
                     }
                 }
             }
             log::debug!(
-                "Port '{}' does not have {} station {} yet, retrying...",
-                port_name,
-                role,
-                station_id
+                "Port '{port_name}' does not have {role} station {station_id} yet, retrying..."
             );
         }
 
@@ -296,19 +280,14 @@ pub async fn wait_for_cli_status(
     let interval = retry_interval_ms.unwrap_or(500);
 
     loop {
-        if start.elapsed() > timeout.into() {
+        if start.elapsed() > timeout {
             return Err(anyhow!(
-                "Timeout waiting for CLI status for port '{}' (waited {}s)",
-                port_name,
-                timeout_secs
+                "Timeout waiting for CLI status for port '{port_name}' (waited {timeout_secs}s)"
             ));
         }
 
         if let Ok(status) = read_cli_status(port_name) {
-            log::info!(
-                "✅ CLI subprocess status available for port '{}'",
-                port_name
-            );
+            log::info!("✅ CLI subprocess status available for port '{port_name}'");
             return Ok(status);
         }
 
@@ -330,5 +309,5 @@ pub fn get_port_log_count(port_name: &str) -> Result<usize> {
             return Ok(port.log_count);
         }
     }
-    Err(anyhow!("Port '{}' not found in TUI status", port_name))
+    Err(anyhow!("Port '{port_name}' not found in TUI status"))
 }

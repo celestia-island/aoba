@@ -5,7 +5,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use ci_utils::sleep_a_while;
+use ci_utils::sleep_1s;
 
 /// Test slave listen temporary mode (single response)
 pub async fn test_slave_listen_temp() -> Result<()> {
@@ -37,7 +37,7 @@ pub async fn test_slave_listen_temp() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Wait for a short time, then kill it (it will timeout anyway)
-            sleep_a_while().await;
+            sleep_1s().await;
             child.kill()?;
 
             log::info!("🧪 Slave listen command accepted (port error expected)");
@@ -76,7 +76,7 @@ pub async fn test_slave_listen_persist() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Give it a moment to start
-            sleep_a_while().await;
+            sleep_1s().await;
 
             // Kill the process after timeout
             child.kill()?;
@@ -127,7 +127,7 @@ pub async fn test_master_provide_temp() -> Result<()> {
 
     match output {
         Ok(mut child) => {
-            sleep_a_while().await;
+            sleep_1s().await;
             child.kill()?;
 
             log::info!("🧪 Master provide command accepted (port error expected)");
@@ -183,7 +183,7 @@ pub async fn test_master_provide_persist() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Let it run for a bit
-            sleep_a_while().await;
+            sleep_1s().await;
 
             // Kill the process
             child.kill()?;

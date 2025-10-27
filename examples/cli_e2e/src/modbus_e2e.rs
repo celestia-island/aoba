@@ -6,7 +6,7 @@ use std::{
 };
 
 use ci_utils::{
-    create_modbus_command, sleep_a_while, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
+    create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 
 /// Test master-slave communication with virtual serial ports
@@ -44,9 +44,9 @@ pub async fn test_master_slave_communication() -> Result<()> {
 
     // Give server time to start and fully acquire the port
     // use multiple async short waits to emulate a few seconds
-    sleep_a_while().await;
-    sleep_a_while().await;
-    sleep_a_while().await;
+    sleep_1s().await;
+    sleep_1s().await;
+    sleep_1s().await;
 
     // Check if server is still running
     match server.try_wait()? {
@@ -107,7 +107,7 @@ pub async fn test_master_slave_communication() -> Result<()> {
     server.wait()?;
 
     // Give extra time for ports to be fully released
-    sleep_a_while().await;
+    sleep_1s().await;
 
     log::info!(
         "🧪 Client exit status: {status}",
@@ -158,14 +158,14 @@ pub async fn test_slave_listen_with_vcom() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Wait for a short time
-            sleep_a_while().await;
+            sleep_1s().await;
             child.kill()?;
             child.wait()?;
 
             log::info!("✅ Slave listen command accepted with virtual ports");
 
             // Give extra time for port to be fully released
-            sleep_a_while().await;
+            sleep_1s().await;
 
             Ok(())
         }
@@ -202,7 +202,7 @@ pub async fn test_master_provide_with_vcom() -> Result<()> {
     match output {
         Ok(mut child) => {
             // Let it run for a bit
-            sleep_a_while().await;
+            sleep_1s().await;
             child.kill()?;
             child.wait()?;
 
@@ -212,7 +212,7 @@ pub async fn test_master_provide_with_vcom() -> Result<()> {
             std::fs::remove_file(&data_file)?;
 
             // Give extra time for port to be fully released
-            sleep_a_while().await;
+            sleep_1s().await;
 
             Ok(())
         }

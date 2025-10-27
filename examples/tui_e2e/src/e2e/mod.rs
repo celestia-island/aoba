@@ -1,4 +1,5 @@
 // TUI E2E test modules
+pub mod common;
 pub mod multi_station;
 pub mod single_station;
 

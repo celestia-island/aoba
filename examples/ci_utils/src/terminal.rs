@@ -95,7 +95,7 @@ pub fn spawn_expect_process_with_size(
     );
 
     if let Some((rows, cols)) = pty_size {
-        log::info!("   PTY size: {}x{} (rows x cols)", rows, cols);
+        log::info!("   PTY size: {rows}x{cols} (rows x cols)");
     }
 
     // If spawning TUI, set AOBA_LOG_FILE environment variable

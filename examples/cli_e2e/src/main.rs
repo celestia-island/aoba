@@ -63,7 +63,7 @@ pub fn setup_virtual_serial_ports() -> Result<bool> {
     #[cfg(windows)]
     {
         log::info!("🧪 Windows platform: skipping virtual serial port setup (socat not available)");
-        return Ok(false);
+        Ok(false)
     }
 
     #[cfg(not(windows))]
@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    log::info!("🧪 Running module: {}", module);
+    log::info!("🧪 Running module: {module}");
 
     // Run the selected module
     match module {
@@ -183,13 +183,13 @@ async fn main() -> Result<()> {
         "modbus_multi_slaves_adjacent_registers" => test_multi_slaves_adjacent_registers().await?,
 
         _ => {
-            log::error!("❌ Unknown module: {}", module);
+            log::error!("❌ Unknown module: {module}");
             log::error!("Run without --module to see available modules");
-            return Err(anyhow::anyhow!("Unknown module: {}", module));
+            return Err(anyhow::anyhow!("Unknown module: {module}"));
         }
     }
 
-    log::info!("✅ Module '{}' completed successfully!", module);
+    log::info!("✅ Module '{module}' completed successfully!");
 
     Ok(())
 }

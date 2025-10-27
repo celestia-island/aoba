@@ -171,8 +171,7 @@ fn initialize_cli_data_source(
         }
         if station.register_mode != register_mode {
             log::warn!(
-                "initialize_cli_data_source: skipping station with different register mode (expected {:?})",
-                register_mode
+                "initialize_cli_data_source: skipping station with different register mode (expected {register_mode:?})"
             );
             continue;
         }
@@ -539,6 +538,10 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
 
 pub fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
+
+    // Check if config cache should be disabled (--no-config-cache flag)
+    let no_cache = matches.get_flag("no-config-cache");
+    persistence::set_no_cache(no_cache);
 
     // Terminal is initialized inside the rendering thread to avoid sharing
     // a Terminal instance across threads. The rendering loop will create
