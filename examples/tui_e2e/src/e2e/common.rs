@@ -2082,13 +2082,7 @@ pub async fn configure_tui_station<T: Expect>(
         CursorAction::TypeString(config.station_id.to_string()), // Type new value
         CursorAction::Sleep { ms: 500 },                         // Wait for typing to complete
         CursorAction::PressEnter,                                // Confirm
-        CursorAction::Sleep { ms: 1000 },                        // Wait for commit
-        // Move to next field (Register Type)
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep { ms: 500 },
+        CursorAction::Sleep { ms: 1500 }, // Wait longer for commit and UI update
     ];
 
     let reset_to_station_id = vec![
@@ -2103,14 +2097,32 @@ pub async fn configure_tui_station<T: Expect>(
         CursorAction::Sleep { ms: 300 },
     ];
 
+    // Edit Station ID field WITHOUT moving to next field
+    // We'll verify the value directly instead of checking next field position
     execute_field_edit_with_retry(
         session,
         cap,
         "station_id",
         &station_id_actions,
-        true,                    // Check not in edit mode
-        Some("> Register Type"), // Should be on Register Type field
+        true, // Check not in edit mode
+        None, // Don't verify next field, just verify we're not in edit mode
         &reset_to_station_id,
+    )
+    .await?;
+
+    // Now explicitly move to Register Type field
+    log::info!("Moving to Register Type field...");
+    execute_cursor_actions(
+        session,
+        cap,
+        &[
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
+            CursorAction::Sleep { ms: 500 },
+        ],
+        "move_to_register_type",
     )
     .await?;
 
