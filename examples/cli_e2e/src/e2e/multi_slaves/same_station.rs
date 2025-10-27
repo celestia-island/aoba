@@ -85,9 +85,9 @@ pub async fn test_multi_slaves_same_station() -> Result<()> {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
 
-            log::error!("❌ Process exited prematurely with status: {}", status);
-            log::error!("stdout: {}", stdout);
-            log::error!("stderr: {}", stderr);
+            log::error!("❌ Process exited prematurely with status: {status}");
+            log::error!("stdout: {stdout}");
+            log::error!("stderr: {stderr}");
 
             // Clean up and return error
             std::fs::remove_file(&config_file)?;

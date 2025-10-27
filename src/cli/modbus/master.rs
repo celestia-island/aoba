@@ -427,9 +427,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                             let addr = range.address_start + i as u16;
                                             if let Err(e) = context.set_holding(addr, val) {
                                                 log::warn!(
-                                                    "Failed to set holding register at {}: {}",
-                                                    addr,
-                                                    e
+                                                    "Failed to set holding register at {addr}: {e}"
                                                 );
                                             }
                                         }
@@ -440,7 +438,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                         for (i, &val) in range.initial_values.iter().enumerate() {
                                             let addr = range.address_start + i as u16;
                                             if let Err(e) = context.set_coil(addr, val != 0) {
-                                                log::warn!("Failed to set coil at {}: {}", addr, e);
+                                                log::warn!("Failed to set coil at {addr}: {e}");
                                             }
                                         }
                                     }
@@ -451,9 +449,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                             let addr = range.address_start + i as u16;
                                             if let Err(e) = context.set_discrete(addr, val != 0) {
                                                 log::warn!(
-                                                    "Failed to set discrete input at {}: {}",
-                                                    addr,
-                                                    e
+                                                    "Failed to set discrete input at {addr}: {e}"
                                                 );
                                             }
                                         }
@@ -465,9 +461,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                             let addr = range.address_start + i as u16;
                                             if let Err(e) = context.set_input(addr, val) {
                                                 log::warn!(
-                                                    "Failed to set input register at {}: {}",
-                                                    addr,
-                                                    e
+                                                    "Failed to set input register at {addr}: {e}"
                                                 );
                                             }
                                         }
@@ -811,9 +805,9 @@ fn update_storage_loop(
                 let file = match std::fs::File::open(path) {
                     Ok(f) => f,
                     Err(err) => {
-                        log::error!("Failed to open data source file {}: {}", path, err);
+                        log::error!("Failed to open data source file {path}: {err}");
                         log::error!("Update thread will exit, causing main process to terminate");
-                        return Err(anyhow!("Failed to open data source file: {}", err));
+                        return Err(anyhow!("Failed to open data source file: {err}"));
                     }
                 };
                 let reader = BufReader::new(file);
@@ -823,8 +817,8 @@ fn update_storage_loop(
                     let line = match line {
                         Ok(l) => l,
                         Err(err) => {
-                            log::error!("Failed to read line from data source: {}", err);
-                            return Err(anyhow!("Failed to read line: {}", err));
+                            log::error!("Failed to read line from data source: {err}");
+                            return Err(anyhow!("Failed to read line: {err}"));
                         }
                     };
 
@@ -871,15 +865,14 @@ fn update_storage_loop(
                             std::thread::sleep(Duration::from_millis(100));
                         }
                         Err(err) => {
-                            log::warn!("Error parsing data line {}: {}", line_count, err);
+                            log::warn!("Error parsing data line {line_count}: {err}");
                         }
                     }
                 }
 
                 // After reading all lines, loop back to start of file
                 log::debug!(
-                    "Reached end of data file ({} lines processed), looping back to start",
-                    line_count
+                    "Reached end of data file ({line_count} lines processed), looping back to start"
                 );
             }
             DataSource::Pipe(path) => {

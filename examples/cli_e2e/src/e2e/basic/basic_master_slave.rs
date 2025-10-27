@@ -6,7 +6,7 @@ use std::{
 };
 
 use ci_utils::{
-    create_modbus_command, sleep_a_while, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
+    create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 
 /// Test basic master-slave communication with virtual serial ports
@@ -43,9 +43,9 @@ pub async fn test_basic_master_slave_communication() -> Result<()> {
     .spawn()?;
 
     // Give server time to start and fully acquire the port
-    sleep_a_while().await;
-    sleep_a_while().await;
-    sleep_a_while().await;
+    sleep_1s().await;
+    sleep_1s().await;
+    sleep_1s().await;
 
     // Check if server is still running
     match server.try_wait()? {
@@ -106,7 +106,7 @@ pub async fn test_basic_master_slave_communication() -> Result<()> {
     server.wait()?;
 
     // Give extra time for ports to be fully released
-    sleep_a_while().await;
+    sleep_1s().await;
 
     log::info!(
         "🧪 Client exit status: {status}",
