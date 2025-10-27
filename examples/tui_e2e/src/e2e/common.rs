@@ -2307,13 +2307,129 @@ pub async fn configure_tui_station<T: Expect>(
     // Note: Register Count will be verified after save via final status check
     // Values are only committed to status tree after Ctrl+S
 
-    // Phase 8: Configure register values if provided
-    // NOTE: Register value configuration is temporarily skipped to focus on
-    // fixing the core configuration and port enable flow
-    // TODO: Implement register value configuration after port enable is working
-    if let Some(_values) = &config.register_values {
-        log::warn!("⚠️  Register value configuration is temporarily skipped");
-        log::warn!("    TODO: Implement after port enable is working");
+    // Phase 8: Configure register values if provided (Slave stations only)
+    if let Some(values) = &config.register_values {
+        if !config.is_master {
+            log::info!("Phase 8: Configuring {} register values...", values.len());
+
+            // IMPORTANT: After Register Count edit + Enter, cursor is at Register Length field
+            // We need to navigate to the register list below it
+            // The UI shows register address lines, each with multiple register value fields
+            log::info!("Navigating to first register value field...");
+
+            // Navigation steps:
+            // 1. Down: Move from "Register Length" to first register address line
+            //    After Down, cursor should already be at the first register value field
+            let actions = vec![
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
+                CursorAction::Sleep { ms: 500 },
+            ];
+            execute_cursor_actions(session, cap, &actions, "nav_to_first_register_value").await?;
+
+            // Now configure each register value
+            // TUI displays registers in rows with 4 values per row
+            // Navigation: Right arrow moves to next register on same row
+            // After last register on a row, we're at the end - need Down to go to next row's first register
+            for (reg_idx, &value) in values.iter().enumerate() {
+                log::info!(
+                    "  Setting register {} to 0x{:04X} ({})",
+                    reg_idx,
+                    value,
+                    value
+                );
+
+                // Edit the current register value
+                let actions = vec![
+                    CursorAction::PressEnter, // Enter edit mode
+                    CursorAction::Sleep { ms: 500 },
+                    CursorAction::PressCtrlA, // Select all
+                    CursorAction::Sleep { ms: 200 },
+                    CursorAction::PressBackspace, // Clear
+                    CursorAction::Sleep { ms: 200 },
+                    // NOTE: TUI register fields accept hexadecimal input
+                    // Format as "0xXXXX" for proper hex interpretation
+                    CursorAction::TypeString(format!("0x{:04X}", value)),
+                    CursorAction::Sleep { ms: 500 },
+                    CursorAction::PressEnter,        // Confirm
+                    CursorAction::Sleep { ms: 800 }, // Wait for commit
+                ];
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &actions,
+                    &format!("set_register_{}", reg_idx),
+                )
+                .await?;
+
+                // After Enter, cursor stays at the same register field
+                // We need to manually navigate to next register
+                if reg_idx < values.len() - 1 {
+                    // Not the last register - move to next
+                    // Check if we need to move to next row (every 4 registers)
+                    if (reg_idx + 1) % 4 == 0 {
+                        // Moving to next row: Down then move back to first column
+                        // Actually, Down + Left*3 to get to first register of next row
+                        log::info!("    Moving to next register row...");
+                        let actions = vec![
+                            CursorAction::PressArrow {
+                                direction: ArrowKey::Down,
+                                count: 1,
+                            },
+                            CursorAction::Sleep { ms: 300 },
+                            // After Down, cursor should be at address field of next row
+                            // Press Right once to get to first register value
+                            CursorAction::PressArrow {
+                                direction: ArrowKey::Right,
+                                count: 1,
+                            },
+                            CursorAction::Sleep { ms: 300 },
+                        ];
+                        execute_cursor_actions(
+                            session,
+                            cap,
+                            &actions,
+                            &format!("nav_to_next_row_{}", reg_idx + 1),
+                        )
+                        .await?;
+                    } else {
+                        // Same row - just move Right to next register
+                        log::info!("    Moving to next register on same row...");
+                        let actions = vec![
+                            CursorAction::PressArrow {
+                                direction: ArrowKey::Right,
+                                count: 1,
+                            },
+                            CursorAction::Sleep { ms: 300 },
+                        ];
+                        execute_cursor_actions(
+                            session,
+                            cap,
+                            &actions,
+                            &format!("nav_to_next_register_{}", reg_idx + 1),
+                        )
+                        .await?;
+                    }
+                }
+            }
+
+            log::info!("✅ All {} register values configured", values.len());
+
+            // Capture milestone: Register values configured
+            log::info!("📸 Milestone: Register values configured");
+            let screen = cap
+                .capture(session, "milestone_register_values_configured")
+                .await?;
+            log::info!("Terminal snapshot:\n{screen}");
+        } else {
+            log::info!(
+                "Phase 8: Skipping register value configuration (Master stations don't have initial values)"
+            );
+        }
+    } else {
+        log::info!("Phase 8: No register values provided - using defaults");
     }
 
     // Phase 9: Save configuration with Ctrl+S (port will auto-enable)
@@ -4299,15 +4415,119 @@ pub async fn configure_multiple_stations<T: Expect>(
         )
         .await?;
 
-        log::info!("  ✅ Station {} configuration complete", station_num);
+        log::info!("  ✅ Station {} basic configuration complete", station_num);
 
-        // Configure register values if provided
-        // NOTE: Register value configuration is temporarily skipped to focus on
-        // fixing the core configuration and port enable flow
-        // TODO: Implement register value configuration after fixing the input mechanism
-        if let Some(_values) = &config.register_values {
-            log::warn!("  ⚠️  Register value configuration is temporarily skipped");
-            log::warn!("      TODO: Implement proper value input for multi-station");
+        // Configure register values if provided (Slave stations only)
+        if let Some(values) = &config.register_values {
+            if !config.is_master {
+                log::info!("  Configuring {} register values...", values.len());
+
+                // IMPORTANT: After Register Count edit + Enter, cursor is at Register Length field
+                // We need to navigate to the register list below it
+                log::info!("  Navigating to first register value field...");
+
+                // Navigation steps:
+                // 1. Down: Move from "Register Length" to first register address line
+                //    After Down, cursor should already be at the first register value field
+                let actions = vec![
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Down,
+                        count: 1,
+                    },
+                    CursorAction::Sleep { ms: 500 },
+                ];
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &actions,
+                    &format!("nav_to_first_register_value_{station_num}"),
+                )
+                .await?;
+
+                // Now configure each register value
+                // TUI displays registers in rows with 4 values per row
+                for (reg_idx, &value) in values.iter().enumerate() {
+                    log::info!(
+                        "    Setting register {} to 0x{:04X} ({})",
+                        reg_idx,
+                        value,
+                        value
+                    );
+
+                    // Edit the current register value
+                    let actions = vec![
+                        CursorAction::PressEnter, // Enter edit mode
+                        CursorAction::Sleep { ms: 500 },
+                        CursorAction::PressCtrlA, // Select all
+                        CursorAction::Sleep { ms: 200 },
+                        CursorAction::PressBackspace, // Clear
+                        CursorAction::Sleep { ms: 200 },
+                        // NOTE: TUI register fields accept hexadecimal input
+                        // Format as "0xXXXX" for proper hex interpretation
+                        CursorAction::TypeString(format!("0x{:04X}", value)),
+                        CursorAction::Sleep { ms: 500 },
+                        CursorAction::PressEnter,        // Confirm
+                        CursorAction::Sleep { ms: 800 }, // Wait for commit
+                    ];
+                    execute_cursor_actions(
+                        session,
+                        cap,
+                        &actions,
+                        &format!("set_register_{}_{station_num}", reg_idx),
+                    )
+                    .await?;
+
+                    // After Enter, cursor stays at the same register field
+                    // We need to manually navigate to next register
+                    if reg_idx < values.len() - 1 {
+                        // Not the last register - move to next
+                        if (reg_idx + 1) % 4 == 0 {
+                            // Moving to next row
+                            log::info!("    Moving to next register row...");
+                            let actions = vec![
+                                CursorAction::PressArrow {
+                                    direction: ArrowKey::Down,
+                                    count: 1,
+                                },
+                                CursorAction::Sleep { ms: 300 },
+                                CursorAction::PressArrow {
+                                    direction: ArrowKey::Right,
+                                    count: 1,
+                                },
+                                CursorAction::Sleep { ms: 300 },
+                            ];
+                            execute_cursor_actions(
+                                session,
+                                cap,
+                                &actions,
+                                &format!("nav_to_next_row_{}_{}", reg_idx + 1, station_num),
+                            )
+                            .await?;
+                        } else {
+                            // Same row - just move Right
+                            log::info!("    Moving to next register on same row...");
+                            let actions = vec![
+                                CursorAction::PressArrow {
+                                    direction: ArrowKey::Right,
+                                    count: 1,
+                                },
+                                CursorAction::Sleep { ms: 300 },
+                            ];
+                            execute_cursor_actions(
+                                session,
+                                cap,
+                                &actions,
+                                &format!("nav_to_next_register_{}_{}", reg_idx + 1, station_num),
+                            )
+                            .await?;
+                        }
+                    }
+                }
+
+                log::info!("  ✅ All {} register values configured", values.len());
+            } else {
+                log::info!("  ⚠️  Register values provided for Master station - ignoring (Masters don't have initial values)");
+            }
         }
 
         // Return to top after configuring this station
