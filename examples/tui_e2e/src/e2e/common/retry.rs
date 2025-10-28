@@ -131,6 +131,11 @@ pub async fn execute_field_edit_with_retry<T: Expect>(
         }
 
         // Failed verification
+        log::info!(
+            "Field '{}' verification failed, captured screen:\n{}",
+            field_name,
+            screen
+        );
         if attempt < MAX_RETRY_ATTEMPTS {
             log::warn!(
                 "⚠️  Field '{}' edit verification failed, will retry (attempt {}/{})",

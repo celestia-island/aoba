@@ -122,7 +122,7 @@ where
     // We need to take ownership and drop the session, which should trigger cleanup
     // But first, let's try to send Ctrl+C for graceful shutdown
     let mut session = session;
-    
+
     // Send Ctrl+C for graceful shutdown
     let ctrlc_bytes = b"\x03";
     if let Err(e) = session.send(ctrlc_bytes) {
