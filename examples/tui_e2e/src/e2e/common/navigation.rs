@@ -659,6 +659,7 @@ pub async fn configure_tui_station<T: Expect>(
     _port1: &str,
     config: &StationConfig,
 ) -> Result<()> {
+    const MAX_NUMERIC_FIELD_DIGITS: usize = 5;
     log::info!("⚙️  Configuring TUI station: {config:?}");
 
     // Phase 0: Ensure cursor is at AddLine (Create Station button)
@@ -726,7 +727,7 @@ pub async fn configure_tui_station<T: Expect>(
         // This verification checks the terminal display to ensure "Slave" is visible
         // on the Connection Mode line specifically
         log::info!("Verifying Connection Mode was switched to Slave...");
-        let pattern = Regex::new(r"Connection Mode\s+Slave")?;
+        let pattern = Regex::new(r"Connection Mode.*Slave")?;
         let actions = vec![CursorAction::MatchPattern {
             pattern,
             description: "Connection Mode line should show 'Slave'".to_string(),
@@ -963,25 +964,6 @@ pub async fn configure_tui_station<T: Expect>(
     // Phase 6: Configure Start Address (field 2) with transaction retry
     log::info!("Configuring Start Address: 0x{:04X}", config.start_address);
 
-    // Start Address should be entered in decimal format
-    let start_address_actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep1s,
-        CursorAction::PressCtrlA,
-        CursorAction::Sleep1s,
-        CursorAction::PressBackspace,
-        CursorAction::Sleep1s,
-        CursorAction::TypeString(config.start_address.to_string()),
-        CursorAction::Sleep1s,
-        CursorAction::PressEnter,
-        CursorAction::Sleep3s,
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep1s,
-    ];
-
     let reset_to_start_address = vec![
         CursorAction::PressCtrlPageUp,
         CursorAction::Sleep1s,
@@ -994,41 +976,107 @@ pub async fn configure_tui_station<T: Expect>(
         CursorAction::Sleep1s,
     ];
 
-    execute_field_edit_with_retry(
+    // Always re-center the cursor onto Start Address before attempting edits. This keeps
+    // subsequent operations deterministic even if prior navigation left us on Register
+    // Type or other fields.
+    execute_cursor_actions(
         session,
         cap,
-        "start_address",
-        &start_address_actions,
-        true,
-        Some("> Register Length"),
         &reset_to_start_address,
+        "focus_start_address_initial",
     )
     .await?;
+    ensure_cursor_on_start_address(session, cap).await?;
+
+    if config.start_address == 0 {
+        log::info!("Start Address already 0 - skipping edit");
+        let screen = cap.capture(session, "verify_start_address_default").await?;
+        if !screen.contains("> Start Address") {
+            return Err(anyhow!(
+                "Cursor not positioned at Start Address when attempting to skip edit"
+            ));
+        }
+        execute_cursor_actions(
+            session,
+            cap,
+            &[
+                CursorAction::PressArrow {
+                    direction: ArrowKey::Down,
+                    count: 1,
+                },
+                CursorAction::Sleep1s,
+            ],
+            "move_to_register_length_after_start_skip",
+        )
+        .await?;
+    } else {
+        // Start Address should be entered in decimal format. Clear existing digits via
+        // limited backspace attempts to avoid control-key sequences misbehaving in CI.
+        let mut start_address_actions = vec![
+            CursorAction::PressEnter,
+            CursorAction::Sleep1s,
+            CursorAction::PressCtrlA,
+            CursorAction::Sleep1s,
+        ];
+        for _ in 0..MAX_NUMERIC_FIELD_DIGITS {
+            start_address_actions.push(CursorAction::PressBackspace);
+        }
+        start_address_actions.extend_from_slice(&[
+            CursorAction::Sleep1s,
+            CursorAction::TypeString(config.start_address.to_string()),
+            CursorAction::Sleep1s,
+            CursorAction::PressEnter,
+            CursorAction::Sleep3s,
+            CursorAction::PressArrow {
+                direction: ArrowKey::Down,
+                count: 1,
+            },
+            CursorAction::Sleep1s,
+        ]);
+
+        let expected_start_pattern = format!(
+            "Start Address         0x{:04X} ({})",
+            config.start_address, config.start_address
+        );
+
+        execute_field_edit_with_retry(
+            session,
+            cap,
+            "start_address",
+            &start_address_actions,
+            true,
+            Some(expected_start_pattern.as_str()),
+            &reset_to_start_address,
+        )
+        .await?;
+    }
 
     log::info!("📸 Milestone: Start Address configured");
 
     // Phase 7: Configure Register Count (field 3) with transaction retry
     log::info!("Configuring Register Count: {}", config.register_count);
 
-    let register_count_actions = vec![
+    let mut register_count_actions = vec![
         CursorAction::PressEnter,
         CursorAction::Sleep3s,
         CursorAction::PressCtrlA,
         CursorAction::Sleep1s,
-        CursorAction::PressBackspace,
+    ];
+    for _ in 0..MAX_NUMERIC_FIELD_DIGITS {
+        register_count_actions.push(CursorAction::PressBackspace);
+    }
+    register_count_actions.extend_from_slice(&[
         CursorAction::Sleep1s,
         CursorAction::TypeString(config.register_count.to_string()),
         CursorAction::Sleep1s,
         CursorAction::PressEnter,
         CursorAction::Sleep3s, // Wait for register grid to render (reduced from 3000ms)
-        // CRITICAL: Move cursor away from Register Length field to commit the value
-        // Without this Down arrow, the field stays in a pending/editing state
         CursorAction::PressArrow {
             direction: ArrowKey::Down,
             count: 1,
         },
         CursorAction::Sleep1s,
-    ];
+    ]);
 
     let reset_to_register_count = vec![
         CursorAction::PressCtrlPageUp,
@@ -1042,10 +1090,13 @@ pub async fn configure_tui_station<T: Expect>(
         CursorAction::Sleep1s,
     ];
 
-    // After setting Register Count and pressing Down, we should be in the register grid
-    // Check that we've successfully moved away from Register Length field
-    // by verifying presence of register address line (e.g., "0x0000" or hex pattern)
-    // OR that we're no longer showing the edit cursor on Register Length
+    // After setting Register Count we expect the display to reflect the new value
+    // and the cursor to move into the register grid so further edits can proceed.
+
+    let expected_register_count_pattern = format!(
+        "Register Length       0x{:04X} ({})",
+        config.register_count, config.register_count
+    );
 
     execute_field_edit_with_retry(
         session,
@@ -1053,7 +1104,7 @@ pub async fn configure_tui_station<T: Expect>(
         "register_count",
         &register_count_actions,
         true, // Must NOT be in edit mode
-        None, // Don't check specific pattern - just verify we exited edit mode
+        Some(expected_register_count_pattern.as_str()),
         &reset_to_register_count,
     )
     .await?;
@@ -1284,4 +1335,61 @@ pub async fn configure_tui_station<T: Expect>(
 
     log::info!("✅ Station configuration completed - saved and enabled");
     Ok(())
+}
+
+async fn ensure_cursor_on_start_address<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+) -> Result<()> {
+    const MAX_FOCUS_ATTEMPTS: usize = 5;
+
+    for attempt in 0..MAX_FOCUS_ATTEMPTS {
+        let capture_name = format!("focus_start_address_attempt_{}", attempt + 1);
+        let screen = cap.capture(session, &capture_name).await?;
+
+        if screen.contains("> Start Address") {
+            return Ok(());
+        }
+
+        let (actions, label): (Vec<CursorAction>, &str) = if screen.contains("> Register Type") {
+            (
+                vec![
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Down,
+                        count: 1,
+                    },
+                    CursorAction::Sleep1s,
+                ],
+                "focus_start_address_from_register_type",
+            )
+        } else if screen.contains("> Register Length") {
+            (
+                vec![
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Up,
+                        count: 1,
+                    },
+                    CursorAction::Sleep1s,
+                ],
+                "focus_start_address_from_register_length",
+            )
+        } else {
+            (
+                vec![
+                    CursorAction::PressArrow {
+                        direction: ArrowKey::Down,
+                        count: 1,
+                    },
+                    CursorAction::Sleep1s,
+                ],
+                "focus_start_address_general_adjust",
+            )
+        };
+
+        execute_cursor_actions(session, cap, &actions, label).await?;
+    }
+
+    Err(anyhow!(
+        "Failed to focus Start Address field after {MAX_FOCUS_ATTEMPTS} attempts"
+    ))
 }

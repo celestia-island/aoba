@@ -138,6 +138,7 @@ pub mod config;
 pub mod navigation;
 pub mod retry;
 pub mod test_execution;
+pub mod validation;
 
 // Re-export commonly used types and functions
 pub use config::{RegisterMode, StationConfig};
@@ -145,3 +146,4 @@ pub use test_execution::{
     run_multi_station_master_test, run_multi_station_slave_test, run_single_station_master_test,
     run_single_station_slave_test,
 };
+pub use validation::*;
