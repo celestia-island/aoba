@@ -8,6 +8,12 @@ use super::{
 };
 use ci_utils::*;
 
+/// Timeout for CLI subprocess operations in seconds
+///
+/// CLI slave-poll should complete in 5-10 seconds under normal conditions.
+/// Using 30 seconds to account for slow CI environments while still catching hung processes.
+const CLI_SUBPROCESS_TIMEOUT_SECS: u64 = 30;
+
 /// Run a complete single-station Master test with TUI Master and CLI Slave.
 ///
 /// # Purpose
@@ -75,7 +81,7 @@ use ci_utils::*;
 /// - Call `configure_tui_station` with test data to create Master station
 ///
 /// ## Stage 3: Start CLI Slave and Poll
-/// - Call `send_data_from_cli_master` to spawn CLI in master-poll mode
+/// - Call `send_data_from_cli_master` to spawn CLI in slave-poll mode (acts as Modbus master)
 /// - CLI sends read request to TUI Slave
 /// - TUI Slave responds with register data
 ///
@@ -293,6 +299,11 @@ pub async fn run_single_station_master_test(
     log::info!("   ✓ Data entry successful");
     log::info!("   ✓ Save operation completed");
     log::info!("   ✓ All configuration fields verified");
+
+    // Explicitly terminate TUI session to ensure clean shutdown
+    // This is critical in CI environments to prevent zombie processes
+    terminate_session(session, "TUI").await?;
+
     Ok(())
 }
 
@@ -483,24 +494,42 @@ pub async fn verify_master_data(
     let binary = build_debug_bin("aoba")?;
     log::info!("🔍 DEBUG: Using binary: {binary:?}");
 
-    let args = [
-        "--slave-poll",
-        port2,
-        "--station-id",
-        &config.station_id.to_string(),
-        "--register-address",
-        &config.start_address.to_string(),
-        "--register-length",
-        &config.register_count.to_string(),
-        "--register-mode",
-        config.register_mode.as_cli_mode(),
-        "--baud-rate",
-        "9600",
-        "--json",
+    // Create owned args vec to avoid lifetime issues with spawn_blocking
+    let args_vec: Vec<String> = vec![
+        "--slave-poll".to_string(),
+        port2.to_string(),
+        "--station-id".to_string(),
+        config.station_id.to_string(),
+        "--register-address".to_string(),
+        config.start_address.to_string(),
+        "--register-length".to_string(),
+        config.register_count.to_string(),
+        "--register-mode".to_string(),
+        config.register_mode.as_cli_mode().to_string(),
+        "--baud-rate".to_string(),
+        "9600".to_string(),
+        "--json".to_string(),
     ];
-    log::info!("🔍 DEBUG: CLI args: {args:?}");
+    log::info!("🔍 DEBUG: CLI args: {args_vec:?}");
 
-    let output = std::process::Command::new(&binary).args(args).output()?;
+    // Wrap the CLI command execution in a timeout to prevent indefinite hangs in CI
+    // CLI slave-poll should complete in 5-10 seconds under normal conditions
+    // Using CLI_SUBPROCESS_TIMEOUT_SECS to account for slow CI environments
+
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(CLI_SUBPROCESS_TIMEOUT_SECS),
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new(&binary).args(&args_vec).output()
+        }),
+    )
+    .await
+    .map_err(|_| {
+        anyhow!(
+            "CLI slave-poll timed out after {} seconds",
+            CLI_SUBPROCESS_TIMEOUT_SECS
+        )
+    })?
+    .map_err(|e| anyhow!("Failed to spawn CLI slave-poll task: {}", e))??;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
     log::info!(
@@ -627,7 +656,7 @@ pub async fn verify_master_data(
 /// - TUI writes test data to Slave registers
 ///
 /// ## Stage 3: Start CLI Master and Poll
-/// - Call `send_data_from_cli_master` to spawn CLI in master-poll mode
+/// - Call `send_data_from_cli_master` to spawn CLI in slave-poll mode (acts as Modbus master)
 /// - CLI sends read request to TUI Slave
 /// - TUI Slave responds with register data
 ///
@@ -722,8 +751,8 @@ pub async fn verify_master_data(
 ///
 /// ## Monitor CLI Output
 /// ```bash
-/// # Run CLI master-poll manually to debug
-/// aoba --master-poll COM4 \
+/// # Run CLI slave-poll manually to debug
+/// aoba --slave-poll COM4 \
 ///   --station-id 1 \
 ///   --register-address 200 \
 ///   --register-length 10 \
@@ -798,6 +827,10 @@ pub async fn run_single_station_slave_test(
     log::info!("   ✓ Data entry successful");
     log::info!("   ✓ Save operation completed");
     log::info!("   ✓ CLI Master received correct data");
+
+    // Explicitly terminate TUI session to ensure clean shutdown
+    terminate_session(session, "TUI").await?;
+
     Ok(())
 }
 
@@ -850,7 +883,7 @@ pub async fn run_single_station_slave_test(
 ///
 /// The function builds and executes this CLI command:
 /// ```bash
-/// aoba --master-poll <port2> \
+/// aoba --slave-poll <port2> \
 ///   --station-id <id> \
 ///   --register-address <addr> \
 ///   --register-length <count> \
@@ -876,7 +909,7 @@ pub async fn run_single_station_slave_test(
 ///
 /// // After TUI Slave is configured with test data...
 /// send_data_from_cli_master("COM4", &test_data, &config).await?;
-/// // CLI Master polls Slave and verifies received [1000, 2000, 3000, 4000, 5000]
+/// // CLI Master polls Slave and verifies the received data [1000, 2000, 3000, 4000, 5000]
 /// # Ok(())
 /// # }
 /// ```
@@ -904,7 +937,7 @@ pub async fn run_single_station_slave_test(
 /// # Error Handling
 ///
 /// ## CLI Execution Failure
-/// - **Symptom**: `"CLI master-poll failed: <stderr>"` error
+/// - **Symptom**: `"CLI slave-poll failed: <stderr>"` error
 /// - **Cause**: CLI binary not found, port unavailable, or invalid arguments
 /// - **Solution**: Check binary path via `build_debug_bin`, verify port is free
 ///
@@ -946,10 +979,10 @@ pub async fn run_single_station_slave_test(
 ///
 /// This function emits detailed debug logs:
 /// ```text
-/// 🔍 DEBUG: CLI master-poll starting on port COM4
+/// 🔍 DEBUG: CLI slave-poll starting on port COM4
 /// 🔍 DEBUG: Expected data: [1000, 2000, 3000, 4000, 5000]
 /// 🔍 DEBUG: Using binary: target/debug/aoba
-/// 🔍 DEBUG: CLI args: ["--master-poll", "COM4", "--station-id", "1", ...]
+/// 🔍 DEBUG: CLI args: ["--slave-poll", "COM4", "--station-id", "1", ...]
 /// 🔍 DEBUG: CLI exit status: ExitStatus(ExitCode(0))
 /// 🔍 DEBUG: CLI stderr: (empty or warnings)
 /// 🔍 DEBUG: Parsed JSON: Object({"values": Array([Number(1000), ...])})
@@ -959,7 +992,7 @@ pub async fn run_single_station_slave_test(
 ///
 /// # Timing Considerations
 ///
-/// - **CLI Execution**: 1-3 seconds (depends on poll timeout)
+/// - **CLI Execution**: 1-3 seconds (depends on request timing)
 /// - **JSON Parsing**: <100ms
 /// - **Verification**: <100ms
 /// - **Total Duration**: 1-4 seconds
@@ -976,30 +1009,48 @@ pub async fn send_data_from_cli_master(
     config: &StationConfig,
 ) -> Result<()> {
     log::info!("📤 Sending data from CLI Master...");
-    log::info!("🔍 DEBUG: CLI master-poll starting on port {port2}");
+    log::info!("🔍 DEBUG: CLI slave-poll starting on port {port2}");
     log::info!("🔍 DEBUG: Expected data: {expected_data:?}");
 
     let binary = build_debug_bin("aoba")?;
     log::info!("🔍 DEBUG: Using binary: {binary:?}");
 
-    let args = [
-        "--master-poll",
-        port2,
-        "--station-id",
-        &config.station_id.to_string(),
-        "--register-address",
-        &config.start_address.to_string(),
-        "--register-length",
-        &config.register_count.to_string(),
-        "--register-mode",
-        config.register_mode.as_cli_mode(),
-        "--baud-rate",
-        "9600",
-        "--json",
+    // Create owned args vec to avoid lifetime issues with spawn_blocking
+    let args_vec: Vec<String> = vec![
+        "--slave-poll".to_string(),
+        port2.to_string(),
+        "--station-id".to_string(),
+        config.station_id.to_string(),
+        "--register-address".to_string(),
+        config.start_address.to_string(),
+        "--register-length".to_string(),
+        config.register_count.to_string(),
+        "--register-mode".to_string(),
+        config.register_mode.as_cli_mode().to_string(),
+        "--baud-rate".to_string(),
+        "9600".to_string(),
+        "--json".to_string(),
     ];
-    log::info!("🔍 DEBUG: CLI args: {args:?}");
+    log::info!("🔍 DEBUG: CLI args: {args_vec:?}");
 
-    let output = std::process::Command::new(&binary).args(args).output()?;
+    // Wrap the CLI command execution in a timeout to prevent indefinite hangs in CI
+    // CLI slave-poll should complete in 5-10 seconds under normal conditions
+    // Using CLI_SUBPROCESS_TIMEOUT_SECS to account for slow CI environments
+
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(CLI_SUBPROCESS_TIMEOUT_SECS),
+        tokio::task::spawn_blocking(move || {
+            std::process::Command::new(&binary).args(&args_vec).output()
+        }),
+    )
+    .await
+    .map_err(|_| {
+        anyhow!(
+            "CLI slave-poll timed out after {} seconds",
+            CLI_SUBPROCESS_TIMEOUT_SECS
+        )
+    })?
+    .map_err(|e| anyhow!("Failed to spawn CLI slave-poll task: {}", e))??;
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
     log::info!(
@@ -1009,7 +1060,7 @@ pub async fn send_data_from_cli_master(
 
     if !output.status.success() {
         return Err(anyhow!(
-            "CLI master-poll failed: {}",
+            "CLI slave-poll failed: {}",
             String::from_utf8_lossy(&output.stderr)
         ));
     }
@@ -1749,6 +1800,10 @@ pub async fn run_multi_station_master_test(
     log::info!("   ✓ All Masters configured correctly");
     log::info!("   ✓ All Master-Slave polling combinations tested");
     log::info!("   ✓ All data verification passed");
+
+    // Explicitly terminate TUI session to ensure clean shutdown
+    terminate_session(session, "TUI").await?;
+
     Ok(())
 }
 
@@ -1968,5 +2023,9 @@ pub async fn run_multi_station_slave_test(
     log::info!("   ✓ All Slaves configured correctly");
     log::info!("   ✓ All CLI Master to Slave write operations tested");
     log::info!("   ✓ All data verification passed");
+
+    // Explicitly terminate TUI session to ensure clean shutdown
+    terminate_session(session, "TUI").await?;
+
     Ok(())
 }
