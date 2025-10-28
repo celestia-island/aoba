@@ -473,3 +473,337 @@ async fn check_status_path(
         sleep(interval).await;
     }
 }
+
+/// Factory function for executing actions with automatic status validation and retry
+///
+/// This function combines cursor actions with status checks in a single atomic operation
+/// with automatic retry logic. It's designed to implement fine-grained validation at each
+/// step of UI interaction.
+///
+/// # Purpose
+///
+/// In TUI E2E tests, we need to verify that the UI's internal state matches our expectations
+/// after each interaction. This function automates the pattern of:
+/// 1. Execute some cursor actions (e.g., press arrow keys, type text)
+/// 2. Verify the result via status check (e.g., check field value, edit mode state)
+/// 3. Retry if verification fails (e.g., action didn't take effect)
+///
+/// # Parameters
+///
+/// - `session`: Active TUI session
+/// - `cap`: Terminal capture for debugging
+/// - `actions`: Cursor actions to execute (e.g., navigation, typing)
+/// - `status_checks`: Status validations to perform after actions
+/// - `session_name`: Name for logging/debugging
+/// - `max_retries`: Number of retry attempts (default: 3)
+///
+/// # Returns
+///
+/// - `Ok(())`: Actions executed and all status checks passed
+/// - `Err`: Actions failed, status checks failed, or timeout reached
+///
+/// # Example 1: Navigate and verify cursor position
+///
+/// ```rust,no_run
+/// # use ci_utils::*;
+/// # use anyhow::Result;
+/// # async fn example() -> Result<()> {
+/// # let mut session = todo!();
+/// # let mut cap = todo!();
+/// use serde_json::json;
+///
+/// execute_with_status_checks(
+///     &mut session,
+///     &mut cap,
+///     // Actions: Navigate down 2 times to "Station ID" field
+///     &[
+///         CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 },
+///     ],
+///     // Status checks: Verify cursor is on station_id field
+///     &[
+///         CursorAction::CheckStatus {
+///             description: "Cursor on Station ID field".to_string(),
+///             path: "cursor.field".to_string(),
+///             expected: json!("station_id"),
+///             timeout_secs: Some(5),
+///             retry_interval_ms: Some(300),
+///         },
+///     ],
+///     "navigate_to_station_id",
+///     None,
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Example 2: Enter edit mode and verify
+///
+/// ```rust,no_run
+/// # use ci_utils::*;
+/// # use anyhow::Result;
+/// # async fn example() -> Result<()> {
+/// # let mut session = todo!();
+/// # let mut cap = todo!();
+/// use serde_json::json;
+///
+/// execute_with_status_checks(
+///     &mut session,
+///     &mut cap,
+///     // Actions: Press Enter to enter edit mode
+///     &[CursorAction::PressEnter],
+///     // Status checks: Verify in edit mode with empty buffer
+///     &[
+///         CursorAction::CheckStatus {
+///             description: "Entered edit mode".to_string(),
+///             path: "cursor.mode".to_string(),
+///             expected: json!("Edit"),
+///             timeout_secs: Some(3),
+///             retry_interval_ms: Some(300),
+///         },
+///         CursorAction::CheckStatus {
+///             description: "Edit buffer is empty".to_string(),
+///             path: "cursor.edit_buffer".to_string(),
+///             expected: json!(""),
+///             timeout_secs: Some(2),
+///             retry_interval_ms: Some(200),
+///         },
+///     ],
+///     "enter_edit_mode",
+///     None,
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Example 3: Type and verify input buffer
+///
+/// ```rust,no_run
+/// # use ci_utils::*;
+/// # use anyhow::Result;
+/// # async fn example() -> Result<()> {
+/// # let mut session = todo!();
+/// # let mut cap = todo!();
+/// use serde_json::json;
+///
+/// execute_with_status_checks(
+///     &mut session,
+///     &mut cap,
+///     // Actions: Type "123"
+///     &[CursorAction::TypeString("123".to_string())],
+///     // Status checks: Verify buffer contains "123"
+///     &[
+///         CursorAction::CheckStatus {
+///             description: "Typed '123' into buffer".to_string(),
+///             path: "cursor.edit_buffer".to_string(),
+///             expected: json!("123"),
+///             timeout_secs: Some(3),
+///             retry_interval_ms: Some(300),
+///         },
+///     ],
+///     "type_station_id",
+///     None,
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Example 4: Exit edit and verify value committed
+///
+/// ```rust,no_run
+/// # use ci_utils::*;
+/// # use anyhow::Result;
+/// # async fn example() -> Result<()> {
+/// # let mut session = todo!();
+/// # let mut cap = todo!();
+/// use serde_json::json;
+///
+/// execute_with_status_checks(
+///     &mut session,
+///     &mut cap,
+///     // Actions: Press Enter to commit
+///     &[CursorAction::PressEnter],
+///     // Status checks: Verify exited edit mode AND value was written
+///     &[
+///         CursorAction::CheckStatus {
+///             description: "Exited edit mode".to_string(),
+///             path: "cursor.mode".to_string(),
+///             expected: json!("Normal"),
+///             timeout_secs: Some(3),
+///             retry_interval_ms: Some(300),
+///         },
+///         CursorAction::CheckStatus {
+///             description: "Station ID updated to 123".to_string(),
+///             path: "ports[0].modbus_masters[0].station_id".to_string(),
+///             expected: json!(123),
+///             timeout_secs: Some(5),
+///             retry_interval_ms: Some(500),
+///         },
+///     ],
+///     "commit_station_id",
+///     None,
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Retry Logic
+///
+/// If any status check fails:
+/// 1. Log warning with attempt number
+/// 2. Wait 1 second
+/// 3. Re-execute ALL actions from the beginning
+/// 4. Re-check ALL status validations
+/// 5. Repeat up to `max_retries` times (default: 3)
+///
+/// This ensures that transient timing issues (e.g., UI not yet updated) don't cause
+/// test failures, while still catching real bugs (actions not working at all).
+///
+/// # Granularity Best Practices
+///
+/// For fine-grained validation, break operations into small atomic steps:
+///
+/// ```rust,no_run
+/// # use ci_utils::*;
+/// # use anyhow::Result;
+/// # async fn example() -> Result<()> {
+/// # let mut session = todo!();
+/// # let mut cap = todo!();
+/// use serde_json::json;
+///
+/// // BAD: One big action without intermediate checks
+/// // execute_with_status_checks(
+/// //     &mut session, &mut cap,
+/// //     &[
+/// //         CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 },
+/// //         CursorAction::PressEnter,
+/// //         CursorAction::TypeString("123".to_string()),
+/// //         CursorAction::PressEnter,
+/// //     ],
+/// //     &[/* only check final result */],
+/// //     "big_action", None
+/// // ).await?;
+///
+/// // GOOD: Multiple small actions with checks at each step
+/// execute_with_status_checks(
+///     &mut session, &mut cap,
+///     &[CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 }],
+///     &[CursorAction::CheckStatus {
+///         description: "Cursor on target field".to_string(),
+///         path: "cursor.field".to_string(),
+///         expected: json!("station_id"),
+///         timeout_secs: Some(3),
+///         retry_interval_ms: Some(300),
+///     }],
+///     "navigate", None
+/// ).await?;
+///
+/// execute_with_status_checks(
+///     &mut session, &mut cap,
+///     &[CursorAction::PressEnter],
+///     &[CursorAction::CheckStatus {
+///         description: "Entered edit mode".to_string(),
+///         path: "cursor.mode".to_string(),
+///         expected: json!("Edit"),
+///         timeout_secs: Some(3),
+///         retry_interval_ms: Some(300),
+///     }],
+///     "enter_edit", None
+/// ).await?;
+///
+/// execute_with_status_checks(
+///     &mut session, &mut cap,
+///     &[CursorAction::TypeString("123".to_string())],
+///     &[CursorAction::CheckStatus {
+///         description: "Buffer contains typed value".to_string(),
+///         path: "cursor.edit_buffer".to_string(),
+///         expected: json!("123"),
+///         timeout_secs: Some(3),
+///         retry_interval_ms: Some(300),
+///     }],
+///     "type_value", None
+/// ).await?;
+///
+/// execute_with_status_checks(
+///     &mut session, &mut cap,
+///     &[CursorAction::PressEnter],
+///     &[
+///         CursorAction::CheckStatus {
+///             description: "Exited edit mode".to_string(),
+///             path: "cursor.mode".to_string(),
+///             expected: json!("Normal"),
+///             timeout_secs: Some(3),
+///             retry_interval_ms: Some(300),
+///         },
+///         CursorAction::CheckStatus {
+///             description: "Value committed to config".to_string(),
+///             path: "ports[0].modbus_masters[0].station_id".to_string(),
+///             expected: json!(123),
+///             timeout_secs: Some(5),
+///             retry_interval_ms: Some(500),
+///         },
+///     ],
+///     "commit_value", None
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # See Also
+///
+/// - [`execute_cursor_actions`]: Lower-level action execution without retry
+/// - [`CursorAction::CheckStatus`]: Individual status check action
+/// - [`check_status_path`]: Underlying status verification function
+pub async fn execute_with_status_checks<T: Expect>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    actions: &[CursorAction],
+    status_checks: &[CursorAction],
+    session_name: &str,
+    max_retries: Option<usize>,
+) -> Result<()> {
+    let max_retries = max_retries.unwrap_or(3);
+    
+    for attempt in 1..=max_retries {
+        // Execute all actions
+        match execute_cursor_actions(session, cap, actions, &format!("{}_actions_attempt_{}", session_name, attempt)).await {
+            Ok(()) => {
+                // All actions succeeded, now check status
+                match execute_cursor_actions(session, cap, status_checks, &format!("{}_checks_attempt_{}", session_name, attempt)).await {
+                    Ok(()) => {
+                        // All checks passed
+                        if attempt > 1 {
+                            log::info!("✅ {} succeeded on attempt {}/{}", session_name, attempt, max_retries);
+                        }
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        // Status checks failed
+                        if attempt < max_retries {
+                            log::warn!("⚠️  {} status checks failed on attempt {}/{}: {}", session_name, attempt, max_retries, e);
+                            log::warn!("   Retrying...");
+                            sleep_1s().await;
+                            continue;
+                        } else {
+                            log::error!("❌ {} status checks failed after {} attempts", session_name, max_retries);
+                            return Err(anyhow!("{} status checks failed after {} attempts: {}", session_name, max_retries, e));
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                // Actions failed
+                if attempt < max_retries {
+                    log::warn!("⚠️  {} actions failed on attempt {}/{}: {}", session_name, attempt, max_retries, e);
+                    log::warn!("   Retrying...");
+                    sleep_1s().await;
+                    continue;
+                } else {
+                    log::error!("❌ {} actions failed after {} attempts", session_name, max_retries);
+                    return Err(anyhow!("{} actions failed after {} attempts: {}", session_name, max_retries, e));
+                }
+            }
+        }
+    }
+    
+    Err(anyhow!("{} failed after {} attempts", session_name, max_retries))
+}
