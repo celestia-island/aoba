@@ -16,6 +16,7 @@
 //! - [`config`]: Configuration structures for Modbus stations and registers
 //! - [`navigation`]: TUI environment setup and panel navigation
 //! - [`test_execution`]: High-level test orchestrators and data verification
+//! - [`station`]: Station-specific test utilities and configurations
 //!
 //! # Usage Examples
 //!
@@ -137,13 +138,27 @@
 pub mod config;
 pub mod navigation;
 pub mod retry;
+mod status_paths;
 pub mod test_execution;
 pub mod validation;
 
 // Re-export commonly used types and functions
+#[allow(unused_imports)]
 pub use config::{RegisterMode, StationConfig};
+#[allow(unused_imports)]
 pub use test_execution::{
     run_multi_station_master_test, run_multi_station_slave_test, run_single_station_master_test,
     run_single_station_slave_test,
 };
+#[allow(unused_imports)]
 pub use validation::*;
+
+// Re-export station configuration helpers
+#[allow(unused_imports)]
+pub use station::{
+    configure_register_count, configure_register_type, configure_start_address,
+    configure_station_id, create_station, ensure_connection_mode, initialize_slave_registers,
+    save_configuration_and_verify,
+};
+
+mod station;

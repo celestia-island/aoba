@@ -1,172 +1,17 @@
 use anyhow::{anyhow, Result};
-
 use expectrl::Expect;
 
 use ci_utils::*;
 
-/// Maximum number of retry attempts for transaction operations
+/// Maximum number of retry attempts for transaction operations.
 ///
-/// Each operation (field edit, navigation, etc.) will be attempted up to this many times
-/// before failing. This provides resilience against CI environment timing issues.
+/// Each operation (field edit, navigation, etc.) will be attempted up to this many
+/// times before failing. This provides resilience against CI environment timing issues.
 const MAX_RETRY_ATTEMPTS: usize = 3;
 
-/// Execute field edit with transaction-style retry mechanism
+/// Perform safe rollback with multi-layer checkpoints to prevent over-escaping.
 ///
-/// This function implements a robust field editing strategy that handles
-/// unreliable keyboard input in CI environments. It operates like a database
-/// transaction: attempt → verify → commit, or rollback on failure.
-///
-/// # Workflow
-///
-/// 1. **Execute**: Run the edit action sequence (Enter → Type → Enter)
-/// 2. **Verify**: Check if edit succeeded via screen capture
-///    - Verify not stuck in edit mode (optional)
-///    - Verify expected value pattern matches (optional)
-/// 3. **Commit**: If verification passes, return success
-/// 4. **Rollback**: If verification fails:
-///    - Press Escape × 2 to exit edit mode
-///    - Execute navigation reset sequence
-///    - Wait 1 second and retry (up to 3 times)
-///
-/// # Parameters
-///
-/// - `session`: The expectrl session controlling the TUI process
-/// - `cap`: Terminal capture tool for screen verification
-/// - `field_name`: Field name for logging (e.g., "station_id")
-/// - `edit_actions`: Action sequence for editing the field
-///   - Should include: Enter, delays, input, Enter
-/// - `reset_navigation`: Actions to reset cursor position after rollback
-///   - Example: `[PressCtrlPageUp, Sleep1s]`
-/// - `expected_pattern`: Regex pattern to match expected value
-///   - Example: `r">\s*1\s*<"` verifies Station ID is 1
-/// - `check_not_in_edit`: Optional regex to detect stuck-in-edit-mode
-///   - Example: `r">\s*\[?\s*_"` detects cursor underscore
-///
-/// # Returns
-///
-/// - `Ok(())` if field edit verified successfully within retry limit
-/// - `Err(_)` if maximum retries exceeded or other error occurred
-///
-/// # Example
-///
-/// ```rust,no_run
-/// # use anyhow::Result;
-/// # async fn example() -> Result<()> {
-/// # let mut session = todo!();
-/// # let mut cap = todo!();
-/// use ci_utils::CursorAction;
-///
-/// // Configure Start Address to 0x0000
-/// execute_field_edit_with_retry(
-///     &mut session,
-///     &mut cap,
-///     "start_address",
-///     vec![
-///         CursorAction::PressEnter,
-///         CursorAction::Sleep1s,
-///         CursorAction::PressCtrlA,
-///         CursorAction::TypeString(format!("{:x}", 0x0000)),
-///         CursorAction::PressEnter,
-///         CursorAction::Sleep1s,
-///     ],
-///     vec![
-///         CursorAction::PressCtrlPageUp,
-///         CursorAction::Sleep1s,
-///     ],
-///     r">\s*0x0000\s*<",        // Expected: "> 0x0000 <"
-///     Some(r">\s*\[?\s*_"),     // Check for cursor: "> _ <"
-/// ).await?;
-/// # Ok(())
-/// # }
-/// ```
-///
-/// # See Also
-///
-/// - `TRANSACTION_RETRY_MECHANISM.md` - Complete documentation
-/// - `configure_tui_station` - Usage in station configuration
-pub async fn execute_field_edit_with_retry<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-    field_name: &str,
-    edit_actions: &[CursorAction],
-    check_not_in_edit: bool, // Should verify we're NOT in edit mode after
-    expected_pattern: Option<&str>, // Optional pattern to verify in screen
-    reset_navigation: &[CursorAction], // Actions to navigate back to field
-) -> Result<()> {
-    for attempt in 1..=MAX_RETRY_ATTEMPTS {
-        // Execute the edit actions
-        execute_cursor_actions(session, cap, edit_actions, field_name).await?;
-
-        // Verify the result
-        let screen = cap
-            .capture(session, &format!("verify_{}", field_name))
-            .await?;
-
-        let mut success = true;
-
-        // Check if we're stuck in edit mode
-        if check_not_in_edit {
-            let in_edit_mode = screen.contains("_ <") || screen.contains("> [");
-            if in_edit_mode {
-                log::debug!("❌ Field '{}': Still in edit mode", field_name);
-                success = false;
-            }
-        }
-
-        // Check for expected pattern
-        if let Some(pattern) = expected_pattern {
-            if !screen.contains(pattern) {
-                log::debug!(
-                    "❌ Field '{}': Expected pattern '{}' not found",
-                    field_name,
-                    pattern
-                );
-                success = false;
-            }
-        }
-
-        if success {
-            log::info!("✅ Field '{}' edit verified successfully", field_name);
-            return Ok(());
-        }
-
-        // Failed verification
-        log::info!(
-            "Field '{}' verification failed, captured screen:\n{}",
-            field_name,
-            screen
-        );
-        if attempt < MAX_RETRY_ATTEMPTS {
-            log::warn!(
-                "⚠️  Field '{}' edit verification failed, will retry (attempt {}/{})",
-                field_name,
-                attempt,
-                MAX_RETRY_ATTEMPTS
-            );
-
-            // Rollback with safety checkpoints
-            perform_safe_rollback(session, cap, field_name).await?;
-
-            // Reset navigation
-            execute_cursor_actions(session, cap, reset_navigation, "reset_navigation").await?;
-
-            // Wait before retry
-            sleep_1s().await;
-        } else {
-            return Err(anyhow!(
-                "Field '{}' edit failed after {} attempts",
-                field_name,
-                MAX_RETRY_ATTEMPTS
-            ));
-        }
-    }
-
-    unreachable!()
-}
-
-/// Perform safe rollback with multi-layer checkpoints to prevent over-escaping
-///
-/// This function carefully exits edit mode while verifying we don't escape too far
+/// This function carefully exits edit mode while verifying we do not escape too far
 /// (e.g., back to Entry page, About page, or ConfigPanel). It implements an adaptive
 /// strategy: press Escape once, check the result, and only press Escape again if
 /// still in edit mode.
@@ -187,14 +32,14 @@ pub async fn execute_field_edit_with_retry<T: Expect>(
 /// - Wait 500ms for UI to respond
 ///
 /// ## Layer 2: Checkpoint 1 - Page Verification
-/// Check if we're still in the correct area:
+/// Check if we are still in the correct area:
 /// - ❌ Contains "Welcome" or "Press Enter to continue" → Entry page (fail)
 /// - ❌ Contains "Thanks for using" or "About" → About page (fail)
 /// - ❌ Contains "COM Ports" without "Station" → ConfigPanel (fail)
 /// - ✅ Still contains "Station" or Modbus-related content → Continue
 ///
 /// ## Layer 3: Edit Mode Detection
-/// Check if we're still in edit mode:
+/// Check if we are still in edit mode:
 /// - Cursor indicators: `_ <`, `> [`, `▂`
 /// - If detected → Need second Escape
 /// - If not detected → Successfully exited with one Escape
@@ -205,7 +50,7 @@ pub async fn execute_field_edit_with_retry<T: Expect>(
 /// - Wait 500ms for UI to respond
 ///
 /// ## Layer 5: Checkpoint 2 - Final Verification
-/// Repeat page verification checks to ensure we didn't over-escape
+/// Repeat page verification checks to ensure we did not over-escape.
 ///
 /// # Parameters
 ///
@@ -218,75 +63,24 @@ pub async fn execute_field_edit_with_retry<T: Expect>(
 /// - `Ok(())` if successfully exited edit mode and remained in correct page
 /// - `Err(_)` if over-escaped to wrong page (Entry/About/ConfigPanel)
 ///
-/// # Error Messages
-///
-/// - `"Over-escaped to Entry page during rollback"` - Went back to main menu
-/// - `"Over-escaped to About page during rollback"` - Triggered About screen
-/// - `"Over-escaped to ConfigPanel during rollback"` - Left Modbus configuration
-///
 /// # Example Usage
-///
-/// This function is typically called automatically by [`execute_field_edit_with_retry`]
-/// and [`execute_transaction_with_retry`]. For custom rollback:
 ///
 /// ```rust,no_run
 /// # use anyhow::Result;
 /// # use ci_utils::TerminalCapture;
 /// # use expectrl::Expect;
-/// # async fn example<T: Expect>(
-/// #     session: &mut T,
-/// #     cap: &mut TerminalCapture,
-/// # ) -> Result<()> {
+/// # async fn example<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
 /// use examples::tui_e2e::common::perform_safe_rollback;
 ///
-/// // After a failed field edit, safely exit edit mode
+/// // After a failed step, safely exit edit mode
 /// perform_safe_rollback(session, cap, "station_id_edit").await?;
 /// # Ok(())
 /// # }
 /// ```
 ///
-/// # Design Rationale
-///
-/// ## Why Adaptive Escape?
-///
-/// Different TUI states require different numbers of Escapes:
-/// - **Text input field**: 1 Escape exits edit mode
-/// - **Nested dialog**: May need 2 Escapes
-/// - **Some widgets**: May exit on first Escape
-///
-/// By checking edit mode indicators, we adapt to the actual state.
-///
-/// ## Why Multiple Checkpoints?
-///
-/// Each Escape can potentially navigate to a different page:
-/// - First Escape: Usually safe, but could trigger navigation
-/// - Second Escape: Higher risk of over-escaping
-///
-/// Checking after each Escape allows early detection and failure.
-///
-/// ## Why Specific Text Patterns?
-///
-/// Page detection uses multiple indicators:
-/// - "Welcome" → Unique to Entry page
-/// - "Thanks for using" → Unique to About page
-/// - "COM Ports" without "Station" → ConfigPanel but not Modbus panel
-///
-/// This prevents false positives from similar text in different contexts.
-///
-/// # Logging
-///
-/// The function provides detailed logging at each step:
-/// - DEBUG: "🔄 Performing safe rollback for 'X'"
-/// - DEBUG: "Still in edit mode after first Escape, pressing Escape again"
-/// - DEBUG: "Successfully exited edit mode with one Escape"
-/// - DEBUG: "✅ Safe rollback completed for 'X'"
-/// - ERROR: "❌ Over-escaped to [Page] after [first/second] Escape"
-///
 /// # See Also
 ///
-/// - [`execute_field_edit_with_retry`] - Uses this for rollback
-/// - [`execute_transaction_with_retry`] - Can use this for default rollback
-/// - `TRANSACTION_ENHANCEMENT_SUMMARY.md` - Full design documentation
+/// - [`execute_transaction_with_retry`]: Default caller providing rollback context
 pub async fn perform_safe_rollback<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -303,7 +97,7 @@ pub async fn perform_safe_rollback<T: Expect>(
     )
     .await?;
 
-    // Checkpoint 1: Verify we're still in Modbus panel
+    // Checkpoint 1: Verify we are still in Modbus panel
     let screen = cap
         .capture(session, &format!("{}_checkpoint_1", context))
         .await?;
@@ -324,7 +118,7 @@ pub async fn perform_safe_rollback<T: Expect>(
         return Err(anyhow!("Over-escaped to ConfigPanel during rollback"));
     }
 
-    // Check if we're still in edit mode (cursor visible)
+    // Check if we are still in edit mode (cursor visible)
     let still_in_edit = screen.contains("_ <") || screen.contains("> [") || screen.contains("▂");
 
     if still_in_edit {
@@ -376,9 +170,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 /// - **Navigation**: Check for page titles, rollback by returning to previous page
 /// - **Field editing**: Check for specific values, rollback by Escape to parent page
 ///
-/// Unlike `execute_field_edit_with_retry` which is specialized for field editing with
-/// `EditMode` detection, this function provides a **fully customizable** framework for
-/// any TUI operation.
+/// This function provides a **fully customizable** framework for any TUI operation.
 ///
 /// # Solution
 ///
@@ -387,7 +179,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 /// 2. **Custom Verification**: User-provided closure for validation logic
 /// 3. **Flexible Rollback**: Optional custom rollback or default safe Escape
 /// 4. **Navigation Reset**: Restore cursor position after rollback
-/// 5. **Retry Loop**: Up to `MAX_RETRY_ATTEMPTS` (3) with `RETRY_WAIT_MS` (1000ms) delay
+/// 5. **Retry Loop**: Up to `MAX_RETRY_ATTEMPTS` (3) with a 1 second delay between attempts
 ///
 /// # Parameters
 ///
@@ -400,7 +192,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 ///   - Output: `Result<bool>` (Ok(true) = success, Ok(false) = retry, Err = abort)
 /// - `rollback_actions`: Optional custom rollback sequence:
 ///   - `Some(&[...])`: Execute custom rollback actions
-///   - `None`: Use default `perform_safe_rollback` with adaptive Escape
+///   - `None`: Use default [`perform_safe_rollback`] with adaptive Escape
 /// - `reset_navigation`: Actions to restore cursor position after rollback (e.g., move to target field)
 ///
 /// # Returns
@@ -470,9 +262,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 ///         CursorAction::PressBackspace,           // Clear field
 ///         CursorAction::PressBackspace,
 ///     ]), // Custom rollback: reset fields instead of exiting
-///     &[
-///         CursorAction::PressCtrlHome,            // Navigate to first field
-///     ],
+///     &[CursorAction::PressCtrlHome],
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -507,7 +297,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 ///         }
 ///     },
 ///     None, // Use default safe rollback
-///     &[CursorAction::PressCtrlPageUp], // Return to station list
+///     &[CursorAction::PressCtrlPageUp],
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -546,15 +336,6 @@ pub async fn perform_safe_rollback<T: Expect>(
 /// The `reset_navigation` parameter ensures the cursor is positioned correctly
 /// before the next retry attempt.
 ///
-/// ## When to Use vs. `execute_field_edit_with_retry`?
-///
-/// | Use `execute_field_edit_with_retry` | Use `execute_transaction_with_retry` |
-/// |-------------------------------------|--------------------------------------|
-/// | Editing a single field              | Multi-step operations                |
-/// | Standard field validation           | Custom verification logic            |
-/// | Simple Escape rollback              | Operation-specific rollback          |
-/// | EditMode detection sufficient       | Complex state detection needed       |
-///
 /// # Logging Output
 ///
 /// Successful operation:
@@ -578,9 +359,8 @@ pub async fn perform_safe_rollback<T: Expect>(
 ///
 /// # See Also
 ///
-/// - [`execute_field_edit_with_retry`]: Specialized version for field editing
 /// - [`perform_safe_rollback`]: Default rollback implementation with adaptive Escape
-/// - [`MAX_RETRY_ATTEMPTS`], [`RETRY_WAIT_MS`]: Configuration constants
+/// - [`MAX_RETRY_ATTEMPTS`]: Configuration constant controlling retry count
 pub async fn execute_transaction_with_retry<T, F>(
     session: &mut T,
     cap: &mut TerminalCapture,

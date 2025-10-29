@@ -21,6 +21,8 @@ rand = "0.9"
 regex = "^1"
 chrono = { version = "^0.4", features = ["serde", "alloc"] }
 
+aoba = { path = "../.." }
+
 tokio = { version = "^1", features = ["rt-multi-thread", "macros", "time"] }
 expectrl = "^0.8"
 

@@ -762,30 +762,64 @@ pub async fn execute_with_status_checks<T: Expect>(
     max_retries: Option<usize>,
 ) -> Result<()> {
     let max_retries = max_retries.unwrap_or(3);
-    
+
     for attempt in 1..=max_retries {
         // Execute all actions
-        match execute_cursor_actions(session, cap, actions, &format!("{}_actions_attempt_{}", session_name, attempt)).await {
+        match execute_cursor_actions(
+            session,
+            cap,
+            actions,
+            &format!("{}_actions_attempt_{}", session_name, attempt),
+        )
+        .await
+        {
             Ok(()) => {
                 // All actions succeeded, now check status
-                match execute_cursor_actions(session, cap, status_checks, &format!("{}_checks_attempt_{}", session_name, attempt)).await {
+                match execute_cursor_actions(
+                    session,
+                    cap,
+                    status_checks,
+                    &format!("{}_checks_attempt_{}", session_name, attempt),
+                )
+                .await
+                {
                     Ok(()) => {
                         // All checks passed
                         if attempt > 1 {
-                            log::info!("✅ {} succeeded on attempt {}/{}", session_name, attempt, max_retries);
+                            log::info!(
+                                "✅ {} succeeded on attempt {}/{}",
+                                session_name,
+                                attempt,
+                                max_retries
+                            );
                         }
                         return Ok(());
                     }
                     Err(e) => {
                         // Status checks failed
                         if attempt < max_retries {
-                            log::warn!("⚠️  {} status checks failed on attempt {}/{}: {}", session_name, attempt, max_retries, e);
+                            log::warn!(
+                                "⚠️  {} status checks failed on attempt {}/{}: {}",
+                                session_name,
+                                attempt,
+                                max_retries,
+                                e
+                            );
                             log::warn!("   Retrying...");
                             sleep_1s().await;
                             continue;
                         } else {
-                            log::error!("❌ {} status checks failed after {} attempts", session_name, max_retries);
-                            return Err(anyhow!("{} status checks failed after {} attempts: {}", session_name, max_retries, e));
+                            log::error!(
+                                "❌ {} status checks failed after {} attempts",
+                                session_name,
+                                max_retries
+                            );
+                            return Err(anyhow!(
+                                "{} status checks failed after {} attempts: {}",
+                                session_name,
+                                max_retries,
+                                e
+                            ));
                         }
                     }
                 }
@@ -793,17 +827,36 @@ pub async fn execute_with_status_checks<T: Expect>(
             Err(e) => {
                 // Actions failed
                 if attempt < max_retries {
-                    log::warn!("⚠️  {} actions failed on attempt {}/{}: {}", session_name, attempt, max_retries, e);
+                    log::warn!(
+                        "⚠️  {} actions failed on attempt {}/{}: {}",
+                        session_name,
+                        attempt,
+                        max_retries,
+                        e
+                    );
                     log::warn!("   Retrying...");
                     sleep_1s().await;
                     continue;
                 } else {
-                    log::error!("❌ {} actions failed after {} attempts", session_name, max_retries);
-                    return Err(anyhow!("{} actions failed after {} attempts: {}", session_name, max_retries, e));
+                    log::error!(
+                        "❌ {} actions failed after {} attempts",
+                        session_name,
+                        max_retries
+                    );
+                    return Err(anyhow!(
+                        "{} actions failed after {} attempts: {}",
+                        session_name,
+                        max_retries,
+                        e
+                    ));
                 }
             }
         }
     }
-    
-    Err(anyhow!("{} failed after {} attempts", session_name, max_retries))
+
+    Err(anyhow!(
+        "{} failed after {} attempts",
+        session_name,
+        max_retries
+    ))
 }
