@@ -342,49 +342,47 @@ async fn main() -> Result<()> {
     log::info!("🧪 Running module: {module}");
 
     // Run the selected module
-    match module {
+    let result = match module {
         // TUI Single-Station Master Mode Tests
-        "tui_master_coils" => e2e::test_tui_master_coils(&args.port1, &args.port2).await?,
+        "tui_master_coils" => e2e::test_tui_master_coils(&args.port1, &args.port2).await,
         "tui_master_discrete_inputs" => {
-            e2e::test_tui_master_discrete_inputs(&args.port1, &args.port2).await?
+            e2e::test_tui_master_discrete_inputs(&args.port1, &args.port2).await
         }
         "tui_master_holding" => {
-            e2e::test_tui_master_holding_registers(&args.port1, &args.port2).await?
+            e2e::test_tui_master_holding_registers(&args.port1, &args.port2).await
         }
-        "tui_master_input" => {
-            e2e::test_tui_master_input_registers(&args.port1, &args.port2).await?
-        }
+        "tui_master_input" => e2e::test_tui_master_input_registers(&args.port1, &args.port2).await,
 
         // TUI Single-Station Slave Mode Tests
-        "tui_slave_coils" => e2e::test_tui_slave_coils(&args.port1, &args.port2).await?,
+        "tui_slave_coils" => e2e::test_tui_slave_coils(&args.port1, &args.port2).await,
         "tui_slave_discrete_inputs" => {
-            e2e::test_tui_slave_discrete_inputs(&args.port1, &args.port2).await?
+            e2e::test_tui_slave_discrete_inputs(&args.port1, &args.port2).await
         }
         "tui_slave_holding" => {
-            e2e::test_tui_slave_holding_registers(&args.port1, &args.port2).await?
+            e2e::test_tui_slave_holding_registers(&args.port1, &args.port2).await
         }
-        "tui_slave_input" => e2e::test_tui_slave_input_registers(&args.port1, &args.port2).await?,
+        "tui_slave_input" => e2e::test_tui_slave_input_registers(&args.port1, &args.port2).await,
 
         // TUI Multi-Station Master Mode Tests
         "tui_multi_master_mixed_types" => {
-            e2e::test_tui_multi_master_mixed_register_types(&args.port1, &args.port2).await?
+            e2e::test_tui_multi_master_mixed_register_types(&args.port1, &args.port2).await
         }
         "tui_multi_master_spaced_addresses" => {
-            e2e::test_tui_multi_master_spaced_addresses(&args.port1, &args.port2).await?
+            e2e::test_tui_multi_master_spaced_addresses(&args.port1, &args.port2).await
         }
         "tui_multi_master_mixed_ids" => {
-            e2e::test_tui_multi_master_mixed_station_ids(&args.port1, &args.port2).await?
+            e2e::test_tui_multi_master_mixed_station_ids(&args.port1, &args.port2).await
         }
 
         // TUI Multi-Station Slave Mode Tests
         "tui_multi_slave_mixed_types" => {
-            e2e::test_tui_multi_slave_mixed_register_types(&args.port1, &args.port2).await?
+            e2e::test_tui_multi_slave_mixed_register_types(&args.port1, &args.port2).await
         }
         "tui_multi_slave_spaced_addresses" => {
-            e2e::test_tui_multi_slave_spaced_addresses(&args.port1, &args.port2).await?
+            e2e::test_tui_multi_slave_spaced_addresses(&args.port1, &args.port2).await
         }
         "tui_multi_slave_mixed_ids" => {
-            e2e::test_tui_multi_slave_mixed_station_ids(&args.port1, &args.port2).await?
+            e2e::test_tui_multi_slave_mixed_station_ids(&args.port1, &args.port2).await
         }
 
         _ => {
@@ -392,9 +390,17 @@ async fn main() -> Result<()> {
             log::error!("Run without --module to see available modules");
             return Err(anyhow::anyhow!("Unknown module: {module}"));
         }
+    };
+
+    match result {
+        Ok(()) => {
+            log::info!("✅ Module '{module}' completed successfully!");
+            Ok(())
+        }
+        Err(err) => {
+            log::error!("❌ Module '{module}' failed: {err:?}");
+            ci_utils::log_last_terminal_snapshot(&format!("Module '{module}' failure"));
+            Err(err)
+        }
     }
-
-    log::info!("✅ Module '{module}' completed successfully!");
-
-    Ok(())
 }

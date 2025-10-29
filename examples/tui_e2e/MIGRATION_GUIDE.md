@@ -5,6 +5,7 @@ This document demonstrates how to migrate TUI E2E tests from screen-capture-base
 ## Pattern Overview
 
 ### Before: Screen Capture Validation (Slow, Unreliable)
+
 ```rust
 // Old pattern: Perform actions, then capture screen to verify
 let actions = vec![
@@ -23,12 +24,14 @@ if !screen.contains("Station ID: 5") {
 ```
 
 **Problems:**
+
 - Slow (terminal rendering + capture overhead)
 - Brittle (depends on exact text format)
 - Race conditions (UI may not have rendered yet)
 - No intermediate validation (all-or-nothing)
 
 ### After: Status Check Validation (Fast, Reliable)
+
 ```rust
 // New pattern: Atomic action + validation with auto-retry
 use serde_json::json;
@@ -37,7 +40,13 @@ use serde_json::json;
 execute_with_status_checks(
     session, cap,
     &[CursorAction::PressArrow { direction: ArrowKey::Down, count: 2 }],
-    &[], // No check yet - just navigation
+    &[CursorAction::CheckStatus {
+        description: "Page is modbus_dashboard".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("modbus_dashboard"),
+        timeout_secs: Some(5),
+        retry_interval_ms: Some(500),
+    }],
     "navigate_to_station_id",
     None,
 ).await?;
@@ -46,7 +55,13 @@ execute_with_status_checks(
 execute_with_status_checks(
     session, cap,
     &[CursorAction::PressEnter],
-    &[], // Could check edit mode if cursor tracking exists
+    &[CursorAction::CheckStatus {
+        description: "Page is modbus_dashboard".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("modbus_dashboard"),
+        timeout_secs: Some(5),
+        retry_interval_ms: Some(500),
+    }],
     "enter_edit",
     None,
 ).await?;
@@ -59,7 +74,13 @@ execute_with_status_checks(
         CursorAction::PressBackspace,
         CursorAction::TypeString("5".to_string()),
     ],
-    &[], // Could check buffer if cursor tracking exists
+    &[CursorAction::CheckStatus {
+        description: "Page is modbus_dashboard".to_string(),
+        path: "page.type".to_string(),
+        expected: json!("modbus_dashboard"),
+        timeout_secs: Some(5),
+        retry_interval_ms: Some(500),
+    }],
     "type_value",
     None,
 ).await?;
@@ -83,6 +104,7 @@ execute_with_status_checks(
 ```
 
 **Benefits:**
+
 - Fast (direct status file read)
 - Reliable (checks actual config, not UI representation)
 - Fine-grained (validates at each step)
@@ -124,7 +146,13 @@ pub async fn configure_station_demo<T: Expect>(
     execute_with_status_checks(
         session, cap,
         &[CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 }],
-        &[], // No specific check - just positioning
+        &[CursorAction::CheckStatus {
+            description: "Page is modbus_dashboard".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("modbus_dashboard"),
+            timeout_secs: Some(5),
+            retry_interval_ms: Some(500),
+        }],
         "nav_to_station_id",
         None,
     ).await?;
@@ -133,7 +161,13 @@ pub async fn configure_station_demo<T: Expect>(
     execute_with_status_checks(
         session, cap,
         &[CursorAction::PressEnter], // Enter edit mode
-        &[],
+        &[CursorAction::CheckStatus {
+            description: "Page is modbus_dashboard".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("modbus_dashboard"),
+            timeout_secs: Some(5),
+            retry_interval_ms: Some(500),
+        }],
         "enter_edit_station_id",
         None,
     ).await?;
@@ -145,7 +179,13 @@ pub async fn configure_station_demo<T: Expect>(
             CursorAction::PressBackspace,
             CursorAction::TypeString("5".to_string()),
         ],
-        &[],
+        &[CursorAction::CheckStatus {
+            description: "Page is modbus_dashboard".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("modbus_dashboard"),
+            timeout_secs: Some(5),
+            retry_interval_ms: Some(500),
+        }],
         "type_station_id",
         None,
     ).await?;
@@ -170,7 +210,13 @@ pub async fn configure_station_demo<T: Expect>(
     execute_with_status_checks(
         session, cap,
         &[CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 }],
-        &[],
+        &[CursorAction::CheckStatus {
+            description: "Page is modbus_dashboard".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("modbus_dashboard"),
+            timeout_secs: Some(5),
+            retry_interval_ms: Some(500),
+        }],
         "nav_to_register_type",
         None,
     ).await?;
@@ -200,7 +246,13 @@ pub async fn configure_station_demo<T: Expect>(
     execute_with_status_checks(
         session, cap,
         &[CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 }],
-        &[],
+        &[CursorAction::CheckStatus {
+            description: "Page is modbus_dashboard".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("modbus_dashboard"),
+            timeout_secs: Some(5),
+            retry_interval_ms: Some(500),
+        }],
         "nav_to_start_address",
         None,
     ).await?;
@@ -231,7 +283,13 @@ pub async fn configure_station_demo<T: Expect>(
     execute_with_status_checks(
         session, cap,
         &[CursorAction::PressArrow { direction: ArrowKey::Down, count: 1 }],
-        &[],
+        &[CursorAction::CheckStatus {
+            description: "Page is modbus_dashboard".to_string(),
+            path: "page.type".to_string(),
+            expected: json!("modbus_dashboard"),
+            timeout_secs: Some(5),
+            retry_interval_ms: Some(500),
+        }],
         "nav_to_register_count",
         None,
     ).await?;
@@ -299,21 +357,25 @@ pub async fn configure_station_demo<T: Expect>(
 As requested by @langyo, validation should be **as fine-grained as possible**:
 
 ### ✅ GOOD: Fine-grained steps
+
 ```rust
+let page_check = check_page("modbus_dashboard");
+
 // Step 1: Navigate
-execute_with_status_checks(..., &[navigate_action], &[], ...).await?;
+execute_with_status_checks(..., &[navigate_action], &page_check, ...).await?;
 
 // Step 2: Enter edit
-execute_with_status_checks(..., &[enter], &[], ...).await?;
+execute_with_status_checks(..., &[enter], &page_check, ...).await?;
 
 // Step 3: Type
-execute_with_status_checks(..., &[type_action], &[], ...).await?;
+execute_with_status_checks(..., &[type_action], &page_check, ...).await?;
 
 // Step 4: Commit + VERIFY
 execute_with_status_checks(..., &[enter], &[check_config], ...).await?;
 ```
 
 ### ❌ BAD: Coarse-grained (all actions in one step)
+
 ```rust
 execute_with_status_checks(
     ...,
@@ -324,6 +386,7 @@ execute_with_status_checks(
 ```
 
 **Why fine-grained is better:**
+
 - Easier to debug which step failed
 - Can retry individual steps
 - Better isolation of failures
@@ -339,7 +402,7 @@ let checks = check_station_config(0, 0, true, 5, "Holding", 100, 10);
 execute_cursor_actions(session, cap, &checks, "verify").await?;
 
 // Check page
-let checks = check_page("ModbusDashboard");
+let checks = check_page("modbus_dashboard");
 execute_cursor_actions(session, cap, &checks, "verify_page").await?;
 
 // Check port enabled
@@ -360,9 +423,10 @@ execute_cursor_actions(session, cap, &checks, "verify_enabled").await?;
 ## Status Paths Reference
 
 ### Common Paths
-- `page` - Current TUI page (e.g., `{"type": "ModbusDashboard"}`)
+
+- `page` - Current TUI page (e.g., `{"type": "modbus_dashboard"}`)
 - `ports[N].enabled` - Port enabled state (boolean)
-- `ports[N].state` - Port state (e.g., `{"type": "OccupiedByThis"}`)
+- `ports[N].state` - Port state (e.g., `{"type": "occupied_by_this"}`)
 - `ports[N].modbus_masters[M].station_id` - Master station ID (number)
 - `ports[N].modbus_masters[M].register_type` - Register type (string like "Holding")
 - `ports[N].modbus_masters[M].start_address` - Start address (number)
@@ -370,6 +434,7 @@ execute_cursor_actions(session, cap, &checks, "verify_enabled").await?;
 - `ports[N].modbus_slaves[M].*` - Same fields for slaves
 
 ### Index Conventions
+
 - `N` = Port index (usually 0 for first port)
 - `M` = Station index (0 for first station, 1 for second, etc.)
 
@@ -382,17 +447,19 @@ json!(5)                  // Number
 json!("Holding")          // String
 json!(true)               // Boolean
 json!([1, 2, 3])          // Array
-json!({"type": "Entry"})  // Object
+json!({"type": "entry"})  // Object
 ```
 
 ## Performance Impact
 
 **Before** (screen capture):
+
 - 1 operation = 500-1000ms (capture + parse)
 - 10 operations = 5-10 seconds
 
 **After** (status check):
+
 - 1 operation = 50-100ms (read JSON file)
 - 10 operations = 0.5-1 second
 
-**Result: 10x faster tests**
+Result: **10x faster tests**

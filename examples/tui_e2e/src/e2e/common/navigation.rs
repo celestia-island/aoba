@@ -1,13 +1,32 @@
 use anyhow::{anyhow, Result};
 
 use expectrl::Expect;
-use regex::Regex;
 
 use super::{
     config::StationConfig,
-    retry::{execute_field_edit_with_retry, execute_transaction_with_retry},
+    retry::execute_transaction_with_retry,
+    station::{
+        configure_register_count, configure_register_type, configure_start_address,
+        configure_station_id, create_station, ensure_connection_mode, focus_create_station_button,
+        focus_station, initialize_slave_registers, save_configuration_and_verify,
+    },
+    validation::check_station_config,
 };
 use ci_utils::*;
+
+fn is_default_master_station(station: &TuiModbusMaster) -> bool {
+    station.station_id == 1
+        && station.register_type == "Holding"
+        && station.start_address == 0
+        && station.register_count <= 1
+}
+
+fn is_default_slave_station(station: &TuiModbusSlave) -> bool {
+    station.station_id == 1
+        && station.register_type == "Holding"
+        && station.start_address == 0
+        && station.register_count <= 1
+}
 
 /// Setup TUI test environment with initialized session and terminal capture.
 ///
@@ -656,740 +675,121 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
 pub async fn configure_tui_station<T: Expect>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    _port1: &str,
+    port1: &str,
     config: &StationConfig,
 ) -> Result<()> {
-    const MAX_NUMERIC_FIELD_DIGITS: usize = 5;
     log::info!("⚙️  Configuring TUI station: {config:?}");
 
-    // Phase 0: Ensure cursor is at AddLine (Create Station button)
-    // After navigate_to_modbus_panel, cursor position is undefined
-    // We must explicitly navigate to AddLine before starting configuration
-    log::info!("Phase 0: Resetting cursor to AddLine (Create Station button)...");
-    let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep1s];
-    execute_cursor_actions(session, cap, &actions, "reset_to_addline").await?;
-
-    // Verify cursor is at Create Station button
-    let screen = cap.capture(session, "verify_at_create_station").await?;
-    if !screen.contains("Create Station") {
-        return Err(anyhow!(
-            "Expected to be at Create Station button after Ctrl+PgUp, but not found"
-        ));
+    let mut status = read_tui_status()?;
+    if status.ports.iter().all(|p| p.name != port1) {
+        return Err(anyhow!("Port {} not found in TUI status", port1));
     }
-    log::info!("✅ Cursor positioned at Create Station button");
 
-    // Phase 1: Configure connection mode (Master/Slave) FIRST, before creating station
-    // This ensures the station is created with the correct mode from the start
-    log::info!(
-        "Phase 1: Configuring connection mode: {}",
-        if config.is_master { "Master" } else { "Slave" }
-    );
+    ensure_connection_mode(session, cap, config.is_master).await?;
 
-    // Navigate from AddLine (Create Station) to Connection Mode field
-    // Connection Mode is the field right after Create Station
-    let actions = vec![
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep1s,
-    ];
-    execute_cursor_actions(session, cap, &actions, "move_to_connection_mode").await?;
+    status = read_tui_status()?;
 
-    // Switch to Slave if needed (default is Master)
+    let port = status
+        .ports
+        .iter()
+        .find(|p| p.name == port1)
+        .ok_or_else(|| anyhow!("Port {} not found in TUI status", port1))?;
+
+    let (reuse_existing, existing_index) = if config.is_master {
+        match port.modbus_masters.len() {
+            0 => (false, None),
+            1 if is_default_master_station(&port.modbus_masters[0]) => {
+                log::info!("♻️  Reusing initial master station at index 0");
+                (true, Some(0))
+            }
+            _ => (false, None),
+        }
+    } else {
+        match port.modbus_slaves.len() {
+            0 => (false, None),
+            1 if is_default_slave_station(&port.modbus_slaves[0]) => {
+                log::info!("♻️  Reusing initial slave station at index 0");
+                (true, Some(0))
+            }
+            _ => (false, None),
+        }
+    };
+
+    if !reuse_existing {
+        focus_create_station_button(session, cap).await?;
+    }
+
+    let station_index = if reuse_existing {
+        existing_index.unwrap()
+    } else {
+        create_station(session, cap, port1, config.is_master).await?
+    };
+
+    focus_station(session, cap, port1, station_index, config.is_master).await?;
+
+    configure_station_id(
+        session,
+        cap,
+        port1,
+        station_index,
+        config.station_id,
+        config.is_master,
+    )
+    .await?;
+
+    configure_register_type(
+        session,
+        cap,
+        port1,
+        station_index,
+        config.register_mode,
+        config.is_master,
+    )
+    .await?;
+
+    configure_start_address(
+        session,
+        cap,
+        port1,
+        station_index,
+        config.start_address,
+        config.is_master,
+    )
+    .await?;
+
+    configure_register_count(
+        session,
+        cap,
+        port1,
+        station_index,
+        config.register_count,
+        config.is_master,
+    )
+    .await?;
+
     if !config.is_master {
-        log::info!("Switching from Master to Slave mode...");
-
-        // Enter edit mode for Connection Mode selector
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
-        execute_cursor_actions(session, cap, &actions, "enter_connection_mode_edit").await?;
-
-        // Press Right arrow to switch from Master (index 0) to Slave (index 1)
-        let actions = vec![
-            CursorAction::PressArrow {
-                direction: ArrowKey::Right,
-                count: 1,
-            },
-            CursorAction::Sleep1s,
-        ];
-        execute_cursor_actions(session, cap, &actions, "switch_to_slave_index").await?;
-
-        // Confirm the selection by pressing Enter
-        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep3s];
-        execute_cursor_actions(session, cap, &actions, "confirm_slave_mode").await?;
-
-        // Capture milestone: Mode switched to Slave
-        log::info!("📸 Milestone: Mode switched to Slave");
-        let screen = cap.capture(session, "milestone_mode_slave").await?;
-        log::info!("Terminal snapshot:\n{screen}");
-
-        // CRITICAL: Verify the mode was actually switched to Slave
-        // This verification checks the terminal display to ensure "Slave" is visible
-        // on the Connection Mode line specifically
-        log::info!("Verifying Connection Mode was switched to Slave...");
-        let pattern = Regex::new(r"Connection Mode.*Slave")?;
-        let actions = vec![CursorAction::MatchPattern {
-            pattern,
-            description: "Connection Mode line should show 'Slave'".to_string(),
-            line_range: None,
-            col_range: None,
-            retry_action: None,
-        }];
-        execute_cursor_actions(session, cap, &actions, "verify_slave_mode").await?;
-        log::info!("✅ Connection Mode verified as Slave (UI display)");
-
-        // ADDITIONAL: Wait longer for internal state to update
-        // The UI might show "Slave" before the internal state is fully committed
-        sleep_3s().await;
-
-        // Reset to top after mode change to ensure known cursor position
-        let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep1s];
-        execute_cursor_actions(session, cap, &actions, "reset_to_top_after_slave").await?;
-    } else {
-        // For Master mode, also reset to top for consistency
-        let actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep1s];
-        execute_cursor_actions(session, cap, &actions, "reset_to_top_master").await?;
-    }
-
-    // Phase 2: Create station AFTER mode is configured
-    log::info!("Creating station...");
-
-    // First check if station already exists (may happen in retry scenarios)
-    let screen = cap.capture(session, "check_existing_station").await?;
-    let station_exists = screen.contains("#1");
-
-    if !station_exists {
-        execute_transaction_with_retry(
-            session,
-            cap,
-            "create_station",
-            &[
-                CursorAction::PressEnter,
-                CursorAction::Sleep3s,
-                // DO NOT press Ctrl+PgUp here!
-                // The TUI automatically moves cursor to the new station's StationId field
-                // after creation, which is exactly where we want to be for Phase 3
-            ],
-            |screen| {
-                // Verify station #1 was created AND cursor is at Station ID field
-                // Look for both "#1" (station created) and "Station ID" field
-                if screen.contains("#1") && screen.contains("Station ID") {
-                    Ok(true)
-                } else {
-                    log::debug!("Create station verification: looking for '#1' and 'Station ID'");
-                    Ok(false)
-                }
-            },
-            Some(&[
-                // Custom rollback: reset to top (AddLine) to retry creation
-                CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep1s,
-            ]),
-            &[CursorAction::PressCtrlPageUp, CursorAction::Sleep1s],
-        )
-        .await?;
-    } else {
-        log::info!("Station #1 already exists, navigating to it...");
-        // Navigate to existing station's StationId field
-        execute_cursor_actions(
-            session,
-            cap,
-            &[
-                CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep1s,
-                CursorAction::PressPageDown,
-                CursorAction::Sleep1s,
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep1s,
-            ],
-            "navigate_to_existing_station",
-        )
-        .await?;
-    }
-
-    // Phase 3: Verify we're at Station ID field
-    // After station creation, TUI automatically positions cursor at StationId field
-    // No additional navigation needed!
-    log::info!("Verifying cursor is at Station ID field...");
-
-    let screen = cap.capture(session, "verify_at_station_id").await?;
-    if !screen.contains("Station ID") {
-        return Err(anyhow!(
-            "Expected to be at Station ID field after station creation, but field not found"
-        ));
-    }
-
-    log::info!("📸 Milestone: At Station ID field");
-
-    // Phase 4: Configure Station ID (field 0) with enhanced transaction retry
-    // Cursor should now be on Station ID field
-    log::info!("Configuring Station ID: {}", config.station_id);
-
-    let station_id_actions = vec![
-        CursorAction::PressEnter, // Enter edit mode
-        CursorAction::Sleep1s,    // Increased wait for edit mode
-        CursorAction::PressCtrlA, // Select all
-        CursorAction::Sleep1s,
-        CursorAction::PressBackspace, // Clear
-        CursorAction::Sleep1s,
-        CursorAction::TypeString(config.station_id.to_string()), // Type new value
-        CursorAction::Sleep1s,                                   // Wait for typing to complete
-        CursorAction::PressEnter,                                // Confirm
-        CursorAction::Sleep3s, // Wait longer for commit and UI update
-    ];
-
-    let reset_to_station_id = vec![
-        CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep1s,
-        CursorAction::PressPageDown,
-        CursorAction::Sleep1s,
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep1s,
-    ];
-
-    // Edit Station ID field WITHOUT moving to next field
-    // We'll verify the value directly instead of checking next field position
-    execute_field_edit_with_retry(
-        session,
-        cap,
-        "station_id",
-        &station_id_actions,
-        true, // Check not in edit mode
-        None, // Don't verify next field, just verify we're not in edit mode
-        &reset_to_station_id,
-    )
-    .await?;
-
-    // Now explicitly move to Register Type field
-    log::info!("Moving to Register Type field...");
-    execute_cursor_actions(
-        session,
-        cap,
-        &[
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 1,
-            },
-            CursorAction::Sleep1s,
-        ],
-        "move_to_register_type",
-    )
-    .await?;
-
-    log::info!("📸 Milestone: Station ID configured");
-
-    // Phase 5: Configure Register Type (field 1) with transaction retry
-    log::info!("Configuring Register Type: {:?}", config.register_mode);
-    let (direction, count) = config.register_mode.arrow_from_default();
-
-    if count > 0 {
-        // Need to change from default (Holding) to another type
-        execute_transaction_with_retry(
-            session,
-            cap,
-            "configure_register_type",
-            &[
-                CursorAction::PressEnter,
-                CursorAction::Sleep1s,
-                CursorAction::PressArrow { direction, count },
-                CursorAction::Sleep1s,
-                CursorAction::PressEnter,
-                CursorAction::Sleep3s,
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep1s,
-            ],
-            |screen| {
-                // Verify we moved to next field (Start Address)
-                let has_address_field = screen.contains("Address") || screen.contains("0x");
-                Ok(has_address_field)
-            },
-            Some(&[CursorAction::PressEscape, CursorAction::Sleep1s]),
-            &[
-                CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep1s,
-                CursorAction::PressPageDown,
-                CursorAction::Sleep1s,
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 2,
-                },
-                CursorAction::Sleep1s,
-            ],
-        )
-        .await?;
-    } else {
-        // Using default (Holding), just move to next field with retry
-        execute_transaction_with_retry(
-            session,
-            cap,
-            "skip_default_register_type",
-            &[
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep1s,
-            ],
-            |screen| {
-                let has_address_field = screen.contains("Address") || screen.contains("0x");
-                Ok(has_address_field)
-            },
-            None,
-            &[
-                CursorAction::PressCtrlPageUp,
-                CursorAction::Sleep1s,
-                CursorAction::PressPageDown,
-                CursorAction::Sleep1s,
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep1s,
-            ],
-        )
-        .await?;
-    }
-
-    log::info!("📸 Milestone: Register Type configured");
-
-    // Phase 6: Configure Start Address (field 2) with transaction retry
-    log::info!("Configuring Start Address: 0x{:04X}", config.start_address);
-
-    let reset_to_start_address = vec![
-        CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep1s,
-        CursorAction::PressPageDown,
-        CursorAction::Sleep1s,
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 3,
-        },
-        CursorAction::Sleep1s,
-    ];
-
-    // Always re-center the cursor onto Start Address before attempting edits. This keeps
-    // subsequent operations deterministic even if prior navigation left us on Register
-    // Type or other fields.
-    execute_cursor_actions(
-        session,
-        cap,
-        &reset_to_start_address,
-        "focus_start_address_initial",
-    )
-    .await?;
-    ensure_cursor_on_start_address(session, cap).await?;
-
-    if config.start_address == 0 {
-        log::info!("Start Address already 0 - skipping edit");
-        let screen = cap.capture(session, "verify_start_address_default").await?;
-        if !screen.contains("> Start Address") {
-            return Err(anyhow!(
-                "Cursor not positioned at Start Address when attempting to skip edit"
-            ));
+        if let Some(values) = &config.register_values {
+            initialize_slave_registers(session, cap, values, config.register_mode).await?;
         }
-        execute_cursor_actions(
-            session,
-            cap,
-            &[
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep1s,
-            ],
-            "move_to_register_length_after_start_skip",
-        )
-        .await?;
-    } else {
-        // Start Address should be entered in decimal format. Clear existing digits via
-        // limited backspace attempts to avoid control-key sequences misbehaving in CI.
-        let mut start_address_actions = vec![
-            CursorAction::PressEnter,
-            CursorAction::Sleep1s,
-            CursorAction::PressCtrlA,
-            CursorAction::Sleep1s,
-        ];
-        for _ in 0..MAX_NUMERIC_FIELD_DIGITS {
-            start_address_actions.push(CursorAction::PressBackspace);
-        }
-        start_address_actions.extend_from_slice(&[
-            CursorAction::Sleep1s,
-            CursorAction::TypeString(config.start_address.to_string()),
-            CursorAction::Sleep1s,
-            CursorAction::PressEnter,
-            CursorAction::Sleep3s,
-            CursorAction::PressArrow {
-                direction: ArrowKey::Down,
-                count: 1,
-            },
-            CursorAction::Sleep1s,
-        ]);
-
-        let expected_start_pattern = format!(
-            "Start Address         0x{:04X} ({})",
-            config.start_address, config.start_address
-        );
-
-        execute_field_edit_with_retry(
-            session,
-            cap,
-            "start_address",
-            &start_address_actions,
-            true,
-            Some(expected_start_pattern.as_str()),
-            &reset_to_start_address,
-        )
-        .await?;
     }
 
-    log::info!("📸 Milestone: Start Address configured");
-
-    // Phase 7: Configure Register Count (field 3) with transaction retry
-    log::info!("Configuring Register Count: {}", config.register_count);
-
-    let mut register_count_actions = vec![
-        CursorAction::PressEnter,
-        CursorAction::Sleep3s,
-        CursorAction::PressCtrlA,
-        CursorAction::Sleep1s,
-    ];
-    for _ in 0..MAX_NUMERIC_FIELD_DIGITS {
-        register_count_actions.push(CursorAction::PressBackspace);
+    if !config.is_master {
+        ensure_connection_mode(session, cap, config.is_master).await?;
     }
-    register_count_actions.extend_from_slice(&[
-        CursorAction::Sleep1s,
-        CursorAction::TypeString(config.register_count.to_string()),
-        CursorAction::Sleep1s,
-        CursorAction::PressEnter,
-        CursorAction::Sleep3s, // Wait for register grid to render (reduced from 3000ms)
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 1,
-        },
-        CursorAction::Sleep1s,
-    ]);
 
-    let reset_to_register_count = vec![
-        CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep1s,
-        CursorAction::PressPageDown,
-        CursorAction::Sleep1s,
-        CursorAction::PressArrow {
-            direction: ArrowKey::Down,
-            count: 4,
-        },
-        CursorAction::Sleep1s,
-    ];
+    save_configuration_and_verify(session, cap, port1).await?;
 
-    // After setting Register Count we expect the display to reflect the new value
-    // and the cursor to move into the register grid so further edits can proceed.
-
-    let expected_register_count_pattern = format!(
-        "Register Length       0x{:04X} ({})",
-        config.register_count, config.register_count
+    let final_checks = check_station_config(
+        port1,
+        station_index,
+        config.is_master,
+        config.station_id,
+        config.register_mode.status_value(),
+        config.start_address,
+        config.register_count,
     );
+    execute_cursor_actions(session, cap, &final_checks, "verify_station_config").await?;
 
-    execute_field_edit_with_retry(
-        session,
-        cap,
-        "register_count",
-        &register_count_actions,
-        true, // Must NOT be in edit mode
-        Some(expected_register_count_pattern.as_str()),
-        &reset_to_register_count,
-    )
-    .await?;
-
-    log::info!("📸 Milestone: Register Count configured");
-
-    // Phase 8: Configure register values if provided (Slave stations only)
-    if let Some(values) = &config.register_values {
-        if !config.is_master {
-            log::info!("Phase 8: Configuring {} register values...", values.len());
-
-            // IMPORTANT: After Register Count edit + Enter, cursor is at Register Length field
-            // We need to navigate to the register list below it
-            // The UI shows register address lines, each with multiple register value fields
-            log::info!("Navigating to first register value field...");
-
-            // Navigation steps:
-            // 1. Down: Move from "Register Length" to first register address line
-            //    After Down, cursor should already be at the first register value field
-            let actions = vec![
-                CursorAction::PressArrow {
-                    direction: ArrowKey::Down,
-                    count: 1,
-                },
-                CursorAction::Sleep1s,
-            ];
-            execute_cursor_actions(session, cap, &actions, "nav_to_first_register_value").await?;
-
-            // Now configure each register value
-            // TUI displays registers in rows with 4 values per row
-            // Navigation: Right arrow moves to next register on same row
-            // After last register on a row, we're at the end - need Down to go to next row's first register
-            for (reg_idx, &value) in values.iter().enumerate() {
-                log::info!(
-                    "  Setting register {} to 0x{:04X} ({})",
-                    reg_idx,
-                    value,
-                    value
-                );
-
-                // Edit the current register value
-                let actions = vec![
-                    CursorAction::PressEnter, // Enter edit mode
-                    CursorAction::Sleep1s,
-                    CursorAction::PressCtrlA, // Select all
-                    CursorAction::Sleep1s,
-                    CursorAction::PressBackspace, // Clear
-                    CursorAction::Sleep1s,
-                    // NOTE: TUI register fields accept hexadecimal input
-                    // Format as "0xXXXX" for proper hex interpretation
-                    CursorAction::TypeString(format!("0x{:04X}", value)),
-                    CursorAction::Sleep1s,
-                    CursorAction::PressEnter, // Confirm
-                    CursorAction::Sleep1s,    // Wait for commit
-                ];
-                execute_cursor_actions(
-                    session,
-                    cap,
-                    &actions,
-                    &format!("set_register_{}", reg_idx),
-                )
-                .await?;
-
-                // After Enter, cursor stays at the same register field
-                // We need to manually navigate to next register
-                if reg_idx < values.len() - 1 {
-                    // Not the last register - move to next
-                    // Check if we need to move to next row (every 4 registers)
-                    if (reg_idx + 1) % 4 == 0 {
-                        // Moving to next row: Down then move back to first column
-                        // Actually, Down + Left*3 to get to first register of next row
-                        log::info!("    Moving to next register row...");
-                        let actions = vec![
-                            CursorAction::PressArrow {
-                                direction: ArrowKey::Down,
-                                count: 1,
-                            },
-                            CursorAction::Sleep1s,
-                            // After Down, cursor should be at address field of next row
-                            // Press Right once to get to first register value
-                            CursorAction::PressArrow {
-                                direction: ArrowKey::Right,
-                                count: 1,
-                            },
-                            CursorAction::Sleep1s,
-                        ];
-                        execute_cursor_actions(
-                            session,
-                            cap,
-                            &actions,
-                            &format!("nav_to_next_row_{}", reg_idx + 1),
-                        )
-                        .await?;
-                    } else {
-                        // Same row - just move Right to next register
-                        log::info!("    Moving to next register on same row...");
-                        let actions = vec![
-                            CursorAction::PressArrow {
-                                direction: ArrowKey::Right,
-                                count: 1,
-                            },
-                            CursorAction::Sleep1s,
-                        ];
-                        execute_cursor_actions(
-                            session,
-                            cap,
-                            &actions,
-                            &format!("nav_to_next_register_{}", reg_idx + 1),
-                        )
-                        .await?;
-                    }
-                }
-            }
-
-            log::info!("✅ All {} register values configured", values.len());
-
-            log::info!("📸 Milestone: Register values configured");
-        } else {
-            log::info!(
-                "Phase 8: Skipping register value configuration (Master stations don't have initial values)"
-            );
-        }
-    } else {
-        log::info!("Phase 8: No register values provided - using defaults");
-    }
-
-    // Phase 9: Save configuration with Ctrl+S (port will auto-enable)
-    log::info!("Saving configuration with Ctrl+S...");
-
-    // Save configuration - don't verify screen as old error messages may persist
-    // Instead, verify via status file in next phase
-    let save_actions = vec![
-        CursorAction::PressCtrlPageUp,
-        CursorAction::Sleep1s,
-        CursorAction::PressCtrlS,
-        CursorAction::Sleep3s, // Wait longer for save and port enable
-    ];
-
-    execute_cursor_actions(session, cap, &save_actions, "save_configuration").await?;
-
-    log::info!("📸 Milestone: Configuration saved");
-
-    // Phase 10: Verify configuration via status file
-    // According to CLAUDE.md, Ctrl+S saves config and auto-enables port
-    log::info!("Verifying configuration was saved to status file...");
-
-    // Wait for status file to be updated
-    sleep_3s().await;
-
-    // Check if configuration exists in status file
-    let status = read_tui_status().map_err(|e| {
-        anyhow!(
-            "Failed to read TUI status file after Ctrl+S: {}. \
-             This indicates the configuration may not have been saved.",
-            e
-        )
-    })?;
-
-    // Verify we have the port
-    if status.ports.is_empty() {
-        return Err(anyhow!(
-            "No ports found in TUI status after Ctrl+S. \
-             Configuration save may have failed."
-        ));
-    }
-
-    let port_status = &status.ports[0];
-    log::info!(
-        "Port status: enabled={}, masters={}, slaves={}",
-        port_status.enabled,
-        port_status.modbus_masters.len(),
-        port_status.modbus_slaves.len()
-    );
-
-    // Verify station configuration exists
-    if config.is_master {
-        if port_status.modbus_masters.is_empty() {
-            return Err(anyhow!(
-                "No master configuration found in status file after Ctrl+S. \
-                 Configuration save failed."
-            ));
-        }
-        log::info!("✅ Master configuration found in status file");
-    } else {
-        if port_status.modbus_slaves.is_empty() {
-            return Err(anyhow!(
-                "No slave configuration found in status file after Ctrl+S. \
-                 Configuration save failed."
-            ));
-        }
-        log::info!("✅ Slave configuration found in status file");
-    }
-
-    // Phase 11: Wait for CLI subprocess to start (for Master mode)
-    // The TUI spawns a CLI subprocess which creates its own status file
-    if config.is_master {
-        log::info!("Waiting for CLI Master subprocess to start...");
-        sleep_3s().await;
-
-        // Check if CLI status file exists
-        let cli_status_path = format!(
-            "/tmp/ci_cli_{}_status.json",
-            _port1.trim_start_matches("/tmp/")
-        );
-        log::info!("Checking for CLI status file: {cli_status_path}");
-
-        // Wait up to 10 seconds for CLI status file to appear
-        let mut found = false;
-        for i in 1..=20 {
-            if std::path::Path::new(&cli_status_path).exists() {
-                log::info!(
-                    "✅ CLI subprocess status file found after {}s",
-                    i as f32 * 0.5
-                );
-                found = true;
-                break;
-            }
-            sleep_1s().await;
-        }
-
-        if !found {
-            log::warn!("⚠️  CLI subprocess status file not found, but continuing...");
-            log::warn!("    This may be normal if subprocess hasn't written status yet");
-        }
-    }
-
-    log::info!("📸 Milestone: Port enabled and running");
-
-    log::info!("✅ Station configuration completed - saved and enabled");
+    log::info!("✅ Station configured and verified");
     Ok(())
-}
-
-async fn ensure_cursor_on_start_address<T: Expect>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-) -> Result<()> {
-    const MAX_FOCUS_ATTEMPTS: usize = 5;
-
-    for attempt in 0..MAX_FOCUS_ATTEMPTS {
-        let capture_name = format!("focus_start_address_attempt_{}", attempt + 1);
-        let screen = cap.capture(session, &capture_name).await?;
-
-        if screen.contains("> Start Address") {
-            return Ok(());
-        }
-
-        let (actions, label): (Vec<CursorAction>, &str) = if screen.contains("> Register Type") {
-            (
-                vec![
-                    CursorAction::PressArrow {
-                        direction: ArrowKey::Down,
-                        count: 1,
-                    },
-                    CursorAction::Sleep1s,
-                ],
-                "focus_start_address_from_register_type",
-            )
-        } else if screen.contains("> Register Length") {
-            (
-                vec![
-                    CursorAction::PressArrow {
-                        direction: ArrowKey::Up,
-                        count: 1,
-                    },
-                    CursorAction::Sleep1s,
-                ],
-                "focus_start_address_from_register_length",
-            )
-        } else {
-            (
-                vec![
-                    CursorAction::PressArrow {
-                        direction: ArrowKey::Down,
-                        count: 1,
-                    },
-                    CursorAction::Sleep1s,
-                ],
-                "focus_start_address_general_adjust",
-            )
-        };
-
-        execute_cursor_actions(session, cap, &actions, label).await?;
-    }
-
-    Err(anyhow!(
-        "Failed to focus Start Address field after {MAX_FOCUS_ATTEMPTS} attempts"
-    ))
 }

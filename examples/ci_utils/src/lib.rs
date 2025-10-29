@@ -28,7 +28,7 @@ pub use ports::{
     port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, VcomMatchers,
     DEFAULT_PORT1, DEFAULT_PORT2,
 };
-pub use snapshot::{TerminalCapture, TerminalSize};
+pub use snapshot::{log_last_terminal_snapshot, TerminalCapture, TerminalSize};
 pub use status_monitor::{
     get_port_log_count, port_exists_in_tui, read_cli_status, read_tui_status, wait_for_cli_status,
     wait_for_modbus_config, wait_for_port_enabled, wait_for_tui_page, CliMode, CliStatus,

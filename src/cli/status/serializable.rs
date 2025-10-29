@@ -2,10 +2,10 @@
 ///
 /// This module defines a serializable status structure specifically for CLI subprocesses,
 /// which can be easily converted to JSON for E2E test validation.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// CLI subprocess status
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CliStatus {
     pub port_name: String,
     pub station_id: u8,
@@ -17,8 +17,8 @@ pub struct CliStatus {
 }
 
 /// CLI operation mode
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum CliMode {
     SlaveListen,
     SlavePoll,
@@ -26,8 +26,8 @@ pub enum CliMode {
 }
 
 /// Register mode for modbus operations
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum RegisterMode {
     Coil,
     Discrete,

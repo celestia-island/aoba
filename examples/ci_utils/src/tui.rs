@@ -253,6 +253,18 @@ pub async fn navigate_to_vcom<T: Expect>(
     ];
     crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_port").await?;
 
+    // Align focus with the "Enter Business Configuration" option so the next Enter
+    // transitions directly into the Modbus dashboard instead of toggling Enable Port.
+    let actions = vec![
+        crate::auto_cursor::CursorAction::PressArrow {
+            direction: crate::key_input::ArrowKey::Down,
+            count: 2,
+        },
+        crate::auto_cursor::CursorAction::Sleep1s,
+    ];
+    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "align_enter_business")
+        .await?;
+
     Ok(())
 }
 

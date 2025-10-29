@@ -71,6 +71,19 @@ else
   KILL_PATTERNS=("$V1" "$V2" "$(basename "$V1")")
 fi
 
+USER_SUFFIX="$(id -u)"
+if [ -e "$PIDFILE" ] && [ ! -w "$PIDFILE" ]; then
+  ALT_PIDFILE="/tmp/aoba_socat_${MODE}_${USER_SUFFIX}.pid"
+  echo "[socat_init] pidfile $PIDFILE not writable, using $ALT_PIDFILE instead"
+  PIDFILE="$ALT_PIDFILE"
+fi
+
+if [ -e "$LOG" ] && [ ! -w "$LOG" ]; then
+  ALT_LOG="/tmp/aoba_socat_${MODE}_${USER_SUFFIX}.log"
+  echo "[socat_init] log file $LOG not writable, using $ALT_LOG instead"
+  LOG="$ALT_LOG"
+fi
+
 if [ "$MODE" = "tui_multiple" ]; then
   echo "[socat_init] operating entirely without sudo; using 6 ports $V1, $V2, $V3, $V4, $V5, $V6 with full mesh connectivity"
 else

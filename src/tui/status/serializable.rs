@@ -2,16 +2,16 @@
 ///
 /// This module defines a serializable status structure specifically for TUI,
 /// which can be easily converted to JSON for E2E test validation.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiStatus {
     pub ports: Vec<TuiPort>,
     pub page: TuiPage,
     pub timestamp: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiPort {
     pub name: String,
     pub enabled: bool,
@@ -21,16 +21,16 @@ pub struct TuiPort {
     pub log_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PortState {
     Free,
     OccupiedByThis,
     OccupiedByOther,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum TuiPage {
     Entry,
     ConfigPanel,
@@ -39,7 +39,7 @@ pub enum TuiPage {
     About,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiModbusMaster {
     pub station_id: u8,
     pub register_type: String,
@@ -47,7 +47,7 @@ pub struct TuiModbusMaster {
     pub register_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TuiModbusSlave {
     pub station_id: u8,
     pub register_type: String,

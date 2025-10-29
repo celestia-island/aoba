@@ -4,6 +4,41 @@ use expectrl::{Expect, Regex as ExpectRegex};
 use vt100::Parser;
 
 use crate::helpers::sleep_1s;
+use std::sync::{Mutex, OnceLock};
+
+type SnapshotRecord = (String, String);
+
+fn snapshot_store() -> &'static Mutex<Option<SnapshotRecord>> {
+    static STORE: OnceLock<Mutex<Option<SnapshotRecord>>> = OnceLock::new();
+    STORE.get_or_init(|| Mutex::new(None))
+}
+
+fn update_last_snapshot(step_description: &str, screen: &str) {
+    let record = (step_description.to_string(), screen.to_string());
+    if let Ok(mut guard) = snapshot_store().lock() {
+        *guard = Some(record);
+    } else {
+        log::warn!("Failed to update last terminal snapshot due to poisoned mutex");
+    }
+}
+
+/// Log the most recent captured terminal screen to assist debugging failures.
+pub fn log_last_terminal_snapshot(context: &str) {
+    match snapshot_store().lock() {
+        Ok(guard) => {
+            if let Some((step, screen)) = guard.as_ref() {
+                log::error!("❌ {context}: last captured screen at '{step}'\n{screen}");
+            } else {
+                log::error!("❌ {context}: no terminal snapshot captured yet");
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "❌ {context}: unable to retrieve terminal snapshot (mutex poisoned: {err})"
+            );
+        }
+    }
+}
 
 /// Standard terminal sizes for E2E tests
 #[derive(Debug, Clone, Copy)]
@@ -137,6 +172,8 @@ impl TerminalCapture {
                 out = self.parser.screen().contents();
             }
         }
+
+        update_last_snapshot(step_description, &out);
 
         // Log as a single multi-line string to preserve CI log formatting (only if requested)
         if log_content {

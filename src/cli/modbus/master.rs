@@ -10,10 +10,51 @@ use std::{
 
 use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
+use serialport::SerialPort;
 
 use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
 use crate::cli::cleanup;
-use crate::protocol::modbus::{build_slave_coils_response, build_slave_holdings_response};
+use crate::protocol::modbus::{
+    build_slave_coils_response, build_slave_discrete_inputs_response,
+    build_slave_holdings_response, build_slave_inputs_response,
+};
+
+const SERIAL_PORT_OPEN_RETRIES: usize = 10;
+const SERIAL_PORT_OPEN_RETRY_DELAY_MS: u64 = 200;
+
+fn open_serial_port_with_retry(
+    port: &str,
+    baud_rate: u32,
+    timeout: Duration,
+) -> Result<Box<dyn SerialPort>> {
+    let mut last_error = String::new();
+    for attempt in 1..=SERIAL_PORT_OPEN_RETRIES {
+        log::info!(
+            "Attempting to open serial port {port} (attempt {attempt}/{SERIAL_PORT_OPEN_RETRIES})"
+        );
+        match serialport::new(port, baud_rate).timeout(timeout).open() {
+            Ok(handle) => {
+                if attempt > 1 {
+                    log::info!("Opened serial port {port} after {attempt} attempts");
+                }
+                return Ok(handle);
+            }
+            Err(err) => {
+                last_error = err.to_string();
+                if attempt < SERIAL_PORT_OPEN_RETRIES {
+                    log::warn!(
+                        "Failed to open serial port {port} (attempt {attempt}/{SERIAL_PORT_OPEN_RETRIES}): {last_error}"
+                    );
+                    std::thread::sleep(Duration::from_millis(SERIAL_PORT_OPEN_RETRY_DELAY_MS));
+                }
+            }
+        }
+    }
+
+    Err(anyhow!(
+        "Failed to open port {port} after {SERIAL_PORT_OPEN_RETRIES} attempts: {last_error}"
+    ))
+}
 
 /// Handle master provide (temporary: output once and exit)
 pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
@@ -52,19 +93,21 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                     context.set_coil(register_address + i as u16, val != 0)?;
                 }
             }
-            _ => {
-                return Err(anyhow!(
-                    "Master provide only supports holding registers and coils"
-                ));
+            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                for (i, &val) in values.iter().enumerate() {
+                    context.set_discrete(register_address + i as u16, val != 0)?;
+                }
+            }
+            crate::protocol::status::types::modbus::RegisterMode::Input => {
+                for (i, &val) in values.iter().enumerate() {
+                    context.set_input(register_address + i as u16, val)?;
+                }
             }
         }
     }
 
     // Open serial port and wait for one request, then respond and exit
-    let port_handle = serialport::new(port, baud_rate)
-        .timeout(Duration::from_secs(5))
-        .open()
-        .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+    let port_handle = open_serial_port_with_retry(port, baud_rate, Duration::from_secs(5))?;
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -194,10 +237,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     };
 
     // Open serial port with longer timeout for reading requests
-    let port_handle = serialport::new(port, baud_rate)
-        .timeout(Duration::from_millis(50))
-        .open()
-        .map_err(|err| {
+    let port_handle = match open_serial_port_with_retry(port, baud_rate, Duration::from_millis(50))
+    {
+        Ok(handle) => handle,
+        Err(err) => {
             if let Some(ref mut ipc_conns) = ipc_connections {
                 let _ = ipc_conns
                     .status
@@ -207,8 +250,9 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                         timestamp: None,
                     });
             }
-            anyhow!("Failed to open port {port}: {err}")
-        })?;
+            return Err(err);
+        }
+    };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -253,10 +297,15 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                     context.set_coil(register_address + i as u16, val != 0)?;
                 }
             }
-            _ => {
-                return Err(anyhow!(
-                    "Master provide only supports holding registers and coils"
-                ));
+            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                for (i, &val) in initial_values.iter().enumerate() {
+                    context.set_discrete(register_address + i as u16, val != 0)?;
+                }
+            }
+            crate::protocol::status::types::modbus::RegisterMode::Input => {
+                for (i, &val) in initial_values.iter().enumerate() {
+                    context.set_input(register_address + i as u16, val)?;
+                }
             }
         }
     }
@@ -538,10 +587,20 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
                                         Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
                                     }
+                                    0x02 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                    }
                                     0x03 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
                                         Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                    }
+                                    0x04 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
                                     }
                                     _ => None,
                                 }
@@ -616,10 +675,20 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
                                         Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
                                     }
+                                    0x02 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                    }
                                     0x03 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
                                         Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                    }
+                                    0x04 => {
+                                        let start = u16::from_be_bytes([request[2], request[3]]);
+                                        let qty = u16::from_be_bytes([request[4], request[5]]);
+                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
                                     }
                                     _ => None,
                                 }
@@ -743,6 +812,21 @@ fn respond_to_request(
                 }
             }
         }
+        rmodbus::consts::ModbusFunction::GetInputs => {
+            match build_slave_inputs_response(&mut frame, &mut context) {
+                Ok(Some(resp)) => {
+                    log::debug!(
+                        "respond_to_request: Built input registers response ({} bytes)",
+                        resp.len()
+                    );
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build input registers response");
+                    return Err(anyhow!("Failed to build input registers response"));
+                }
+            }
+        }
         rmodbus::consts::ModbusFunction::GetCoils => {
             match build_slave_coils_response(&mut frame, &mut context) {
                 Ok(Some(resp)) => {
@@ -755,6 +839,21 @@ fn respond_to_request(
                 _ => {
                     log::error!("respond_to_request: Failed to build coils response");
                     return Err(anyhow!("Failed to build coils response"));
+                }
+            }
+        }
+        rmodbus::consts::ModbusFunction::GetDiscretes => {
+            match build_slave_discrete_inputs_response(&mut frame, &mut context) {
+                Ok(Some(resp)) => {
+                    log::debug!(
+                        "respond_to_request: Built discrete inputs response ({} bytes)",
+                        resp.len()
+                    );
+                    resp
+                }
+                _ => {
+                    log::error!("respond_to_request: Failed to build discrete inputs response");
+                    return Err(anyhow!("Failed to build discrete inputs response"));
                 }
             }
         }
@@ -781,10 +880,18 @@ fn respond_to_request(
     let values = extract_values_from_response(&response)?;
     log::debug!("respond_to_request: Extracted values for output: {values:?}");
 
+    let register_mode_label = match frame.func {
+        rmodbus::consts::ModbusFunction::GetHoldings => "holding",
+        rmodbus::consts::ModbusFunction::GetCoils => "coils",
+        rmodbus::consts::ModbusFunction::GetDiscretes => "discrete",
+        rmodbus::consts::ModbusFunction::GetInputs => "input",
+        _ => "unknown",
+    };
+
     Ok(ModbusResponse {
         station_id,
-        register_address: 0, // left as 0; we parse ranges from raw request in caller
-        register_mode: format!("{:?}", frame.func),
+        register_address: frame.reg,
+        register_mode: register_mode_label.to_string(),
         values,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -846,7 +953,16 @@ fn update_storage_loop(
                                         context.set_coil(register_address + i as u16, val != 0)?;
                                     }
                                 }
-                                _ => {}
+                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_discrete(register_address + i as u16, val != 0)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_input(register_address + i as u16, val)?;
+                                    }
+                                }
                             }
                             drop(context);
 
@@ -901,7 +1017,16 @@ fn update_storage_loop(
                                         context.set_coil(register_address + i as u16, val != 0)?;
                                     }
                                 }
-                                _ => {}
+                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_discrete(register_address + i as u16, val != 0)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_input(register_address + i as u16, val)?;
+                                    }
+                                }
                             }
                             drop(context);
 
@@ -942,10 +1067,10 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
     let byte_count = response[2] as usize;
 
     match function_code {
-        0x03 => {
-            // Read Holding Registers response
+        0x03 | 0x04 => {
+            // Read register response (holding or input registers)
             if response.len() < 3 + byte_count {
-                return Err(anyhow!("Response too short for holdings"));
+                return Err(anyhow!("Response too short for register data"));
             }
             let mut values = Vec::new();
             for i in (0..byte_count).step_by(2) {
@@ -956,10 +1081,10 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
             }
             Ok(values)
         }
-        0x01 => {
-            // Read Coils response
+        0x01 | 0x02 => {
+            // Read bit-based response (coils or discrete inputs)
             if response.len() < 3 + byte_count {
-                return Err(anyhow!("Response too short for coils"));
+                return Err(anyhow!("Response too short for bit data"));
             }
             let mut values = Vec::new();
             for byte_idx in 0..byte_count {

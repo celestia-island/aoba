@@ -85,8 +85,6 @@ expectrl = "^0.8"
 regex = "^1"
 vt100 = "^0.15"
 ctrlc = "^3"
-ci_utils = { path = "examples/ci_utils" }
-
 [dev-dependencies]
 # TUI testing dependencies
 tokio-test = "^0.4"

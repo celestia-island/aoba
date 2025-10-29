@@ -264,6 +264,22 @@ impl RegisterMode {
         }
     }
 
+    /// Get the canonical value emitted in TUI status dumps.
+    ///
+    /// The status tree stores the enum variant names using camel case without
+    /// spaces (e.g. `"DiscreteInputs"`). This helper mirrors that encoding so
+    /// tests can assert against the exact JSON payload without hard-coding
+    /// string literals throughout the codebase.
+    #[allow(dead_code)]
+    pub fn status_value(&self) -> &'static str {
+        match self {
+            RegisterMode::Coils => "Coils",
+            RegisterMode::DiscreteInputs => "DiscreteInputs",
+            RegisterMode::Holding => "Holding",
+            RegisterMode::Input => "Input",
+        }
+    }
+
     /// Get arrow key navigation from default mode (Holding) to this mode.
     ///
     /// # Purpose

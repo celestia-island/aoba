@@ -6,96 +6,13 @@
 /// These type definitions match the canonical definitions in src/protocol/status/e2e.rs
 /// to ensure consistency between dumping and parsing.
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
-// ============================================================================
-// TUI Status Structures (matching src/protocol/status/e2e.rs)
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TuiStatus {
-    pub ports: Vec<TuiPort>,
-    pub page: TuiPage,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TuiPort {
-    pub name: String,
-    pub enabled: bool,
-    pub state: PortState,
-    pub modbus_masters: Vec<TuiModbusMaster>,
-    pub modbus_slaves: Vec<TuiModbusSlave>,
-    pub log_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum PortState {
-    Free,
-    OccupiedByThis,
-    OccupiedByOther,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum TuiPage {
-    Entry,
-    ConfigPanel,
-    ModbusDashboard,
-    LogPanel,
-    About,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TuiModbusMaster {
-    pub station_id: u8,
-    pub register_type: String,
-    pub start_address: u16,
-    pub register_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TuiModbusSlave {
-    pub station_id: u8,
-    pub register_type: String,
-    pub start_address: u16,
-    pub register_count: usize,
-}
-
-// ============================================================================
-// CLI Status Structures (matching src/protocol/status/e2e.rs)
-// ============================================================================
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CliStatus {
-    pub port_name: String,
-    pub station_id: u8,
-    pub register_mode: RegisterMode,
-    pub register_address: u16,
-    pub register_length: u16,
-    pub mode: CliMode,
-    pub timestamp: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum CliMode {
-    SlaveListen,
-    SlavePoll,
-    MasterProvide,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum RegisterMode {
-    Coil,
-    Discrete,
-    Input,
-    Holding,
-}
+pub use aoba::cli::status::serializable::{CliMode, CliStatus, RegisterMode};
+pub use aoba::tui::status::serializable::{
+    PortState, TuiModbusMaster, TuiModbusSlave, TuiPage, TuiPort, TuiStatus,
+};
 
 /// Read and parse TUI status from /tmp/ci_tui_status.json
 pub fn read_tui_status() -> Result<TuiStatus> {
