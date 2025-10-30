@@ -25,7 +25,7 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
             persistence: PersistenceMode::Persistent,
         },
         stations: vec![StationConfig {
-            id: 1,
+            station_id: 1,
             mode: StationMode::Master,
             map: RegisterMap {
                 holding: vec![RegisterRange {

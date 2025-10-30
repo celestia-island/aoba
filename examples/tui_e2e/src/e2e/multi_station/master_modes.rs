@@ -3,7 +3,7 @@
 /// Tests TUI acting as Modbus Master with multiple stations configured.
 use anyhow::Result;
 
-use super::super::common::{run_multi_station_master_test, RegisterMode, StationConfig};
+use super::super::common::{make_station_config, run_multi_station_master_test, RegisterMode};
 
 /// Test: Mixed Register Types - Station 1 Coils, Station 2 Holding
 /// Both stations: ID=1, addr=0x0000, len=10
@@ -11,41 +11,13 @@ pub async fn test_tui_multi_master_mixed_register_types(port1: &str, port2: &str
     log::info!("🧪 Test: TUI Multi-Master with Mixed Register Types");
 
     let master_configs = vec![
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Coils,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: true,
-            register_values: None,
-        },
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: true,
-            register_values: None,
-        },
+        make_station_config(1, RegisterMode::Coils, 0x0000, 10, true, None),
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, true, None),
     ];
 
     let slave_configs = vec![
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Coils,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: false,
-            register_values: None,
-        },
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: false,
-            register_values: None,
-        },
+        make_station_config(1, RegisterMode::Coils, 0x0000, 10, false, None),
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
     ];
 
     run_multi_station_master_test(port1, port2, &master_configs, &slave_configs).await
@@ -57,41 +29,13 @@ pub async fn test_tui_multi_master_spaced_addresses(port1: &str, port2: &str) ->
     log::info!("🧪 Test: TUI Multi-Master with Spaced Addresses");
 
     let master_configs = vec![
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: true,
-            register_values: None,
-        },
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0100,
-            register_count: 10,
-            is_master: true,
-            register_values: None,
-        },
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, true, None),
+        make_station_config(1, RegisterMode::Holding, 0x0100, 10, true, None),
     ];
 
     let slave_configs = vec![
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: false,
-            register_values: None,
-        },
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0100,
-            register_count: 10,
-            is_master: false,
-            register_values: None,
-        },
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
+        make_station_config(1, RegisterMode::Holding, 0x0100, 10, false, None),
     ];
 
     run_multi_station_master_test(port1, port2, &master_configs, &slave_configs).await
@@ -103,41 +47,13 @@ pub async fn test_tui_multi_master_mixed_station_ids(port1: &str, port2: &str) -
     log::info!("🧪 Test: TUI Multi-Master with Mixed Station IDs");
 
     let master_configs = vec![
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: true,
-            register_values: None,
-        },
-        StationConfig {
-            station_id: 2,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: true,
-            register_values: None,
-        },
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, true, None),
+        make_station_config(2, RegisterMode::Holding, 0x0000, 10, true, None),
     ];
 
     let slave_configs = vec![
-        StationConfig {
-            station_id: 1,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: false,
-            register_values: None,
-        },
-        StationConfig {
-            station_id: 2,
-            register_mode: RegisterMode::Holding,
-            start_address: 0x0000,
-            register_count: 10,
-            is_master: false,
-            register_values: None,
-        },
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
+        make_station_config(2, RegisterMode::Holding, 0x0000, 10, false, None),
     ];
 
     run_multi_station_master_test(port1, port2, &master_configs, &slave_configs).await

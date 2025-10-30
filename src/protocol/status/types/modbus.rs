@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt};
 use strum::{EnumIter, FromRepr};
 
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,33 @@ impl std::fmt::Display for ModbusConnectionMode {
             ModbusConnectionMode::Slave { .. } => {
                 write!(f, "{}", lang().protocol.modbus.role_slave)
             }
+        }
+    }
+}
+
+/// Station-level configuration primitive shared by CLI, TUI and tests.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StationMode {
+    Master,
+    Slave,
+}
+
+impl StationMode {
+    pub fn is_master(self) -> bool {
+        matches!(self, StationMode::Master)
+    }
+
+    pub fn is_slave(self) -> bool {
+        matches!(self, StationMode::Slave)
+    }
+}
+
+impl fmt::Display for StationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StationMode::Master => write!(f, "master"),
+            StationMode::Slave => write!(f, "slave"),
         }
     }
 }
@@ -132,6 +159,212 @@ impl std::fmt::Display for RegisterMode {
             RegisterMode::Holding => write!(f, "{}", lang().protocol.modbus.reg_type_holding),
             RegisterMode::Input => write!(f, "{}", lang().protocol.modbus.reg_type_input),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterRange {
+    pub address_start: u16,
+    pub length: u16,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub initial_values: Vec<u16>,
+}
+
+impl Default for RegisterRange {
+    fn default() -> Self {
+        Self {
+            address_start: 0,
+            length: 10,
+            initial_values: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RegisterMap {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub coils: Vec<RegisterRange>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub discrete_inputs: Vec<RegisterRange>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub holding: Vec<RegisterRange>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input: Vec<RegisterRange>,
+}
+
+/// Canonical Modbus station configuration shared across the application.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationConfig {
+    #[serde(rename = "id")]
+    pub station_id: u8,
+    pub mode: StationMode,
+    pub map: RegisterMap,
+}
+
+impl Default for StationConfig {
+    fn default() -> Self {
+        Self {
+            station_id: 1,
+            mode: StationMode::Master,
+            map: RegisterMap::default(),
+        }
+    }
+}
+
+impl StationConfig {
+    /// Convenience constructor for the common single-register-range case.
+    pub fn single_range(
+        station_id: u8,
+        mode: StationMode,
+        register_mode: RegisterMode,
+        start_address: u16,
+        register_count: u16,
+        register_values: Option<Vec<u16>>,
+    ) -> Self {
+        let mut map = RegisterMap::default();
+        let range = RegisterRange {
+            address_start: start_address,
+            length: register_count,
+            initial_values: register_values.unwrap_or_default(),
+        };
+        match register_mode {
+            RegisterMode::Coils => map.coils.push(range),
+            RegisterMode::DiscreteInputs => map.discrete_inputs.push(range),
+            RegisterMode::Holding => map.holding.push(range),
+            RegisterMode::Input => map.input.push(range),
+        }
+
+        Self {
+            station_id,
+            mode,
+            map,
+        }
+    }
+
+    pub fn station_id(&self) -> u8 {
+        self.station_id
+    }
+
+    pub fn is_master(&self) -> bool {
+        self.mode.is_master()
+    }
+
+    pub fn is_slave(&self) -> bool {
+        self.mode.is_slave()
+    }
+
+    fn first_range(&self) -> Option<(RegisterMode, &RegisterRange)> {
+        self.map
+            .coils
+            .first()
+            .map(|r| (RegisterMode::Coils, r))
+            .or_else(|| {
+                self.map
+                    .discrete_inputs
+                    .first()
+                    .map(|r| (RegisterMode::DiscreteInputs, r))
+            })
+            .or_else(|| self.map.holding.first().map(|r| (RegisterMode::Holding, r)))
+            .or_else(|| self.map.input.first().map(|r| (RegisterMode::Input, r)))
+    }
+
+    fn first_range_mut(&mut self) -> Option<(RegisterMode, &mut RegisterRange)> {
+        if let Some(range) = self.map.coils.first_mut() {
+            return Some((RegisterMode::Coils, range));
+        }
+        if let Some(range) = self.map.discrete_inputs.first_mut() {
+            return Some((RegisterMode::DiscreteInputs, range));
+        }
+        if let Some(range) = self.map.holding.first_mut() {
+            return Some((RegisterMode::Holding, range));
+        }
+        if let Some(range) = self.map.input.first_mut() {
+            return Some((RegisterMode::Input, range));
+        }
+        None
+    }
+
+    pub fn register_mode(&self) -> RegisterMode {
+        self.first_range()
+            .map(|(mode, _)| mode)
+            .expect("StationConfig must contain at least one register range")
+    }
+
+    pub fn start_address(&self) -> u16 {
+        self.first_range()
+            .map(|(_, range)| range.address_start)
+            .expect("StationConfig must contain at least one register range")
+    }
+
+    pub fn register_count(&self) -> u16 {
+        self.first_range()
+            .map(|(_, range)| range.length)
+            .expect("StationConfig must contain at least one register range")
+    }
+
+    pub fn register_values(&self) -> Option<&[u16]> {
+        self.first_range().and_then(|(_, range)| {
+            if range.initial_values.is_empty() {
+                None
+            } else {
+                Some(range.initial_values.as_slice())
+            }
+        })
+    }
+
+    pub fn register_values_owned(&self) -> Option<Vec<u16>> {
+        self.register_values().map(|slice| slice.to_vec())
+    }
+
+    /// Total number of register ranges across all register modes.
+    pub fn range_count(&self) -> usize {
+        self.map.coils.len()
+            + self.map.discrete_inputs.len()
+            + self.map.holding.len()
+            + self.map.input.len()
+    }
+
+    /// Whether the station is defined with exactly one register range.
+    pub fn is_single_range(&self) -> bool {
+        self.range_count() == 1
+    }
+
+    pub fn set_station_id(&mut self, station_id: u8) {
+        self.station_id = station_id;
+    }
+
+    pub fn set_mode(&mut self, mode: StationMode) {
+        self.mode = mode;
+    }
+
+    pub fn set_register_values(&mut self, values: Option<Vec<u16>>) {
+        let (_, range) = self
+            .first_range_mut()
+            .expect("StationConfig must contain at least one register range");
+        range.initial_values = values.unwrap_or_default();
+    }
+
+    pub fn set_single_range(
+        &mut self,
+        register_mode: RegisterMode,
+        start_address: u16,
+        register_count: u16,
+    ) {
+        let mut map = RegisterMap::default();
+        let range = RegisterRange {
+            address_start: start_address,
+            length: register_count,
+            initial_values: self.register_values_owned().unwrap_or_else(|| Vec::new()),
+        };
+
+        match register_mode {
+            RegisterMode::Coils => map.coils.push(range),
+            RegisterMode::DiscreteInputs => map.discrete_inputs.push(range),
+            RegisterMode::Holding => map.holding.push(range),
+            RegisterMode::Input => map.input.push(range),
+        }
+
+        self.map = map;
     }
 }
 

@@ -1,24 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Communication mode (Master or Slave)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum StationMode {
-    /// Modbus master mode
-    Master,
-    /// Modbus slave mode
-    Slave,
-}
-
-impl fmt::Display for StationMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            StationMode::Master => write!(f, "master"),
-            StationMode::Slave => write!(f, "slave"),
-        }
-    }
-}
+pub use crate::protocol::status::types::modbus::{
+    RegisterMap, RegisterRange, StationConfig, StationMode,
+};
 
 /// Communication method
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,46 +54,6 @@ impl fmt::Display for RegisterType {
     }
 }
 
-/// Register range configuration for a specific register type
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RegisterRange {
-    /// Start address
-    pub address_start: u16,
-    /// Number of registers
-    pub length: u16,
-    /// Initial values (for master mode, optional for slave mode)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub initial_values: Vec<u16>,
-}
-
-/// Register map containing all register types for a station
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct RegisterMap {
-    /// Coil register ranges
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub coils: Vec<RegisterRange>,
-    /// Discrete input register ranges
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub discrete_inputs: Vec<RegisterRange>,
-    /// Holding register ranges
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub holding: Vec<RegisterRange>,
-    /// Input register ranges
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub input: Vec<RegisterRange>,
-}
-
-/// Station configuration with ID, mode, and register map
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StationConfig {
-    /// Station ID (1-247 for Modbus)
-    pub id: u8,
-    /// Station mode (Master or Slave)
-    pub mode: StationMode,
-    /// Register map for this station
-    pub map: RegisterMap,
-}
-
 /// Communication thread parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommunicationParams {
@@ -149,26 +94,6 @@ impl Default for CommunicationParams {
     }
 }
 
-impl Default for RegisterRange {
-    fn default() -> Self {
-        Self {
-            address_start: 0,
-            length: 10,
-            initial_values: Vec::new(),
-        }
-    }
-}
-
-impl Default for StationConfig {
-    fn default() -> Self {
-        Self {
-            id: 1,
-            mode: StationMode::Master,
-            map: RegisterMap::default(),
-        }
-    }
-}
-
 impl Config {
     /// Parse configuration from a JSON string
     pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
@@ -199,7 +124,7 @@ mod tests {
             communication_params: CommunicationParams::default(),
             stations: vec![
                 StationConfig {
-                    id: 1,
+                    station_id: 1,
                     mode: StationMode::Master,
                     map: RegisterMap {
                         holding: vec![RegisterRange {
@@ -211,7 +136,7 @@ mod tests {
                     },
                 },
                 StationConfig {
-                    id: 2,
+                    station_id: 2,
                     mode: StationMode::Slave,
                     map: RegisterMap {
                         input: vec![RegisterRange {
@@ -231,8 +156,8 @@ mod tests {
         let parsed_config = Config::from_json(&json).unwrap();
         assert_eq!(parsed_config.port_name, "COM1");
         assert_eq!(parsed_config.stations.len(), 2);
-        assert_eq!(parsed_config.stations[0].id, 1);
-        assert_eq!(parsed_config.stations[1].id, 2);
+        assert_eq!(parsed_config.stations[0].station_id, 1);
+        assert_eq!(parsed_config.stations[1].station_id, 2);
 
         // Test postcard serialization of stations array (what's actually used in IPC)
         // We only test that serialization works, as the actual deserialization happens

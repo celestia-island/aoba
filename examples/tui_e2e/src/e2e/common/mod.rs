@@ -144,7 +144,7 @@ pub mod validation;
 
 // Re-export commonly used types and functions
 #[allow(unused_imports)]
-pub use config::{RegisterMode, StationConfig};
+pub use config::{make_station_config, RegisterMode, StationConfig, StationMode};
 #[allow(unused_imports)]
 pub use execution::{
     run_multi_station_master_test, run_multi_station_slave_test, run_single_station_master_test,

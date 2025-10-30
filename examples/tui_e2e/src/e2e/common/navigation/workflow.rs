@@ -42,7 +42,7 @@ pub async fn configure_tui_station<T: Expect>(
         return Err(anyhow!("Port {} not found in TUI status", port1));
     }
 
-    ensure_connection_mode(session, cap, config.is_master).await?;
+    ensure_connection_mode(session, cap, config.is_master()).await?;
 
     status = read_tui_status()?;
 
@@ -52,7 +52,7 @@ pub async fn configure_tui_station<T: Expect>(
         .find(|p| p.name == port1)
         .ok_or_else(|| anyhow!("Port {} not found in TUI status", port1))?;
 
-    let (reuse_existing, existing_index) = if config.is_master {
+    let (reuse_existing, existing_index) = if config.is_master() {
         match port.modbus_masters.len() {
             0 => (false, None),
             1 if is_default_master_station(&port.modbus_masters[0]) => {
@@ -79,10 +79,10 @@ pub async fn configure_tui_station<T: Expect>(
     let station_index = if reuse_existing {
         existing_index.unwrap()
     } else {
-        create_station(session, cap, port1, config.is_master).await?
+        create_station(session, cap, port1, config.is_master()).await?
     };
 
-    focus_station(session, cap, port1, station_index, config.is_master).await?;
+    focus_station(session, cap, port1, station_index, config.is_master()).await?;
 
     configure_station_id(
         session,
@@ -90,7 +90,7 @@ pub async fn configure_tui_station<T: Expect>(
         port1,
         station_index,
         config.station_id,
-        config.is_master,
+        config.is_master(),
     )
     .await?;
 
@@ -99,8 +99,8 @@ pub async fn configure_tui_station<T: Expect>(
         cap,
         port1,
         station_index,
-        config.register_mode,
-        config.is_master,
+        config.register_mode(),
+        config.is_master(),
     )
     .await?;
 
@@ -109,8 +109,8 @@ pub async fn configure_tui_station<T: Expect>(
         cap,
         port1,
         station_index,
-        config.start_address,
-        config.is_master,
+        config.start_address(),
+        config.is_master(),
     )
     .await?;
 
@@ -119,14 +119,14 @@ pub async fn configure_tui_station<T: Expect>(
         cap,
         port1,
         station_index,
-        config.register_count,
-        config.is_master,
+        config.register_count(),
+        config.is_master(),
     )
     .await?;
 
-    if !config.is_master {
-        if let Some(values) = &config.register_values {
-            initialize_slave_registers(session, cap, values, config.register_mode).await?;
+    if !config.is_master() {
+        if let Some(values) = config.register_values() {
+            initialize_slave_registers(session, cap, &values, config.register_mode()).await?;
         }
 
         focus_create_station_button(session, cap).await?;
@@ -137,11 +137,11 @@ pub async fn configure_tui_station<T: Expect>(
     let final_checks = check_station_config(
         port1,
         station_index,
-        config.is_master,
+        config.is_master(),
         config.station_id,
-        config.register_mode.status_value(),
-        config.start_address,
-        config.register_count,
+        config.register_mode().status_value(),
+        config.start_address(),
+        config.register_count(),
     );
     execute_cursor_actions(session, cap, &final_checks, "verify_station_config").await?;
 

@@ -26,7 +26,7 @@ pub async fn test_multi_masters() -> Result<()> {
         },
         stations: vec![
             StationConfig {
-                id: 1,
+                station_id: 1,
                 mode: StationMode::Master,
                 map: RegisterMap {
                     holding: vec![RegisterRange {
@@ -38,7 +38,7 @@ pub async fn test_multi_masters() -> Result<()> {
                 },
             },
             StationConfig {
-                id: 2,
+                station_id: 2,
                 mode: StationMode::Master,
                 map: RegisterMap {
                     input: vec![RegisterRange {
@@ -50,7 +50,7 @@ pub async fn test_multi_masters() -> Result<()> {
                 },
             },
             StationConfig {
-                id: 3,
+                station_id: 3,
                 mode: StationMode::Master,
                 map: RegisterMap {
                     coils: vec![RegisterRange {

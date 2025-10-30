@@ -11,6 +11,8 @@ use std::{
 
 use crate::protocol::ipc::{IpcClient, IpcConnection, IpcMessage};
 
+pub use crate::protocol::status::types::CliMode;
+
 /// Configuration for a CLI subprocess
 #[derive(Debug, Clone)]
 pub struct CliSubprocessConfig {
@@ -22,17 +24,6 @@ pub struct CliSubprocessConfig {
     pub register_mode: String,
     pub baud_rate: u32,
     pub data_source: Option<String>,
-}
-
-/// CLI mode (master or slave)
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CliMode {
-    /// Slave mode - listen (acts as server, responds to requests)
-    SlaveListen,
-    /// Slave mode - poll (acts as client, polls external master for data)
-    SlavePoll,
-    /// Master mode (provides data and responds to poll requests)
-    MasterProvide,
 }
 
 /// A managed CLI subprocess

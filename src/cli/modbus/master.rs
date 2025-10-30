@@ -466,7 +466,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                 for station in &stations {
                                     log::info!(
                                         "  Applying Station {}: mode={:?}",
-                                        station.id,
+                                        station.station_id,
                                         station.mode
                                     );
 

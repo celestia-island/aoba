@@ -1,10 +1,11 @@
 use chrono::{DateTime, Local};
+use serde::{Deserialize, Serialize};
 
 use crate::protocol::{status::types, tty::PortExtra};
 
 /// Serial port configuration (baud rate, data bits, stop bits, parity)
 /// This replaces the runtime SerialConfig that was in the disabled runtime module
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SerialConfig {
     pub baud: u32,
     pub data_bits: u8,
@@ -12,7 +13,7 @@ pub struct SerialConfig {
     pub parity: SerialParity,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SerialParity {
     None,
     Odd,
@@ -77,7 +78,8 @@ pub enum PortSubprocessMode {
     MasterProvide,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum PortState {
     Free,
     OccupiedByThis,

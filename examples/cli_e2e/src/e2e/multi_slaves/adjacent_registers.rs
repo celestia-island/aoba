@@ -25,7 +25,7 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
             persistence: PersistenceMode::Persistent,
         },
         stations: vec![StationConfig {
-            id: 1,
+            station_id: 1,
             mode: StationMode::Slave,
             map: RegisterMap {
                 holding: vec![

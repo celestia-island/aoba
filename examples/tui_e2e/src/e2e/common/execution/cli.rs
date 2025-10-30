@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use once_cell::sync::OnceCell;
 use serde_json::json;
 use std::{
@@ -230,6 +230,13 @@ pub async fn verify_master_data(
     log::info!("🔍 DEBUG: CLI slave-poll starting on port {port2}");
     log::info!("🔍 DEBUG: Expected data: {expected_data:?}");
 
+    ensure!(
+        config.is_single_range(),
+        "Station {} defines {} register ranges; CLI single-range helpers only support one range. Use a JSON config file with --config for multi-range or multi-station scenarios.",
+        config.station_id,
+        config.range_count()
+    );
+
     let binary = ensure_aoba_binary()?;
     log::info!("🔍 DEBUG: Using binary: {}", binary.display());
 
@@ -239,11 +246,11 @@ pub async fn verify_master_data(
         "--station-id".to_string(),
         config.station_id.to_string(),
         "--register-address".to_string(),
-        config.start_address.to_string(),
+        config.start_address().to_string(),
         "--register-length".to_string(),
-        config.register_count.to_string(),
+        config.register_count().to_string(),
         "--register-mode".to_string(),
-        config.register_mode.as_cli_mode().to_string(),
+        config.register_mode().as_cli_mode().to_string(),
         "--baud-rate".to_string(),
         "9600".to_string(),
         "--json".to_string(),
@@ -342,6 +349,13 @@ pub async fn send_data_from_cli_master(
     log::info!("🔍 DEBUG: CLI master-provide starting on port {port2}");
     log::info!("🔍 DEBUG: Expected data: {expected_data:?}");
 
+    ensure!(
+        config.is_single_range(),
+        "Station {} defines {} register ranges; CLI single-range helpers only support one range. Use a JSON config file with --config for multi-range or multi-station scenarios.",
+        config.station_id,
+        config.range_count()
+    );
+
     let binary = ensure_aoba_binary()?;
     log::info!("🔍 DEBUG: Using binary: {}", binary.display());
 
@@ -361,11 +375,11 @@ pub async fn send_data_from_cli_master(
         "--station-id".to_string(),
         config.station_id.to_string(),
         "--register-address".to_string(),
-        config.start_address.to_string(),
+        config.start_address().to_string(),
         "--register-length".to_string(),
-        config.register_count.to_string(),
+        config.register_count().to_string(),
         "--register-mode".to_string(),
-        config.register_mode.as_cli_mode().to_string(),
+        config.register_mode().as_cli_mode().to_string(),
         "--baud-rate".to_string(),
         "9600".to_string(),
         "--data-source".to_string(),
@@ -463,6 +477,13 @@ pub async fn verify_slave_data<T: Expect>(
 ) -> Result<()> {
     log::info!("🔍 Verifying Slave configuration in TUI status file...");
 
+    ensure!(
+        config.is_single_range(),
+        "Station {} defines {} register ranges; CLI single-range helpers only support one range. Use a JSON config file with --config for multi-range or multi-station scenarios.",
+        config.station_id,
+        config.range_count()
+    );
+
     let status = read_tui_status().map_err(|e| {
         anyhow!(
             "Failed to read TUI status file for Slave verification: {}",
@@ -471,15 +492,25 @@ pub async fn verify_slave_data<T: Expect>(
     })?;
     log::info!("🔍 DEBUG: Status file read successfully");
 
-    if status.ports.is_empty() || status.ports[0].modbus_slaves.is_empty() {
-        return Err(anyhow!("No slave configuration found in status file"));
-    }
+    let slaves: Vec<_> = status
+        .ports
+        .iter()
+        .flat_map(|port| port.modbus_slaves.iter())
+        .collect();
 
-    let slave = &status.ports[0].modbus_slaves[0];
-    log::info!(
-        "🔍 DEBUG: Found {} slave configurations",
-        status.ports[0].modbus_slaves.len()
+    ensure!(
+        !slaves.is_empty(),
+        "No slave configuration found in status file. CLI helper expects exactly one slave; multi-station tests must use a config file instead."
     );
+
+    ensure!(
+        slaves.len() == 1,
+        "Found {} slave configurations in status file; CLI single-range helpers support only one. Use a JSON config file with --config for multi-station scenarios.",
+        slaves.len()
+    );
+
+    let slave = slaves[0];
+    log::info!("🔍 DEBUG: Found {} slave configurations", slaves.len());
     log::info!(
         "🔍 DEBUG: Slave config - ID:{}, Type:{}, Addr:{}, Count:{}",
         slave.station_id,
@@ -496,18 +527,18 @@ pub async fn verify_slave_data<T: Expect>(
         ));
     }
 
-    if slave.start_address != config.start_address {
+    if slave.start_address != config.start_address() {
         return Err(anyhow!(
             "Slave start address mismatch: expected {}, got {}",
-            config.start_address,
+            config.start_address(),
             slave.start_address
         ));
     }
 
-    if slave.register_count != config.register_count as usize {
+    if slave.register_count != config.register_count() as usize {
         return Err(anyhow!(
             "Slave register count mismatch: expected {}, got {}",
-            config.register_count,
+            config.register_count(),
             slave.register_count
         ));
     }

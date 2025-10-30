@@ -22,7 +22,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
         // Coils
         for range in &station.map.coils {
             items.push(ModbusRegisterItem {
-                station_id: station.id,
+                station_id: station.station_id,
                 register_mode: RegisterMode::Coils,
                 register_address: range.address_start,
                 register_length: range.length,
@@ -39,7 +39,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
         // Discrete Inputs
         for range in &station.map.discrete_inputs {
             items.push(ModbusRegisterItem {
-                station_id: station.id,
+                station_id: station.station_id,
                 register_mode: RegisterMode::DiscreteInputs,
                 register_address: range.address_start,
                 register_length: range.length,
@@ -56,7 +56,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
         // Holding Registers
         for range in &station.map.holding {
             items.push(ModbusRegisterItem {
-                station_id: station.id,
+                station_id: station.station_id,
                 register_mode: RegisterMode::Holding,
                 register_address: range.address_start,
                 register_length: range.length,
@@ -73,7 +73,7 @@ pub fn stations_to_register_items(stations: &[StationConfig]) -> Vec<ModbusRegis
         // Input Registers
         for range in &station.map.input {
             items.push(ModbusRegisterItem {
-                station_id: station.id,
+                station_id: station.station_id,
                 register_mode: RegisterMode::Input,
                 register_address: range.address_start,
                 register_length: range.length,
@@ -124,15 +124,15 @@ pub fn register_items_to_stations(
     // Convert to StationConfig list
     let mut stations: Vec<StationConfig> = station_map
         .into_iter()
-        .map(|(id, map)| StationConfig {
-            id,
+        .map(|(station_id, map)| StationConfig {
+            station_id,
             mode: modbus_connection_mode_to_station_mode(&mode),
             map,
         })
         .collect();
 
     // Sort by station ID for consistent ordering
-    stations.sort_by_key(|s| s.id);
+    stations.sort_by_key(|s| s.station_id);
 
     stations
 }
@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn test_stations_to_register_items() {
         let stations = vec![StationConfig {
-            id: 1,
+            station_id: 1,
             mode: StationMode::Master,
             map: RegisterMap {
                 holding: vec![RegisterRange {
@@ -223,7 +223,7 @@ mod tests {
         let stations = register_items_to_stations(&items, ModbusConnectionMode::Master);
 
         assert_eq!(stations.len(), 1);
-        assert_eq!(stations[0].id, 1);
+        assert_eq!(stations[0].station_id, 1);
         assert_eq!(stations[0].mode, StationMode::Master);
         assert_eq!(stations[0].map.holding.len(), 1);
         assert_eq!(stations[0].map.coils.len(), 1);
