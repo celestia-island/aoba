@@ -1,6 +1,8 @@
 use std::convert::TryFrom;
 use strum::{EnumIter, FromRepr};
 
+use serde::{Deserialize, Serialize};
+
 use crate::i18n::lang;
 
 #[repr(u8)]
@@ -66,7 +68,8 @@ impl std::fmt::Display for ModbusConnectionMode {
 }
 
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, EnumIter, FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, FromRepr, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RegisterMode {
     Coils = 1,
     DiscreteInputs = 2,

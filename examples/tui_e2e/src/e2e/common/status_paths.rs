@@ -1,4 +1,8 @@
+use anyhow::{anyhow, Result};
 use serde_json::to_string;
+use tokio::time::{sleep, Duration};
+
+use ci_utils::read_tui_status;
 
 /// JSON path to the current page "type" field in the status dump.
 pub(super) const PAGE_TYPE_PATH: &str = "page.type";
@@ -54,4 +58,46 @@ pub(super) fn station_field_path(
 /// Return the JSONPath to the page type field.
 pub(super) fn page_type_path() -> &'static str {
     PAGE_TYPE_PATH
+}
+
+/// Wait until the specified port reports at least `expected_count` stations in the TUI status dump.
+pub async fn wait_for_station_count(
+    port_name: &str,
+    is_master: bool,
+    expected_count: usize,
+    timeout_secs: u64,
+) -> Result<()> {
+    let started = std::time::Instant::now();
+    let timeout = Duration::from_secs(timeout_secs);
+    let interval = Duration::from_millis(500);
+
+    loop {
+        if started.elapsed() > timeout {
+            return Err(anyhow!(
+                "Timeout waiting for port {port_name} to report {expected_count} {} station(s)",
+                if is_master { "master" } else { "slave" }
+            ));
+        }
+
+        match read_tui_status() {
+            Ok(status) => {
+                if let Some(port) = status.ports.iter().find(|p| p.name == port_name) {
+                    let current = if is_master {
+                        port.modbus_masters.len()
+                    } else {
+                        port.modbus_slaves.len()
+                    };
+
+                    if current >= expected_count {
+                        return Ok(());
+                    }
+                }
+            }
+            Err(err) => {
+                log::debug!("wait_for_station_count: failed to read TUI status: {err}");
+            }
+        }
+
+        sleep(interval).await;
+    }
 }

@@ -1,5 +1,9 @@
 use ci_utils::ArrowKey;
 
+/// Re-export the canonical RegisterMode used by the aoba binary so tests
+/// operate on the same enumeration as the runtime.
+pub use _bin::protocol::status::types::modbus::RegisterMode;
+
 /// Station configuration for TUI tests.
 ///
 /// This structure encapsulates all parameters needed to configure a Modbus station
@@ -202,33 +206,17 @@ pub struct StationConfig {
 ///
 /// - [`StationConfig`]: Uses this enum to specify register type
 /// - [`as_cli_mode`]: Convert to CLI mode string for command-line operations
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RegisterMode {
-    Coils,          // 01 Coils
-    DiscreteInputs, // 02 Discrete Inputs (writable coils)
-    Holding,        // 03 Holding Registers
-    Input,          // 04 Input Registers (writable registers)
+/// Extension helpers for the shared RegisterMode enum that are only needed by
+/// the test harness (e.g. translating into CLI strings or navigation hints).
+pub trait RegisterModeExt {
+    fn as_cli_mode(&self) -> &'static str;
+    fn display_name(&self) -> &'static str;
+    fn status_value(&self) -> &'static str;
+    fn arrow_from_default(&self) -> (ArrowKey, usize);
 }
 
-impl RegisterMode {
-    /// Get the CLI mode string for command-line operations.
-    ///
-    /// # Returns
-    ///
-    /// Returns the lowercase mode string used in CLI commands:
-    /// - `Coils` → `"coils"`
-    /// - `DiscreteInputs` → `"discrete_inputs"`
-    /// - `Holding` → `"holding"`
-    /// - `Input` → `"input"`
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use aoba::protocol::modbus::RegisterMode;
-    /// let mode = RegisterMode::Holding;
-    /// assert_eq!(mode.as_cli_mode(), "holding");
-    /// ```
-    pub fn as_cli_mode(&self) -> &'static str {
+impl RegisterModeExt for RegisterMode {
+    fn as_cli_mode(&self) -> &'static str {
         match self {
             RegisterMode::Coils => "coils",
             RegisterMode::DiscreteInputs => "discrete_inputs",
@@ -237,25 +225,7 @@ impl RegisterMode {
         }
     }
 
-    /// Get the display name as shown in TUI interface.
-    ///
-    /// # Returns
-    ///
-    /// Returns the human-readable name displayed in TUI:
-    /// - `Coils` → `"Coils"`
-    /// - `DiscreteInputs` → `"Discrete Inputs"`
-    /// - `Holding` → `"Holding"`
-    /// - `Input` → `"Input"`
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use aoba::protocol::modbus::RegisterMode;
-    /// let mode = RegisterMode::DiscreteInputs;
-    /// assert_eq!(mode.display_name(), "Discrete Inputs");
-    /// ```
-    #[allow(dead_code)]
-    pub fn display_name(&self) -> &'static str {
+    fn display_name(&self) -> &'static str {
         match self {
             RegisterMode::Coils => "Coils",
             RegisterMode::DiscreteInputs => "Discrete Inputs",
@@ -264,14 +234,7 @@ impl RegisterMode {
         }
     }
 
-    /// Get the canonical value emitted in TUI status dumps.
-    ///
-    /// The status tree stores the enum variant names using camel case without
-    /// spaces (e.g. `"DiscreteInputs"`). This helper mirrors that encoding so
-    /// tests can assert against the exact JSON payload without hard-coding
-    /// string literals throughout the codebase.
-    #[allow(dead_code)]
-    pub fn status_value(&self) -> &'static str {
+    fn status_value(&self) -> &'static str {
         match self {
             RegisterMode::Coils => "Coils",
             RegisterMode::DiscreteInputs => "DiscreteInputs",
@@ -280,58 +243,11 @@ impl RegisterMode {
         }
     }
 
-    /// Get arrow key navigation from default mode (Holding) to this mode.
-    ///
-    /// # Purpose
-    ///
-    /// In the TUI register mode selector, `Holding` is the default selected mode
-    /// (appears at index 2 in the list). This method calculates the arrow key
-    /// sequence needed to navigate from Holding to the desired mode.
-    ///
-    /// # Mode List Order in TUI
-    ///
-    /// ```text
-    /// Index 0: Coils             ← 2 Left from Holding
-    /// Index 1: Discrete Inputs   ← 1 Left from Holding
-    /// Index 2: Holding           ← Default (no movement)
-    /// Index 3: Input             ← 1 Right from Holding
-    /// ```
-    ///
-    /// # Returns
-    ///
-    /// Returns `(ArrowKey, count)` tuple:
-    /// - `ArrowKey::Left` or `ArrowKey::Right` - Direction to move
-    /// - `usize` - Number of times to press the arrow key
-    ///
-    /// Special case: `Holding` returns `(ArrowKey::Down, 0)` meaning no movement needed.
-    ///
-    /// # Example
-    ///
-    /// ```rust,no_run
-    /// # use aoba::protocol::modbus::RegisterMode;
-    /// # use ci_utils::ArrowKey;
-    /// // Navigate from Holding (default) to Coils
-    /// let mode = RegisterMode::Coils;
-    /// let (direction, count) = mode.arrow_from_default();
-    /// assert_eq!(direction, ArrowKey::Left);
-    /// assert_eq!(count, 2); // Press Left arrow 2 times
-    ///
-    /// // Navigate to Input
-    /// let mode = RegisterMode::Input;
-    /// let (direction, count) = mode.arrow_from_default();
-    /// assert_eq!(direction, ArrowKey::Right);
-    /// assert_eq!(count, 1); // Press Right arrow 1 time
-    ///
-    /// // Holding is default, no movement
-    /// let mode = RegisterMode::Holding;
-    /// let (direction, count) = mode.arrow_from_default();
-    /// assert_eq!(count, 0); // No movement needed
-    /// ```
-    pub fn arrow_from_default(&self) -> (ArrowKey, usize) {
+    fn arrow_from_default(&self) -> (ArrowKey, usize) {
         match self {
             RegisterMode::Coils => (ArrowKey::Left, 2),
             RegisterMode::DiscreteInputs => (ArrowKey::Left, 1),
-            RegisterMode::Holding => (ArrowKey::Down, 0), // No movement
+            RegisterMode::Holding => (ArrowKey::Down, 0),
             RegisterMode::Input => (ArrowKey::Right, 1),
         }
     }
