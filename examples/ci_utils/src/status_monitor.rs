@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use tokio::time::{sleep, Duration};
 
-pub use aoba::cli::status::serializable::{CliMode, CliStatus, RegisterMode};
+pub use aoba::protocol::status::types::cli::{CliMode, CliStatus};
 pub use aoba::tui::status::serializable::{
     PortState, TuiModbusMaster, TuiModbusSlave, TuiPage, TuiPort, TuiStatus,
 };

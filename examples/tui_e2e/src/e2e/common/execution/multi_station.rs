@@ -612,13 +612,13 @@ pub async fn run_multi_station_master_test(
 ///
 /// ## Check CLI Master Output
 /// ```bash
-/// # Run CLI master-write manually to debug
-/// aoba --master-write COM4 \
-///   --station-id 1 \
-///   --register-address 100 \
-///   --register-values 1000,2000,3000,4000,5000 \
-///   --register-mode holding \
-///   --json
+/// # Prepare JSONL file with register updates (one entry per line)
+/// cat <<'EOF' > /tmp/master_data.jsonl
+/// {"station_id":1,"register_address":100,"register_mode":"holding","register_values":[1000,2000,3000,4000,5000]}
+/// EOF
+///
+/// # Run CLI master-provide manually to debug
+/// aoba --master-provide COM4 --data-file /tmp/master_data.jsonl --json
 /// ```
 ///
 /// ## Test Individual Slaves
