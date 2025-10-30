@@ -6,30 +6,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serialport::{DataBits, SerialPort, StopBits};
+use serialport::{DataBits, Parity, SerialPort, StopBits};
+
+use crate::protocol::status::types::port::{SerialConfig, SerialParity};
 
 // Read buffer and assembling limits shared by runtime implementation.
 const READ_BUF_SIZE: usize = 256;
 const MAX_ASSEMBLING_LEN: usize = 768; // defensive cap (3 * READ_BUF_SIZE)
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SerialConfig {
-    pub baud: u32,
-    pub data_bits: u8,
-    pub stop_bits: u8,
-    pub parity: serialport::Parity,
-}
-
-impl Default for SerialConfig {
-    fn default() -> Self {
-        Self {
-            baud: 9600,
-            data_bits: 8,
-            stop_bits: 1,
-            parity: serialport::Parity::None,
-        }
-    }
-}
 
 impl SerialConfig {
     pub fn apply_builder(&self, b: serialport::SerialPortBuilder) -> serialport::SerialPortBuilder {
@@ -43,8 +26,13 @@ impl SerialConfig {
             2 => StopBits::Two,
             _ => StopBits::One,
         });
+        let parity = match self.parity {
+            SerialParity::None => Parity::None,
+            SerialParity::Odd => Parity::Odd,
+            SerialParity::Even => Parity::Even,
+        };
 
-        b.parity(self.parity)
+        b.parity(parity)
     }
 }
 

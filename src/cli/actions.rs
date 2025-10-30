@@ -266,7 +266,7 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
     for station in &config.stations {
         log::info!(
             "  - Station {}: mode={}, coils={}, discrete={}, holding={}, input={}",
-            station.id,
+            station.station_id,
             station.mode,
             station.map.coils.len(),
             station.map.discrete_inputs.len(),
@@ -451,7 +451,7 @@ fn process_modbus_frame(
     // Find if we have a station with this ID configured as slave/listener
     let has_station = stations
         .iter()
-        .any(|s| s.id == station_id && matches!(s.mode, super::config::StationMode::Slave));
+        .any(|s| s.station_id == station_id && matches!(s.mode, super::config::StationMode::Slave));
 
     if !has_station {
         // Not our station, ignore
