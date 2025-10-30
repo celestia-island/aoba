@@ -22,16 +22,15 @@ use ci_utils::*;
 ///
 /// # Configuration Flow
 ///
-/// ```text
-/// For each station in config_list:
-///       │
-///       ├─ Navigate to Modbus panel
-///       ├─ Configure connection mode (Master/Slave)
-///       ├─ Create station with proper mode
-///       ├─ Configure register type, address, count
-///       ├─ Initialize register values (Slave only)
-///       ├─ Save configuration
-///       │
+/// ```mermaid
+/// flowchart TD
+///     start[For each station in config_list]
+///     start --> nav[Navigate to Modbus panel]
+///     nav --> mode[Configure connection mode (Master/Slave)]
+///     mode --> create[Create station with proper mode]
+///     create --> registers[Configure register type, address, count]
+///     registers --> init[Initialize register values (Slave only)]
+///     init --> save[Save configuration]
 /// ```
 ///
 /// # Parameters
@@ -229,35 +228,27 @@ pub async fn configure_multiple_stations<T: Expect>(
 ///
 /// # Test Architecture
 ///
-/// ```text
-/// Port1 (TUI Masters)                  Port2 (CLI Slaves)
-///       │                                     │
-///       ├─ Configure Master #1                │
-///       ├─ Configure Master #2                │
-///       │                                     │
-///       │                            ┌────────┴────────┐
-///       │                            │ Start CLI Slave │
-///       │                            │ with data for   │
-///       │                            │ Master #1       │
-///       │                            └────────┬────────┘
-///       │                                     │
-///       ├────── Master #1 Poll ──────────────>│
-///       │<──── Response (data) ───────────────┤
-///       │                                     │
-///       │                            ┌────────┴────────┐
-///       │                            │ Switch CLI to   │
-///       │                            │ data for        │
-///       │                            │ Master #2       │
-///       │                            └────────┬────────┘
-///       │                                     │
-///       ├────── Master #2 Poll ──────────────>│
-///       │<──── Response (data) ───────────────┤
-///       │                                     │
-///   ┌───┴───┐                                 │
-///   │Verify │                                 │
-///   │ All   │                                 │
-///   │ Data  │                                 │
-///   └───────┘                                 │
+/// ```mermaid
+/// flowchart LR
+///     subgraph tuimasters[Port1 · TUI Masters]
+///         tm1[Configure Master #1]
+///         tm2[Configure Master #2]
+///         tm3[Master #1 Polls]
+///         tm4[Master #2 Polls]
+///         tm5[Verify All Data]
+///     end
+///     subgraph clislaves[Port2 · CLI Slaves]
+///         cs1[Start CLI Slave with data for Master #1]
+///         cs2[Switch CLI to data for Master #2]
+///     end
+///     tm1 --> tm2 --> tm3
+///     tm2 --> cs1
+///     tm3 -->|Poll request| cs1
+///     cs1 -->|Response (data)| tm3
+///     tm3 --> cs2
+///     tm4 -->|Poll request| cs2
+///     cs2 -->|Response (data)| tm4
+///     tm4 --> tm5
 /// ```
 ///
 /// # Parameters
@@ -485,35 +476,27 @@ pub async fn run_multi_station_master_test(
 ///
 /// # Test Architecture
 ///
-/// ```text
-/// Port1 (TUI Slaves)                   Port2 (CLI Masters)
-///       │                                     │
-///       ├─ Configure Slave #1                 │
-///       ├─ Configure Slave #2                 │
-///       │                                     │
-///       │                            ┌────────┴────────┐
-///       │                            │ Start CLI Master│
-///       │                            │ with data for   │
-///       │                            │ Slave #1        │
-///       │                            └────────┬────────┘
-///       │                                     │
-///       │<────── Master Write ────────────────┤
-///       ├──────── Response ──────────────────>│
-///       │                                     │
-///       │                            ┌────────┴────────┐
-///       │                            │ Switch CLI to   │
-///       │                            │ data for        │
-///       │                            │ Slave #2        │
-///       │                            └────────┬────────┘
-///       │                                     │
-///       │<────── Master Write ────────────────┤
-///       ├──────── Response ──────────────────>│
-///       │                                     │
-///   ┌───┴───┐                                 │
-///   │Verify │                                 │
-///   │ All   │                                 │
-///   │ Data  │                                 │
-///   └───────┘                                 │
+/// ```mermaid
+/// flowchart LR
+///     subgraph tuislaves[Port1 · TUI Slaves]
+///         ts1[Configure Slave #1]
+///         ts2[Configure Slave #2]
+///         ts3[Store write for Slave #1]
+///         ts4[Store write for Slave #2]
+///         ts5[Verify All Data]
+///     end
+///     subgraph climasters[Port2 · CLI Masters]
+///         cm1[Start CLI Master with data for Slave #1]
+///         cm2[Switch CLI to data for Slave #2]
+///     end
+///     ts1 --> ts2
+///     ts2 --> cm1
+///     cm1 -->|Master write| ts3
+///     ts3 -->|Response| cm1
+///     ts3 --> cm2
+///     cm2 -->|Master write| ts4
+///     ts4 -->|Response| cm2
+///     ts4 --> ts5
 /// ```
 ///
 /// # Parameters
