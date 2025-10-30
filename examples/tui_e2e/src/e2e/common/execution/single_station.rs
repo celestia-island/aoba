@@ -53,7 +53,7 @@ use ci_utils::*;
 /// - `port2`: Serial port for CLI Slave (e.g., "COM4", "/dev/ttyUSB1")
 ///   - Connected to `port1` via null modem or virtual pair
 /// - `config`: Station configuration without initial values
-///   - `config.is_master` should be `true`
+///   - `config.is_master()` should be `true`
 ///   - `register_values` will be overwritten with generated test data
 ///
 /// # Returns
@@ -66,7 +66,7 @@ use ci_utils::*;
 /// ## Stage 1: Generate Test Data
 /// - **Coils/DiscreteInputs**: Random bit values (0 or 1) via `generate_random_coils`
 /// - **Holding/Input**: Random 16-bit values (0-65535) via `generate_random_registers`
-/// - Data length matches `config.register_count`
+/// - Data length matches `config.register_count()`
 ///
 /// ## Stage 2: Setup TUI Master
 /// - Call `setup_tui_test(port1, port2)` to initialize environment
@@ -274,7 +274,7 @@ pub async fn run_single_station_master_test(
 /// - `port2`: Serial port for CLI Master (e.g., "COM4", "/dev/ttyUSB1")
 ///   - Connected to `port1` via null modem or virtual pair
 /// - `config`: Station configuration without initial values
-///   - `config.is_master` should be `false`
+///   - `config.is_master()` should be `false`
 ///   - `register_values` will be overwritten with generated test data
 ///
 /// # Returns
@@ -287,7 +287,7 @@ pub async fn run_single_station_master_test(
 /// ## Stage 1: Generate Test Data
 /// - **Coils/DiscreteInputs**: Random bit values (0 or 1) via `generate_random_coils`
 /// - **Holding/Input**: Random 16-bit values (0-65535) via `generate_random_registers`
-/// - Data length matches `config.register_count`
+/// - Data length matches `config.register_count()`
 ///
 /// ## Stage 2: Setup TUI Slave
 /// - Call `setup_tui_test(port1, port2)` to initialize environment
@@ -435,18 +435,18 @@ pub async fn run_single_station_slave_test(
 
     // Generate test data
     let test_data = if matches!(
-        config.register_mode,
+        config.register_mode(),
         RegisterMode::Coils | RegisterMode::DiscreteInputs
     ) {
-        generate_random_coils(config.register_count as usize)
+        generate_random_coils(config.register_count() as usize)
     } else {
-        generate_random_registers(config.register_count as usize)
+        generate_random_registers(config.register_count() as usize)
     };
     log::info!("Generated test data: {test_data:?}");
 
     // Create config with test data
     let mut config_with_data = config.clone();
-    config_with_data.register_values = Some(test_data.clone());
+    config_with_data.set_register_values(Some(test_data.clone()));
 
     // Setup TUI
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;

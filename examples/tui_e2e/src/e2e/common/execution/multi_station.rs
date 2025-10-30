@@ -427,18 +427,18 @@ pub async fn run_multi_station_master_test(
 
             // Generate test data for this Master-Slave pair
             let test_data = if matches!(
-                slave_config.register_mode,
+                slave_config.register_mode(),
                 RegisterMode::Coils | RegisterMode::DiscreteInputs
             ) {
-                generate_random_coils(slave_config.register_count as usize)
+                generate_random_coils(slave_config.register_count() as usize)
             } else {
-                generate_random_registers(slave_config.register_count as usize)
+                generate_random_registers(slave_config.register_count() as usize)
             };
 
             // Create Slave config with test data and matching station ID
             let mut slave_config_with_data = slave_config.clone();
             slave_config_with_data.station_id = master_config.station_id; // Match Master's ID
-            slave_config_with_data.register_values = Some(test_data.clone());
+            slave_config_with_data.set_register_values(Some(test_data.clone()));
 
             // Start CLI Slave with test data
             // Note: In real implementation, would need to start CLI slave process here
@@ -662,12 +662,12 @@ pub async fn run_multi_station_slave_test(
 
         // Generate test data for this Slave
         let test_data = if matches!(
-            slave_config.register_mode,
+            slave_config.register_mode(),
             RegisterMode::Coils | RegisterMode::DiscreteInputs
         ) {
-            generate_random_coils(slave_config.register_count as usize)
+            generate_random_coils(slave_config.register_count() as usize)
         } else {
-            generate_random_registers(slave_config.register_count as usize)
+            generate_random_registers(slave_config.register_count() as usize)
         };
 
         // Send data from CLI Master to this Slave

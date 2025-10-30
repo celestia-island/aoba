@@ -26,7 +26,7 @@ pub async fn test_multi_slaves() -> Result<()> {
         },
         stations: vec![
             StationConfig {
-                id: 1,
+                station_id: 1,
                 mode: StationMode::Slave,
                 map: RegisterMap {
                     holding: vec![RegisterRange {
@@ -38,7 +38,7 @@ pub async fn test_multi_slaves() -> Result<()> {
                 },
             },
             StationConfig {
-                id: 2,
+                station_id: 2,
                 mode: StationMode::Slave,
                 map: RegisterMap {
                     input: vec![RegisterRange {
@@ -50,7 +50,7 @@ pub async fn test_multi_slaves() -> Result<()> {
                 },
             },
             StationConfig {
-                id: 3,
+                station_id: 3,
                 mode: StationMode::Slave,
                 map: RegisterMap {
                     coils: vec![RegisterRange {

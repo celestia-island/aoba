@@ -3,20 +3,13 @@
 /// Tests TUI acting as Modbus Slave with E2E process as CLI Master.
 use anyhow::Result;
 
-use super::super::common::{run_single_station_slave_test, RegisterMode, StationConfig};
+use super::super::common::{make_station_config, run_single_station_slave_test, RegisterMode};
 
 /// Test 01: TUI Slave with Coils mode (0x0000, length 10)
 pub async fn test_tui_slave_coils(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Test: TUI Slave with Coils mode");
 
-    let config = StationConfig {
-        station_id: 1,
-        register_mode: RegisterMode::Coils,
-        start_address: 0x0000,
-        register_count: 10,
-        is_master: false, // Slave mode
-        register_values: None,
-    };
+    let config = make_station_config(1, RegisterMode::Coils, 0x0100, 10, false, None);
 
     run_single_station_slave_test(port1, port2, config).await
 }
@@ -25,14 +18,7 @@ pub async fn test_tui_slave_coils(port1: &str, port2: &str) -> Result<()> {
 pub async fn test_tui_slave_discrete_inputs(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Test: TUI Slave with Discrete Inputs mode");
 
-    let config = StationConfig {
-        station_id: 1,
-        register_mode: RegisterMode::DiscreteInputs,
-        start_address: 0x0010,
-        register_count: 10,
-        is_master: false, // Slave mode
-        register_values: None,
-    };
+    let config = make_station_config(1, RegisterMode::DiscreteInputs, 0x0200, 10, false, None);
 
     run_single_station_slave_test(port1, port2, config).await
 }
@@ -41,14 +27,7 @@ pub async fn test_tui_slave_discrete_inputs(port1: &str, port2: &str) -> Result<
 pub async fn test_tui_slave_holding_registers(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Test: TUI Slave with Holding Registers mode");
 
-    let config = StationConfig {
-        station_id: 1,
-        register_mode: RegisterMode::Holding,
-        start_address: 0x0020,
-        register_count: 10,
-        is_master: false, // Slave mode
-        register_values: None,
-    };
+    let config = make_station_config(1, RegisterMode::Holding, 0x0300, 10, false, None);
 
     run_single_station_slave_test(port1, port2, config).await
 }
@@ -57,14 +36,7 @@ pub async fn test_tui_slave_holding_registers(port1: &str, port2: &str) -> Resul
 pub async fn test_tui_slave_input_registers(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Test: TUI Slave with Input Registers mode");
 
-    let config = StationConfig {
-        station_id: 1,
-        register_mode: RegisterMode::Input,
-        start_address: 0x0030,
-        register_count: 10,
-        is_master: false, // Slave mode
-        register_values: None,
-    };
+    let config = make_station_config(1, RegisterMode::Input, 0x0400, 10, false, None);
 
     run_single_station_slave_test(port1, port2, config).await
 }

@@ -21,6 +21,8 @@ pub mod serializable {
     use anyhow::{anyhow, Result};
     use serde::{Deserialize, Serialize};
 
+    pub use crate::protocol::status::types::port::PortState;
+
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct TuiStatus {
         pub ports: Vec<TuiPort>,
@@ -36,14 +38,6 @@ pub mod serializable {
         pub modbus_masters: Vec<TuiModbusMaster>,
         pub modbus_slaves: Vec<TuiModbusSlave>,
         pub log_count: usize,
-    }
-
-    #[derive(Debug, Clone, Serialize, Deserialize)]
-    #[serde(tag = "type", rename_all = "snake_case")]
-    pub enum PortState {
-        Free,
-        OccupiedByThis,
-        OccupiedByOther,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,26 +69,14 @@ pub mod serializable {
     /// Convert from global Status to TuiStatus for serialization
     impl TuiStatus {
         pub fn from_status(status: &super::Status) -> Self {
-            use crate::protocol::status::types::port::{
-                PortConfig, PortState as ProtocolPortState,
-            };
+            use crate::protocol::status::types::port::PortConfig;
 
             let mut ports = Vec::new();
 
             for port_name in &status.ports.order {
                 if let Some(port) = status.ports.map.get(port_name) {
-                    let enabled = matches!(port.state, ProtocolPortState::OccupiedByThis);
-                    let state = match &port.state {
-                        ProtocolPortState::Free => {
-                            crate::tui::status::serializable::PortState::Free
-                        }
-                        ProtocolPortState::OccupiedByThis => {
-                            crate::tui::status::serializable::PortState::OccupiedByThis
-                        }
-                        ProtocolPortState::OccupiedByOther => {
-                            crate::tui::status::serializable::PortState::OccupiedByOther
-                        }
-                    };
+                    let enabled = matches!(port.state, PortState::OccupiedByThis);
+                    let state = port.state.clone();
 
                     let mut modbus_masters = Vec::new();
                     let mut modbus_slaves = Vec::new();
