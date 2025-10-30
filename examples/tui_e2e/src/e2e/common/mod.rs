@@ -15,7 +15,7 @@
 //! - [`retry`]: Transaction-style retry mechanisms with checkpoint-based rollback
 //! - [`config`]: Configuration structures for Modbus stations and registers
 //! - [`navigation`]: TUI environment setup and panel navigation
-//! - [`test_execution`]: High-level test orchestrators and data verification
+//! - [`execution`]: High-level test orchestrators and data verification
 //! - [`station`]: Station-specific test utilities and configurations
 //!
 //! # Usage Examples
@@ -23,7 +23,7 @@
 //! ## Basic Single-Station Test
 //!
 //! ```rust,no_run
-//! use common::{config::StationConfig, navigation::setup_tui_test, test_execution::run_single_station_master_test};
+//! use common::{config::StationConfig, execution::run_single_station_master_test, navigation::setup_tui_test};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Configure a Master station
@@ -45,7 +45,7 @@
 //! ## Multi-Station Test
 //!
 //! ```rust,no_run
-//! use common::{config::{StationConfig, RegisterMode}, test_execution::run_multi_station_master_test};
+//! use common::{config::{StationConfig, RegisterMode}, execution::run_multi_station_master_test};
 //!
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let masters = vec![
@@ -136,17 +136,17 @@
 
 // Re-export all public items from submodules for convenient access
 pub mod config;
+pub mod execution;
 pub mod navigation;
 pub mod retry;
 mod status_paths;
-pub mod test_execution;
 pub mod validation;
 
 // Re-export commonly used types and functions
 #[allow(unused_imports)]
 pub use config::{RegisterMode, StationConfig};
 #[allow(unused_imports)]
-pub use test_execution::{
+pub use execution::{
     run_multi_station_master_test, run_multi_station_slave_test, run_single_station_master_test,
     run_single_station_slave_test,
 };

@@ -194,7 +194,7 @@ use ci_utils::*;
 ///
 /// # See Also
 ///
-/// - [`send_data_from_cli_master`]: Function to poll Slave via CLI Master
+/// - [`send_data_from_cli_master`]: Function to supply data via CLI master-provide
 /// - [`run_single_station_slave_test`]: Inverse test (CLI Master, TUI Slave)
 /// - [`configure_tui_station`]: Underlying station configuration
 /// - [`setup_tui_test`]: Environment initialization
@@ -253,12 +253,12 @@ pub async fn run_single_station_master_test(
 ///       ├─ Initialize with test data          │
 ///       │                                     │
 ///       │                            ┌────────┴────────┐
-///       │                            │ Start CLI Master│
-///       │                            │  polling mode   │
+///       │                            │ Start CLI Data  │
+///       │                            │   Provider      │
 ///       │                            └────────┬────────┘
 ///       │                                     │
-///       │<──────── Poll Request ──────────────┤
-///       ├────────── Response ────────────────>│
+///       │──────── Poll Request ──────────────>│
+///       │<────────── Response ────────────────┤
 ///       │         (test data)                 │
 ///       │                                     │
 ///       │                                ┌────┴────┐
@@ -295,13 +295,13 @@ pub async fn run_single_station_master_test(
 /// - Call `configure_tui_station` with test data to create Slave station
 /// - TUI writes test data to Slave registers
 ///
-/// ## Stage 3: Start CLI Master and Poll
-/// - Call `send_data_from_cli_master` to spawn CLI in slave-poll mode (acts as Modbus master)
-/// - CLI sends read request to TUI Slave
-/// - TUI Slave responds with register data
+/// ## Stage 3: Provide a Modbus responder for TUI polling
+/// - Call `send_data_from_cli_master` to spawn CLI in master-provide mode (acts as Modbus slave/server)
+/// - CLI waits for the TUI's polling request and responds with the prepared data set
+/// - TUI Slave receives the response via its background `slave-poll-persist` subprocess
 ///
 /// ## Stage 4: Verify Data
-/// - `send_data_from_cli_master` internally verifies CLI's received data
+/// - `send_data_from_cli_master` parses the CLI output to confirm the served values
 /// - Compare against original test data
 /// - Verify all registers match (exact equality check)
 ///
@@ -391,12 +391,14 @@ pub async fn run_single_station_master_test(
 ///
 /// ## Monitor CLI Output
 /// ```bash
-/// # Run CLI slave-poll manually to debug
-/// aoba --slave-poll COM4 \
+/// # Run CLI master-provide manually to debug
+/// printf '{"values":[1,2,3,4,5]}' > /tmp/data.json
+/// aoba --master-provide COM4 \
 ///   --station-id 1 \
 ///   --register-address 200 \
 ///   --register-length 10 \
 ///   --register-mode holding \
+///   --data-source file:/tmp/data.json \
 ///   --json
 /// ```
 ///
@@ -416,7 +418,7 @@ pub async fn run_single_station_master_test(
 ///
 /// # See Also
 ///
-/// - [`send_data_from_cli_master`]: Function to poll Slave via CLI Master
+/// - [`send_data_from_cli_master`]: Function to supply data via CLI master-provide
 /// - [`run_single_station_master_test`]: Inverse test (TUI Master, CLI Slave)
 /// - [`configure_tui_station`]: Underlying station configuration
 /// - [`setup_tui_test`]: Environment initialization
@@ -428,7 +430,7 @@ pub async fn run_single_station_slave_test(
 ) -> Result<()> {
     log::info!("🧪 Running single-station Slave test");
     log::info!("   Port1: {port1} (TUI Slave)");
-    log::info!("   Port2: {port2} (CLI Master)");
+    log::info!("   Port2: {port2} (CLI data provider)");
     log::info!("   Config: {config:?}");
 
     // Generate test data
@@ -466,7 +468,7 @@ pub async fn run_single_station_slave_test(
     log::info!("   ✓ Field navigation validated");
     log::info!("   ✓ Data entry successful");
     log::info!("   ✓ Save operation completed");
-    log::info!("   ✓ CLI Master received correct data");
+    log::info!("   ✓ CLI responder served expected data");
 
     // Explicitly terminate TUI session to ensure clean shutdown
     terminate_session(session, "TUI").await?;
