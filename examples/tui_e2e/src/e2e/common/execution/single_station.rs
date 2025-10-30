@@ -24,26 +24,24 @@ use ci_utils::*;
 ///
 /// # Test Architecture
 ///
-/// ```text
-/// Port1 (TUI Master)                    Port2 (CLI Slave)
-///       │                                     │
-///       ├─ Configure Station #1               │
-///       ├─ Enable Master Mode                 │
-///       ├─ Set Register Range                 │
-///       │                                     │
-///       │                            ┌────────┴────────┐
-///       │                            │ Start CLI Slave │
-///       │                            │ with test data  │
-///       │                            └────────┬────────┘
-///       │                                     │
-///       ├──────── Poll Request ──────────────>│
-///       │<──────── Response ──────────────────┤
-///       │         (test data)                 │
-///       │                                     │
-///   ┌───┴───┐                                 │
-///   │Verify │                                 │
-///   │ Data  │                                 │
-///   └───────┘                                 │
+/// ```mermaid
+/// flowchart LR
+///     subgraph tuimaster[Port1 · TUI Master]
+///         t1[Configure Station #1]
+///         t2[Enable Master Mode]
+///         t3[Set Register Range]
+///         t4[Send Poll Request]
+///         t5[Receive Response]
+///         t6[Verify Data]
+///     end
+///     subgraph clislave[Port2 · CLI Slave]
+///         c1[Start CLI Slave with test data]
+///     end
+///     t1 --> t2 --> t3 --> t4
+///     t3 -->|Launch CLI helper| c1
+///     t4 -->|Poll request| c1
+///     c1 -->|Response (test data)| t5
+///     t5 --> t6
 /// ```
 ///
 /// # Parameters
@@ -244,27 +242,23 @@ pub async fn run_single_station_master_test(
 ///
 /// # Test Architecture
 ///
-/// ```text
-/// Port1 (TUI Slave)                     Port2 (CLI Master)
-///       │                                     │
-///       ├─ Configure Station #1               │
-///       ├─ Enable Slave Mode                  │
-///       ├─ Set Register Range                 │
-///       ├─ Initialize with test data          │
-///       │                                     │
-///       │                            ┌────────┴────────┐
-///       │                            │ Start CLI Data  │
-///       │                            │   Provider      │
-///       │                            └────────┬────────┘
-///       │                                     │
-///       │──────── Poll Request ──────────────>│
-///       │<────────── Response ────────────────┤
-///       │         (test data)                 │
-///       │                                     │
-///       │                                ┌────┴────┐
-///       │                                │ Verify  │
-///       │                                │  Data   │
-///       │                                └─────────┘
+/// ```mermaid
+/// flowchart LR
+///     subgraph tuislave[Port1 · TUI Slave]
+///         s1[Configure Station #1]
+///         s2[Enable Slave Mode]
+///         s3[Set Register Range]
+///         s4[Initialize with test data]
+///         s5[Provide Response]
+///     end
+///     subgraph climaster[Port2 · CLI Master]
+///         m1[Start CLI Data Provider]
+///         m2[Verify Data]
+///     end
+///     s1 --> s2 --> s3 --> s4
+///     s4 -->|Launch CLI helper| m1
+///     m1 -->|Poll request| s5
+///     s5 -->|Response (test data)| m2
 /// ```
 ///
 /// # Parameters
