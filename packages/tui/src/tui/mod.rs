@@ -539,6 +539,13 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
     let no_cache = matches.get_flag("no-config-cache");
     persistence::set_no_cache(no_cache);
 
+    // Check if screen capture mode is enabled
+    let screen_capture_mode = matches.get_flag("debug-screen-capture");
+    if screen_capture_mode {
+        log::info!("📸 Screen capture mode enabled - will render once and exit");
+        return run_screen_capture_mode();
+    }
+
     // Terminal is initialized inside the rendering thread to avoid sharing
     // a Terminal instance across threads. The rendering loop will create
     // and restore the terminal on its own.
@@ -1246,6 +1253,194 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
     crate::tui::ui::pages::render_panels(frame, main_chunks[1])?;
     crate::tui::ui::bottom::render_bottom(frame, main_chunks[2])?;
 
+    Ok(())
+}
+
+/// Run screen capture mode: render UI once and exit immediately
+fn run_screen_capture_mode() -> Result<()> {
+    log::info!("📸 Starting screen capture mode");
+
+    // Initialize global status
+    let app = Arc::new(RwLock::new(Status::default()));
+    self::status::init_status(app.clone())?;
+
+    // Load status from /tmp/status.json if it exists
+    let status_path = std::path::Path::new("/tmp/status.json");
+    if status_path.exists() {
+        log::info!("📄 Loading status from {}", status_path.display());
+        let status_content = std::fs::read_to_string(status_path)?;
+        let serializable_status: crate::tui::status::serializable::TuiStatus =
+            serde_json::from_str(&status_content)?;
+
+        // Apply the loaded status to global state
+        self::status::write_status(|status| {
+            // Clear existing ports
+            status.ports.order.clear();
+            status.ports.map.clear();
+
+            // Convert TuiStatus back to Status
+            for tui_port in &serializable_status.ports {
+                // Create PortData from TuiPort
+                let mut port_data = crate::tui::status::types::port::PortData::default();
+                port_data.port_name = tui_port.name.clone();
+                port_data.port_type = "virtual".to_string();
+                port_data.state = tui_port.state.clone();
+                port_data.config = crate::tui::status::types::port::PortConfig::Modbus {
+                    mode: if !tui_port.modbus_masters.is_empty() {
+                        crate::tui::status::types::modbus::ModbusConnectionMode::Master
+                    } else {
+                        crate::tui::status::types::modbus::ModbusConnectionMode::Slave {
+                            current_request_at_station_index: 0,
+                        }
+                    },
+                    stations: Vec::new(),
+                };
+                port_data.status_indicator = if tui_port.enabled {
+                    crate::tui::status::types::port::PortStatusIndicator::Running
+                } else {
+                    crate::tui::status::types::port::PortStatusIndicator::NotStarted
+                };
+
+                // Convert modbus masters to stations
+                for master in &tui_port.modbus_masters {
+                    let register_mode = match master.register_type.as_str() {
+                        "Coils" => crate::tui::status::types::modbus::RegisterMode::Coils,
+                        "DiscreteInputs" => {
+                            crate::tui::status::types::modbus::RegisterMode::DiscreteInputs
+                        }
+                        "Holding" => crate::tui::status::types::modbus::RegisterMode::Holding,
+                        "Input" => crate::tui::status::types::modbus::RegisterMode::Input,
+                        _ => crate::tui::status::types::modbus::RegisterMode::Holding,
+                    };
+
+                    let crate::tui::status::types::port::PortConfig::Modbus { stations, .. } =
+                        &mut port_data.config;
+                    stations.push(crate::tui::status::types::modbus::ModbusRegisterItem {
+                        station_id: master.station_id,
+                        register_mode,
+                        register_address: master.start_address,
+                        register_length: master.register_count as u16,
+                        last_values: vec![0; master.register_count],
+                        req_total: 0,
+                        req_success: 0,
+                        next_poll_at: std::time::Instant::now(),
+                        last_request_time: None,
+                        last_response_time: None,
+                        pending_requests: vec![],
+                    });
+                }
+
+                // Convert modbus slaves to stations
+                for slave in &tui_port.modbus_slaves {
+                    let register_mode = match slave.register_type.as_str() {
+                        "Coils" => crate::tui::status::types::modbus::RegisterMode::Coils,
+                        "DiscreteInputs" => {
+                            crate::tui::status::types::modbus::RegisterMode::DiscreteInputs
+                        }
+                        "Holding" => crate::tui::status::types::modbus::RegisterMode::Holding,
+                        "Input" => crate::tui::status::types::modbus::RegisterMode::Input,
+                        _ => crate::tui::status::types::modbus::RegisterMode::Holding,
+                    };
+
+                    if let crate::tui::status::types::port::PortConfig::Modbus {
+                        stations, ..
+                    } = &mut port_data.config
+                    {
+                        stations.push(crate::tui::status::types::modbus::ModbusRegisterItem {
+                            station_id: slave.station_id,
+                            register_mode,
+                            register_address: slave.start_address,
+                            register_length: slave.register_count as u16,
+                            last_values: vec![0; slave.register_count],
+                            req_total: 0,
+                            req_success: 0,
+                            next_poll_at: std::time::Instant::now(),
+                            last_request_time: None,
+                            last_response_time: None,
+                            pending_requests: vec![],
+                        });
+                    }
+                }
+
+                // Add port to status
+                status.ports.order.push(tui_port.name.clone());
+                status.ports.map.insert(tui_port.name.clone(), port_data);
+            }
+
+            // Set page
+            status.page = match serializable_status.page {
+                crate::tui::status::serializable::TuiPage::Entry => {
+                    crate::tui::status::Page::Entry {
+                        cursor: None,
+                        view_offset: 0,
+                    }
+                }
+                crate::tui::status::serializable::TuiPage::ConfigPanel => {
+                    crate::tui::status::Page::ConfigPanel {
+                        selected_port: 0,
+                        view_offset: 0,
+                        cursor: crate::tui::status::types::cursor::ConfigPanelCursor::EnablePort,
+                    }
+                }
+                crate::tui::status::serializable::TuiPage::ModbusDashboard => {
+                    crate::tui::status::Page::ModbusDashboard {
+                        selected_port: 0,
+                        view_offset: 0,
+                        cursor: crate::tui::status::types::cursor::ModbusDashboardCursor::AddLine,
+                    }
+                }
+                crate::tui::status::serializable::TuiPage::LogPanel => {
+                    crate::tui::status::Page::LogPanel {
+                        selected_port: 0,
+                        input_mode: crate::tui::status::types::ui::InputMode::Ascii,
+                        selected_item: None,
+                    }
+                }
+                crate::tui::status::serializable::TuiPage::About => {
+                    crate::tui::status::Page::About { view_offset: 0 }
+                }
+            };
+
+            log::info!(
+                "✅ Status loaded from file ({} ports)",
+                serializable_status.ports.len()
+            );
+            Ok(())
+        })?;
+        log::info!("✅ Status loaded successfully");
+    } else {
+        log::warn!(
+            "⚠️  No status file found at {}, using default state",
+            status_path.display()
+        );
+    }
+
+    // Initialize terminal
+    let mut stdout = io::stdout();
+    crossterm::terminal::enable_raw_mode()?;
+    crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(&mut stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    // Render UI once
+    terminal.draw(|frame| {
+        if let Err(err) = render_ui(frame) {
+            log::error!("Failed to render UI: {}", err);
+        }
+    })?;
+
+    // Wait a moment to ensure rendering is complete
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Restore terminal state
+    crossterm::execute!(
+        io::stdout(),
+        crossterm::terminal::LeaveAlternateScreen,
+        crossterm::event::DisableMouseCapture
+    )?;
+    crossterm::terminal::disable_raw_mode()?;
+
+    log::info!("✅ Screen capture completed successfully");
     Ok(())
 }
 

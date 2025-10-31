@@ -183,6 +183,13 @@ pub fn parse_args() -> ArgMatches {
                 .hide(true), // Hidden from normal help output
         )
         .arg(
+            Arg::new("debug-screen-capture")
+                .long("debug-screen-capture")
+                .help("Enable screen capture mode: render UI once and exit immediately")
+                .action(clap::ArgAction::SetTrue)
+                .hide(true), // Hidden from normal help output
+        )
+        .arg(
             Arg::new("no-config-cache")
                 .long("no-config-cache")
                 .help("Disable configuration cache (do not load/save aoba_tui_config.json). Useful for E2E tests.")

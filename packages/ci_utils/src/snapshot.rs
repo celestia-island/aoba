@@ -1,10 +1,13 @@
 use anyhow::Result;
 
-use expectrl::{Expect, Regex as ExpectRegex};
+use expectrl::{process::NonBlocking, Expect};
 use vt100::Parser;
 
 use crate::helpers::sleep_1s;
-use std::sync::{Mutex, OnceLock};
+use std::{
+    io,
+    sync::{Mutex, OnceLock},
+};
 
 type SnapshotRecord = (String, String);
 
@@ -81,6 +84,21 @@ pub struct TerminalCapture {
     parser: Parser,
 }
 
+/// Extension trait for expectrl sessions that support non-blocking reads.
+pub trait ExpectSession: Expect {
+    /// Attempt to read bytes from the underlying PTY without blocking.
+    fn try_read_nonblocking(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+}
+
+impl<P, S> ExpectSession for expectrl::session::Session<P, S>
+where
+    S: io::Read + io::Write + NonBlocking,
+{
+    fn try_read_nonblocking(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        expectrl::session::Session::try_read(self, buf)
+    }
+}
+
 impl TerminalCapture {
     /// Create a new TerminalCapture with standard terminal size
     pub fn with_size(size: TerminalSize) -> Self {
@@ -105,7 +123,7 @@ impl TerminalCapture {
     /// This reduces log verbosity during successful test runs.
     pub async fn capture(
         &mut self,
-        session: &mut impl Expect,
+        session: &mut impl ExpectSession,
         step_description: &str,
     ) -> Result<String> {
         self.capture_with_logging(session, step_description, true)
@@ -116,7 +134,7 @@ impl TerminalCapture {
     /// Set `log_content` to false to reduce log verbosity during successful operations.
     pub async fn capture_with_logging(
         &mut self,
-        session: &mut impl Expect,
+        session: &mut impl ExpectSession,
         step_description: &str,
         log_content: bool,
     ) -> Result<String> {
@@ -126,51 +144,49 @@ impl TerminalCapture {
             log::debug!("📺 Screen capture point: {step_description}");
         }
 
-        // Capture the most recent frame we have; this may be empty on the first call.
-        let mut out = self.parser.screen().contents();
+        const MAX_ATTEMPTS: usize = 3;
+        let mut out = String::new();
+        let mut last_bytes = 0usize;
+
+        for attempt in 0..MAX_ATTEMPTS {
+            let bytes_read = self.drain_session(session)?;
+            last_bytes = bytes_read;
+
+            if bytes_read > 0 {
+                log::debug!(
+                    "🔍 Drained {bytes_read} bytes from session on attempt {}",
+                    attempt + 1
+                );
+            }
+
+            out = self.parser.screen().contents();
+
+            if !out.trim().is_empty() {
+                if bytes_read == 0 {
+                    log::debug!(
+                        "ℹ️ Screen already populated before attempt {}, no new bytes drained",
+                        attempt + 1
+                    );
+                } else {
+                    log::info!(
+                        "✅ Screen content captured on attempt {} ({} bytes)",
+                        attempt + 1,
+                        bytes_read
+                    );
+                }
+                break;
+            }
+
+            if attempt + 1 < MAX_ATTEMPTS {
+                sleep_1s().await;
+            }
+        }
 
         if out.trim().is_empty() {
-            // First-time capture: poll in a non-blocking loop until the TUI paints something
-            // or we give up after a handful of retries. This avoids the long expect timeout.
-            const MAX_ATTEMPTS: usize = 3;
-            for attempt in 0..MAX_ATTEMPTS {
-                match session.check(ExpectRegex("(?s).+")) {
-                    Ok(captures) => {
-                        let bytes = captures.as_bytes();
-                        log::debug!(
-                            "🔍 Captured {} bytes on attempt {}",
-                            bytes.len(),
-                            attempt + 1
-                        );
-                        if !bytes.is_empty() {
-                            self.parser.process(bytes);
-                            out = self.parser.screen().contents();
-                            if !out.trim().is_empty() {
-                                log::info!("✅ Screen content captured on attempt {}", attempt + 1);
-                                break;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        log::debug!("⚠️ Check failed on attempt {}: {}", attempt + 1, e);
-                    }
-                }
-
-                // Give the TUI a moment to draw before polling again.
-                if attempt + 1 < MAX_ATTEMPTS {
-                    sleep_1s().await;
-                }
-            }
-
-            if out.trim().is_empty() {
-                log::warn!("⚠️ Screen still empty after {MAX_ATTEMPTS} attempts");
-            }
-        } else if let Ok(captures) = session.check(ExpectRegex("(?s).+")) {
-            let bytes = captures.as_bytes();
-            if !bytes.is_empty() {
-                self.parser.process(bytes);
-                out = self.parser.screen().contents();
-            }
+            log::warn!(
+                "⚠️ Screen still empty after {MAX_ATTEMPTS} attempts (last drain {} bytes)",
+                last_bytes
+            );
         }
 
         update_last_snapshot(step_description, &out);
@@ -184,6 +200,34 @@ impl TerminalCapture {
         sleep_1s().await;
 
         Ok(out)
+    }
+
+    /// Drain any bytes currently available from the session and feed them into the vt100 parser.
+    /// Returns the number of bytes that were processed.
+    fn drain_session(&mut self, session: &mut impl ExpectSession) -> Result<usize> {
+        use io::ErrorKind;
+
+        let mut total = 0usize;
+        let mut buf = [0u8; 4096];
+
+        loop {
+            match session.try_read_nonblocking(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if n == 0 {
+                        break;
+                    }
+                    self.parser.process(&buf[..n]);
+                    total += n;
+                }
+                Err(err) if err.kind() == ErrorKind::WouldBlock => break,
+                Err(err) if err.kind() == ErrorKind::Interrupted => continue,
+                Err(err) if err.kind() == ErrorKind::UnexpectedEof => break,
+                Err(err) => return Err(err.into()),
+            }
+        }
+
+        Ok(total)
     }
 
     /// Return the last-rendered screen contents without consuming session
