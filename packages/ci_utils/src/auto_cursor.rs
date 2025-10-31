@@ -1,10 +1,19 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde_json::Value;
+use std::fs;
+use std::path::Path;
 
-use expectrl::Expect;
+use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture};
 
-use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, TerminalCapture};
+/// Read a screen capture from file
+fn read_screen_capture(test_name: &str, step_name: &str) -> Result<String> {
+    let filename = format!("{}_{}.txt", test_name, step_name.replace(' ', "_"));
+    let filepath = Path::new("examples/tui_ui_e2e/screen_captures").join(&filename);
+
+    let content = fs::read_to_string(&filepath)?;
+    Ok(content)
+}
 
 /// Action instruction for automated cursor navigation
 #[derive(Debug, Clone)]
@@ -41,6 +50,20 @@ pub enum CursorAction {
     Sleep1s,
     /// Wait for 3 seconds (3000ms)
     Sleep3s,
+    /// Match screen capture against saved screenshot
+    /// Uses exact text comparison for precise UI validation
+    MatchScreenCapture {
+        /// Test name (e.g., "tui_master_coils")
+        test_name: String,
+        /// Step name (e.g., "initial_screen", "after_navigation")
+        step_name: String,
+        /// Description for logging
+        description: String,
+        /// Line range to compare (inclusive, 0-indexed)
+        line_range: Option<(usize, usize)>,
+        /// Column range to compare (inclusive, 0-indexed)
+        col_range: Option<(usize, usize)>,
+    },
     /// Match a pattern within specified line and column range
     /// If match fails after retries, optionally execute retry_action and retry again
     /// Implements nested retry: 3 attempts -> execute retry_action -> repeat 3 times (total 9 attempts)
@@ -74,7 +97,7 @@ pub enum CursorAction {
 /// Execute a sequence of cursor actions on an expect session
 /// All actions execute in order. If MatchPattern fails, the function
 /// dumps the current screen and returns an error immediately.
-pub async fn execute_cursor_actions<T: Expect>(
+pub async fn execute_cursor_actions<T: ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     actions: &[CursorAction],
@@ -286,6 +309,113 @@ pub async fn execute_cursor_actions<T: Expect>(
             }
             CursorAction::Sleep3s => {
                 sleep_3s().await;
+            }
+            CursorAction::MatchScreenCapture {
+                test_name,
+                step_name,
+                description,
+                line_range,
+                col_range,
+            } => {
+                // Read the saved screen capture
+                let expected_screen = match read_screen_capture(test_name, step_name) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        log::error!(
+                            "❌ Action Step {} FAILED: Failed to read screen capture for test '{}', step '{}': {}",
+                            idx + 1,
+                            test_name,
+                            step_name,
+                            e
+                        );
+                        return Err(anyhow!(
+                            "Action Step {}: Failed to read screen capture for test '{}', step '{}': {}",
+                            idx + 1,
+                            test_name,
+                            step_name,
+                            e
+                        ));
+                    }
+                };
+
+                // Capture current screen
+                let current_screen = cap
+                    .capture(
+                        session,
+                        &format!("match_screen_{}_{}", test_name, step_name),
+                    )
+                    .await?;
+
+                // Extract regions to compare based on line and column ranges
+                let extract_region = |screen: &str| -> String {
+                    let lines: Vec<&str> = screen.lines().collect();
+                    let total_lines = lines.len();
+
+                    let (start_line, end_line) =
+                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                    let start_line = start_line.min(total_lines.saturating_sub(1));
+                    let end_line = end_line.min(total_lines.saturating_sub(1));
+
+                    let mut region_text = String::new();
+                    for line_idx in start_line..=end_line {
+                        if line_idx >= lines.len() {
+                            break;
+                        }
+                        let line = lines[line_idx];
+                        let line_text = if let Some((start_col, end_col)) = col_range {
+                            let chars: Vec<char> = line.chars().collect();
+                            let char_count = chars.len();
+                            if char_count == 0 {
+                                String::new()
+                            } else {
+                                let sc = (*start_col).min(char_count.saturating_sub(1));
+                                let ec = (*end_col).min(char_count.saturating_sub(1));
+                                chars[sc..=ec].iter().collect()
+                            }
+                        } else {
+                            line.to_string()
+                        };
+                        region_text.push_str(&line_text);
+                        region_text.push('\n');
+                    }
+                    region_text
+                };
+
+                let expected_region = extract_region(&expected_screen);
+                let current_region = extract_region(&current_screen);
+
+                // Compare the regions
+                if expected_region == current_region {
+                    log::debug!("✅ Screen capture matched for '{}'", description);
+                } else {
+                    log::error!(
+                        "❌ Action Step {} FAILED: Screen capture mismatch for '{}'",
+                        idx + 1,
+                        description
+                    );
+                    log::error!(
+                        "Expected region (lines {:?}, cols {:?}):",
+                        line_range,
+                        col_range
+                    );
+                    log::error!("\n{}\n", expected_region);
+                    log::error!(
+                        "Current region (lines {:?}, cols {:?}):",
+                        line_range,
+                        col_range
+                    );
+                    log::error!("\n{}\n", current_region);
+                    log::error!("Full current screen:");
+                    log::error!("\n{}\n", current_screen);
+
+                    return Err(anyhow!(
+                        "Action Step {}: Screen capture mismatch for '{}' (test: '{}', step: '{}')",
+                        idx + 1,
+                        description,
+                        test_name,
+                        step_name
+                    ));
+                }
             }
             CursorAction::DebugBreakpoint { description } => {
                 // Check if debug mode is enabled (set by main program based on --debug flag)
@@ -753,7 +883,7 @@ async fn check_status_path(
 /// - [`execute_cursor_actions`]: Lower-level action execution without retry
 /// - [`CursorAction::CheckStatus`]: Individual status check action
 /// - [`check_status_path`]: Underlying status verification function
-pub async fn execute_with_status_checks<T: Expect>(
+pub async fn execute_with_status_checks<T: ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     actions: &[CursorAction],
