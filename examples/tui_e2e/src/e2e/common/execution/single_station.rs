@@ -233,6 +233,8 @@ pub async fn run_single_station_master_test(
     config: StationConfig,
     screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
+    use super::super::screenshot_integration::*;
+    
     log::info!("🧪 Running single-station Master test");
     log::info!("   Port1: {port1} (TUI Master)");
     log::info!("   Port2: {port2} (CLI Slave)");
@@ -246,6 +248,9 @@ pub async fn run_single_station_master_test(
     // Navigate to Modbus panel and confirm dashboard activation.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
     wait_for_tui_page("ModbusDashboard", 10, None).await?;
+    
+    // Screenshot: After entering Modbus panel
+    screenshot_after_modbus_panel(&mut session, &mut cap, port1, Some(screenshot_ctx)).await?;
 
     // Configure the target station using reusable workflow helpers.
     configure_tui_station(&mut session, &mut cap, port1, &config).await?;
@@ -253,10 +258,36 @@ pub async fn run_single_station_master_test(
     // Station count and configuration must be visible in the status dump.
     wait_for_station_count(port1, true, 1, 10).await?;
     wait_for_modbus_config(port1, true, config.station_id(), 10, None).await?;
+    
+    // Screenshot: After configuring station
+    screenshot_after_station_config(
+        &mut session,
+        &mut cap,
+        port1,
+        config.station_id(),
+        config.register_mode(),
+        config.start_address(),
+        config.register_count() as usize,
+        config.is_master(),
+        Some(screenshot_ctx),
+    ).await?;
 
     // Persisted configuration should enable the port; verify status JSON and UI indicator.
     wait_for_port_enabled(port1, 20, Some(500)).await?;
     verify_port_enabled(&mut session, &mut cap, "master_port_enabled").await?;
+    
+    // Screenshot: After port is enabled
+    screenshot_after_port_enabled(
+        &mut session,
+        &mut cap,
+        port1,
+        config.station_id(),
+        config.register_mode(),
+        config.start_address(),
+        config.register_count() as usize,
+        config.is_master(),
+        Some(screenshot_ctx),
+    ).await?;
 
     // Ensure the managed CLI subprocess is running in MasterProvide mode, retrying with socat reset when needed.
     let cli_status = wait_for_cli_status_with_recovery(port1, 15, Some(500)).await?;

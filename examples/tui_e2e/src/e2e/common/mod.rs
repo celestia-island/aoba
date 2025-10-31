@@ -139,6 +139,7 @@ pub mod config;
 pub mod execution;
 pub mod navigation;
 pub mod retry;
+pub mod screenshot_integration;
 pub mod state_helpers;
 mod status_paths;
 pub mod validation;
