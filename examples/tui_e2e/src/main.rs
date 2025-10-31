@@ -191,6 +191,12 @@ struct Args {
     /// Enable debug mode (show debug breakpoints and additional logging)
     #[arg(long)]
     debug: bool,
+
+    /// Generate reference screenshots instead of running tests
+    /// This mode captures terminal output at each test step and saves
+    /// reference screenshots for future verification
+    #[arg(long)]
+    generate_screenshots: bool,
 }
 
 /// Clean up debug status files from previous test runs

@@ -9,6 +9,7 @@ pub mod key_input;
 pub mod log_parser;
 pub mod log_utils;
 pub mod ports;
+pub mod screenshot;
 pub mod snapshot;
 pub mod status_monitor;
 pub mod terminal;
@@ -28,6 +29,7 @@ pub use ports::{
     port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, VcomMatchers,
     DEFAULT_PORT1, DEFAULT_PORT2,
 };
+pub use screenshot::{apply_state_change, ExecutionMode, ScreenshotContext, StateBuilder};
 pub use snapshot::{log_last_terminal_snapshot, ExpectSession, TerminalCapture, TerminalSize};
 pub use status_monitor::{
     get_port_log_count, port_exists_in_tui, read_cli_status, read_tui_status, wait_for_cli_status,
