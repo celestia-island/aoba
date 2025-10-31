@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 
+use crate::e2e::common::state_helpers::{create_config_panel_state, create_entry_state};
 use aoba_ci_utils::*;
 
 /// Setup TUI test environment with initialized session and terminal capture.
@@ -72,6 +73,7 @@ use aoba_ci_utils::*;
 pub async fn setup_tui_test(
     port1: &str,
     _port2: &str,
+    screenshot_ctx: Option<&ScreenshotContext>,
 ) -> Result<(impl ExpectSession, TerminalCapture)> {
     log::info!("🔧 Setting up TUI test environment for port {port1}");
 
@@ -89,6 +91,11 @@ pub async fn setup_tui_test(
     log::info!("Waiting for TUI Entry page...");
     wait_for_tui_page("Entry", 10, None).await?;
 
+    if let Some(ctx) = screenshot_ctx {
+        ctx.capture_or_verify(&mut tui_session, &mut tui_cap, create_entry_state())
+            .await?;
+    }
+
     log::info!("Navigating to ConfigPanel...");
     let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
     execute_cursor_actions(
@@ -100,6 +107,15 @@ pub async fn setup_tui_test(
     .await?;
 
     wait_for_tui_page("ConfigPanel", 10, None).await?;
+
+    if let Some(ctx) = screenshot_ctx {
+        ctx.capture_or_verify(
+            &mut tui_session,
+            &mut tui_cap,
+            create_config_panel_state(port1),
+        )
+        .await?;
+    }
 
     log::info!("✅ TUI test environment ready");
     Ok((tui_session, tui_cap))

@@ -63,6 +63,11 @@ impl ScreenshotContext {
         }
     }
 
+    /// Get the execution mode associated with this context
+    pub fn mode(&self) -> ExecutionMode {
+        self.mode
+    }
+
     /// Get the next screenshot filename
     fn next_filename(&self) -> String {
         let step = self.step_counter.fetch_add(1, Ordering::SeqCst);

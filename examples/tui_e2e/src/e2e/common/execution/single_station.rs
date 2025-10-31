@@ -231,6 +231,7 @@ pub async fn run_single_station_master_test(
     port1: &str,
     port2: &str,
     config: StationConfig,
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running single-station Master test");
     log::info!("   Port1: {port1} (TUI Master)");
@@ -240,8 +241,7 @@ pub async fn run_single_station_master_test(
     reset_snapshot_placeholders();
 
     // Setup TUI and ensure we are fully inside ConfigPanel before proceeding.
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
-    wait_for_tui_page("Entry", 5, None).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
 
     // Navigate to Modbus panel and confirm dashboard activation.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
@@ -516,6 +516,7 @@ pub async fn run_single_station_slave_test(
     port1: &str,
     port2: &str,
     config: StationConfig,
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running single-station Slave test");
     log::info!("   Port1: {port1} (TUI Slave)");
@@ -554,8 +555,7 @@ pub async fn run_single_station_slave_test(
     config_with_data.set_register_values(Some(test_data.clone()));
 
     // Setup TUI and confirm ConfigPanel is ready for interaction.
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
-    wait_for_tui_page("Entry", 5, None).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
 
     // Navigate to Modbus panel and guarantee dashboard context.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;

@@ -394,6 +394,7 @@ pub async fn run_multi_station_master_test(
     port2: &str,
     master_configs: &[StationConfig],
     slave_configs: &[StationConfig],
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running multi-station Master test");
     log::info!("   Port1: {port1} (TUI Masters)");
@@ -404,7 +405,7 @@ pub async fn run_multi_station_master_test(
     reset_snapshot_placeholders();
 
     // Setup TUI and configure all Masters
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
     configure_multiple_stations(&mut session, &mut cap, port1, master_configs).await?;
 
     // Test each Master polling each Slave
@@ -627,6 +628,7 @@ pub async fn run_multi_station_slave_test(
     port1: &str,
     port2: &str,
     slave_configs: &[StationConfig],
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running multi-station Slave test");
     log::info!("   Port1: {port1} (TUI Slaves)");
@@ -636,7 +638,7 @@ pub async fn run_multi_station_slave_test(
     reset_snapshot_placeholders();
 
     // Setup TUI and configure all Slaves
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
     configure_multiple_stations(&mut session, &mut cap, port1, slave_configs).await?;
 
     // Test each Slave receiving data from CLI Master

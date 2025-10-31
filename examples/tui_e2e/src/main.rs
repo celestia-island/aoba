@@ -167,9 +167,12 @@
 mod e2e;
 
 use anyhow::Result;
-use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
+
+use clap::Parser;
+
+use aoba_ci_utils::ExecutionMode;
 
 /// TUI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
@@ -347,48 +350,72 @@ async fn main() -> Result<()> {
 
     log::info!("🧪 Running module: {module}");
 
+    let execution_mode = if args.generate_screenshots {
+        ExecutionMode::GenerateScreenshots
+    } else {
+        ExecutionMode::Normal
+    };
+
     // Run the selected module
     let result = match module {
         // TUI Single-Station Master Mode Tests
-        "tui_master_coils" => e2e::test_tui_master_coils(&args.port1, &args.port2).await,
+        "tui_master_coils" => {
+            e2e::test_tui_master_coils(&args.port1, &args.port2, execution_mode).await
+        }
         "tui_master_discrete_inputs" => {
-            e2e::test_tui_master_discrete_inputs(&args.port1, &args.port2).await
+            e2e::test_tui_master_discrete_inputs(&args.port1, &args.port2, execution_mode).await
         }
         "tui_master_holding" => {
-            e2e::test_tui_master_holding_registers(&args.port1, &args.port2).await
+            e2e::test_tui_master_holding_registers(&args.port1, &args.port2, execution_mode).await
         }
-        "tui_master_input" => e2e::test_tui_master_input_registers(&args.port1, &args.port2).await,
+        "tui_master_input" => {
+            e2e::test_tui_master_input_registers(&args.port1, &args.port2, execution_mode).await
+        }
 
         // TUI Single-Station Slave Mode Tests
-        "tui_slave_coils" => e2e::test_tui_slave_coils(&args.port1, &args.port2).await,
+        "tui_slave_coils" => {
+            e2e::test_tui_slave_coils(&args.port1, &args.port2, execution_mode).await
+        }
         "tui_slave_discrete_inputs" => {
-            e2e::test_tui_slave_discrete_inputs(&args.port1, &args.port2).await
+            e2e::test_tui_slave_discrete_inputs(&args.port1, &args.port2, execution_mode).await
         }
         "tui_slave_holding" => {
-            e2e::test_tui_slave_holding_registers(&args.port1, &args.port2).await
+            e2e::test_tui_slave_holding_registers(&args.port1, &args.port2, execution_mode).await
         }
-        "tui_slave_input" => e2e::test_tui_slave_input_registers(&args.port1, &args.port2).await,
+        "tui_slave_input" => {
+            e2e::test_tui_slave_input_registers(&args.port1, &args.port2, execution_mode).await
+        }
 
         // TUI Multi-Station Master Mode Tests
         "tui_multi_master_mixed_types" => {
-            e2e::test_tui_multi_master_mixed_register_types(&args.port1, &args.port2).await
+            e2e::test_tui_multi_master_mixed_register_types(
+                &args.port1,
+                &args.port2,
+                execution_mode,
+            )
+            .await
         }
         "tui_multi_master_spaced_addresses" => {
-            e2e::test_tui_multi_master_spaced_addresses(&args.port1, &args.port2).await
+            e2e::test_tui_multi_master_spaced_addresses(&args.port1, &args.port2, execution_mode)
+                .await
         }
         "tui_multi_master_mixed_ids" => {
-            e2e::test_tui_multi_master_mixed_station_ids(&args.port1, &args.port2).await
+            e2e::test_tui_multi_master_mixed_station_ids(&args.port1, &args.port2, execution_mode)
+                .await
         }
 
         // TUI Multi-Station Slave Mode Tests
         "tui_multi_slave_mixed_types" => {
-            e2e::test_tui_multi_slave_mixed_register_types(&args.port1, &args.port2).await
+            e2e::test_tui_multi_slave_mixed_register_types(&args.port1, &args.port2, execution_mode)
+                .await
         }
         "tui_multi_slave_spaced_addresses" => {
-            e2e::test_tui_multi_slave_spaced_addresses(&args.port1, &args.port2).await
+            e2e::test_tui_multi_slave_spaced_addresses(&args.port1, &args.port2, execution_mode)
+                .await
         }
         "tui_multi_slave_mixed_ids" => {
-            e2e::test_tui_multi_slave_mixed_station_ids(&args.port1, &args.port2).await
+            e2e::test_tui_multi_slave_mixed_station_ids(&args.port1, &args.port2, execution_mode)
+                .await
         }
 
         _ => {
