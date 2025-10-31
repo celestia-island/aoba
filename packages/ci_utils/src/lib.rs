@@ -36,6 +36,7 @@ pub use status_monitor::{
 };
 pub use terminal::{
     build_debug_bin, run_binary_sync, spawn_expect_process, spawn_expect_process_with_size,
+    spawn_expect_session, spawn_expect_session_with_size,
 };
 pub use tui::{
     check_status_indicator, enable_port_carefully, enter_modbus_panel, navigate_to_vcom,

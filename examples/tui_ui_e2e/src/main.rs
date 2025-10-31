@@ -25,7 +25,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Generate screenshots for tui_e2e tests
-    GenerateScreenshots,
+    GenerateScreenshots {
+        /// Optional module name to generate screenshots for (e.g., "common", "single_station/master_modes")
+        #[arg(long)]
+        module: Option<String>,
+    },
 }
 
 /// Directory to store rendered screenshots
@@ -101,7 +105,7 @@ async fn render_state_and_capture(test_name: &str, step_name: &str, status: Stat
 
 /// Spawn TUI process and capture real terminal output using ci_utils
 async fn spawn_tui_and_capture_screen() -> Result<String> {
-    use aoba_ci_utils::{spawn_expect_process, TerminalCapture, TerminalSize};
+    use aoba_ci_utils::{spawn_expect_session_with_size, TerminalCapture, TerminalSize};
 
     info!("🧪 Spawning TUI with debug-screen-capture mode");
 
@@ -115,12 +119,19 @@ async fn spawn_tui_and_capture_screen() -> Result<String> {
         return Err(anyhow::anyhow!("Failed to build TUI binary"));
     }
 
+    // Get terminal size dimensions
+    let size = TerminalSize::Large;
+    let (rows, cols) = size.dimensions();
+
     // Spawn TUI process using ci_utils expectrl with debug-screen-capture mode
-    let mut session =
-        spawn_expect_process(&["--tui", "--debug-screen-capture", "--no-config-cache"])?;
+    // Use spawn_expect_session_with_size to get a concrete Session type that implements ExpectSession
+    let mut session = spawn_expect_session_with_size(
+        &["--tui", "--debug-screen-capture", "--no-config-cache"],
+        Some((rows, cols)),
+    )?;
 
     // Create terminal capture with proper size
-    let mut cap = TerminalCapture::with_size(TerminalSize::Large);
+    let mut cap = TerminalCapture::with_size(size);
 
     // Wait for TUI to initialize and render
     sleep(Duration::from_secs(3)).await;
@@ -141,146 +152,173 @@ async fn spawn_tui_and_capture_screen() -> Result<String> {
     Ok(screen_content)
 }
 
+/// Helper to check if a test should run based on module filter
+fn should_run_test(test_module: &str, filter: Option<&String>) -> bool {
+    match filter {
+        None => true, // No filter, run all
+        Some(f) => {
+            // Support exact match or prefix match
+            // e.g., "common" matches "common"
+            // e.g., "single_station" matches "single_station/master_modes"
+            test_module == f || test_module.starts_with(&format!("{}/", f))
+        }
+    }
+}
+
 /// Generate all screenshots for tui_e2e tests
-async fn generate_screenshots() -> Result<()> {
-    info!("🚀 Starting screenshot generation for tui_e2e tests");
+async fn generate_screenshots(module_filter: Option<String>) -> Result<()> {
+    if let Some(ref filter) = module_filter {
+        info!("🚀 Starting screenshot generation for module: {}", filter);
+    } else {
+        info!("🚀 Starting screenshot generation for all modules");
+    }
 
     // Generate common base states
-    info!("🔄 Generating common base states...");
-    render_state_and_capture(
-        "common",
-        "single_station_master_base",
-        e2e::common::create_single_station_master_base_state(),
-    )
-    .await?;
+    if should_run_test("common", module_filter.as_ref()) {
+        info!("🔄 Generating common base states...");
+        render_state_and_capture(
+            "common",
+            "single_station_master_base",
+            e2e::common::create_single_station_master_base_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "common",
-        "single_station_slave_base",
-        e2e::common::create_single_station_slave_base_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "common",
+            "single_station_slave_base",
+            e2e::common::create_single_station_slave_base_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "common",
-        "multi_station_master_base",
-        e2e::common::create_multi_station_master_base_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "common",
+            "multi_station_master_base",
+            e2e::common::create_multi_station_master_base_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "common",
-        "multi_station_slave_base",
-        e2e::common::create_multi_station_slave_base_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "common",
+            "multi_station_slave_base",
+            e2e::common::create_multi_station_slave_base_state(),
+        )
+        .await?;
+    }
 
     // Generate single station master mode final states
-    info!("🔌 Generating single station master mode final states...");
-    render_state_and_capture(
-        "single_station/master_modes",
-        "tui_master_coils_final",
-        e2e::single_station::master_modes::create_tui_master_coils_final_state(),
-    )
-    .await?;
+    if should_run_test("single_station/master_modes", module_filter.as_ref()) {
+        info!("🔌 Generating single station master mode final states...");
+        render_state_and_capture(
+            "single_station/master_modes",
+            "tui_master_coils_final",
+            e2e::single_station::master_modes::create_tui_master_coils_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "single_station/master_modes",
-        "tui_master_discrete_inputs_final",
-        e2e::single_station::master_modes::create_tui_master_discrete_inputs_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "single_station/master_modes",
+            "tui_master_discrete_inputs_final",
+            e2e::single_station::master_modes::create_tui_master_discrete_inputs_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "single_station/master_modes",
-        "tui_master_holding_registers_final",
-        e2e::single_station::master_modes::create_tui_master_holding_registers_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "single_station/master_modes",
+            "tui_master_holding_registers_final",
+            e2e::single_station::master_modes::create_tui_master_holding_registers_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "single_station/master_modes",
-        "tui_master_input_registers_final",
-        e2e::single_station::master_modes::create_tui_master_input_registers_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "single_station/master_modes",
+            "tui_master_input_registers_final",
+            e2e::single_station::master_modes::create_tui_master_input_registers_final_state(),
+        )
+        .await?;
+    }
 
     // Generate single station slave mode final states
-    info!("🔌 Generating single station slave mode final states...");
-    render_state_and_capture(
-        "single_station/slave_modes",
-        "tui_slave_coils_final",
-        e2e::single_station::slave_modes::create_tui_slave_coils_final_state(),
-    )
-    .await?;
+    if should_run_test("single_station/slave_modes", module_filter.as_ref()) {
+        info!("🔌 Generating single station slave mode final states...");
+        render_state_and_capture(
+            "single_station/slave_modes",
+            "tui_slave_coils_final",
+            e2e::single_station::slave_modes::create_tui_slave_coils_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "single_station/slave_modes",
-        "tui_slave_discrete_inputs_final",
-        e2e::single_station::slave_modes::create_tui_slave_discrete_inputs_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "single_station/slave_modes",
+            "tui_slave_discrete_inputs_final",
+            e2e::single_station::slave_modes::create_tui_slave_discrete_inputs_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "single_station/slave_modes",
-        "tui_slave_holding_registers_final",
-        e2e::single_station::slave_modes::create_tui_slave_holding_registers_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "single_station/slave_modes",
+            "tui_slave_holding_registers_final",
+            e2e::single_station::slave_modes::create_tui_slave_holding_registers_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "single_station/slave_modes",
-        "tui_slave_input_registers_final",
-        e2e::single_station::slave_modes::create_tui_slave_input_registers_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "single_station/slave_modes",
+            "tui_slave_input_registers_final",
+            e2e::single_station::slave_modes::create_tui_slave_input_registers_final_state(),
+        )
+        .await?;
+    }
 
     // Generate multi station master mode final states
-    info!("🔌 Generating multi station master mode final states...");
-    render_state_and_capture(
-        "multi_station/master_modes",
-        "tui_multi_master_mixed_register_types_final",
-        e2e::multi_station::master_modes::create_tui_multi_master_mixed_register_types_final_state(
-        ),
-    )
-    .await?;
+    if should_run_test("multi_station/master_modes", module_filter.as_ref()) {
+        info!("🔌 Generating multi station master mode final states...");
+        render_state_and_capture(
+            "multi_station/master_modes",
+            "tui_multi_master_mixed_register_types_final",
+            e2e::multi_station::master_modes::create_tui_multi_master_mixed_register_types_final_state(
+            ),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "multi_station/master_modes",
-        "tui_multi_master_spaced_addresses_final",
-        e2e::multi_station::master_modes::create_tui_multi_master_spaced_addresses_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "multi_station/master_modes",
+            "tui_multi_master_spaced_addresses_final",
+            e2e::multi_station::master_modes::create_tui_multi_master_spaced_addresses_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "multi_station/master_modes",
-        "tui_multi_master_mixed_station_ids_final",
-        e2e::multi_station::master_modes::create_tui_multi_master_mixed_station_ids_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "multi_station/master_modes",
+            "tui_multi_master_mixed_station_ids_final",
+            e2e::multi_station::master_modes::create_tui_multi_master_mixed_station_ids_final_state(),
+        )
+        .await?;
+    }
 
     // Generate multi station slave mode final states
-    info!("🔌 Generating multi station slave mode final states...");
-    render_state_and_capture(
-        "multi_station/slave_modes",
-        "tui_multi_slave_mixed_register_types_final",
-        e2e::multi_station::slave_modes::create_tui_multi_slave_mixed_register_types_final_state(),
-    )
-    .await?;
+    if should_run_test("multi_station/slave_modes", module_filter.as_ref()) {
+        info!("🔌 Generating multi station slave mode final states...");
+        render_state_and_capture(
+            "multi_station/slave_modes",
+            "tui_multi_slave_mixed_register_types_final",
+            e2e::multi_station::slave_modes::create_tui_multi_slave_mixed_register_types_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "multi_station/slave_modes",
-        "tui_multi_slave_spaced_addresses_final",
-        e2e::multi_station::slave_modes::create_tui_multi_slave_spaced_addresses_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "multi_station/slave_modes",
+            "tui_multi_slave_spaced_addresses_final",
+            e2e::multi_station::slave_modes::create_tui_multi_slave_spaced_addresses_final_state(),
+        )
+        .await?;
 
-    render_state_and_capture(
-        "multi_station/slave_modes",
-        "tui_multi_slave_mixed_station_ids_final",
-        e2e::multi_station::slave_modes::create_tui_multi_slave_mixed_station_ids_final_state(),
-    )
-    .await?;
+        render_state_and_capture(
+            "multi_station/slave_modes",
+            "tui_multi_slave_mixed_station_ids_final",
+            e2e::multi_station::slave_modes::create_tui_multi_slave_mixed_station_ids_final_state(),
+        )
+        .await?;
+    }
 
     info!("✅ All screenshots generated successfully!");
     info!("📁 Screenshots saved to: examples/tui_ui_e2e/screenshots/");
@@ -295,8 +333,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::GenerateScreenshots => {
-            generate_screenshots().await?;
+        Commands::GenerateScreenshots { module } => {
+            generate_screenshots(module).await?;
         }
     }
 
