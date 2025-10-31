@@ -2,7 +2,7 @@ use anyhow::Result;
 use expectrl::Expect;
 
 use super::super::retry::execute_transaction_with_retry;
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 /// Navigate from ConfigPanel to the Modbus dashboard for a specific port.
 ///

@@ -3,7 +3,7 @@ use expectrl::Expect;
 
 use super::super::status_paths::{station_collection, wait_for_station_count};
 use super::modbus_page_check;
-use ci_utils::{execute_cursor_actions, read_tui_status, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_cursor_actions, read_tui_status, CursorAction, TerminalCapture};
 
 /// Creates a new station and verifies its creation via a status check.
 ///

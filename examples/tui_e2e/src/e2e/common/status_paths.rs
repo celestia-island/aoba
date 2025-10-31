@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 use serde_json::to_string;
 use tokio::time::{sleep, Duration};
 
-use ci_utils::read_tui_status;
+use aoba_ci_utils::read_tui_status;
 
 /// JSON path to the current page "type" field in the status dump.
 pub(super) const PAGE_TYPE_PATH: &str = "page.type";

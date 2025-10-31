@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::super::status_paths::page_type_path;
-use ci_utils::CursorAction;
+use aoba_ci_utils::CursorAction;
 
 /// Validate that the UI reports the expected page type.
 #[allow(dead_code)]

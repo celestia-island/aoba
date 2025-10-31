@@ -4,7 +4,7 @@ use regex::Regex;
 
 use super::focus::focus_create_station_button;
 use super::modbus_page_check;
-use ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
 
 const MAX_TOGGLE_ATTEMPTS: usize = 3;
 

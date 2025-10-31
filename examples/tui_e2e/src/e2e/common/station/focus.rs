@@ -5,7 +5,7 @@ use serde_json::json;
 
 use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
-use ci_utils::{execute_with_status_checks, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, CursorAction, TerminalCapture};
 
 /// Ensure the cursor is focused on the "Create Station" button at the top of the dashboard.
 pub async fn focus_create_station_button<T: Expect>(

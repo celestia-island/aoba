@@ -6,7 +6,7 @@ use super::super::{
     status_paths::wait_for_station_count,
 };
 use super::cli::{send_data_from_cli_master, verify_master_data, verify_slave_data};
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 /// Run a complete single-station Master test with TUI Master and CLI Slave.
 ///
@@ -29,7 +29,7 @@ use ci_utils::*;
 ///    to enter the configuration view, and confirm `Page::ConfigPanel` in the status dump via
 ///    `wait_for_tui_page("ConfigPanel")`.
 /// 2. **Enter Modbus Dashboard**: Execute `navigate_to_modbus_panel`, which relies on
-///    `ci_utils::navigate_to_vcom` and `src/tui/ui/pages/modbus_panel/input/navigation.rs`
+///    `aoba_ci_utils::navigate_to_vcom` and `src/tui/ui/pages/modbus_panel/input/navigation.rs`
 ///    (`handle_enter_action`) while double-checking both terminal frames and the status tree to
 ///    ensure we land on `Page::ModbusDashboard`.
 /// 3. **Ensure Connection Mode**: `configure_tui_station` first invokes `ensure_connection_mode`

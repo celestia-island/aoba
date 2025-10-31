@@ -1,8 +1,8 @@
-use ci_utils::ArrowKey;
+use aoba_ci_utils::ArrowKey;
 
 /// Re-export the canonical Modbus configuration primitives used by the binary so
 /// tests operate on the exact same data structures.
-pub use _bin::protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode};
+pub use aoba::protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode};
 
 /// Construct a single-range station configuration shared across the test suite.
 ///

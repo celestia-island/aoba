@@ -5,7 +5,7 @@ use std::{
     process::Stdio,
 };
 
-use ci_utils::{
+use aoba_ci_utils::{
     create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 
@@ -78,7 +78,7 @@ pub async fn test_master_slave_communication() -> Result<()> {
         ports.port2_name
     );
 
-    let binary = ci_utils::build_debug_bin("aoba")?;
+    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
     let client_output = std::process::Command::new(&binary)
         .args([
             "--slave-poll",

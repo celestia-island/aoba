@@ -3,7 +3,7 @@ use expectrl::Expect;
 
 use super::super::config::RegisterMode;
 use super::modbus_page_check;
-use ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
 
 /// Initialize slave register values after base configuration.
 ///

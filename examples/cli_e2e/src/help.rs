@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use ci_utils::run_binary_sync;
+use aoba_ci_utils::run_binary_sync;
 
 pub async fn test_cli_help() -> Result<()> {
     let output = run_binary_sync(&["--help"])?;
