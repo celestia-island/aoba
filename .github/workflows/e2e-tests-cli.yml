@@ -1,0 +1,120 @@
+name: CLI E2E Tests
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cli-e2e-basic:
+    name: CLI E2E Basic - ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - help
+          - list_ports
+          - list_ports_json
+          - list_ports_status
+          - modbus_basic_master_slave
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config socat
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cli-e2e-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cli-e2e-cargo-
+
+      - name: Build packages
+        run: cargo build --package aoba --package aoba_cli --package cli_e2e
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/cli_e2e
+
+      - name: Install socat
+        if: matrix.module == 'modbus_basic_master_slave'
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        if: matrix.module == 'modbus_basic_master_slave'
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
+
+      - name: Run CLI E2E module
+        run: ./target/debug/cli_e2e --module ${{ matrix.module }}
+
+  cli-e2e-config-mode:
+    name: CLI E2E Config Mode - ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - modbus_multi_masters
+          - modbus_multi_masters_same_station
+          - modbus_multi_slaves
+          - modbus_multi_slaves_same_station
+          - modbus_multi_slaves_adjacent_registers
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config socat
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cli-e2e-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cli-e2e-cargo-
+
+      - name: Build packages
+        run: cargo build --package aoba --package aoba_cli --package cli_e2e
+
+      - name: Make binaries executable
+        run: |
+          chmod +x target/debug/aoba
+          chmod +x target/debug/cli_e2e
+
+      - name: Install socat
+        run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Setup virtual serial ports
+        run: |
+          chmod +x scripts/socat_init.sh
+          ./scripts/socat_init.sh
+
+      - name: Run CLI E2E module
+        run: ./target/debug/cli_e2e --module ${{ matrix.module }}

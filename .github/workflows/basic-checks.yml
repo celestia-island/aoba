@@ -13,7 +13,7 @@ jobs:
     uses: ./.github/workflows/reusable-setup.yml
     with:
       install_rust: false
-      install_deps: gui
+      install_deps: "libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev"
       socat_init: false
       build_packages: ""
       upload_artifacts: false

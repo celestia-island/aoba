@@ -13,7 +13,7 @@ use tempfile::{Builder, TempPath};
 use expectrl::Expect;
 
 use super::super::config::{RegisterModeExt, StationConfig};
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 static AOBA_BINARY: OnceCell<PathBuf> = OnceCell::new();
 

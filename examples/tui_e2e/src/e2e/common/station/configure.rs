@@ -6,7 +6,7 @@ use serde_json::json;
 use super::super::config::{RegisterMode, RegisterModeExt};
 use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
-use ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
 
 /// Configures the Station ID for a given station.
 ///

@@ -162,7 +162,7 @@
 //! - `src/e2e/common.rs` - Core implementation with comprehensive inline documentation
 //! - `../../docs/zh-chs/CLI_MODBUS.md` - CLI Modbus usage (for reference)
 //! - `../../scripts/socat_init.sh` - Virtual serial port setup script
-//! - `../ci_utils/` - Testing utilities (terminal capture, cursor actions, status monitoring)
+//! - `../../packages/aoba_ci_utils/` - Testing utilities (terminal capture, cursor actions, status monitoring)
 
 mod e2e;
 
@@ -399,7 +399,7 @@ async fn main() -> Result<()> {
         }
         Err(err) => {
             log::error!("❌ Module '{module}' failed: {err:?}");
-            ci_utils::log_last_terminal_snapshot(&format!("Module '{module}' failure"));
+            aoba_ci_utils::log_last_terminal_snapshot(&format!("Module '{module}' failure"));
             Err(err)
         }
     }

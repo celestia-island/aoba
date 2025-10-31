@@ -1,20 +1,14 @@
-[package]
-name = "aoba"
+[workspace]
+members = ["packages/*", "examples/*"]
+resolver = "2"
+
+[workspace.package]
 authors = ["langyo <langyo.china@gmail.com>"]
 description = "Multi-protocol debug & simulation CLI tool (Modbus, MQTT, TTY, TCP/UDP, etc.)"
 repository = "https://github.com/celestia-island/aoba"
 license = "Apache-2.0"
-
 version = "0.0.2"
 edition = "2021"
-
-[[bin]]
-name = "aoba"
-path = "src/main.rs"
-
-[lib]
-name = "aoba"
-path = "src/lib.rs"
 
 [profile.release]
 lto = true
@@ -22,10 +16,7 @@ opt-level = 'z'
 codegen-units = 1
 panic = "abort"
 
-[workspace]
-members = ["examples/*"]
-
-[dependencies]
+[workspace.dependencies]
 anyhow = { version = "^1", features = ["backtrace"] }
 async-trait = "^0.1"
 cfg-if = "^1"
@@ -42,15 +33,17 @@ sqids = "^0.4"
 
 serde = { version = "^1", features = ["derive"] }
 serde_json = "^1"
+serde_json_path = "^0.7"
 postcard = { version = "^1", features = ["alloc"] }
 strum = { version = "^0.27", features = ["derive"] }
 toml = "^0.9"
+semver = "^1"
 uuid = { version = "^1", features = [
-  'v4',
+  "v4",
   "v7",
-  'fast-rng',
-  'macro-diagnostics',
-  'serde',
+  "fast-rng",
+  "macro-diagnostics",
+  "serde",
 ] }
 yuuka = "^0.6"
 rand = "^0.9"
@@ -66,6 +59,7 @@ flume = "^0.11"
 tokio = { version = "^1", features = ["full"] }
 futures = "^0.3"
 oneshot = "^0.1"
+tokio-test = "^0.4"
 
 whoami = "^1"
 crossterm = "^0.29"
@@ -85,12 +79,3 @@ expectrl = "^0.8"
 regex = "^1"
 vt100 = "^0.15"
 ctrlc = "^3"
-[dev-dependencies]
-# TUI testing dependencies
-tokio-test = "^0.4"
-
-[build-dependencies]
-anyhow = " ^1"
-serde_json = "^1"
-toml = "^0.9"
-semver = "^1"

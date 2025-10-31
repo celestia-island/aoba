@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::super::status_paths::port_field_path;
 use super::modbus_page_check;
-use ci_utils::{execute_with_status_checks, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, CursorAction, TerminalCapture};
 
 /// Saves the configuration and verifies that the port is enabled.
 ///

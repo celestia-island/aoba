@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::super::status_paths::station_field_path;
-use ci_utils::CursorAction;
+use aoba_ci_utils::CursorAction;
 
 /// Validate that a station was created with specific configuration.
 pub fn check_station_config(

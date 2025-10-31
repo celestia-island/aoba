@@ -6,7 +6,7 @@ use super::super::{
     navigation::{configure_tui_station, navigate_to_modbus_panel, setup_tui_test},
 };
 use super::cli::{send_data_from_cli_master, verify_master_data, verify_slave_data};
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 /// Configure multiple stations in the TUI for multi-station tests.
 ///

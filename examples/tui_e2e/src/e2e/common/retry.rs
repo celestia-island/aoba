@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use expectrl::Expect;
 
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 /// Maximum number of retry attempts for transaction operations.
 ///
@@ -67,7 +67,7 @@ const MAX_RETRY_ATTEMPTS: usize = 3;
 ///
 /// ```rust,no_run
 /// # use anyhow::Result;
-/// # use ci_utils::TerminalCapture;
+/// # use aoba_ci_utils::TerminalCapture;
 /// # use expectrl::Expect;
 /// # async fn example<T: Expect>(session: &mut T, cap: &mut TerminalCapture) -> Result<()> {
 /// use examples::tui_e2e::common::perform_safe_rollback;
@@ -212,7 +212,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 /// # async fn example() -> Result<()> {
 /// # let mut session = todo!();
 /// # let mut cap = todo!();
-/// use ci_utils::CursorAction;
+/// use aoba_ci_utils::CursorAction;
 ///
 /// execute_transaction_with_retry(
 ///     &mut session,
@@ -240,7 +240,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 /// # async fn example() -> Result<()> {
 /// # let mut session = todo!();
 /// # let mut cap = todo!();
-/// use ci_utils::CursorAction;
+/// use aoba_ci_utils::CursorAction;
 ///
 /// execute_transaction_with_retry(
 ///     &mut session,
@@ -275,7 +275,7 @@ pub async fn perform_safe_rollback<T: Expect>(
 /// # async fn example() -> Result<()> {
 /// # let mut session = todo!();
 /// # let mut cap = todo!();
-/// use ci_utils::CursorAction;
+/// use aoba_ci_utils::CursorAction;
 ///
 /// execute_transaction_with_retry(
 ///     &mut session,
