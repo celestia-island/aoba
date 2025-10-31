@@ -11,6 +11,40 @@ use super::state_helpers::{
     add_master_station, add_slave_station, create_modbus_dashboard_state, enable_port,
 };
 
+/// Helper function to apply station configuration to a state
+fn apply_station_to_state(
+    state: TuiStatus,
+    port_name: &str,
+    station_id: u8,
+    register_mode: aoba::protocol::status::types::modbus::RegisterMode,
+    start_address: u16,
+    register_count: usize,
+    is_master: bool,
+) -> TuiStatus {
+    let mut state = state;
+    let register_type = format!("{:?}", register_mode);
+    
+    if is_master {
+        state = add_master_station(
+            state,
+            station_id,
+            &register_type,
+            start_address,
+            register_count,
+        );
+    } else {
+        state = add_slave_station(
+            state,
+            station_id,
+            &register_type,
+            start_address,
+            register_count,
+        );
+    }
+    
+    state
+}
+
 /// Capture or verify screenshot after navigating to Modbus dashboard
 pub async fn screenshot_after_modbus_panel<T: ExpectSession>(
     session: &mut T,
@@ -38,26 +72,16 @@ pub async fn screenshot_after_station_config<T: ExpectSession>(
     screenshot_ctx: Option<&ScreenshotContext>,
 ) -> Result<()> {
     if let Some(ctx) = screenshot_ctx {
-        let mut state = create_modbus_dashboard_state(port_name);
-        let register_type = format!("{:?}", register_mode);
-        
-        if is_master {
-            state = add_master_station(
-                state,
-                station_id,
-                &register_type,
-                start_address,
-                register_count,
-            );
-        } else {
-            state = add_slave_station(
-                state,
-                station_id,
-                &register_type,
-                start_address,
-                register_count,
-            );
-        }
+        let state = create_modbus_dashboard_state(port_name);
+        let state = apply_station_to_state(
+            state,
+            port_name,
+            station_id,
+            register_mode,
+            start_address,
+            register_count,
+            is_master,
+        );
         
         ctx.capture_or_verify(session, cap, state).await?;
     }
@@ -77,28 +101,17 @@ pub async fn screenshot_after_port_enabled<T: ExpectSession>(
     screenshot_ctx: Option<&ScreenshotContext>,
 ) -> Result<()> {
     if let Some(ctx) = screenshot_ctx {
-        let mut state = create_modbus_dashboard_state(port_name);
-        let register_type = format!("{:?}", register_mode);
-        
-        if is_master {
-            state = add_master_station(
-                state,
-                station_id,
-                &register_type,
-                start_address,
-                register_count,
-            );
-        } else {
-            state = add_slave_station(
-                state,
-                station_id,
-                &register_type,
-                start_address,
-                register_count,
-            );
-        }
-        
-        state = enable_port(state);
+        let state = create_modbus_dashboard_state(port_name);
+        let state = apply_station_to_state(
+            state,
+            port_name,
+            station_id,
+            register_mode,
+            start_address,
+            register_count,
+            is_master,
+        );
+        let state = enable_port(state);
         
         ctx.capture_or_verify(session, cap, state).await?;
     }
