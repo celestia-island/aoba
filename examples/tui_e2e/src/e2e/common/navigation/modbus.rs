@@ -22,16 +22,18 @@ pub async fn navigate_to_modbus_panel<T: Expect>(
         cap,
         "entry_to_config_panel",
         &[CursorAction::PressEnter, CursorAction::Sleep3s],
-        |screen| {
-            if screen.contains("Welcome") || screen.contains("Press Enter") {
-                Ok(false)
-            } else if screen.contains("Configuration") || screen.contains("Serial") {
-                Ok(true)
+        |_| {
+            if let Ok(status) = read_tui_status() {
+                match status.page {
+                    TuiPage::ConfigPanel => Ok(true),
+                    TuiPage::Entry => Ok(false),
+                    _ => Ok(false),
+                }
             } else {
                 Ok(false)
             }
         },
-        None,
+        Some(&[]),
         &[],
     )
     .await?;

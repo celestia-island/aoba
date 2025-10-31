@@ -1,10 +1,11 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use super::super::{
     config::{RegisterMode, StationConfig},
     navigation::{configure_tui_station, navigate_to_modbus_panel, setup_tui_test},
+    status_paths::wait_for_station_count,
 };
-use super::cli::send_data_from_cli_master;
+use super::cli::{send_data_from_cli_master, verify_master_data, verify_slave_data};
 use ci_utils::*;
 
 /// Run a complete single-station Master test with TUI Master and CLI Slave.
@@ -12,15 +13,46 @@ use ci_utils::*;
 /// # Purpose
 ///
 /// This is a **high-level test orchestrator** that validates the complete Modbus
-/// Master workflow:
-/// 1. Generate random test data (coils or registers)
-/// 2. Setup TUI environment and configure Master station
-/// 3. Start CLI Slave on second port with test data
-/// 4. Wait for TUI Master to poll Slave and retrieve data
-/// 5. Verify Master received correct data via TUI status file
+/// Master workflow using the shared navigation, status, and CLI helpers:
+/// 1. Launch the TUI and configure a Master station via fine-grained status checks
+/// 2. Wait for the TUI-managed CLI subprocess to report readiness
+/// 3. Issue a CLI `--slave-poll` health check against the runtime data source
+/// 4. Assert that the returned payload matches the expected register snapshot
 ///
 /// This function tests the **TUI → CLI communication path** where the TUI acts
 /// as Master and initiates read operations.
+///
+/// ## Execution Plan (Aligned with TUI Internals)
+///
+/// 1. **Initialization & Page Transition**: Call `setup_tui_test`, which wraps the
+///    keyboard handlers in `src/tui/ui/pages/entry` and `config_panel`, press `Enter`
+///    to enter the configuration view, and confirm `Page::ConfigPanel` in the status dump via
+///    `wait_for_tui_page("ConfigPanel")`.
+/// 2. **Enter Modbus Dashboard**: Execute `navigate_to_modbus_panel`, which relies on
+///    `ci_utils::navigate_to_vcom` and `src/tui/ui/pages/modbus_panel/input/navigation.rs`
+///    (`handle_enter_action`) while double-checking both terminal frames and the status tree to
+///    ensure we land on `Page::ModbusDashboard`.
+/// 3. **Ensure Connection Mode**: `configure_tui_station` first invokes `ensure_connection_mode`
+///    (see `station/connection.rs`), using the `ModbusDashboardCursor::ModbusMode` branch so that
+///    the runtime `ModbusConnectionMode` matches `StationConfig::is_master()`.
+/// 4. **Edit Station Fields**: Sequentially call `configure_station_id`, `configure_register_type`,
+///    `configure_start_address`, and `configure_register_count` (implemented in
+///    `station/configure.rs`, backed by `src/tui/ui/pages/modbus_panel/input/editing.rs`), with
+///    every step validated through `execute_with_status_checks` on the status JSON.
+/// 5. **Save & Enable Port**: Trigger `Ctrl+S` via `save_configuration_and_verify`, which flows
+///    through `navigation.rs::handle_save_config` → `UiToCore::ToggleRuntime` →
+///    `src/tui/subprocess.rs::start_subprocess`, while simultaneously watching
+///    `wait_for_port_enabled`/`verify_port_enabled` to confirm both the status file and the title bar
+///    (`src/tui/ui/title.rs`).
+/// 6. **Confirm CLI Subprocess & Recover if Needed**: Read `/tmp/ci_cli_*_status.json` with
+///    `wait_for_cli_status`; on timeout, run `scripts/socat_init.sh` to reset ports and retry.
+///    Verify `CliMode` resolves to `MasterProvide` for Master flows or `SlavePoll` for Slave flows.
+/// 7. **Master Data Verification**: For Master scenarios, call `verify_master_data` to launch the
+///    CLI `--slave-poll`, ensuring the synthesized data source from the subprocess is externally
+///    reachable (default expectation: zeroed registers).
+/// 8. **Slave Data Verification**: For Slave scenarios, first call `send_data_from_cli_master` to
+///    provide deterministic values, then run `verify_slave_data` against the TUI status tree to
+///    confirm the configuration and write-back metadata.
 ///
 /// # Test Architecture
 ///
@@ -40,7 +72,7 @@ use ci_utils::*;
 ///     t1 --> t2 --> t3 --> t4
 ///     t3 -->|Launch CLI helper| c1
 ///     t4 -->|Poll request| c1
-///     c1 -->|Response (test data)| t5
+///     c1 -->|Response · test data| t5
 ///     t5 --> t6
 /// ```
 ///
@@ -61,25 +93,23 @@ use ci_utils::*;
 ///
 /// # Test Workflow
 ///
-/// ## Stage 1: Generate Test Data
-/// - **Coils/DiscreteInputs**: Random bit values (0 or 1) via `generate_random_coils`
-/// - **Holding/Input**: Random 16-bit values (0-65535) via `generate_random_registers`
-/// - Data length matches `config.register_count()`
+/// ## Stage 1: Determine Expected Data
+/// - Default expectation uses zeroed values that mirror the freshly created data source
+/// - Future enhancements may inject randomized snapshots for regression coverage
 ///
 /// ## Stage 2: Setup TUI Master
 /// - Call `setup_tui_test(port1, port2)` to initialize environment
 /// - Call `navigate_to_modbus_panel` to reach Modbus dashboard
 /// - Call `configure_tui_station` with test data to create Master station
 ///
-/// ## Stage 3: Start CLI Slave and Poll
-/// - Call `send_data_from_cli_master` to spawn CLI in slave-poll mode (acts as Modbus master)
-/// - CLI sends read request to TUI Slave
-/// - TUI Slave responds with register data
+/// ## Stage 3: Wait for CLI Subprocess
+/// - Use `wait_for_station_count` to ensure the station is committed in the status dump
+/// - Call `wait_for_cli_status` so the CLI `master-provide-persist` helper reports readiness
+/// - Allow the runtime a brief grace period to finish IPC handshakes
 ///
-/// ## Stage 4: Verify Data
-/// - `send_data_from_cli_master` internally verifies CLI's received data
-/// - Compare against original test data
-/// - Verify all registers match (exact equality check)
+/// ## Stage 4: Verify Data Path
+/// - Call `verify_master_data` to run `aoba --slave-poll` against `port2`
+/// - Inspect the JSON output and ensure the provided values match expectations
 ///
 /// # Example 1: Master Holding Registers Test
 ///
@@ -92,12 +122,11 @@ use ci_utils::*;
 ///     start_address: 100,
 ///     register_count: 10,
 ///     is_master: true,
-///     register_values: None, // Will be overwritten with test data
+///     register_values: None,
 /// };
 ///
 /// run_single_station_master_test("COM3", "COM4", master_config).await?;
-/// // Test generates 10 random values, configures Master, starts Slave,
-/// // waits for polling, and verifies data match
+/// // Test configures a Master station and verifies the CLI subprocess answers a poll
 /// # Ok(())
 /// # }
 /// ```
@@ -117,7 +146,7 @@ use ci_utils::*;
 /// };
 ///
 /// run_single_station_master_test("COM3", "COM4", coil_config).await?;
-/// // Test generates 32 random bits (0/1), verifies Master read them correctly
+/// // Test configures a Coils station and confirms the CLI subprocess responds
 /// # Ok(())
 /// # }
 /// ```
@@ -130,19 +159,20 @@ use ci_utils::*;
 /// - **Solution**: Verify ports exist, check TUI logs, retry with longer timeouts
 ///
 /// ## Master Configuration Failure
-/// - **Symptom**: `configure_tui_station` fails during register initialization
-/// - **Cause**: Register edit timeout, or values not saved properly
-/// - **Solution**: Increase edit timeouts, verify register count matches data length
+/// - **Symptom**: `configure_tui_station` fails during field edits or save
+/// - **Cause**: Navigation drift, register edit timeout, or values not persisted
+/// - **Solution**: Increase edit timeouts, ensure register counts align with expectations
 ///
-/// ## CLI Slave Start Failure
-/// - **Symptom**: `send_data_from_cli_master` fails with CLI error
-/// - **Cause**: Port already in use, CLI binary missing, or permissions issue
-/// - **Solution**: Check `lsof` (Unix) or `mode` (Windows), verify CLI path
-///
-/// ## Data Verification Failure
-/// - **Symptom**: `send_data_from_cli_master` reports data mismatch
-/// - **Cause**: Master registers not initialized, or CLI received corrupted data
-/// - **Solution**: Verify register initialization completed, check port connection quality
+/// ## CLI Subprocess Readiness Failure
+/// - **Symptom**: `wait_for_cli_status` times out or fails to locate the helper dump
+/// - **Cause**: Debug CI flag missing, subprocess startup delay, or virtual port conflicts
+/// - **Solution**: Confirm `--debug-ci-e2e-test` is enabled, rerun `scripts/socat_init.sh`, review TUI logs
+
+/// ## CLI Health Check Failure
+/// - **Symptom**: `verify_master_data` fails with CLI error or value mismatch
+/// - **Cause**: CLI binary missing, subprocess not yet started, or serial contention
+/// - **Solution**: Confirm the status snapshot lists the station, rerun after
+///   `scripts/socat_init.sh` to rebuild virtual ports, inspect CLI stderr for permission errors
 ///
 /// # Timing Considerations
 ///
@@ -192,11 +222,11 @@ use ci_utils::*;
 ///
 /// # See Also
 ///
-/// - [`send_data_from_cli_master`]: Function to supply data via CLI master-provide
+/// - [`verify_master_data`]: CLI `--slave-poll` health check for Master subprocesses
+/// - [`send_data_from_cli_master`]: Function to supply data via CLI master-provide (Slave tests)
 /// - [`run_single_station_slave_test`]: Inverse test (CLI Master, TUI Slave)
 /// - [`configure_tui_station`]: Underlying station configuration
 /// - [`setup_tui_test`]: Environment initialization
-/// - [`generate_random_coils`], [`generate_random_registers`]: Test data generators
 pub async fn run_single_station_master_test(
     port1: &str,
     port2: &str,
@@ -207,19 +237,76 @@ pub async fn run_single_station_master_test(
     log::info!("   Port2: {port2} (CLI Slave)");
     log::info!("   Config: {config:?}");
 
-    // Setup TUI
+    // Setup TUI and ensure we are fully inside ConfigPanel before proceeding.
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
+    wait_for_tui_page("Entry", 5, None).await?;
 
-    // Navigate to Modbus panel
+    // Navigate to Modbus panel and confirm dashboard activation.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
+    wait_for_tui_page("ModbusDashboard", 10, None).await?;
 
-    // Configure station
+    // Configure the target station using reusable workflow helpers.
     configure_tui_station(&mut session, &mut cap, port1, &config).await?;
 
-    log::info!("✅ Single-station Master configuration applied and verified");
+    // Station count and configuration must be visible in the status dump.
+    wait_for_station_count(port1, true, 1, 10).await?;
+    wait_for_modbus_config(port1, true, config.station_id(), 10, None).await?;
 
-    // Explicitly terminate TUI session to ensure clean shutdown
-    // This is critical in CI environments to prevent zombie processes
+    // Persisted configuration should enable the port; verify status JSON and UI indicator.
+    wait_for_port_enabled(port1, 20, Some(500)).await?;
+    verify_port_enabled(&mut session, &mut cap, "master_port_enabled").await?;
+
+    // Ensure the managed CLI subprocess is running in MasterProvide mode, retrying with socat reset when needed.
+    let cli_status = wait_for_cli_status_with_recovery(port1, 15, Some(500)).await?;
+    if cli_status.mode != CliMode::MasterProvide {
+        return Err(anyhow!(
+            "CLI subprocess for {port1} expected MasterProvide but observed {:?}",
+            cli_status.mode
+        ));
+    }
+    if cli_status.station_id != config.station_id() {
+        return Err(anyhow!(
+            "CLI station id mismatch: expected {}, got {}",
+            config.station_id(),
+            cli_status.station_id
+        ));
+    }
+    if cli_status.register_length != config.register_count() {
+        return Err(anyhow!(
+            "CLI register length mismatch: expected {}, got {}",
+            config.register_count(),
+            cli_status.register_length
+        ));
+    }
+    if cli_status.register_address != config.start_address() {
+        return Err(anyhow!(
+            "CLI register address mismatch: expected {}, got {}",
+            config.start_address(),
+            cli_status.register_address
+        ));
+    }
+    if cli_status.register_mode != config.register_mode() {
+        return Err(anyhow!(
+            "CLI register mode mismatch: expected {:?}, got {:?}",
+            config.register_mode(),
+            cli_status.register_mode
+        ));
+    }
+
+    log::info!("✅ CLI master-provide subprocess reported ready");
+
+    // Allow subprocess to settle before issuing poll.
+    sleep_3s().await;
+
+    // Initial master data set defaults to zeros until operators push updates.
+    let expected_data = vec![0u16; config.register_count() as usize];
+
+    // Poll MasterProvide helper via CLI slave-poll to ensure runtime responds.
+    verify_master_data(port2, &expected_data, &config).await?;
+
+    log::info!("✅ Single-station Master runtime responded to CLI poll");
+
+    // Explicitly terminate TUI session to ensure clean shutdown.
     terminate_session(session, "TUI").await?;
 
     Ok(())
@@ -287,7 +374,8 @@ pub async fn run_single_station_master_test(
 /// - Call `setup_tui_test(port1, port2)` to initialize environment
 /// - Call `navigate_to_modbus_panel` to reach Modbus dashboard
 /// - Call `configure_tui_station` with test data to create Slave station
-/// - TUI writes test data to Slave registers
+/// - TUI writes test data to Slave registers and publishes status updates via `wait_for_station_count`
+/// - Confirm the background `slave-poll-persist` subprocess is running with `wait_for_cli_status`
 ///
 /// ## Stage 3: Provide a Modbus responder for TUI polling
 /// - Call `send_data_from_cli_master` to spawn CLI in master-provide mode (acts as Modbus slave/server)
@@ -351,6 +439,11 @@ pub async fn run_single_station_master_test(
 /// - **Symptom**: `configure_tui_station` fails during register initialization
 /// - **Cause**: Register edit timeout, or values not saved properly
 /// - **Solution**: Increase edit timeouts, verify register count matches data length
+
+/// ## CLI Subprocess Readiness Failure
+/// - **Symptom**: `wait_for_cli_status` times out waiting for the background helper
+/// - **Cause**: Debug CI mode disabled, subprocess crash, or virtual port misconfiguration
+/// - **Solution**: Confirm `--debug-ci-e2e-test` is set, rerun `scripts/socat_init.sh`, inspect TUI logs
 ///
 /// ## CLI Master Start Failure
 /// - **Symptom**: `send_data_from_cli_master` fails with CLI error
@@ -427,6 +520,11 @@ pub async fn run_single_station_slave_test(
     log::info!("   Port2: {port2} (CLI data provider)");
     log::info!("   Config: {config:?}");
 
+    // Ensure virtual serial ports are initialized and not left in a busy state from previous runs.
+    if reset_virtual_serial_ports().await? {
+        sleep_1s().await;
+    }
+
     // Generate test data
     let test_data = if matches!(
         config.register_mode(),
@@ -442,20 +540,70 @@ pub async fn run_single_station_slave_test(
     let mut config_with_data = config.clone();
     config_with_data.set_register_values(Some(test_data.clone()));
 
-    // Setup TUI
+    // Setup TUI and confirm ConfigPanel is ready for interaction.
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
+    wait_for_tui_page("Entry", 5, None).await?;
 
-    // Navigate to Modbus panel
+    // Navigate to Modbus panel and guarantee dashboard context.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
+    wait_for_tui_page("ModbusDashboard", 10, None).await?;
 
-    // Configure station
+    // Configure the Slave station with generated data.
     configure_tui_station(&mut session, &mut cap, port1, &config_with_data).await?;
 
-    // Wait for TUI to be ready
+    // Verify station presence and configuration in the status dump.
+    wait_for_station_count(port1, false, 1, 10).await?;
+    wait_for_modbus_config(port1, false, config_with_data.station_id(), 10, None).await?;
+
+    // Saving configuration should enable the port; verify JSON status and visual indicator.
+    wait_for_port_enabled(port1, 20, Some(500)).await?;
+    verify_port_enabled(&mut session, &mut cap, "slave_port_enabled").await?;
+
+    // Ensure the CLI helper is in SlavePoll mode, retrying with port reset if needed.
+    let cli_status = wait_for_cli_status_with_recovery(port1, 15, Some(500)).await?;
+    if cli_status.mode != CliMode::SlavePoll {
+        return Err(anyhow!(
+            "CLI subprocess for {port1} expected SlavePoll but observed {:?}",
+            cli_status.mode
+        ));
+    }
+    if cli_status.station_id != config_with_data.station_id() {
+        return Err(anyhow!(
+            "CLI station id mismatch: expected {}, got {}",
+            config_with_data.station_id(),
+            cli_status.station_id
+        ));
+    }
+    if cli_status.register_length != config_with_data.register_count() {
+        return Err(anyhow!(
+            "CLI register length mismatch: expected {}, got {}",
+            config_with_data.register_count(),
+            cli_status.register_length
+        ));
+    }
+    if cli_status.register_address != config_with_data.start_address() {
+        return Err(anyhow!(
+            "CLI register address mismatch: expected {}, got {}",
+            config_with_data.start_address(),
+            cli_status.register_address
+        ));
+    }
+    if cli_status.register_mode != config_with_data.register_mode() {
+        return Err(anyhow!(
+            "CLI register mode mismatch: expected {:?}, got {:?}",
+            config_with_data.register_mode(),
+            cli_status.register_mode
+        ));
+    }
+
+    log::info!("✅ CLI slave-poll subprocess reported ready");
+
+    // Allow slave poller to settle.
     sleep_3s().await;
 
-    // Send data from CLI Master and verify
+    // Send data from CLI Master and verify the TUI slave consumed it.
     send_data_from_cli_master(port2, &test_data, &config).await?;
+    verify_slave_data(&mut session, &mut cap, &test_data, &config_with_data).await?;
 
     log::info!("✅ Single-station Slave test PASSED");
     log::info!("   ✓ Configuration UI working correctly");
@@ -464,8 +612,92 @@ pub async fn run_single_station_slave_test(
     log::info!("   ✓ Save operation completed");
     log::info!("   ✓ CLI responder served expected data");
 
-    // Explicitly terminate TUI session to ensure clean shutdown
+    // Explicitly terminate TUI session to ensure clean shutdown.
     terminate_session(session, "TUI").await?;
 
     Ok(())
+}
+
+async fn wait_for_cli_status_with_recovery(
+    port_name: &str,
+    timeout_secs: u64,
+    retry_interval_ms: Option<u64>,
+) -> Result<CliStatus> {
+    match wait_for_cli_status(port_name, timeout_secs, retry_interval_ms).await {
+        Ok(status) => Ok(status),
+        Err(err) => {
+            log::warn!(
+                "⚠️  CLI status wait failed for {port_name}: {err}. Attempting port reset via socat_init.sh"
+            );
+            let original_err = err;
+            if reset_virtual_serial_ports().await? {
+                sleep_1s().await;
+                wait_for_cli_status(port_name, timeout_secs, retry_interval_ms)
+                    .await
+                    .map_err(|retry_err| {
+                        anyhow!(
+                            "CLI status unavailable after port reset: {retry_err} (original: {original_err})"
+                        )
+                    })
+            } else {
+                Err(original_err)
+            }
+        }
+    }
+}
+
+async fn reset_virtual_serial_ports() -> Result<bool> {
+    #[cfg(not(unix))]
+    {
+        log::info!(
+            "ℹ️  Skipping socat_init.sh reset because virtual serial ports are not supported on this platform"
+        );
+        return Ok(false);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::{path::PathBuf, process::Command};
+
+        let script_candidates = [
+            PathBuf::from("scripts/socat_init.sh"),
+            PathBuf::from("../../scripts/socat_init.sh"),
+        ];
+
+        let script_path = script_candidates
+            .into_iter()
+            .find(|candidate| candidate.exists());
+
+        let Some(path) = script_path else {
+            log::warn!("⚠️  socat_init.sh not found; skipping port reset");
+            return Ok(false);
+        };
+
+        log::info!(
+            "🔁 Running socat_init.sh to reset virtual ports: {}",
+            path.display()
+        );
+
+        let output = tokio::task::spawn_blocking(move || {
+            Command::new("bash")
+                .arg(&path)
+                .arg("--mode")
+                .arg("tui")
+                .output()
+        })
+        .await??;
+
+        if output.status.success() {
+            log::info!("✅ socat_init.sh completed successfully");
+            Ok(true)
+        } else {
+            log::warn!(
+                "⚠️  socat_init.sh failed (status {}):\nstdout: {}\nstderr: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            Ok(false)
+        }
+    }
 }
