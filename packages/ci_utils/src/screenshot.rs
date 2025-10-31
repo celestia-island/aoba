@@ -1,18 +1,18 @@
-///! Screenshot generation and verification for TUI E2E tests
-///!
-///! This module provides infrastructure for:
-///! - Generating reference screenshots from predicted TUI states
-///! - Verifying actual terminal output against reference screenshots
-///! - Incremental state modification using closure-based updates
-///! - Strict verification of both screenshot content and global state
+//! Screenshot generation and verification for TUI E2E tests
+//!
+//! This module provides infrastructure for:
+//! - Generating reference screenshots from predicted TUI states
+//! - Verifying actual terminal output against reference screenshots
+//! - Incremental state modification using closure-based updates
+//! - Strict verification of both screenshot content and global state
 
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use crate::snapshot::{ExpectSession, TerminalCapture, TerminalSize};
 use crate::status_monitor::TuiStatus;
 use crate::terminal::spawn_expect_session_with_size;
-use crate::snapshot::{ExpectSession, TerminalCapture, TerminalSize};
 
 /// Execution mode for TUI E2E tests
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,7 +50,7 @@ impl ScreenshotContext {
         let screenshot_dir = PathBuf::from("examples/tui_e2e/screenshots")
             .join(&module_name)
             .join(&test_name);
-        
+
         Self {
             mode,
             module_name,
@@ -75,7 +75,10 @@ impl ScreenshotContext {
     fn ensure_dir(&self) -> Result<()> {
         if !self.screenshot_dir.exists() {
             std::fs::create_dir_all(&self.screenshot_dir)?;
-            log::debug!("📁 Created screenshot directory: {}", self.screenshot_dir.display());
+            log::debug!(
+                "📁 Created screenshot directory: {}",
+                self.screenshot_dir.display()
+            );
         }
         Ok(())
     }
@@ -99,7 +102,7 @@ impl ScreenshotContext {
         // Spawn TUI in screen-capture mode
         let size = TerminalSize::Large;
         let (rows, cols) = size.dimensions();
-        
+
         let mut session = spawn_expect_session_with_size(
             &["--tui", "--debug-screen-capture", "--no-config-cache"],
             Some((rows, cols)),
@@ -140,7 +143,7 @@ impl ScreenshotContext {
         filename: &str,
     ) -> Result<()> {
         let path = self.screenshot_path(filename);
-        
+
         if !path.exists() {
             return Err(anyhow!(
                 "Reference screenshot not found: {}. Run with --generate-screenshots first.",
@@ -200,13 +203,21 @@ impl ScreenshotContext {
             ));
         }
 
-        for (i, (pred_port, actual_port)) in predicted_ports.iter().zip(actual_ports.iter()).enumerate() {
+        for (i, (pred_port, actual_port)) in
+            predicted_ports.iter().zip(actual_ports.iter()).enumerate()
+        {
             // Check critical fields
             if pred_port["name"] != actual_port["name"] {
-                return Err(anyhow!("State verification failed: port[{}] name mismatch", i));
+                return Err(anyhow!(
+                    "State verification failed: port[{}] name mismatch",
+                    i
+                ));
             }
             if pred_port["enabled"] != actual_port["enabled"] {
-                return Err(anyhow!("State verification failed: port[{}] enabled mismatch", i));
+                return Err(anyhow!(
+                    "State verification failed: port[{}] enabled mismatch",
+                    i
+                ));
             }
             // Note: We don't check log_count as it may vary during test execution
         }
@@ -231,16 +242,18 @@ impl ScreenshotContext {
         match self.mode {
             ExecutionMode::GenerateScreenshots => {
                 // Generate reference screenshot from predicted state
-                self.generate_reference_screenshot(&predicted_state, &filename).await?;
+                self.generate_reference_screenshot(&predicted_state, &filename)
+                    .await?;
                 log::info!("📸 Generated screenshot {}", filename);
             }
             ExecutionMode::Normal => {
                 // Verify actual terminal output against reference
-                self.verify_against_reference(cap, session, &filename).await?;
-                
+                self.verify_against_reference(cap, session, &filename)
+                    .await?;
+
                 // Verify actual state against predicted state
                 self.verify_state(&predicted_state)?;
-                
+
                 log::info!("✅ Verified screenshot and state {}", filename);
             }
         }

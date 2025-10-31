@@ -126,7 +126,7 @@ pub async fn configure_tui_station<T: Expect + ExpectSession>(
 
     if !config.is_master() {
         if let Some(values) = config.register_values() {
-            initialize_slave_registers(session, cap, &values, config.register_mode()).await?;
+            initialize_slave_registers(session, cap, values, config.register_mode()).await?;
         }
 
         focus_create_station_button(session, cap).await?;

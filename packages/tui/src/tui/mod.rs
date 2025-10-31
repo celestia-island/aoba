@@ -1342,24 +1342,21 @@ fn run_screen_capture_mode() -> Result<()> {
                         _ => crate::tui::status::types::modbus::RegisterMode::Holding,
                     };
 
-                    if let crate::tui::status::types::port::PortConfig::Modbus {
-                        stations, ..
-                    } = &mut port_data.config
-                    {
-                        stations.push(crate::tui::status::types::modbus::ModbusRegisterItem {
-                            station_id: slave.station_id,
-                            register_mode,
-                            register_address: slave.start_address,
-                            register_length: slave.register_count as u16,
-                            last_values: vec![0; slave.register_count],
-                            req_total: 0,
-                            req_success: 0,
-                            next_poll_at: std::time::Instant::now(),
-                            last_request_time: None,
-                            last_response_time: None,
-                            pending_requests: vec![],
-                        });
-                    }
+                    let crate::tui::status::types::port::PortConfig::Modbus { stations, .. } =
+                        &mut port_data.config;
+                    stations.push(crate::tui::status::types::modbus::ModbusRegisterItem {
+                        station_id: slave.station_id,
+                        register_mode,
+                        register_address: slave.start_address,
+                        register_length: slave.register_count as u16,
+                        last_values: vec![0; slave.register_count],
+                        req_total: 0,
+                        req_success: 0,
+                        next_poll_at: std::time::Instant::now(),
+                        last_request_time: None,
+                        last_response_time: None,
+                        pending_requests: vec![],
+                    });
                 }
 
                 // Add port to status
@@ -1432,7 +1429,7 @@ fn run_screen_capture_mode() -> Result<()> {
     // Flush to ensure content is written to the PTY
     use std::io::Write;
     io::stdout().flush()?;
-    
+
     log::info!("✅ Screen rendered, waiting for termination signal...");
 
     // Wait for termination signal (e.g., Ctrl+C from parent process)
@@ -1443,7 +1440,8 @@ fn run_screen_capture_mode() -> Result<()> {
             if let Event::Key(key) = crossterm::event::read()? {
                 // Exit on Ctrl+C or Ctrl+D
                 if (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))
-                    || (key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL))
+                    || (key.code == KeyCode::Char('d')
+                        && key.modifiers.contains(KeyModifiers::CONTROL))
                 {
                     break;
                 }

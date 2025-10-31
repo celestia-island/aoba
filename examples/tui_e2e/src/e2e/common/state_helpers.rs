@@ -1,7 +1,7 @@
-///! State prediction helpers for TUI E2E screenshot generation
-///!
-///! This module provides helper functions for creating and modifying
-///! TUI states incrementally for screenshot generation and verification.
+//! State prediction helpers for TUI E2E screenshot generation
+//!
+//! This module provides helper functions for creating and modifying
+//! TUI states incrementally for screenshot generation and verification.
 use aoba_ci_utils::{
     apply_state_change, E2EPortState, StateBuilder, TuiModbusMaster, TuiModbusSlave, TuiPage,
     TuiPort, TuiStatus,

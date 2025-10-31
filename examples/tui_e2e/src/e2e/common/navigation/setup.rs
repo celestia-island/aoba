@@ -1,7 +1,5 @@
 use anyhow::{anyhow, Result};
 
-use expectrl::Expect;
-
 use aoba_ci_utils::*;
 
 /// Setup TUI test environment with initialized session and terminal capture.
@@ -74,7 +72,7 @@ use aoba_ci_utils::*;
 pub async fn setup_tui_test(
     port1: &str,
     _port2: &str,
-) -> Result<(impl Expect + ExpectSession, TerminalCapture)> {
+) -> Result<(impl ExpectSession, TerminalCapture)> {
     log::info!("🔧 Setting up TUI test environment for port {port1}");
 
     if !port_exists(port1) {

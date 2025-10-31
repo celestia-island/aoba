@@ -4,10 +4,7 @@
 //! mirroring the test structure from tui_e2e.
 
 use aoba::tui::status::Status;
-use aoba_protocol::status::types::{
-    modbus::{ModbusConnectionMode, RegisterMode},
-    port::{PortConfig, PortData, PortState, SerialConfig},
-};
+use aoba_protocol::status::types::{modbus::RegisterMode, port::PortConfig};
 
 use crate::e2e::common::{create_multi_station_slave_base_state, create_register_item};
 
@@ -18,10 +15,9 @@ pub fn create_tui_multi_slave_mixed_register_types_final_state() -> Status {
 
     // Add mixed register type stations
     if let Some(port_data) = status.ports.map.get_mut("/tmp/vcom1") {
-        if let PortConfig::Modbus { stations, .. } = &mut port_data.config {
-            stations.push(create_register_item(1, RegisterMode::Coils, 0x0000, 10));
-            stations.push(create_register_item(1, RegisterMode::Holding, 0x0000, 10));
-        }
+        let PortConfig::Modbus { stations, .. } = &mut port_data.config;
+        stations.push(create_register_item(1, RegisterMode::Coils, 0x0000, 10));
+        stations.push(create_register_item(1, RegisterMode::Holding, 0x0000, 10));
     }
 
     status
@@ -34,10 +30,9 @@ pub fn create_tui_multi_slave_spaced_addresses_final_state() -> Status {
 
     // Add stations with spaced addresses
     if let Some(port_data) = status.ports.map.get_mut("/tmp/vcom1") {
-        if let PortConfig::Modbus { stations, .. } = &mut port_data.config {
-            stations.push(create_register_item(1, RegisterMode::Holding, 0x0000, 10));
-            stations.push(create_register_item(1, RegisterMode::Holding, 0x0100, 10));
-        }
+        let PortConfig::Modbus { stations, .. } = &mut port_data.config;
+        stations.push(create_register_item(1, RegisterMode::Holding, 0x0000, 10));
+        stations.push(create_register_item(1, RegisterMode::Holding, 0x0100, 10));
     }
 
     status
@@ -48,12 +43,11 @@ pub fn create_tui_multi_slave_spaced_addresses_final_state() -> Status {
 pub fn create_tui_multi_slave_mixed_station_ids_final_state() -> Status {
     let mut status = create_multi_station_slave_base_state();
 
-    // Add stations with mixed station IDs
+    // Add stations with mixed IDs
     if let Some(port_data) = status.ports.map.get_mut("/tmp/vcom1") {
-        if let PortConfig::Modbus { stations, .. } = &mut port_data.config {
-            stations.push(create_register_item(1, RegisterMode::Holding, 0x0000, 10));
-            stations.push(create_register_item(2, RegisterMode::Holding, 0x0000, 10));
-        }
+        let PortConfig::Modbus { stations, .. } = &mut port_data.config;
+        stations.push(create_register_item(1, RegisterMode::Holding, 0x0000, 10));
+        stations.push(create_register_item(5, RegisterMode::Holding, 0x0000, 10));
     }
 
     status

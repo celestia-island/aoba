@@ -127,7 +127,7 @@ async fn spawn_tui_and_capture_screen() -> Result<String> {
 
     // Build the TUI binary first (no features needed)
     let build_status = Command::new("cargo")
-        .args(&["build", "--bin", "aoba"])
+        .args(["build", "--bin", "aoba"])
         .current_dir(workspace_root)
         .status()?;
 

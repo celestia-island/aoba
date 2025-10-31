@@ -136,6 +136,7 @@ pub fn make_station_config(
 ///
 /// - [`StationConfig`]: Uses this enum to specify register type
 /// - [`as_cli_mode`]: Convert to CLI mode string for command-line operations
+///
 /// Extension helpers for the shared RegisterMode enum that are only needed by
 /// the test harness (e.g. translating into CLI strings or navigation hints).
 pub trait RegisterModeExt {
