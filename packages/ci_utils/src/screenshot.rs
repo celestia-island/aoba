@@ -10,6 +10,9 @@ use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use crate::placeholder::{
+    apply_placeholders_for_generation, restore_placeholders_for_verification,
+};
 use crate::snapshot::{ExpectSession, TerminalCapture, TerminalSize};
 use crate::status_monitor::TuiStatus;
 use crate::terminal::spawn_expect_session_with_size;
@@ -116,6 +119,7 @@ impl ScreenshotContext {
 
         // Capture the screen
         let screen_content = cap.capture(&mut session, "generate_screenshot").await?;
+        let processed_content = apply_placeholders_for_generation(&screen_content);
 
         // Send Ctrl+C to terminate TUI
         use crate::key_input::ExpectKeyExt;
@@ -126,10 +130,10 @@ impl ScreenshotContext {
 
         // Save screenshot
         let path = self.screenshot_path(filename);
-        std::fs::write(&path, &screen_content)?;
+        std::fs::write(&path, processed_content.as_bytes())?;
         log::info!("💾 Saved reference screenshot: {}", path.display());
 
-        Ok(screen_content)
+        Ok(processed_content)
     }
 
     /// Verify actual terminal output against reference screenshot
@@ -151,16 +155,17 @@ impl ScreenshotContext {
             ));
         }
 
-        // Read reference screenshot
+        // Read reference screenshot and restore placeholders
         let reference = std::fs::read_to_string(&path)?;
+        let expected = restore_placeholders_for_verification(&reference);
 
         // Capture current screen
         let actual = cap.capture(session, "verify_screenshot").await?;
 
         // Strict comparison
-        if actual.trim() != reference.trim() {
+        if actual.trim() != expected.trim() {
             log::error!("❌ Screenshot mismatch at {}", filename);
-            log::error!("Expected:\n{}", reference);
+            log::error!("Expected:\n{}", expected);
             log::error!("Actual:\n{}", actual);
             return Err(anyhow!(
                 "Screenshot verification failed for {}: content does not match reference",

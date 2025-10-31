@@ -401,6 +401,8 @@ pub async fn run_multi_station_master_test(
     log::info!("   Masters: {}", master_configs.len());
     log::info!("   Slaves: {}", slave_configs.len());
 
+    reset_snapshot_placeholders();
+
     // Setup TUI and configure all Masters
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
     configure_multiple_stations(&mut session, &mut cap, port1, master_configs).await?;
@@ -631,6 +633,8 @@ pub async fn run_multi_station_slave_test(
     log::info!("   Port2: {port2} (CLI Masters)");
     log::info!("   Slaves: {}", slave_configs.len());
 
+    reset_snapshot_placeholders();
+
     // Setup TUI and configure all Slaves
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
     configure_multiple_stations(&mut session, &mut cap, port1, slave_configs).await?;
@@ -652,6 +656,15 @@ pub async fn run_multi_station_slave_test(
         } else {
             generate_random_registers(slave_config.register_count() as usize)
         };
+
+        match slave_config.register_mode() {
+            RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                register_snapshot_switch_values(&test_data);
+            }
+            RegisterMode::Holding | RegisterMode::Input => {
+                register_snapshot_hex_values(&test_data);
+            }
+        }
 
         // Send data from CLI Master to this Slave
         send_data_from_cli_master(port2, &test_data, slave_config).await?;

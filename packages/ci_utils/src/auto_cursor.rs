@@ -9,7 +9,7 @@ use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalC
 /// Read a screen capture from file
 fn read_screen_capture(test_name: &str, step_name: &str) -> Result<String> {
     let filename = format!("{}_{}.txt", test_name, step_name.replace(' ', "_"));
-    let filepath = Path::new("examples/tui_ui_e2e/screen_captures").join(&filename);
+    let filepath = Path::new("examples/tui_e2e/screenshots").join(&filename);
 
     let content = fs::read_to_string(&filepath)?;
     Ok(content)

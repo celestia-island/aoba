@@ -170,9 +170,14 @@ pub fn spawn_expect_process(args: &[&str]) -> Result<impl expectrl::Expect> {
 pub fn spawn_expect_session_with_size(
     args: &[&str],
     pty_size: Option<(u16, u16)>,
-) -> Result<expectrl::session::Session<expectrl::process::unix::UnixProcess, expectrl::process::unix::PtyStream>> {
+) -> Result<
+    expectrl::session::Session<
+        expectrl::process::unix::UnixProcess,
+        expectrl::process::unix::PtyStream,
+    >,
+> {
     use expectrl::session::Session;
-    
+
     // Build the debug binary for aoba if needed and spawn it with args.
     let bin_path = build_debug_bin("aoba")?;
 
@@ -233,9 +238,14 @@ pub fn spawn_expect_session_with_size(
 pub fn spawn_expect_session_with_size(
     args: &[&str],
     pty_size: Option<(u16, u16)>,
-) -> Result<expectrl::session::Session<expectrl::process::windows::WinProcess, expectrl::process::windows::ProcessStream>> {
+) -> Result<
+    expectrl::session::Session<
+        expectrl::process::windows::WinProcess,
+        expectrl::process::windows::ProcessStream,
+    >,
+> {
     use expectrl::session::Session;
-    
+
     // Build the debug binary for aoba if needed and spawn it with args.
     let bin_path = build_debug_bin("aoba")?;
 

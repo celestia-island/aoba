@@ -7,6 +7,7 @@ The screenshot verification infrastructure has been successfully implemented and
 ## ✅ What's Complete
 
 ### 1. Core Infrastructure (100% Complete)
+
 - ✅ `packages/ci_utils/src/screenshot.rs` - Complete screenshot capture/verification system
 - ✅ `ExecutionMode` enum for dual-mode operation
 - ✅ `ScreenshotContext` for managing screenshots
@@ -15,32 +16,37 @@ The screenshot verification infrastructure has been successfully implemented and
 - ✅ Strict verification of both screenshots AND global state
 
 ### 2. State Helpers (100% Complete)
+
 - ✅ `examples/tui_e2e/src/e2e/common/state_helpers.rs`
 - ✅ Helper functions for all common state transformations
 - ✅ `create_entry_state()`, `create_config_panel_state()`, etc.
 - ✅ `enable_port()`, `disable_port()`, `add_master_station()`, etc.
 
 ### 3. CLI Support (100% Complete)
+
 - ✅ `--generate-screenshots` flag in main.rs
 - ✅ Execution mode detection and dispatch
 - ✅ Documentation and examples
 
 ### 4. Terminal Capture Fix (100% Complete)
+
 - ✅ Alternate screen lifecycle management
 - ✅ Concrete Session types for ExpectSession trait
-- ✅ Verified working with tui_ui_e2e examples
+- ✅ Legacy tui_ui_e2e harness retired; tooling lives under tui_e2e
 
 ## ⏳ What Needs Integration
 
 ### The Challenge
 
 The existing tui_e2e test suite has ~50+ functions that need updates:
+
 - Navigation functions: `navigate_to_modbus_panel()`, `setup_tui_test()`, etc.
 - Station functions: `create_station()`, `configure_station()`, etc.
 - Orchestrator functions: `run_single_station_master_test()`, etc.
 - All test entry points
 
 Each function needs:
+
 1. Type signature changes (`impl Expect` → concrete Session type or add `ExpectSession` bound)
 2. `ScreenshotContext` parameter added
 3. State prediction logic
@@ -49,6 +55,7 @@ Each function needs:
 ### The Problem
 
 Making these changes requires:
+
 - ~100+ lines changed across multiple files
 - Risk of breaking existing functionality
 - Extensive testing to verify each change
@@ -57,6 +64,7 @@ Making these changes requires:
 ## 🎯 Recommended Approach
 
 ### Option 1: Incremental Migration (Safest)
+
 Start with ONE test module and fully integrate it:
 
 1. **Pick simplest test**: `tui_master_coils`
@@ -71,6 +79,7 @@ Start with ONE test module and fully integrate it:
 6. **Replicate pattern to other tests**
 
 ### Option 2: Parallel System (Fastest to Demo)
+
 Create NEW screenshot-enabled functions alongside existing ones:
 
 1. **Keep existing functions unchanged**
@@ -80,6 +89,7 @@ Create NEW screenshot-enabled functions alongside existing ones:
 5. **Remove old functions** once all tests migrated
 
 ### Option 3: Type-Only Changes First
+
 Fix compilation without adding screenshot logic yet:
 
 1. **Change all `impl Expect` to concrete types** (or add `ExpectSession` bound)
@@ -126,10 +136,12 @@ This allows the terminal capture fix (the original issue) to be merged while def
 ## 🔍 Current Compilation Status
 
 The codebase currently does NOT compile due to:
+
 - State helpers use types that don't match existing code (e.g., PortState enum)
 - Many functions use `impl Expect` which doesn't satisfy `ExpectSession` bound
 
 To make it compile again:
+
 - Either complete the integration
 - Or revert state_helpers.rs temporarily
 - Or fix just the type mismatches

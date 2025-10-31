@@ -237,6 +237,8 @@ pub async fn run_single_station_master_test(
     log::info!("   Port2: {port2} (CLI Slave)");
     log::info!("   Config: {config:?}");
 
+    reset_snapshot_placeholders();
+
     // Setup TUI and ensure we are fully inside ConfigPanel before proceeding.
     let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
     wait_for_tui_page("Entry", 5, None).await?;
@@ -520,6 +522,8 @@ pub async fn run_single_station_slave_test(
     log::info!("   Port2: {port2} (CLI data provider)");
     log::info!("   Config: {config:?}");
 
+    reset_snapshot_placeholders();
+
     // Ensure virtual serial ports are initialized and not left in a busy state from previous runs.
     if reset_virtual_serial_ports().await? {
         sleep_1s().await;
@@ -535,6 +539,15 @@ pub async fn run_single_station_slave_test(
         generate_random_registers(config.register_count() as usize)
     };
     log::info!("Generated test data: {test_data:?}");
+
+    match config.register_mode() {
+        RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+            register_snapshot_switch_values(&test_data);
+        }
+        RegisterMode::Holding | RegisterMode::Input => {
+            register_snapshot_hex_values(&test_data);
+        }
+    }
 
     // Create config with test data
     let mut config_with_data = config.clone();
