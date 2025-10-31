@@ -5,19 +5,11 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::Command,
-    thread,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(unix)]
-use std::fs;
-
-#[cfg(not(unix))]
 use tempfile::{Builder, TempPath};
 
 #[cfg(unix)]
-use nix::{sys::stat::Mode, unistd::mkfifo};
-
 use expectrl::Expect;
 
 use super::super::config::{RegisterModeExt, StationConfig};
@@ -91,104 +83,6 @@ fn resolve_aoba_binary_path(root: &Path) -> Result<PathBuf> {
     }
 }
 
-#[cfg(unix)]
-struct TempPathGuard(PathBuf);
-
-#[cfg(unix)]
-impl Drop for TempPathGuard {
-    fn drop(&mut self) {
-        if let Err(err) = fs::remove_file(&self.0) {
-            log::warn!(
-                "⚠️ Failed to remove temporary FIFO {}: {}",
-                self.0.display(),
-                err
-            );
-        }
-    }
-}
-
-#[cfg(unix)]
-struct PipeWriterGuard {
-    handle: Option<thread::JoinHandle<Result<()>>>,
-}
-
-#[cfg(unix)]
-impl PipeWriterGuard {
-    fn new(handle: thread::JoinHandle<Result<()>>) -> Self {
-        Self {
-            handle: Some(handle),
-        }
-    }
-
-    fn wait(mut self) -> Result<()> {
-        if let Some(handle) = self.handle.take() {
-            match handle.join() {
-                Ok(res) => res,
-                Err(err) => Err(anyhow!("Pipe writer thread panicked: {err:?}")),
-            }
-        } else {
-            Ok(())
-        }
-    }
-}
-
-#[cfg(unix)]
-impl Drop for PipeWriterGuard {
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            match handle.join() {
-                Ok(Ok(())) => {}
-                Ok(Err(err)) => {
-                    log::warn!("⚠️ Pipe writer thread reported error during drop: {err}");
-                }
-                Err(err) => {
-                    log::warn!("⚠️ Pipe writer thread panicked during drop: {err:?}");
-                }
-            }
-        }
-    }
-}
-
-#[cfg(unix)]
-fn prepare_pipe_payload(expected_data: &[u16]) -> Result<(String, PipeWriterGuard, TempPathGuard)> {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    let fifo_path = std::env::temp_dir().join(format!("tui_slave_payload_{unique}.fifo"));
-
-    mkfifo(&fifo_path, Mode::S_IRUSR | Mode::S_IWUSR)
-        .with_context(|| format!("Failed to create FIFO at {}", fifo_path.display()))?;
-
-    let guard = TempPathGuard(fifo_path.clone());
-    let payload = json!({ "values": expected_data }).to_string();
-    let fifo_path_for_writer = fifo_path.clone();
-    let writer_handle = thread::spawn(move || -> Result<()> {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .read(true)
-            .open(&fifo_path_for_writer)
-            .with_context(|| {
-                format!(
-                    "Failed to open FIFO {} for writing",
-                    fifo_path_for_writer.display()
-                )
-            })?;
-        writeln!(file, "{payload}").with_context(|| {
-            format!(
-                "Failed to write payload to FIFO {}",
-                fifo_path_for_writer.display()
-            )
-        })?;
-        file.flush().context("Failed to flush FIFO payload")?;
-        Ok(())
-    });
-
-    let data_source = format!("pipe:{}", fifo_path.display());
-    Ok((data_source, PipeWriterGuard::new(writer_handle), guard))
-}
-
-#[cfg(not(unix))]
 fn prepare_file_payload(expected_data: &[u16]) -> Result<(String, TempPath)> {
     let payload = json!({ "values": expected_data }).to_string();
     let mut temp_file = Builder::new()
@@ -359,12 +253,7 @@ pub async fn send_data_from_cli_master(
     let binary = ensure_aoba_binary()?;
     log::info!("🔍 DEBUG: Using binary: {}", binary.display());
 
-    #[cfg(unix)]
-    let (data_source, pipe_writer_guard, _pipe_guard) = prepare_pipe_payload(expected_data)?;
-    #[cfg(not(unix))]
     let (data_source, temp_path_guard) = prepare_file_payload(expected_data)?;
-
-    #[cfg(not(unix))]
     let _temp_path_guard = temp_path_guard;
 
     log::info!("🔍 DEBUG: Data source prepared at {data_source}");
@@ -407,11 +296,6 @@ pub async fn send_data_from_cli_master(
         )
     })?
     .map_err(|e| anyhow!("Failed to spawn CLI master-provide task: {}", e))??;
-
-    #[cfg(unix)]
-    {
-        pipe_writer_guard.wait()?;
-    }
 
     log::info!("🔍 DEBUG: CLI exit status: {:?}", output.status);
     log::info!(
