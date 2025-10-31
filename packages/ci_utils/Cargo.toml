@@ -19,6 +19,8 @@ rand.workspace = true
 env_logger.workspace = true
 log.workspace = true
 regex.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true
 
 chrono.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }

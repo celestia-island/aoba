@@ -8,7 +8,9 @@ pub mod helpers;
 pub mod key_input;
 pub mod log_parser;
 pub mod log_utils;
+pub mod placeholder;
 pub mod ports;
+pub mod screenshot;
 pub mod snapshot;
 pub mod status_monitor;
 pub mod terminal;
@@ -24,10 +26,14 @@ pub use log_parser::{
     get_latest_state, get_port_state, parse_state_dumps, verify_port_exists, wait_for_page,
     wait_for_port_state, ConfigEditState, PortState, StateDump,
 };
+pub use placeholder::{
+    register_snapshot_hex_values, register_snapshot_switch_values, reset_snapshot_placeholders,
+};
 pub use ports::{
     port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, VcomMatchers,
     DEFAULT_PORT1, DEFAULT_PORT2,
 };
+pub use screenshot::{apply_state_change, ExecutionMode, ScreenshotContext, StateBuilder};
 pub use snapshot::{log_last_terminal_snapshot, ExpectSession, TerminalCapture, TerminalSize};
 pub use status_monitor::{
     get_port_log_count, port_exists_in_tui, read_cli_status, read_tui_status, wait_for_cli_status,
@@ -36,6 +42,7 @@ pub use status_monitor::{
 };
 pub use terminal::{
     build_debug_bin, run_binary_sync, spawn_expect_process, spawn_expect_process_with_size,
+    spawn_expect_session, spawn_expect_session_with_size,
 };
 pub use tui::{
     check_status_indicator, enable_port_carefully, enter_modbus_panel, navigate_to_vcom,

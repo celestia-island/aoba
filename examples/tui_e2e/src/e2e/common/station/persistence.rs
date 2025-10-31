@@ -4,13 +4,13 @@ use serde_json::json;
 
 use super::super::status_paths::port_field_path;
 use super::modbus_page_check;
-use aoba_ci_utils::{execute_with_status_checks, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, CursorAction, ExpectSession, TerminalCapture};
 
 /// Saves the configuration and verifies that the port is enabled.
 ///
 /// This function presses Ctrl+S to save the configuration and then checks
 /// the status file to ensure the port's `enabled` flag is set to `true`.
-pub async fn save_configuration_and_verify<T: Expect>(
+pub async fn save_configuration_and_verify<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port_name: &str,

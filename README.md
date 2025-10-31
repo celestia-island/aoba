@@ -16,10 +16,7 @@
     <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-cli.yml?branch=master&label=CLI%20E2E&logo=github" alt="CLI E2E Status" />
   </a>
   <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-tui.yml?branch=master&label=TUI%20Logic%20E2E&logo=github" alt="TUI Logic E2E Status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui-ui.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-tui-ui.yml?branch=master&label=TUI%20UI%20E2E&logo=github" alt="TUI UI E2E Status" />
+    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-tui.yml?branch=master&label=TUI%20E2E&logo=github" alt="TUI E2E Status" />
   </a>
   <a href="https://github.com/celestia-island/aoba/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/celestia-island/aoba?color=blue" alt="License" />

@@ -354,7 +354,7 @@ impl StationConfig {
         let range = RegisterRange {
             address_start: start_address,
             length: register_count,
-            initial_values: self.register_values_owned().unwrap_or_else(|| Vec::new()),
+            initial_values: self.register_values_owned().unwrap_or_default(),
         };
 
         match register_mode {

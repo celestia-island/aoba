@@ -181,7 +181,7 @@ use aoba_ci_utils::*;
 /// - [`run_multi_station_master_test`]: Uses this for multi-Master scenarios
 /// - [`run_multi_station_slave_test`]: Uses this for multi-Slave scenarios
 /// - [`StationConfig`]: Configuration structure for stations
-pub async fn configure_multiple_stations<T: Expect>(
+pub async fn configure_multiple_stations<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port1: &str,
@@ -394,6 +394,7 @@ pub async fn run_multi_station_master_test(
     port2: &str,
     master_configs: &[StationConfig],
     slave_configs: &[StationConfig],
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running multi-station Master test");
     log::info!("   Port1: {port1} (TUI Masters)");
@@ -401,8 +402,10 @@ pub async fn run_multi_station_master_test(
     log::info!("   Masters: {}", master_configs.len());
     log::info!("   Slaves: {}", slave_configs.len());
 
+    reset_snapshot_placeholders();
+
     // Setup TUI and configure all Masters
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
     configure_multiple_stations(&mut session, &mut cap, port1, master_configs).await?;
 
     // Test each Master polling each Slave
@@ -625,14 +628,17 @@ pub async fn run_multi_station_slave_test(
     port1: &str,
     port2: &str,
     slave_configs: &[StationConfig],
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running multi-station Slave test");
     log::info!("   Port1: {port1} (TUI Slaves)");
     log::info!("   Port2: {port2} (CLI Masters)");
     log::info!("   Slaves: {}", slave_configs.len());
 
+    reset_snapshot_placeholders();
+
     // Setup TUI and configure all Slaves
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
     configure_multiple_stations(&mut session, &mut cap, port1, slave_configs).await?;
 
     // Test each Slave receiving data from CLI Master
@@ -652,6 +658,15 @@ pub async fn run_multi_station_slave_test(
         } else {
             generate_random_registers(slave_config.register_count() as usize)
         };
+
+        match slave_config.register_mode() {
+            RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                register_snapshot_switch_values(&test_data);
+            }
+            RegisterMode::Holding | RegisterMode::Input => {
+                register_snapshot_hex_values(&test_data);
+            }
+        }
 
         // Send data from CLI Master to this Slave
         send_data_from_cli_master(port2, &test_data, slave_config).await?;

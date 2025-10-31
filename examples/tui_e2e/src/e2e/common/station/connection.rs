@@ -4,12 +4,14 @@ use regex::Regex;
 
 use super::focus::focus_create_station_button;
 use super::modbus_page_check;
-use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
+use aoba_ci_utils::{
+    execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, TerminalCapture,
+};
 
 const MAX_TOGGLE_ATTEMPTS: usize = 3;
 
 /// Ensure the Modbus connection mode matches the desired role before creating a station.
-pub async fn ensure_connection_mode<T: Expect>(
+pub async fn ensure_connection_mode<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     is_master: bool,

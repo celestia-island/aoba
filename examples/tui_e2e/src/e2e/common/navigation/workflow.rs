@@ -29,7 +29,7 @@ fn is_default_slave_station(station: &TuiModbusSlave) -> bool {
 /// This orchestrates the full workflow of toggling the connection mode, creating
 /// a station (or reusing the default one), updating its fields, populating slave
 /// registers when requested, and persisting the result.
-pub async fn configure_tui_station<T: Expect>(
+pub async fn configure_tui_station<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port1: &str,
@@ -126,7 +126,7 @@ pub async fn configure_tui_station<T: Expect>(
 
     if !config.is_master() {
         if let Some(values) = config.register_values() {
-            initialize_slave_registers(session, cap, &values, config.register_mode()).await?;
+            initialize_slave_registers(session, cap, values, config.register_mode()).await?;
         }
 
         focus_create_station_button(session, cap).await?;

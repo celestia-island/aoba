@@ -62,6 +62,7 @@ pub async fn sleep_3s() {
 /// - Block serial ports from subsequent tests
 /// - Consume file descriptors
 /// - Interfere with process-based resource locks
+///
 /// Terminate an expectrl session by sending Ctrl+C and forcibly killing if needed
 ///
 /// This function ensures proper termination of TUI processes spawned via expectrl.

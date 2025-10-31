@@ -231,15 +231,17 @@ pub async fn run_single_station_master_test(
     port1: &str,
     port2: &str,
     config: StationConfig,
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running single-station Master test");
     log::info!("   Port1: {port1} (TUI Master)");
     log::info!("   Port2: {port2} (CLI Slave)");
     log::info!("   Config: {config:?}");
 
+    reset_snapshot_placeholders();
+
     // Setup TUI and ensure we are fully inside ConfigPanel before proceeding.
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
-    wait_for_tui_page("Entry", 5, None).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
 
     // Navigate to Modbus panel and confirm dashboard activation.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
@@ -514,11 +516,14 @@ pub async fn run_single_station_slave_test(
     port1: &str,
     port2: &str,
     config: StationConfig,
+    screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
     log::info!("🧪 Running single-station Slave test");
     log::info!("   Port1: {port1} (TUI Slave)");
     log::info!("   Port2: {port2} (CLI data provider)");
     log::info!("   Config: {config:?}");
+
+    reset_snapshot_placeholders();
 
     // Ensure virtual serial ports are initialized and not left in a busy state from previous runs.
     if reset_virtual_serial_ports().await? {
@@ -536,13 +541,21 @@ pub async fn run_single_station_slave_test(
     };
     log::info!("Generated test data: {test_data:?}");
 
+    match config.register_mode() {
+        RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+            register_snapshot_switch_values(&test_data);
+        }
+        RegisterMode::Holding | RegisterMode::Input => {
+            register_snapshot_hex_values(&test_data);
+        }
+    }
+
     // Create config with test data
     let mut config_with_data = config.clone();
     config_with_data.set_register_values(Some(test_data.clone()));
 
     // Setup TUI and confirm ConfigPanel is ready for interaction.
-    let (mut session, mut cap) = setup_tui_test(port1, port2).await?;
-    wait_for_tui_page("Entry", 5, None).await?;
+    let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
 
     // Navigate to Modbus panel and guarantee dashboard context.
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
