@@ -8,7 +8,7 @@ use super::super::station::{
     focus_station, initialize_slave_registers, save_configuration_and_verify,
 };
 use super::super::validation::check_station_config;
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 fn is_default_master_station(station: &TuiModbusMaster) -> bool {
     station.station_id == 1

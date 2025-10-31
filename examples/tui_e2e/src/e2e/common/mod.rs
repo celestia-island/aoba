@@ -96,7 +96,7 @@
 //!
 //! - `anyhow`: Error handling
 //! - `serde_json`: JSON parsing for CLI output and status files
-//! - `ci_utils`: Custom utilities for terminal interaction and screen capture
+//! - `aoba_ci_utils`: Custom utilities for terminal interaction and screen capture
 //! - `expectrl`: Terminal automation for TUI control
 //!
 //! # Error Handling

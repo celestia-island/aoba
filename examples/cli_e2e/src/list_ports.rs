@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use ci_utils::{
+use aoba_ci_utils::{
     run_binary_sync, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, DEFAULT_PORT1,
     DEFAULT_PORT2,
 };

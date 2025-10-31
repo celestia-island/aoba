@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use super::status_paths::page_type_path;
-use ci_utils::CursorAction;
+use aoba_ci_utils::CursorAction;
 
 mod configure;
 mod connection;

@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use expectrl::Expect;
 
-use ci_utils::*;
+use aoba_ci_utils::*;
 
 /// Setup TUI test environment with initialized session and terminal capture.
 ///

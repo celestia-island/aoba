@@ -1,0 +1,19 @@
+[package]
+name = "tui_ui_e2e"
+version = "0.0.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+env_logger.workspace = true
+log.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+serde_json.workspace = true
+
+[dependencies.aoba_ci_utils]
+path = "../../packages/ci_utils"
+
+[dependencies.aoba]
+path = "../../packages/tui"

@@ -1,4 +1,30 @@
-# Copilot Instructions for TUI E2E Testing
+# Copilot Instructions for Layered TUI/CLI Testing
+
+## Post-Migration Package Layout
+
+- `packages/tui`: Owns the terminal UI, global state management, and TUI-driven IPC front-ends
+- `packages/cli`: Hosts CLI binaries, command dispatch, and long-running Modbus workers
+- `packages/protocol`: Shared IPC definitions, status schemas, and Modbus transport primitives
+- `packages/ci_utils`: Shared test harness utilities used by every layered test suite
+
+All four crates remain in the top-level workspace. Shared dependencies must be declared in the root `Cargo.toml`; individual package manifests only add crate-specific extras.
+
+## Test Suite Segmentation
+
+- `TUI UI E2E` (new): Simulates user input and consumes a mocked TUI global state layer. Validates key-to-state transitions without touching IPC. Implemented in `examples/tui_ui_e2e`.
+- `TUI Logic Integration` (renamed from legacy TUI E2E): Exercises TUI global state against mocked TUI→CLI IPC endpoints, asserting command emission and inbound register diffs. Implemented in `examples/tui_e2e`.
+- `CLI E2E` (new): Covers bidirectional IPC between the virtualized TUI transport and the live CLI runtime, plus legacy stdio scenarios moved from the original CLI suite. Implemented in `examples/cli_e2e`.
+- `CLI Tests` (renamed from legacy CLI E2E): Pure CLI logic checks that do not rely on IPC or persistent stdio loops.
+
+Current CI workflows mirror this split: `e2e-tests-cli.yml` executes the CLI matrices, `e2e-tests-tui.yml` drives logic-layer suites, and `e2e-tests-tui-ui.yml` runs the UI-only harness. Each workflow builds its associated example crate alongside the primary package before executing modules.
+
+The remaining sections in this document focus on the `TUI Logic Integration` layer, where status monitoring continues to be the primary verification strategy. Refer to each suite's README for layer-specific conventions as they are created.
+
+## Workspace Dependency Policy
+
+- Declare shared versions once in the root `Cargo.toml`
+- Re-export workspace members through `[workspace.dependencies]`
+- Only add `[dependencies]` entries inside a package when the crate is the sole consumer
 
 ## TUI E2E Testing with Status Monitoring
 
@@ -259,28 +285,9 @@ When configuring multiple Modbus stations, follow this two-phase approach:
 
 Create all stations first before configuring any:
 
-```rust
-// Press Enter on "Create Station" N times (where N = number of stations)
-for i in 1..=station_count {
-    let actions = vec![
-        CursorAction::PressEnter,        // Create station
-        CursorAction::Sleep { ms: 200 },
-        CursorAction::PressCtrlPageUp,   // Return to Create Station button
-    ];
-    execute_cursor_actions(&mut session, &mut cap, &actions, &format!("create_station_{i}")).await?;
-}
-
-// Verify last station was created using regex
-let station_pattern = Regex::new(&format!(r"#{}(?:\D|$)", station_count))?;
-let actions = vec![
-    CursorAction::MatchPattern {
-        pattern: station_pattern,
-        description: format!("Station #{station_count} exists"),
-        line_range: None,
-        col_range: None,
-        retry_action: None,
-    },
-];
+```ignore
+// Press Enter on "Create Station" station_count times, resetting with Ctrl+PgUp between iterations.
+// After creation, confirm the final station by matching the literal string formed by the hash symbol followed by station_count via CursorAction::MatchPattern.
 ```
 
 **Connection Mode Configuration:**
@@ -363,7 +370,7 @@ ports[0].modbus_slaves[station_index].registers[register_index]
 
 #### Important Notes
 
-- **Station Index**: 0-based (Station #1 has index 0)
+- **Station Index**: 0-based (Station 1 has index 0)
 - **Register Index**: 0-based (First register has index 0)
 - **Value Format**: Hexadecimal without 0x prefix (e.g., "1234" not "0x1234")
 - **Status Verification**: Always verify critical values were committed to status tree before proceeding

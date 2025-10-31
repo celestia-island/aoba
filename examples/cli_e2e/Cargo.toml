@@ -5,24 +5,20 @@ edition = "2021"
 publish = false
 
 [dependencies]
-anyhow = { version = "^1", features = ["backtrace"] }
-clap = { version = "^4", features = ["derive"] }
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+env_logger.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rand.workspace = true
+regex.workspace = true
+chrono = { workspace = true, features = ["serde", "alloc"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+expectrl.workspace = true
 
-env_logger = "^0.11"
-log = "^0.4"
+[dependencies.aoba_ci_utils]
+path = "../../packages/ci_utils"
 
-serde = { version = "^1", features = ["derive"] }
-serde_json = "^1"
-rand = "0.9"
-regex = "^1"
-chrono = { version = "^0.4", features = ["serde", "alloc"] }
-
-tokio = { version = "^1", features = ["rt-multi-thread", "macros"] }
-expectrl = "^0.8"
-
-[dependencies.ci_utils]
-path = "../ci_utils"
-
-[dependencies._bin]
-path = "../.."
-package = "aoba"
+[dependencies.aoba]
+path = "../../packages/tui"
