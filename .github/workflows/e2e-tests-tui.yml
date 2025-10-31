@@ -1,4 +1,4 @@
-name: TUI Logic E2E Tests
+name: TUI E2E Tests
 
 on:
   push:
