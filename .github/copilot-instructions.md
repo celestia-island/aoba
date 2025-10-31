@@ -11,14 +11,14 @@ All four crates remain in the top-level workspace. Shared dependencies must be d
 
 ## Test Suite Segmentation
 
-- `TUI UI E2E` (new): Simulates user input and consumes a mocked TUI global state layer. Validates key-to-state transitions without touching IPC. Implemented in `examples/tui_ui_e2e`.
-- `TUI Logic Integration` (renamed from legacy TUI E2E): Exercises TUI global state against mocked TUI→CLI IPC endpoints, asserting command emission and inbound register diffs. Implemented in `examples/tui_e2e`.
+- `TUI UI E2E` (deprecated, being merged): Simulates user input and consumes a mocked TUI global state layer. Validates key-to-state transitions without touching IPC. Being merged into `TUI E2E`.
+- `TUI E2E`: Exercises TUI global state against mocked TUI→CLI IPC endpoints, asserting command emission and inbound register diffs. Implemented in `examples/tui_e2e`.
 - `CLI E2E` (new): Covers bidirectional IPC between the virtualized TUI transport and the live CLI runtime, plus legacy stdio scenarios moved from the original CLI suite. Implemented in `examples/cli_e2e`.
 - `CLI Tests` (renamed from legacy CLI E2E): Pure CLI logic checks that do not rely on IPC or persistent stdio loops.
 
-Current CI workflows mirror this split: `e2e-tests-cli.yml` executes the CLI matrices, `e2e-tests-tui.yml` drives logic-layer suites, and `e2e-tests-tui-ui.yml` runs the UI-only harness. Each workflow builds its associated example crate alongside the primary package before executing modules.
+Current CI workflows mirror this split: `e2e-tests-cli.yml` executes the CLI matrices, `e2e-tests-tui.yml` drives the TUI E2E test suites. Each workflow builds its associated example crate alongside the primary package before executing modules.
 
-The remaining sections in this document focus on the `TUI Logic Integration` layer, where status monitoring continues to be the primary verification strategy. Refer to each suite's README for layer-specific conventions as they are created.
+The remaining sections in this document focus on the `TUI E2E` testing layer, where status monitoring continues to be the primary verification strategy. Refer to each suite's README for layer-specific conventions as they are created.
 
 ## Workspace Dependency Policy
 
@@ -32,14 +32,16 @@ The remaining sections in this document focus on the `TUI Logic Integration` lay
 
 The TUI E2E testing framework has been refactored to support two complementary testing approaches:
 
-1. **TUI UI E2E**: Pure UI element testing using simulated terminal
+1. **TUI UI E2E** (deprecated, being merged): Pure UI element testing using simulated terminal
    - Uses terminal screen capture and pattern matching
    - Validates UI rendering, layout, and visual elements
    - Example: Checking if configuration fields show editing brackets `[value]`
+   - Being merged into TUI E2E with screenshot verification
 
-2. **TUI Logic E2E**: Logic testing using status tree monitoring
+2. **TUI E2E**: Testing using status tree monitoring and screenshot verification
    - Reads global status from JSON dumps
    - Validates application state and behavior
+   - Supports screenshot-based UI verification
    - Example: Checking if port is enabled, modbus stations are configured
 
 ### Debug Mode Activation

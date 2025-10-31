@@ -10,7 +10,7 @@ use aoba_ci_utils::*;
 /// the configuration panel, selects the requested port, and confirms that the
 /// Modbus dashboard is active. All navigation steps use the shared transaction
 /// retry helpers so failures capture a snapshot before returning an error.
-pub async fn navigate_to_modbus_panel<T: Expect>(
+pub async fn navigate_to_modbus_panel<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port1: &str,

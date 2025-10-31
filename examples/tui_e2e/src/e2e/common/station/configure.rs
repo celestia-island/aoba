@@ -6,7 +6,9 @@ use serde_json::json;
 use super::super::config::{RegisterMode, RegisterModeExt};
 use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
-use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
+use aoba_ci_utils::{
+    execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, TerminalCapture,
+};
 
 /// Configures the Station ID for a given station.
 ///
@@ -16,7 +18,7 @@ use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, Terminal
 /// 3. Clears the existing value.
 /// 4. Types the new station ID.
 /// 5. Commits the change and verifies it via a status check.
-pub async fn configure_station_id<T: Expect>(
+pub async fn configure_station_id<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port_name: &str,
@@ -81,7 +83,7 @@ pub async fn configure_station_id<T: Expect>(
 /// 2. Enters the selection mode.
 /// 3. Selects the new register type.
 /// 4. Commits the change and verifies it via a status check.
-pub async fn configure_register_type<T: Expect>(
+pub async fn configure_register_type<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     _port_name: &str,
@@ -232,7 +234,7 @@ pub async fn configure_register_type<T: Expect>(
 }
 
 /// Configures the Start Address for a given station.
-pub async fn configure_start_address<T: Expect>(
+pub async fn configure_start_address<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port_name: &str,
@@ -255,7 +257,7 @@ pub async fn configure_start_address<T: Expect>(
 }
 
 /// Configures the Register Count for a given station.
-pub async fn configure_register_count<T: Expect>(
+pub async fn configure_register_count<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port_name: &str,
@@ -278,7 +280,7 @@ pub async fn configure_register_count<T: Expect>(
 }
 
 /// Configures a numeric field (like Start Address or Register Count) for a station.
-async fn configure_numeric_field<T: Expect>(
+async fn configure_numeric_field<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port_name: &str,
