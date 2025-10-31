@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 
-use expectrl::Expect;
+use crate::snapshot::ExpectSession;
 
 /// Check the top-right status indicator in the title bar
 /// Returns Ok(status) where status is one of: "NotStarted", "Starting", "Running", "Modified", "Saving", "Syncing", "Applied"
@@ -45,7 +45,7 @@ pub fn check_status_indicator(screen: &str) -> Result<String> {
 /// This function is more flexible than just looking for "Running" or "Applied"
 /// It handles the timing issue where "Applied ✔" only shows for 3 seconds,
 /// then transitions to "Running ●" or "Modified ○"
-pub async fn verify_port_enabled<T: Expect>(
+pub async fn verify_port_enabled<T: ExpectSession>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
     capture_name: &str,
@@ -130,7 +130,7 @@ pub async fn verify_port_enabled<T: Expect>(
 }
 
 /// Navigate to port1 in TUI (shared helper).
-pub async fn navigate_to_vcom<T: Expect>(
+pub async fn navigate_to_vcom<T: ExpectSession>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
     port1: &str,
@@ -269,7 +269,7 @@ pub async fn navigate_to_vcom<T: Expect>(
 }
 
 /// Enable the serial port in TUI - carefully. Reusable across examples.
-pub async fn enable_port_carefully<T: Expect>(
+pub async fn enable_port_carefully<T: ExpectSession>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
@@ -402,7 +402,7 @@ pub async fn enable_port_carefully<T: Expect>(
 }
 
 /// Enter the Modbus configuration panel from port details page
-pub async fn enter_modbus_panel<T: Expect>(
+pub async fn enter_modbus_panel<T: ExpectSession>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
 ) -> Result<()> {
@@ -675,7 +675,7 @@ pub async fn enter_modbus_panel<T: Expect>(
 
 /// Update TUI registers with new values (shared implementation)
 /// NOTE: Assumes you're already IN the Modbus panel and cursor is on or near the target station
-pub async fn update_tui_registers<T: Expect>(
+pub async fn update_tui_registers<T: ExpectSession>(
     session: &mut T,
     cap: &mut crate::snapshot::TerminalCapture,
     new_values: &[u16],

@@ -71,6 +71,9 @@ tokio-test.workspace = true
 
 aoba_ci_utils = { path = "../ci_utils" }
 
+[features]
+_tui_ui_test = []
+
 [build-dependencies]
 anyhow.workspace = true
 serde_json.workspace = true
