@@ -1,18 +1,35 @@
 use anyhow::{anyhow, Result};
-use regex::Regex;
-use serde_json::Value;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture};
+use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture, TuiStatus};
 
 /// Read a screen capture from file
 fn read_screen_capture(test_name: &str, step_name: &str) -> Result<String> {
-    let filename = format!("{}_{}.txt", test_name, step_name.replace(' ', "_"));
-    let filepath = Path::new("examples/tui_ui_e2e/screen_captures").join(&filename);
+    // Support hierarchical test names (e.g., "single_station/master_modes")
+    let test_path = PathBuf::from(test_name);
+    let filepath = Path::new("examples/tui_e2e/screenshots")
+        .join(test_path)
+        .join(format!("{}.txt", step_name));
 
     let content = fs::read_to_string(&filepath)?;
     Ok(content)
+}
+
+/// Write a screen capture to file
+fn write_screen_capture(test_name: &str, step_name: &str, content: &str) -> Result<()> {
+    // Support hierarchical test names (e.g., "single_station/master_modes")
+    let test_path = PathBuf::from(test_name);
+    let dir_path = Path::new("examples/tui_e2e/screenshots").join(test_path);
+    
+    // Create directory if it doesn't exist
+    fs::create_dir_all(&dir_path)?;
+    
+    let filepath = dir_path.join(format!("{}.txt", step_name));
+    fs::write(&filepath, content)?;
+    
+    log::info!("💾 Wrote screenshot: {}", filepath.display());
+    Ok(())
 }
 
 /// Action instruction for automated cursor navigation
@@ -50,48 +67,30 @@ pub enum CursorAction {
     Sleep1s,
     /// Wait for 3 seconds (3000ms)
     Sleep3s,
-    /// Match screen capture against saved screenshot
-    /// Uses exact text comparison for precise UI validation
+    /// Match screen capture against saved screenshot (non-screenshot mode) or write screenshot (screenshot mode)
+    /// In non-screenshot mode: reads reference file and compares
+    /// In screenshot mode: writes current terminal output to file
     MatchScreenCapture {
-        /// Test name (e.g., "tui_master_coils")
+        /// Test name (can be hierarchical path like "single_station/master_modes")
         test_name: String,
-        /// Step name (e.g., "initial_screen", "after_navigation")
+        /// Step name (e.g., "001_initial_screen", "002_after_navigation")
         step_name: String,
         /// Description for logging
         description: String,
-        /// Line range to compare (inclusive, 0-indexed)
-        line_range: Option<(usize, usize)>,
-        /// Column range to compare (inclusive, 0-indexed)
-        col_range: Option<(usize, usize)>,
     },
-    /// Match a pattern within specified line and column range
-    /// If match fails after retries, optionally execute retry_action and retry again
-    /// Implements nested retry: 3 attempts -> execute retry_action -> repeat 3 times (total 9 attempts)
-    MatchPattern {
-        pattern: Regex,
+    /// Update mock global status (screenshot mode only)
+    /// In screenshot mode: updates the mock TuiStatus using the provided closure
+    /// In non-screenshot mode: ignored
+    /// The closure receives a mutable reference to TuiStatus and can modify it
+    AssertUpdateStatus {
+        /// Description for logging
         description: String,
-        line_range: Option<(usize, usize)>, // (start_line, end_line) inclusive, 0-indexed
-        col_range: Option<(usize, usize)>,  // (start_col, end_col) inclusive, 0-indexed
-        retry_action: Option<Vec<CursorAction>>, // Actions to execute before retrying if match fails
+        /// Closure to update the status (similar to write_status pattern)
+        updater: fn(&mut TuiStatus),
     },
     /// Debug breakpoint: capture screen, print it, reset ports, and exit
     /// Only active when debug mode is enabled
     DebugBreakpoint { description: String },
-    /// Check status from TUI/CLI status dump files
-    /// Verifies that a JSON path in the status equals the expected value
-    /// Uses status monitoring to read current state and compare
-    CheckStatus {
-        /// Description of what is being checked
-        description: String,
-        /// JSON path to check (e.g., "page", "ports[0].enabled", "ports[0].modbus_masters[0].station_id")
-        path: String,
-        /// Expected value as serde_json::Value (use json! macro to construct)
-        expected: Value,
-        /// Timeout in seconds (default: 10)
-        timeout_secs: Option<u64>,
-        /// Retry interval in milliseconds (default: 500)
-        retry_interval_ms: Option<u64>,
-    },
 }
 
 /// Execute a sequence of cursor actions on an expect session
@@ -230,24 +229,57 @@ pub async fn execute_cursor_actions<T: ExpectSession>(
                     ));
                 }
             }
-            CursorAction::PressArrow { direction, count } => {
+}
+
+/// Execution mode for cursor actions
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ActionExecutionMode {
+    /// Normal mode: execute all actions including keyboard input
+    Normal,
+    /// Screenshot generation mode: skip keyboard actions, only process screenshots and status updates
+    GenerateScreenshots,
+}
+
+/// Execute a sequence of cursor actions on an expect session
+/// In Normal mode: executes all actions including keyboard input
+/// In GenerateScreenshots mode: skips keyboard actions, only processes MatchScreenCapture and AssertUpdateStatus
+pub async fn execute_cursor_actions<T: ExpectSession>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    actions: &[CursorAction],
+    session_name: &str,
+) -> Result<()> {
+    execute_cursor_actions_with_mode(session, cap, actions, session_name, ActionExecutionMode::Normal, None).await
+}
+
+/// Execute cursor actions with specified execution mode and optional mock status
+/// This is the internal implementation that supports both normal and screenshot generation modes
+pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
+    session: &mut T,
+    cap: &mut TerminalCapture,
+    actions: &[CursorAction],
+    session_name: &str,
+    mode: ActionExecutionMode,
+    mock_status: Option<&mut TuiStatus>,
+) -> Result<()> {
+    for (idx, action) in actions.iter().enumerate() {
+        match action {
+            // In screenshot mode, keyboard actions are skipped
+            CursorAction::PressArrow { direction, count } if mode == ActionExecutionMode::Normal => {
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
-                // Auto sleep after keypress
                 sleep_1s().await;
             }
-            CursorAction::PressEnter => {
+            CursorAction::PressEnter if mode == ActionExecutionMode::Normal => {
                 session.send_enter()?;
-                // Auto sleep after keypress
                 sleep_1s().await;
             }
-            CursorAction::PressEscape => {
+            CursorAction::PressEscape if mode == ActionExecutionMode::Normal => {
                 session.send_escape()?;
-                // Auto sleep after keypress
                 sleep_1s().await;
             }
-            CursorAction::PressTab => {
+            CursorAction::PressTab if mode == ActionExecutionMode::Normal => {
                 session.send_tab()?;
                 // Auto sleep after keypress
                 sleep_1s().await;

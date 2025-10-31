@@ -81,7 +81,7 @@ const MAX_RETRY_ATTEMPTS: usize = 3;
 /// # See Also
 ///
 /// - [`execute_transaction_with_retry`]: Default caller providing rollback context
-pub async fn perform_safe_rollback<T: Expect>(
+pub async fn perform_safe_rollback<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     context: &str,
@@ -371,7 +371,7 @@ pub async fn execute_transaction_with_retry<T, F>(
     reset_navigation: &[CursorAction],
 ) -> Result<()>
 where
-    T: Expect,
+    T: Expect + ExpectSession,
     F: Fn(&str) -> Result<bool>,
 {
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
