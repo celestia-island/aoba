@@ -1429,8 +1429,27 @@ fn run_screen_capture_mode() -> Result<()> {
         }
     })?;
 
-    // Wait a moment to ensure rendering is complete
-    std::thread::sleep(Duration::from_millis(100));
+    // Flush to ensure content is written to the PTY
+    use std::io::Write;
+    io::stdout().flush()?;
+    
+    log::info!("✅ Screen rendered, waiting for termination signal...");
+
+    // Wait for termination signal (e.g., Ctrl+C from parent process)
+    // This keeps the alternate screen active so it can be captured
+    use crossterm::event::{Event, KeyCode, KeyModifiers};
+    loop {
+        if crossterm::event::poll(Duration::from_millis(100))? {
+            if let Event::Key(key) = crossterm::event::read()? {
+                // Exit on Ctrl+C or Ctrl+D
+                if (key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL))
+                    || (key.code == KeyCode::Char('d') && key.modifiers.contains(KeyModifiers::CONTROL))
+                {
+                    break;
+                }
+            }
+        }
+    }
 
     // Restore terminal state
     crossterm::execute!(

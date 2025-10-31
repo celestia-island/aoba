@@ -109,10 +109,26 @@ async fn spawn_tui_and_capture_screen() -> Result<String> {
 
     info!("🧪 Spawning TUI with debug-screen-capture mode");
 
+    // Find workspace root by looking for Cargo.toml with [workspace]
+    let current_dir = std::env::current_dir()?;
+    let workspace_root = current_dir
+        .ancestors()
+        .find(|p| {
+            let cargo_toml = p.join("Cargo.toml");
+            if let Ok(content) = std::fs::read_to_string(&cargo_toml) {
+                content.contains("[workspace]")
+            } else {
+                false
+            }
+        })
+        .ok_or_else(|| anyhow::anyhow!("Could not find workspace root"))?;
+
+    info!("📁 Workspace root: {}", workspace_root.display());
+
     // Build the TUI binary first (no features needed)
     let build_status = Command::new("cargo")
         .args(&["build", "--bin", "aoba"])
-        .current_dir("../../")
+        .current_dir(workspace_root)
         .status()?;
 
     if !build_status.success() {
