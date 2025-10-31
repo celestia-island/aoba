@@ -71,7 +71,10 @@ use aoba_ci_utils::*;
 /// - Verify AOBA is built and accessible with `cargo build --release`
 /// - Check for port conflicts using `lsof` (Unix) or `mode` (Windows)
 /// - Capture the current screen via [`TerminalCapture::capture`] if setup stalls
-pub async fn setup_tui_test(port1: &str, _port2: &str) -> Result<(impl Expect, TerminalCapture)> {
+pub async fn setup_tui_test(
+    port1: &str,
+    _port2: &str,
+) -> Result<(impl Expect + ExpectSession, TerminalCapture)> {
     log::info!("🔧 Setting up TUI test environment for port {port1}");
 
     if !port_exists(port1) {
@@ -80,7 +83,7 @@ pub async fn setup_tui_test(port1: &str, _port2: &str) -> Result<(impl Expect, T
 
     log::info!("Starting TUI in debug mode with --no-config-cache...");
     let mut tui_session =
-        spawn_expect_process(&["--tui", "--debug-ci-e2e-test", "--no-config-cache"])?;
+        spawn_expect_session(&["--tui", "--debug-ci-e2e-test", "--no-config-cache"])?;
     let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
 
     sleep_3s().await;

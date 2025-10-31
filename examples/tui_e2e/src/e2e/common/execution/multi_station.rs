@@ -181,7 +181,7 @@ use aoba_ci_utils::*;
 /// - [`run_multi_station_master_test`]: Uses this for multi-Master scenarios
 /// - [`run_multi_station_slave_test`]: Uses this for multi-Slave scenarios
 /// - [`StationConfig`]: Configuration structure for stations
-pub async fn configure_multiple_stations<T: Expect>(
+pub async fn configure_multiple_stations<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port1: &str,

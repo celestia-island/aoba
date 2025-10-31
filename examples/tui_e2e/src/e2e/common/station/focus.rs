@@ -5,10 +5,10 @@ use serde_json::json;
 
 use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
-use aoba_ci_utils::{execute_with_status_checks, CursorAction, TerminalCapture};
+use aoba_ci_utils::{execute_with_status_checks, CursorAction, ExpectSession, TerminalCapture};
 
 /// Ensure the cursor is focused on the "Create Station" button at the top of the dashboard.
-pub async fn focus_create_station_button<T: Expect>(
+pub async fn focus_create_station_button<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
 ) -> Result<()> {
@@ -40,7 +40,7 @@ pub async fn focus_create_station_button<T: Expect>(
 }
 
 /// Move the cursor focus to the specified station section.
-pub async fn focus_station<T: Expect>(
+pub async fn focus_station<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     port_name: &str,

@@ -3,7 +3,9 @@ use expectrl::Expect;
 
 use super::super::config::RegisterMode;
 use super::modbus_page_check;
-use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, TerminalCapture};
+use aoba_ci_utils::{
+    execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, TerminalCapture,
+};
 
 /// Initialize slave register values after base configuration.
 ///
@@ -12,7 +14,7 @@ use aoba_ci_utils::{execute_with_status_checks, ArrowKey, CursorAction, Terminal
 /// matching. Status files do not currently expose per-register values, so the best available
 /// validation is confirming that the cursor advances to the expected register index after each
 /// commit.
-pub async fn initialize_slave_registers<T: Expect>(
+pub async fn initialize_slave_registers<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
     values: &[u16],
