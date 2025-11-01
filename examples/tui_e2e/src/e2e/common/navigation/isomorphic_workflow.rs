@@ -216,8 +216,39 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             ).await?;
         }
         
-        // Edit first few registers (3 registers per station for demonstration)
-        let num_registers_to_edit = std::cmp::min(3, config.register_count() as usize);
+        // Edit 10 registers per station for single-station tests
+        // (For multi-station tests, we'll handle more registers)
+        let num_registers_to_edit = std::cmp::min(10, config.register_count() as usize);
+        
+        // Build placeholder values for all registers FIRST (for proper numbering)
+        let mut placeholders = Vec::new();
+        for reg_idx in 0..num_registers_to_edit {
+            // Generate actual value for each register
+            let value = match config.register_mode() {
+                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                    if reg_idx % 2 == 0 { 0x0001 } else { 0x0000 } // Alternating ON/OFF
+                }
+                RegisterMode::Holding | RegisterMode::Input => {
+                    // Unique hex values per register and station
+                    0x1234 + (reg_idx as u16) * 0x0100 + (idx as u16) * 0x0010
+                }
+            };
+            
+            let placeholder = match config.register_mode() {
+                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                    PlaceholderValue::Boolean(value != 0)
+                }
+                RegisterMode::Holding | RegisterMode::Input => {
+                    PlaceholderValue::Hex(value)
+                }
+            };
+            placeholders.push(placeholder);
+        }
+        
+        // Register ALL placeholders at once for proper sequential numbering
+        register_placeholder_values(&placeholders);
+        
+        // Now edit each register
         for reg_idx in 0..num_registers_to_edit {
             // Navigate to register (cursor should already be on first register after count config)
             if reg_idx > 0 && !is_generation_mode {
@@ -229,17 +260,14 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
                 ).await?;
             }
             
-            // Generate placeholder value based on register type
-            let value = match config.register_mode() {
-                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                    if reg_idx % 2 == 0 { 0x0001 } else { 0x0000 } // Alternating ON/OFF
-                }
-                RegisterMode::Holding | RegisterMode::Input => {
-                    0x1234 + (reg_idx as u16) * 0x0100 + (idx as u16) * 0x0010 // Unique hex values
-                }
+            // Get the value for this register
+            let value = match placeholders[reg_idx] {
+                PlaceholderValue::Boolean(b) => if b { 0x0001 } else { 0x0000 },
+                PlaceholderValue::Hex(v) => v,
+                PlaceholderValue::Dec(v) => v,
             };
             
-            // Edit register value
+            // Edit register value (only in normal mode)
             if !is_generation_mode {
                 execute_cursor_actions(
                     session,
@@ -255,21 +283,11 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
                 ).await?;
             }
             
-            // Update state with register value (currently a no-op but keeps state consistent)
+            // Update state with register value
             state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
             
-            // Register placeholder before capturing screenshot
-            let placeholder = match config.register_mode() {
-                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                    PlaceholderValue::Boolean(value != 0)
-                }
-                RegisterMode::Holding | RegisterMode::Input => {
-                    PlaceholderValue::Hex(value)
-                }
-            };
-            register_placeholder_values(&[placeholder]);
-            
             // Capture screenshot (placeholder system will handle the replacement automatically)
+            // Note: Placeholders were already registered above, so numbering is sequential
             screenshot_ctx.capture_or_verify(
                 session,
                 cap,
