@@ -10,7 +10,7 @@ use expectrl::Expect;
 
 use super::super::{
     config::StationConfig,
-    state_helpers::{add_master_station, add_slave_station, create_modbus_dashboard_state, enable_port},
+    state_helpers::{add_master_station, add_slave_station, create_modbus_dashboard_state, enable_port, update_register_value},
     station::{
         configure_register_count, configure_register_type, configure_start_address,
         configure_station_id, create_station, ensure_connection_mode, focus_create_station_button,
@@ -18,6 +18,8 @@ use super::super::{
     },
 };
 use aoba_ci_utils::*;
+
+use crate::e2e::common::config::RegisterMode;
 
 /// Helper to create state with N stations configured
 fn create_state_with_stations(
@@ -202,6 +204,79 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             state.clone(),
             &format!("edit_station_{}_reg_count", idx + 1),
         ).await?;
+        
+        // Step 3.5: Navigate to and edit registers with placeholder values
+        // After configuring register count, cursor automatically moves to register grid
+        if !is_generation_mode {
+            execute_cursor_actions(
+                session,
+                cap,
+                &[CursorAction::Sleep1s],
+                "wait_for_register_grid",
+            ).await?;
+        }
+        
+        // Edit first few registers (3 registers per station for demonstration)
+        let num_registers_to_edit = std::cmp::min(3, config.register_count() as usize);
+        for reg_idx in 0..num_registers_to_edit {
+            // Navigate to register (cursor should already be on first register after count config)
+            if reg_idx > 0 && !is_generation_mode {
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &[CursorAction::PressArrow { direction: ArrowKey::Right, count: 1 }, CursorAction::Sleep1s],
+                    &format!("move_to_register_{}", reg_idx),
+                ).await?;
+            }
+            
+            // Generate placeholder value based on register type
+            let value = match config.register_mode() {
+                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                    if reg_idx % 2 == 0 { 0x0001 } else { 0x0000 } // Alternating ON/OFF
+                }
+                RegisterMode::Holding | RegisterMode::Input => {
+                    0x1234 + (reg_idx as u16) * 0x0100 + (idx as u16) * 0x0010 // Unique hex values
+                }
+            };
+            
+            // Edit register value
+            if !is_generation_mode {
+                execute_cursor_actions(
+                    session,
+                    cap,
+                    &[
+                        CursorAction::PressEnter,
+                        CursorAction::Sleep1s,
+                        CursorAction::TypeString(format!("{:04x}", value)),
+                        CursorAction::PressEnter,
+                        CursorAction::Sleep1s,
+                    ],
+                    &format!("edit_register_{}", reg_idx),
+                ).await?;
+            }
+            
+            // Update state with register value (currently a no-op but keeps state consistent)
+            state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
+            
+            // Register placeholder before capturing screenshot
+            let placeholder = match config.register_mode() {
+                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                    PlaceholderValue::Boolean(value != 0)
+                }
+                RegisterMode::Holding | RegisterMode::Input => {
+                    PlaceholderValue::Hex(value)
+                }
+            };
+            register_placeholder_values(&[placeholder]);
+            
+            // Capture screenshot (placeholder system will handle the replacement automatically)
+            screenshot_ctx.capture_or_verify(
+                session,
+                cap,
+                state.clone(),
+                &format!("edit_station_{}_register_{}", idx + 1, reg_idx),
+            ).await?;
+        }
         
         // Return to top for next station
         if !is_generation_mode {

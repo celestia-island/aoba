@@ -16,6 +16,8 @@ pub async fn test_tui_multi_slave_mixed_register_types(
     log::info!("🧪 Test: TUI Multi-Slave with Mixed Register Types");
 
     let configs = vec![
+        make_station_config(1, RegisterMode::Coils, 0x0000, 10, false, None),
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
     ];
 
     let screenshot_ctx = ScreenshotContext::new(
@@ -37,6 +39,8 @@ pub async fn test_tui_multi_slave_spaced_addresses(
     log::info!("🧪 Test: TUI Multi-Slave with Spaced Addresses");
 
     let configs = vec![
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
+        make_station_config(1, RegisterMode::Holding, 0x0100, 10, false, None),
     ];
 
     let screenshot_ctx = ScreenshotContext::new(
@@ -58,6 +62,8 @@ pub async fn test_tui_multi_slave_mixed_station_ids(
     log::info!("🧪 Test: TUI Multi-Slave with Mixed Station IDs");
 
     let configs = vec![
+        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
+        make_station_config(2, RegisterMode::Holding, 0x0000, 10, false, None),
     ];
 
     let screenshot_ctx = ScreenshotContext::new(

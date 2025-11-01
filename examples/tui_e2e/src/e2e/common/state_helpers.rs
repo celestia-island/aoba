@@ -122,3 +122,23 @@ pub fn increment_log_count(state: TuiStatus, count: usize) -> TuiStatus {
         }
     })
 }
+
+/// Update a register value for a station
+/// 
+/// # Arguments
+/// * `state` - Current TUI status
+/// * `_station_index` - Index of the station (0-based)
+/// * `_register_index` - Index of the register within the station (0-based)
+/// * `_value` - New register value
+/// * `_is_master` - Whether this is a master station (true) or slave station (false)
+pub fn update_register_value(
+    state: TuiStatus,
+    _station_index: usize,
+    _register_index: usize,
+    _value: u16,
+    _is_master: bool,
+) -> TuiStatus {
+    // For now, this is a no-op since TuiModbusMaster/Slave don't have register values
+    // The placeholder system will handle the values during screenshot capture
+    state
+}
