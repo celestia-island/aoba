@@ -48,11 +48,11 @@ impl ScreenshotContext {
     /// # Arguments
     /// * `mode` - Execution mode (Normal or GenerateScreenshots)
     /// * `module_name` - Module name for organizing screenshots
-    /// * `test_name` - Test name for organizing screenshots
+    /// * `test_name` - Test name for organizing screenshots (no longer used for directory structure)
     pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Self {
+        // Remove the extra "default" folder layer - screenshots go directly under module name
         let screenshot_dir = PathBuf::from("examples/tui_e2e/screenshots")
-            .join(&module_name)
-            .join(&test_name);
+            .join(&module_name);
 
         Self {
             mode,
@@ -68,10 +68,10 @@ impl ScreenshotContext {
         self.mode
     }
 
-    /// Get the next screenshot filename
-    fn next_filename(&self) -> String {
+    /// Get the next screenshot filename with step name
+    fn next_filename(&self, step_name: &str) -> String {
         let step = self.step_counter.fetch_add(1, Ordering::SeqCst);
-        format!("{:03}.txt", step)
+        format!("{:03}_{}.txt", step, step_name)
     }
 
     /// Get the full path for a screenshot file
@@ -246,8 +246,9 @@ impl ScreenshotContext {
         session: &mut T,
         cap: &mut TerminalCapture,
         predicted_state: TuiStatus,
+        step_name: &str,
     ) -> Result<()> {
-        let filename = self.next_filename();
+        let filename = self.next_filename(step_name);
 
         match self.mode {
             ExecutionMode::GenerateScreenshots => {

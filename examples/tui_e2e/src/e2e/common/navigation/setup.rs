@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 
 use crate::e2e::common::state_helpers::{create_config_panel_state, create_entry_state};
+use crate::e2e::common::state_updaters;
 use aoba_ci_utils::*;
 
 /// Setup TUI test environment with initialized session and terminal capture.
@@ -92,7 +93,10 @@ pub async fn setup_tui_test(
     wait_for_tui_page("Entry", 10, None).await?;
 
     if let Some(ctx) = screenshot_ctx {
-        ctx.capture_or_verify(&mut tui_session, &mut tui_cap, create_entry_state())
+        let mut state = create_entry_state();
+        // Add discovered ports to the entry state
+        state_updaters::add_discovered_ports(&mut state, port1, _port2);
+        ctx.capture_or_verify(&mut tui_session, &mut tui_cap, state, "entry")
             .await?;
     }
 
@@ -113,6 +117,7 @@ pub async fn setup_tui_test(
             &mut tui_session,
             &mut tui_cap,
             create_config_panel_state(port1),
+            "config_panel",
         )
         .await?;
     }
