@@ -127,18 +127,32 @@ pub fn increment_log_count(state: TuiStatus, count: usize) -> TuiStatus {
 ///
 /// # Arguments
 /// * `state` - Current TUI status
-/// * `_station_index` - Index of the station (0-based)
-/// * `_register_index` - Index of the register within the station (0-based)
-/// * `_value` - New register value
-/// * `_is_master` - Whether this is a master station (true) or slave station (false)
+/// * `station_index` - Index of the station (0-based)
+/// * `register_index` - Index of the register within the station (0-based)
+/// * `value` - New register value
+/// * `is_master` - Whether this is a master station (true) or slave station (false)
 pub fn update_register_value(
     state: TuiStatus,
-    _station_index: usize,
-    _register_index: usize,
-    _value: u16,
-    _is_master: bool,
+    station_index: usize,
+    register_index: usize,
+    value: u16,
+    is_master: bool,
 ) -> TuiStatus {
-    // For now, this is a no-op since TuiModbusMaster/Slave don't have register values
-    // The placeholder system will handle the values during screenshot capture
-    state
+    apply_state_change(state, |s| {
+        if let Some(port) = s.ports.first_mut() {
+            let stations = if is_master {
+                &mut port.modbus_masters
+            } else {
+                &mut port.modbus_slaves
+            };
+
+            if let Some(station) = stations.get_mut(station_index) {
+                // Ensure registers vec is large enough
+                while station.registers.len() <= register_index {
+                    station.registers.push(0);
+                }
+                station.registers[register_index] = value;
+            }
+        }
+    })
 }

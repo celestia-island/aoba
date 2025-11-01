@@ -1320,7 +1320,11 @@ fn run_screen_capture_mode() -> Result<()> {
                         register_mode,
                         register_address: master.start_address,
                         register_length: master.register_count as u16,
-                        last_values: vec![0; master.register_count],
+                        last_values: if !master.registers.is_empty() {
+                            master.registers.clone()
+                        } else {
+                            vec![0; master.register_count]
+                        },
                         req_total: 0,
                         req_success: 0,
                         next_poll_at: std::time::Instant::now(),
@@ -1349,7 +1353,11 @@ fn run_screen_capture_mode() -> Result<()> {
                         register_mode,
                         register_address: slave.start_address,
                         register_length: slave.register_count as u16,
-                        last_values: vec![0; slave.register_count],
+                        last_values: if !slave.registers.is_empty() {
+                            slave.registers.clone()
+                        } else {
+                            vec![0; slave.register_count]
+                        },
                         req_total: 0,
                         req_success: 0,
                         next_poll_at: std::time::Instant::now(),

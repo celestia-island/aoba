@@ -57,6 +57,8 @@ pub mod serializable {
         pub register_type: String,
         pub start_address: u16,
         pub register_count: usize,
+        #[serde(default)]
+        pub registers: Vec<u16>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,6 +67,8 @@ pub mod serializable {
         pub register_type: String,
         pub start_address: u16,
         pub register_count: usize,
+        #[serde(default)]
+        pub registers: Vec<u16>,
     }
 
     /// Convert from global Status to TuiStatus for serialization
@@ -90,6 +94,7 @@ pub mod serializable {
                                 register_type: format!("{:?}", station.register_mode),
                                 start_address: station.register_address,
                                 register_count: station.register_length as usize,
+                                registers: Vec::new(), // Empty for real TUI, filled by E2E tests
                             });
                         } else {
                             modbus_slaves.push(TuiModbusSlave {
@@ -97,6 +102,7 @@ pub mod serializable {
                                 register_type: format!("{:?}", station.register_mode),
                                 start_address: station.register_address,
                                 register_count: station.register_length as usize,
+                                registers: Vec::new(), // Empty for real TUI, filled by E2E tests
                             });
                         }
                     }
