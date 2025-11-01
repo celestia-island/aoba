@@ -96,6 +96,10 @@ pub enum CursorAction {
         line_range: Option<(usize, usize)>,
         /// Optional column range to compare (start, end) inclusive
         col_range: Option<(usize, usize)>,
+        /// Placeholder values for random data (e.g., register values)
+        /// During generation: creates placeholders like {{#x}}, {{0x#x}}, {{0b#x}}
+        /// During verification: replaces placeholders with actual values before comparison
+        placeholders: Vec<crate::placeholder::PlaceholderValue>,
     },
     /// Check status tree path matches expected value
     CheckStatus {
@@ -356,7 +360,15 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                 description,
                 line_range,
                 col_range,
+                placeholders,
             } => {
+                // In screenshot generation mode, register placeholders before capturing
+                if mode == ActionExecutionMode::GenerateScreenshots {
+                    if !placeholders.is_empty() {
+                        crate::placeholder::register_placeholder_values(placeholders);
+                    }
+                }
+
                 // Read the saved screen capture
                 let expected_screen = match read_screen_capture(test_name, step_name) {
                     Ok(content) => content,
@@ -423,6 +435,15 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
 
                 let expected_region = extract_region(&expected_screen);
                 let current_region = extract_region(&current_screen);
+
+                // In verification mode, restore placeholders in expected before comparison
+                let expected_region = if mode == ActionExecutionMode::Normal && !placeholders.is_empty() {
+                    // Register placeholders with actual values before restoration
+                    crate::placeholder::register_placeholder_values(placeholders);
+                    crate::placeholder::restore_placeholders_for_verification(&expected_region)
+                } else {
+                    expected_region
+                };
 
                 // Compare the regions
                 if expected_region == current_region {

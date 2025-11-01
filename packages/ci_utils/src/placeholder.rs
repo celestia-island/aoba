@@ -2,6 +2,37 @@ use log::warn;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
+/// Placeholder value type for screenshot generation
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlaceholderValue {
+    /// Decimal number (e.g., 123 -> {{#x}})
+    Decimal(u16),
+    /// Hexadecimal number (e.g., 0x1234 -> {{0x#x}})
+    Hex(u16),
+    /// Boolean value (e.g., ON/OFF -> {{0b#x}})
+    Boolean(bool),
+}
+
+impl PlaceholderValue {
+    /// Get the actual value as a string
+    pub fn as_string(&self) -> String {
+        match self {
+            PlaceholderValue::Decimal(v) => format!("{}", v),
+            PlaceholderValue::Hex(v) => format!("0x{:04X}", v),
+            PlaceholderValue::Boolean(b) => if *b { "ON" } else { "OFF" }.to_string(),
+        }
+    }
+
+    /// Get the placeholder kind
+    fn kind(&self) -> PlaceholderKind {
+        match self {
+            PlaceholderValue::Decimal(_) => PlaceholderKind::Decimal,
+            PlaceholderValue::Hex(_) => PlaceholderKind::Hex,
+            PlaceholderValue::Boolean(_) => PlaceholderKind::Boolean,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct PlaceholderEntry {
     placeholder: String,
@@ -19,15 +50,17 @@ static PLACEHOLDER_STATE: Lazy<Mutex<PlaceholderState>> =
 
 #[derive(Clone, Copy, Debug)]
 enum PlaceholderKind {
+    Decimal,
     Hex,
-    Switch,
+    Boolean,
 }
 
 impl PlaceholderKind {
     fn build_placeholder(self, index: usize) -> String {
         match self {
+            PlaceholderKind::Decimal => format!("{{{{#{:03}}}}}", index),
             PlaceholderKind::Hex => format!("{{{{0x#{:03}}}}}", index),
-            PlaceholderKind::Switch => format!("{{{{sw#{:03}}}}}", index),
+            PlaceholderKind::Boolean => format!("{{{{0b#{:03}}}}}", index),
         }
     }
 }
@@ -49,6 +82,13 @@ pub fn reset_snapshot_placeholders() {
     state.entries.clear();
 }
 
+/// Register placeholder values that will appear in snapshot output.
+pub fn register_placeholder_values(values: &[PlaceholderValue]) {
+    for value in values {
+        push_entry(value.kind(), value.as_string());
+    }
+}
+
 /// Register hexadecimal values that will appear in snapshot output.
 pub fn register_snapshot_hex_values(values: &[u16]) {
     for &value in values {
@@ -57,10 +97,11 @@ pub fn register_snapshot_hex_values(values: &[u16]) {
 }
 
 /// Register switch-style values (ON/OFF) that will appear in snapshot output.
+#[deprecated(note = "Use register_placeholder_values with PlaceholderValue::Boolean instead")]
 pub fn register_snapshot_switch_values(values: &[u16]) {
     for &value in values {
         let text = if value != 0 { "ON" } else { "OFF" };
-        push_entry(PlaceholderKind::Switch, format!("{text:<4}"));
+        push_entry(PlaceholderKind::Boolean, text.to_string());
     }
 }
 
