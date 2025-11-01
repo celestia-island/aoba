@@ -6,6 +6,8 @@
 /// processes.
 use anyhow::Result;
 use expectrl::Expect;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 
 use super::super::{
     config::StationConfig,
@@ -300,14 +302,29 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         // (For multi-station tests, we'll handle more registers)
         let num_registers_to_edit = std::cmp::min(10, config.register_count() as usize);
 
+        // For Holding/Input register types, create random number array
+        // Use deterministic seed for reproducibility: based on port name and station index
+        let random_values: Vec<u16> = if matches!(config.register_mode(), RegisterMode::Holding | RegisterMode::Input) {
+            let seed_str = format!("{}_{}_{}", port_name, idx, config.register_mode() as u8);
+            let seed = seed_str.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+            let mut rng = StdRng::seed_from_u64(seed);
+            
+            (0..num_registers_to_edit)
+                .map(|_| rng.gen_range(1000..60000))  // Generate random values avoiding 0x0000
+                .collect()
+        } else {
+            vec![]
+        };
+
         for reg_idx in 0..num_registers_to_edit {
             let (value, placeholder) = match config.register_mode() {
                 RegisterMode::Coils | RegisterMode::DiscreteInputs => {
                     (0x0000, PlaceholderValue::Boolean(false))
                 }
                 RegisterMode::Holding | RegisterMode::Input => {
-                    let generated = 0x1234 + (reg_idx as u16) * 0x0100 + (idx as u16) * 0x0010;
-                    (generated, PlaceholderValue::Hex(generated))
+                    let random_val = random_values[reg_idx];
+                    // Use Hex placeholder for Holding/Input types since TUI displays in hex format
+                    (random_val, PlaceholderValue::Hex(random_val))
                 }
             };
 
