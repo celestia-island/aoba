@@ -1,3 +1,4 @@
+use anyhow::Result;
 /// Debug dump utilities for CI/E2E testing
 ///
 /// This module provides functionality to periodically dump the global status tree
@@ -13,8 +14,6 @@ use std::{
     thread,
     time::Duration,
 };
-
-use anyhow::Result;
 
 /// Flag to control whether debug dumping is enabled
 static DEBUG_DUMP_ENABLED: AtomicBool = AtomicBool::new(false);

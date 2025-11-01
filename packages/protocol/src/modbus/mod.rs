@@ -14,15 +14,8 @@ mod slave_inputs;
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use chrono::Duration;
+
 use flume::{Receiver, Sender};
-
-use rmodbus::{
-    client::ModbusRequest,
-    consts::ModbusFunction,
-    server::{storage::ModbusStorageSmall, ModbusFrame},
-    ModbusProto,
-};
-
 pub use frame::read_modbus_frame;
 pub use header::parse_modbus_header;
 pub use pull_get_coils::{generate_pull_get_coils_request, parse_pull_get_coils};
@@ -33,6 +26,12 @@ pub use pull_get_holdings::{generate_pull_get_holdings_request, parse_pull_get_h
 pub use pull_get_inputs::{generate_pull_get_inputs_request, parse_pull_get_inputs};
 pub use pull_set_coils::generate_pull_set_coils_request;
 pub use pull_set_holdings::generate_pull_set_holding_request;
+use rmodbus::{
+    client::ModbusRequest,
+    consts::ModbusFunction,
+    server::{storage::ModbusStorageSmall, ModbusFrame},
+    ModbusProto,
+};
 pub use slave_coils::build_slave_coils_response;
 pub use slave_discrete_inputs::build_slave_discrete_inputs_response;
 pub use slave_holdings::build_slave_holdings_response;

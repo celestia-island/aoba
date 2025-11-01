@@ -2,15 +2,16 @@
 ///
 /// This module provides the TUI-specific status tree and read/write helpers,
 /// along with the serializable snapshot structures used by E2E tooling.
-use std::collections::HashMap;
-use std::sync::Arc;
+pub mod types;
 
 use anyhow::Result;
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use yuuka::derive_struct;
 
-pub mod types;
 use crate::tui::status::types::port;
 
 /// Serializable snapshot helpers for E2E tooling.

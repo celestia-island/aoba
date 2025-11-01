@@ -1,4 +1,5 @@
 pub use crate::protocol::status::types::{CliMode, CliStatus, RegisterMode};
+
 /// CLI status module
 ///
 /// This module provides CLI-specific status structures for E2E testing.

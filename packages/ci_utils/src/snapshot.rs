@@ -1,13 +1,13 @@
 use anyhow::Result;
+use std::{
+    io,
+    sync::{Mutex, OnceLock},
+};
 
 use expectrl::{process::NonBlocking, Expect};
 use vt100::Parser;
 
 use crate::helpers::sleep_1s;
-use std::{
-    io,
-    sync::{Mutex, OnceLock},
-};
 
 type SnapshotRecord = (String, String);
 

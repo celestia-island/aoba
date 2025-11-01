@@ -167,10 +167,9 @@
 mod e2e;
 
 use anyhow::Result;
+use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
-
-use clap::Parser;
 
 use aoba_ci_utils::ExecutionMode;
 

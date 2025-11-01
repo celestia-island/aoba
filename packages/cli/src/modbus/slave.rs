@@ -1,10 +1,9 @@
 use anyhow::{anyhow, Result};
+use clap::ArgMatches;
 use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-
-use clap::ArgMatches;
 
 use super::{extract_values_from_storage, parse_register_mode, ModbusResponse, OutputSink};
 use crate::{actions, cleanup};
