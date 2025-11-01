@@ -101,36 +101,6 @@ pub fn register_placeholder_values(values: &[PlaceholderValue]) {
     }
 }
 
-/// Register hexadecimal values that will appear in snapshot output.
-pub fn register_snapshot_hex_values(values: &[u16]) {
-    let mut state = PLACEHOLDER_STATE.lock();
-    for &value in values {
-        let idx = state.next_index;
-        state.next_index += 1;
-        state.entries.push(PlaceholderEntry {
-            index: idx,
-            kind: PlaceholderKind::Hex,
-            actual: format!("0x{:04X}", value),
-        });
-    }
-}
-
-/// Register switch-style values (ON/OFF) that will appear in snapshot output.
-#[deprecated(note = "Use register_placeholder_values with PlaceholderValue::Boolean instead")]
-pub fn register_snapshot_switch_values(values: &[u16]) {
-    let mut state = PLACEHOLDER_STATE.lock();
-    for &value in values {
-        let idx = state.next_index;
-        state.next_index += 1;
-        let text = if value != 0 { "ON" } else { "OFF" };
-        state.entries.push(PlaceholderEntry {
-            index: idx,
-            kind: PlaceholderKind::Boolean,
-            actual: text.to_string(),
-        });
-    }
-}
-
 /// Apply placeholders to a generated screenshot so random values are hidden in the reference file.
 /// For Boolean placeholders: Scans for "OFF" (or "ON") and replaces sequentially by index
 /// For Dec/Hex placeholders: Replaces actual values with their respective placeholder formats

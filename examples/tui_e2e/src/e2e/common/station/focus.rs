@@ -5,7 +5,10 @@ use serde_json::json;
 
 use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
-use aoba_ci_utils::{execute_with_status_checks, CursorAction, ExpectSession, TerminalCapture};
+use aoba_ci_utils::{
+    execute_with_status_checks, CursorAction, ExpectSession, ScreenAssertion, ScreenPatternSpec,
+    TerminalCapture,
+};
 
 /// Ensure the cursor is focused on the "Create Station" button at the top of the dashboard.
 pub async fn focus_create_station_button<T: Expect + ExpectSession>(
@@ -18,21 +21,18 @@ pub async fn focus_create_station_button<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressCtrlPageUp, CursorAction::Sleep1s],
-        &[
-            CursorAction::MatchPattern {
-                pattern,
-                description: "Cursor positioned on Create Station".to_string(),
-                line_range: None,
-                col_range: None,
-                retry_action: Some(vec![
+        &[modbus_page_check(
+            "ModbusDashboard active while focusing Create Station",
+        )],
+        &[ScreenAssertion::pattern(
+            ScreenPatternSpec::new(pattern, "Cursor positioned on Create Station")
+                .with_retry_action(Some(vec![
                     CursorAction::PressEscape,
                     CursorAction::Sleep1s,
                     CursorAction::PressCtrlPageUp,
                     CursorAction::Sleep1s,
-                ]),
-            },
-            modbus_page_check("ModbusDashboard active while focusing Create Station"),
-        ],
+                ])),
+        )],
         "focus_create_station_button",
         Some(3),
     )
@@ -70,6 +70,7 @@ pub async fn focus_station<T: Expect + ExpectSession>(
             },
             modbus_page_check("ModbusDashboard active while focusing station"),
         ],
+        &[],
         &format!("focus_station_{}", station_index + 1),
         Some(3),
     )

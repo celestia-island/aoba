@@ -6,8 +6,8 @@
 /// processes.
 use anyhow::Result;
 use expectrl::Expect;
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 use super::super::{
     config::StationConfig,
@@ -80,7 +80,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         ensure_connection_mode(session, cap, is_master).await?;
     }
     let state = create_modbus_dashboard_state(port_name);
-    screenshot_ctx
+    let _ = screenshot_ctx
         .capture_or_verify(
             session,
             cap,
@@ -105,7 +105,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Screenshot: After creating each station
         let state = create_state_with_stations(port_name, &configs[..=idx], is_master);
-        screenshot_ctx
+        let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -118,7 +118,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     // Step 3: Configure each station
     // CRITICAL: Use a single mutable state variable that accumulates register values across all stations
     let mut state = create_state_with_stations(port_name, configs, is_master);
-    
+
     for (idx, config) in configs.iter().enumerate() {
         let station_index = station_indices[idx];
 
@@ -126,7 +126,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         if !is_generation_mode {
             focus_station(session, cap, port_name, station_index, is_master).await?;
         }
-        screenshot_ctx
+        let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -164,7 +164,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        screenshot_ctx
+        let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -202,7 +202,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        screenshot_ctx
+        let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -240,7 +240,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        screenshot_ctx
+        let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -278,7 +278,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        screenshot_ctx
+        let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -309,13 +309,18 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
             // For Holding/Input register types, create random number array
             // Use deterministic seed for reproducibility: based on port name and station index
-            let random_values: Vec<u16> = if matches!(config.register_mode(), RegisterMode::Holding | RegisterMode::Input) {
+            let random_values: Vec<u16> = if matches!(
+                config.register_mode(),
+                RegisterMode::Holding | RegisterMode::Input
+            ) {
                 let seed_str = format!("{}_{}_{}", port_name, idx, config.register_mode() as u8);
-                let seed = seed_str.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                let seed = seed_str
+                    .bytes()
+                    .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
                 let mut rng = StdRng::seed_from_u64(seed);
-                
+
                 (0..num_registers_to_edit)
-                    .map(|_| rng.gen_range(1000..60000))  // Generate random values avoiding 0x0000
+                    .map(|_| rng.random_range(1000..60000)) // Generate random values avoiding 0x0000
                     .collect()
             } else {
                 vec![]
@@ -372,11 +377,12 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
                 // CRITICAL: Update state with register value BEFORE capturing screenshot
                 // This ensures the TUI renders the actual value, not 0x0000
-                state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
+                state =
+                    update_register_value(state.clone(), station_index, reg_idx, value, is_master);
 
                 // Capture screenshot (placeholder system will replace the actual value)
                 // Note: Placeholders were already registered above, so numbering is sequential
-                screenshot_ctx
+                let _ = screenshot_ctx
                     .capture_or_verify(
                         session,
                         cap,
@@ -389,15 +395,20 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             // Slave mode: Batch update all 10 registers in state at once (passive listening behavior)
             // No keyboard actions - just simulate receiving data from master
             let num_registers_to_update = std::cmp::min(10, config.register_count() as usize);
-            
+
             // Generate random values for Holding/Input, or use alternating booleans for Coils/DiscreteInputs
-            let random_values: Vec<u16> = if matches!(config.register_mode(), RegisterMode::Holding | RegisterMode::Input) {
+            let random_values: Vec<u16> = if matches!(
+                config.register_mode(),
+                RegisterMode::Holding | RegisterMode::Input
+            ) {
                 let seed_str = format!("{}_{}_{}", port_name, idx, config.register_mode() as u8);
-                let seed = seed_str.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                let seed = seed_str
+                    .bytes()
+                    .fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
                 let mut rng = StdRng::seed_from_u64(seed);
-                
+
                 (0..num_registers_to_update)
-                    .map(|_| rng.gen_range(1000..60000))
+                    .map(|_| rng.random_range(1000..60000))
                     .collect()
             } else {
                 // For Coils/DiscreteInputs: alternating ON/OFF pattern
@@ -405,27 +416,27 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
                     .map(|i| if i % 2 == 0 { 1 } else { 0 })
                     .collect()
             };
-            
+
             // Register all placeholders at once for sequential numbering
-            let placeholders: Vec<PlaceholderValue> = random_values.iter().map(|&val| {
-                match config.register_mode() {
+            let placeholders: Vec<PlaceholderValue> = random_values
+                .iter()
+                .map(|&val| match config.register_mode() {
                     RegisterMode::Coils | RegisterMode::DiscreteInputs => {
                         PlaceholderValue::Boolean(val != 0)
                     }
-                    RegisterMode::Holding | RegisterMode::Input => {
-                        PlaceholderValue::Hex(val)
-                    }
-                }
-            }).collect();
+                    RegisterMode::Holding | RegisterMode::Input => PlaceholderValue::Hex(val),
+                })
+                .collect();
             register_placeholder_values(&placeholders);
-            
+
             // Batch update all registers in state
             for (reg_idx, &value) in random_values.iter().enumerate() {
-                state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
+                state =
+                    update_register_value(state.clone(), station_index, reg_idx, value, is_master);
             }
-            
+
             // Single screenshot capturing all 10 registers with placeholders
-            screenshot_ctx
+            let _ = screenshot_ctx
                 .capture_or_verify(
                     session,
                     cap,
@@ -452,7 +463,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         .await?;
     }
     // Use the accumulated state with all register values
-    screenshot_ctx
+    let _ = screenshot_ctx
         .capture_or_verify(session, cap, state.clone(), "after_save")
         .await?;
 
@@ -461,7 +472,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         wait_for_port_enabled(port_name, 20, Some(500)).await?;
     }
     state = enable_port(state);
-    screenshot_ctx
+    let _ = screenshot_ctx
         .capture_or_verify(session, cap, state, "port_enabled")
         .await?;
 

@@ -50,16 +50,6 @@ pub fn enable_port(state: TuiStatus) -> TuiStatus {
     })
 }
 
-/// Disable a port in the state
-pub fn disable_port(state: TuiStatus) -> TuiStatus {
-    apply_state_change(state, |s| {
-        if let Some(port) = s.ports.first_mut() {
-            port.enabled = false;
-            port.state = E2EPortState::Free;
-        }
-    })
-}
-
 /// Add a master station to the first port
 pub fn add_master_station(
     state: TuiStatus,
@@ -75,7 +65,7 @@ pub fn add_master_station(
                 register_type: register_type.to_string(),
                 start_address,
                 register_count,
-                registers: vec![0; register_count],  // Initialize with zeros
+                registers: vec![0; register_count], // Initialize with zeros
             });
         }
     })
@@ -96,31 +86,8 @@ pub fn add_slave_station(
                 register_type: register_type.to_string(),
                 start_address,
                 register_count,
-                registers: vec![0; register_count],  // Initialize with zeros
+                registers: vec![0; register_count], // Initialize with zeros
             });
-        }
-    })
-}
-
-/// Navigate to ConfigPanel page
-pub fn navigate_to_config_panel(state: TuiStatus) -> TuiStatus {
-    apply_state_change(state, |s| {
-        s.page = TuiPage::ConfigPanel;
-    })
-}
-
-/// Navigate to ModbusDashboard page
-pub fn navigate_to_modbus_dashboard(state: TuiStatus) -> TuiStatus {
-    apply_state_change(state, |s| {
-        s.page = TuiPage::ModbusDashboard;
-    })
-}
-
-/// Update log count for the first port
-pub fn increment_log_count(state: TuiStatus, count: usize) -> TuiStatus {
-    apply_state_change(state, |s| {
-        if let Some(port) = s.ports.first_mut() {
-            port.log_count += count;
         }
     })
 }

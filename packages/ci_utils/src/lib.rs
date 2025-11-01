@@ -17,7 +17,10 @@ pub mod terminal;
 pub mod tui;
 pub mod verify;
 
-pub use auto_cursor::{execute_cursor_actions, execute_with_status_checks, CursorAction};
+pub use auto_cursor::{
+    execute_cursor_actions, execute_with_status_checks, CursorAction, ScreenAssertion,
+    ScreenCaptureSpec, ScreenPatternSpec, TuiStep,
+};
 pub use cli::{create_modbus_command, run_cli_slave_poll};
 pub use data::{generate_random_coils, generate_random_registers};
 pub use helpers::{sleep_1s, sleep_3s, terminate_session};
@@ -26,10 +29,7 @@ pub use log_parser::{
     get_latest_state, get_port_state, parse_state_dumps, verify_port_exists, wait_for_page,
     wait_for_port_state, ConfigEditState, PortState, StateDump,
 };
-pub use placeholder::{
-    register_placeholder_values, register_snapshot_hex_values, register_snapshot_switch_values,
-    reset_snapshot_placeholders, PlaceholderValue,
-};
+pub use placeholder::{register_placeholder_values, reset_snapshot_placeholders, PlaceholderValue};
 pub use ports::{
     port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, VcomMatchers,
     DEFAULT_PORT1, DEFAULT_PORT2,
