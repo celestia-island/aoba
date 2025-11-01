@@ -38,14 +38,14 @@ pub fn parse_args() -> ArgMatches {
                 .short('c')
                 .help("Load configuration from JSON file")
                 .value_name("FILE")
-                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon", "modbus-daemon"]),
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist"]),
         )
         .arg(
             Arg::new("config-json")
                 .long("config-json")
                 .help("Load configuration from JSON string")
                 .value_name("JSON")
-                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon", "modbus-daemon", "config"]),
+                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "config"]),
         )
         .arg(
             Arg::new("slave-listen")
@@ -160,20 +160,6 @@ pub fn parse_args() -> ArgMatches {
                        Manual use is discouraged as it requires a running IPC server.")
                 .value_name("UUID")
                 .hide(false), // Show in help but with warning
-        )
-        .arg(
-            Arg::new("serial-daemon")
-                .long("serial-daemon")
-                .help("Run as serial port daemon (IPC mode) - occupies port and provides IPC communication")
-                .value_name("PORT")
-                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist"]),
-        )
-        .arg(
-            Arg::new("modbus-daemon")
-                .long("modbus-daemon")
-                .help("Run as Modbus daemon (IPC mode) - communicates via IPC without holding port directly")
-                .value_name("IPC_CHANNEL")
-                .conflicts_with_all(["slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist", "serial-daemon"]),
         )
         .arg(
             Arg::new("debug-ci-e2e-test")
