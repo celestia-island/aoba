@@ -116,6 +116,9 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     }
 
     // Step 3: Configure each station
+    // CRITICAL: Use a single mutable state variable that accumulates register values across all stations
+    let mut state = create_state_with_stations(port_name, configs, is_master);
+    
     for (idx, config) in configs.iter().enumerate() {
         let station_index = station_indices[idx];
 
@@ -123,12 +126,11 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         if !is_generation_mode {
             focus_station(session, cap, port_name, station_index, is_master).await?;
         }
-        let state = create_state_with_stations(port_name, &configs[..=idx], is_master);
         screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
-                state,
+                state.clone(),
                 &format!("navigate_station_{}", idx + 1),
             )
             .await?;
@@ -162,7 +164,6 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let mut state = create_state_with_stations(port_name, configs, is_master);
         screenshot_ctx
             .capture_or_verify(
                 session,
@@ -450,7 +451,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         )
         .await?;
     }
-    let state = create_state_with_stations(port_name, configs, is_master);
+    // Use the accumulated state with all register values
     screenshot_ctx
         .capture_or_verify(session, cap, state.clone(), "after_save")
         .await?;
@@ -459,7 +460,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     if !is_generation_mode {
         wait_for_port_enabled(port_name, 20, Some(500)).await?;
     }
-    let state = enable_port(state);
+    state = enable_port(state);
     screenshot_ctx
         .capture_or_verify(session, cap, state, "port_enabled")
         .await?;
