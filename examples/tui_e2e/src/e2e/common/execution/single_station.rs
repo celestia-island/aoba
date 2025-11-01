@@ -233,6 +233,8 @@ pub async fn run_single_station_master_test(
     config: StationConfig,
     screenshot_ctx: &ScreenshotContext,
 ) -> Result<()> {
+    use super::super::screenshot_integration::*;
+
     log::info!("🧪 Running single-station Master test");
     log::info!("   Port1: {port1} (TUI Master)");
     log::info!("   Port2: {port2} (CLI Slave)");
@@ -247,6 +249,9 @@ pub async fn run_single_station_master_test(
     navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
     wait_for_tui_page("ModbusDashboard", 10, None).await?;
 
+    // Screenshot: After entering Modbus panel
+    screenshot_after_modbus_panel(&mut session, &mut cap, port1, Some(screenshot_ctx)).await?;
+
     // Configure the target station using reusable workflow helpers.
     configure_tui_station(&mut session, &mut cap, port1, &config).await?;
 
@@ -254,9 +259,37 @@ pub async fn run_single_station_master_test(
     wait_for_station_count(port1, true, 1, 10).await?;
     wait_for_modbus_config(port1, true, config.station_id(), 10, None).await?;
 
+    // Screenshot: After configuring station
+    screenshot_after_station_config(
+        &mut session,
+        &mut cap,
+        port1,
+        config.station_id(),
+        config.register_mode(),
+        config.start_address(),
+        config.register_count() as usize,
+        config.is_master(),
+        Some(screenshot_ctx),
+    )
+    .await?;
+
     // Persisted configuration should enable the port; verify status JSON and UI indicator.
     wait_for_port_enabled(port1, 20, Some(500)).await?;
     verify_port_enabled(&mut session, &mut cap, "master_port_enabled").await?;
+
+    // Screenshot: After port is enabled
+    screenshot_after_port_enabled(
+        &mut session,
+        &mut cap,
+        port1,
+        config.station_id(),
+        config.register_mode(),
+        config.start_address(),
+        config.register_count() as usize,
+        config.is_master(),
+        Some(screenshot_ctx),
+    )
+    .await?;
 
     // Ensure the managed CLI subprocess is running in MasterProvide mode, retrying with socat reset when needed.
     let cli_status = wait_for_cli_status_with_recovery(port1, 15, Some(500)).await?;
@@ -320,7 +353,7 @@ pub async fn run_single_station_master_test(
 ///
 /// This is a **high-level test orchestrator** that validates the complete Modbus
 /// Slave workflow:
-/// 1. Generate random test data (coils or registers)
+/// 1. Generate test data (coils default to OFF for stable screenshots; registers random)
 /// 2. Setup TUI environment and configure Slave station with test data
 /// 3. Start CLI Master on second port
 /// 4. CLI Master polls TUI Slave to read data
@@ -368,7 +401,7 @@ pub async fn run_single_station_master_test(
 /// # Test Workflow
 ///
 /// ## Stage 1: Generate Test Data
-/// - **Coils/DiscreteInputs**: Random bit values (0 or 1) via `generate_random_coils`
+/// - **Coils/DiscreteInputs**: Deterministic bit values (all OFF) via `generate_random_coils`
 /// - **Holding/Input**: Random 16-bit values (0-65535) via `generate_random_registers`
 /// - Data length matches `config.register_count()`
 ///
@@ -425,7 +458,7 @@ pub async fn run_single_station_master_test(
 /// };
 ///
 /// run_single_station_slave_test("COM3", "COM4", coil_config).await?;
-/// // Test generates 32 random bits (0/1), verifies CLI Master read them correctly
+/// // Test generates 32 OFF bits, verifies CLI Master read them correctly
 /// # Ok(())
 /// # }
 /// ```

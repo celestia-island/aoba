@@ -27,7 +27,8 @@ pub use log_parser::{
     wait_for_port_state, ConfigEditState, PortState, StateDump,
 };
 pub use placeholder::{
-    register_snapshot_hex_values, register_snapshot_switch_values, reset_snapshot_placeholders,
+    register_placeholder_values, register_snapshot_hex_values, register_snapshot_switch_values,
+    reset_snapshot_placeholders, PlaceholderValue,
 };
 pub use ports::{
     port_exists, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, VcomMatchers,

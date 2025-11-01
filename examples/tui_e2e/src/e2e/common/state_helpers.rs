@@ -75,6 +75,7 @@ pub fn add_master_station(
                 register_type: register_type.to_string(),
                 start_address,
                 register_count,
+                registers: vec![0; register_count],  // Initialize with zeros
             });
         }
     })
@@ -95,6 +96,7 @@ pub fn add_slave_station(
                 register_type: register_type.to_string(),
                 start_address,
                 register_count,
+                registers: vec![0; register_count],  // Initialize with zeros
             });
         }
     })
@@ -119,6 +121,44 @@ pub fn increment_log_count(state: TuiStatus, count: usize) -> TuiStatus {
     apply_state_change(state, |s| {
         if let Some(port) = s.ports.first_mut() {
             port.log_count += count;
+        }
+    })
+}
+
+/// Update a register value for a station
+///
+/// # Arguments
+/// * `state` - Current TUI status
+/// * `station_index` - Index of the station (0-based)
+/// * `register_index` - Index of the register within the station (0-based)
+/// * `value` - New register value
+/// * `is_master` - Whether this is a master station (true) or slave station (false)
+pub fn update_register_value(
+    state: TuiStatus,
+    station_index: usize,
+    register_index: usize,
+    value: u16,
+    is_master: bool,
+) -> TuiStatus {
+    apply_state_change(state, |s| {
+        if let Some(port) = s.ports.first_mut() {
+            if is_master {
+                if let Some(station) = port.modbus_masters.get_mut(station_index) {
+                    // Ensure registers vec is large enough
+                    while station.registers.len() <= register_index {
+                        station.registers.push(0);
+                    }
+                    station.registers[register_index] = value;
+                }
+            } else {
+                if let Some(station) = port.modbus_slaves.get_mut(station_index) {
+                    // Ensure registers vec is large enough
+                    while station.registers.len() <= register_index {
+                        station.registers.push(0);
+                    }
+                    station.registers[register_index] = value;
+                }
+            }
         }
     })
 }

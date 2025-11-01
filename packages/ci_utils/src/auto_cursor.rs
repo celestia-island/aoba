@@ -1,8 +1,11 @@
 use anyhow::{anyhow, Result};
+use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture, TuiStatus};
+use crate::{
+    sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture, TuiStatus,
+};
 
 /// Read a screen capture from file
 fn read_screen_capture(test_name: &str, step_name: &str) -> Result<String> {
@@ -21,13 +24,13 @@ fn write_screen_capture(test_name: &str, step_name: &str, content: &str) -> Resu
     // Support hierarchical test names (e.g., "single_station/master_modes")
     let test_path = PathBuf::from(test_name);
     let dir_path = Path::new("examples/tui_e2e/screenshots").join(test_path);
-    
+
     // Create directory if it doesn't exist
     fs::create_dir_all(&dir_path)?;
-    
+
     let filepath = dir_path.join(format!("{}.txt", step_name));
     fs::write(&filepath, content)?;
-    
+
     log::info!("💾 Wrote screenshot: {}", filepath.display());
     Ok(())
 }
@@ -67,6 +70,19 @@ pub enum CursorAction {
     Sleep1s,
     /// Wait for 3 seconds (3000ms)
     Sleep3s,
+    /// Match a regex pattern against terminal output with retry logic
+    MatchPattern {
+        /// Regex pattern to match
+        pattern: regex::Regex,
+        /// Description for logging
+        description: String,
+        /// Optional line range to search (start, end) inclusive, default is entire screen
+        line_range: Option<(usize, usize)>,
+        /// Optional column range to search (start, end) inclusive, default is entire line
+        col_range: Option<(usize, usize)>,
+        /// Optional retry action to execute before retrying pattern match
+        retry_action: Option<Vec<CursorAction>>,
+    },
     /// Match screen capture against saved screenshot (non-screenshot mode) or write screenshot (screenshot mode)
     /// In non-screenshot mode: reads reference file and compares
     /// In screenshot mode: writes current terminal output to file
@@ -77,6 +93,27 @@ pub enum CursorAction {
         step_name: String,
         /// Description for logging
         description: String,
+        /// Optional line range to compare (start, end) inclusive
+        line_range: Option<(usize, usize)>,
+        /// Optional column range to compare (start, end) inclusive
+        col_range: Option<(usize, usize)>,
+        /// Placeholder values for random data (e.g., register values)
+        /// During generation: creates placeholders like {{#x}}, {{0x#x}}, {{0b#x}}
+        /// During verification: replaces placeholders with actual values before comparison
+        placeholders: Vec<crate::placeholder::PlaceholderValue>,
+    },
+    /// Check status tree path matches expected value
+    CheckStatus {
+        /// Description for logging
+        description: String,
+        /// JSONPath to check in status tree (e.g., "page" or "ports[0].enabled")
+        path: String,
+        /// Expected value at that path
+        expected: serde_json::Value,
+        /// Timeout in seconds (default: 10)
+        timeout_secs: Option<u64>,
+        /// Retry interval in milliseconds (default: 500)
+        retry_interval_ms: Option<u64>,
     },
     /// Update mock global status (screenshot mode only)
     /// In screenshot mode: updates the mock TuiStatus using the provided closure
@@ -91,144 +128,6 @@ pub enum CursorAction {
     /// Debug breakpoint: capture screen, print it, reset ports, and exit
     /// Only active when debug mode is enabled
     DebugBreakpoint { description: String },
-}
-
-/// Execute a sequence of cursor actions on an expect session
-/// All actions execute in order. If MatchPattern fails, the function
-/// dumps the current screen and returns an error immediately.
-pub async fn execute_cursor_actions<T: ExpectSession>(
-    session: &mut T,
-    cap: &mut TerminalCapture,
-    actions: &[CursorAction],
-    session_name: &str,
-) -> Result<()> {
-    for (idx, action) in actions.iter().enumerate() {
-        match action {
-            CursorAction::MatchPattern {
-                pattern,
-                description,
-                line_range,
-                col_range,
-                retry_action,
-            } => {
-                const INNER_RETRIES: usize = 3; // Number of screen captures before executing retry_action
-                const OUTER_RETRIES: usize = 3; // Number of times to execute retry_action
-                const RETRY_INTERVAL_MS: u64 = 1000;
-
-                let mut matched = false;
-                let mut last_screen = String::new();
-                let mut total_attempts = 0;
-
-                // Outer loop: execute retry_action up to OUTER_RETRIES times
-                for outer_attempt in 1..=OUTER_RETRIES {
-                    // Inner loop: try to match pattern INNER_RETRIES times
-                    for inner_attempt in 1..=INNER_RETRIES {
-                        total_attempts += 1;
-
-                        // Capture current screen (without logging content to reduce verbosity)
-                        let screen = cap
-                            .capture_with_logging(
-                                session,
-                                &format!("{session_name} - match {description} (outer {outer_attempt}/{OUTER_RETRIES}, inner {inner_attempt}/{INNER_RETRIES})"),
-                                false, // Don't log content on every attempt
-                            )
-                            .await?;
-                        last_screen = screen.clone();
-
-                        // Extract region to search based on line and column ranges
-                        let lines: Vec<&str> = screen.lines().collect();
-                        let total_lines = lines.len();
-
-                        let (start_line, end_line) =
-                            line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-                        let start_line = start_line.min(total_lines.saturating_sub(1));
-                        let end_line = end_line.min(total_lines.saturating_sub(1));
-
-                        let mut search_text = String::new();
-                        for line_idx in start_line..=end_line {
-                            if line_idx >= lines.len() {
-                                break;
-                            }
-                            let line = lines[line_idx];
-                            let line_text = if let Some((start_col, end_col)) = col_range {
-                                let chars: Vec<char> = line.chars().collect();
-                                let char_count = chars.len();
-                                if char_count == 0 {
-                                    String::new()
-                                } else {
-                                    let sc = (*start_col).min(char_count.saturating_sub(1));
-                                    let ec = (*end_col).min(char_count.saturating_sub(1));
-                                    chars[sc..=ec].iter().collect()
-                                }
-                            } else {
-                                line.to_string()
-                            };
-                            search_text.push_str(&line_text);
-                            search_text.push('\n');
-                        }
-
-                        // Try to match pattern
-                        if pattern.is_match(&search_text) {
-                            matched = true;
-                            break;
-                        } else {
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
-                                .await;
-                        }
-                    }
-
-                    // If matched in inner loop, break outer loop
-                    if matched {
-                        break;
-                    }
-
-                    // If we have retry_action and haven't exhausted outer retries, execute it
-                    if let Some(ref retry_actions) = retry_action {
-                        if outer_attempt < OUTER_RETRIES {
-                            // Recursively execute retry_action using Box::pin for async recursion
-                            Box::pin(execute_cursor_actions(
-                                session,
-                                cap,
-                                retry_actions,
-                                &format!("{session_name}_retry_{outer_attempt}"),
-                            ))
-                            .await?;
-
-                            // Add a small delay after retry_action before next attempt
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
-                                .await;
-                        }
-                    } else {
-                        // No retry_action, so we're done if not matched
-                        break;
-                    }
-                }
-
-                if !matched {
-                    // All retries failed - dump screen and return error with step position
-                    log::error!(
-                        "❌ Action Step {} FAILED: Pattern '{description}' NOT FOUND after {total_attempts} total attempts ({OUTER_RETRIES} outer × {INNER_RETRIES} inner)",
-                        idx + 1
-                    );
-                    log::error!("Expected pattern: {:?}", pattern.as_str());
-
-                    let lines: Vec<&str> = last_screen.lines().collect();
-                    let total_lines = lines.len();
-                    let (start_line, end_line) =
-                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-
-                    log::error!(
-                        "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
-                    );
-                    log::error!("Last screen content for {session_name}:");
-                    log::error!("\n{last_screen}\n");
-
-                    return Err(anyhow!(
-                        "Action Step {}: Pattern '{description}' not found in {session_name} after {total_attempts} attempts (lines {start_line}..={end_line}, cols {col_range:?})",
-                        idx + 1
-                    ));
-                }
-            }
 }
 
 /// Execution mode for cursor actions
@@ -249,7 +148,15 @@ pub async fn execute_cursor_actions<T: ExpectSession>(
     actions: &[CursorAction],
     session_name: &str,
 ) -> Result<()> {
-    execute_cursor_actions_with_mode(session, cap, actions, session_name, ActionExecutionMode::Normal, None).await
+    execute_cursor_actions_with_mode(
+        session,
+        cap,
+        actions,
+        session_name,
+        ActionExecutionMode::Normal,
+        None,
+    )
+    .await
 }
 
 /// Execute cursor actions with specified execution mode and optional mock status
@@ -260,12 +167,14 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
     actions: &[CursorAction],
     session_name: &str,
     mode: ActionExecutionMode,
-    mock_status: Option<&mut TuiStatus>,
+    mut mock_status: Option<&mut TuiStatus>,
 ) -> Result<()> {
     for (idx, action) in actions.iter().enumerate() {
         match action {
             // In screenshot mode, keyboard actions are skipped
-            CursorAction::PressArrow { direction, count } if mode == ActionExecutionMode::Normal => {
+            CursorAction::PressArrow { direction, count }
+                if mode == ActionExecutionMode::Normal =>
+            {
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
@@ -342,13 +251,135 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
             CursorAction::Sleep3s => {
                 sleep_3s().await;
             }
+            CursorAction::MatchPattern {
+                pattern,
+                description,
+                line_range,
+                col_range,
+                retry_action,
+            } if mode == ActionExecutionMode::Normal => {
+                const INNER_RETRIES: usize = 3;
+                const OUTER_RETRIES: usize = 3;
+                const RETRY_INTERVAL_MS: u64 = 1000;
+
+                let mut matched = false;
+                let mut last_screen = String::new();
+                let mut total_attempts = 0;
+
+                for outer_attempt in 1..=OUTER_RETRIES {
+                    for inner_attempt in 1..=INNER_RETRIES {
+                        total_attempts += 1;
+
+                        let screen = cap
+                            .capture_with_logging(
+                                session,
+                                &format!("{session_name} - match {description} (outer {outer_attempt}/{OUTER_RETRIES}, inner {inner_attempt}/{INNER_RETRIES})"),
+                                false,
+                            )
+                            .await?;
+                        last_screen = screen.clone();
+
+                        let lines: Vec<&str> = screen.lines().collect();
+                        let total_lines = lines.len();
+
+                        let (start_line, end_line) =
+                            line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+                        let start_line = start_line.min(total_lines.saturating_sub(1));
+                        let end_line = end_line.min(total_lines.saturating_sub(1));
+
+                        let mut search_text = String::new();
+                        for line_idx in start_line..=end_line {
+                            if line_idx >= lines.len() {
+                                break;
+                            }
+                            let line = lines[line_idx];
+                            let line_text = if let Some((start_col, end_col)) = col_range {
+                                let chars: Vec<char> = line.chars().collect();
+                                let char_count = chars.len();
+                                if char_count == 0 {
+                                    String::new()
+                                } else {
+                                    let sc = (*start_col).min(char_count.saturating_sub(1));
+                                    let ec = (*end_col).min(char_count.saturating_sub(1));
+                                    chars[sc..=ec].iter().collect()
+                                }
+                            } else {
+                                line.to_string()
+                            };
+                            search_text.push_str(&line_text);
+                            search_text.push('\n');
+                        }
+
+                        if pattern.is_match(&search_text) {
+                            matched = true;
+                            break;
+                        } else {
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
+                                .await;
+                        }
+                    }
+
+                    if matched {
+                        break;
+                    }
+
+                    if let Some(ref retry_actions) = retry_action {
+                        if outer_attempt < OUTER_RETRIES {
+                            Box::pin(execute_cursor_actions(
+                                session,
+                                cap,
+                                retry_actions,
+                                &format!("{session_name}_retry_{outer_attempt}"),
+                            ))
+                            .await?;
+
+                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
+                                .await;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                if !matched {
+                    log::error!(
+                        "❌ Action Step {} FAILED: Pattern '{description}' NOT FOUND after {total_attempts} total attempts",
+                        idx + 1
+                    );
+                    log::error!("Expected pattern: {:?}", pattern.as_str());
+
+                    let lines: Vec<&str> = last_screen.lines().collect();
+                    let total_lines = lines.len();
+                    let (start_line, end_line) =
+                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+
+                    log::error!(
+                        "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
+                    );
+                    log::error!("Last screen content for {session_name}:");
+                    log::error!("\n{last_screen}\n");
+
+                    return Err(anyhow!(
+                        "Action Step {}: Pattern '{description}' not found in {session_name} after {total_attempts} attempts",
+                        idx + 1
+                    ));
+                }
+            }
             CursorAction::MatchScreenCapture {
                 test_name,
                 step_name,
                 description,
                 line_range,
                 col_range,
+                placeholders,
             } => {
+                // In screenshot generation mode, register placeholders before capturing
+                if mode == ActionExecutionMode::GenerateScreenshots {
+                    if !placeholders.is_empty() {
+                        crate::placeholder::register_placeholder_values(placeholders);
+                    }
+                }
+
                 // Read the saved screen capture
                 let expected_screen = match read_screen_capture(test_name, step_name) {
                     Ok(content) => content,
@@ -416,6 +447,16 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                 let expected_region = extract_region(&expected_screen);
                 let current_region = extract_region(&current_screen);
 
+                // In verification mode, restore placeholders in expected before comparison
+                let expected_region =
+                    if mode == ActionExecutionMode::Normal && !placeholders.is_empty() {
+                        // Register placeholders with actual values before restoration
+                        crate::placeholder::register_placeholder_values(placeholders);
+                        crate::placeholder::restore_placeholders_for_verification(&expected_region)
+                    } else {
+                        expected_region
+                    };
+
                 // Compare the regions
                 if expected_region == current_region {
                     log::debug!("✅ Screen capture matched for '{}'", description);
@@ -447,22 +488,6 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                         test_name,
                         step_name
                     ));
-                }
-            }
-            CursorAction::DebugBreakpoint { description } => {
-                // Check if debug mode is enabled (set by main program based on --debug flag)
-                let debug_mode = std::env::var("DEBUG_MODE").is_ok();
-                if debug_mode {
-                    log::info!("🔴 DEBUG BREAKPOINT: {description}");
-
-                    // Capture and print current screen
-                    let screen = cap
-                        .capture(session, &format!("debug_breakpoint_{description}"))
-                        .await?;
-                    log::info!("📺 Current screen state:\n{screen}\n");
-                    log::info!("⏸️ Debug breakpoint reached (execution continues)");
-                } else {
-                    log::debug!("Debug breakpoint '{description}' skipped (DEBUG_MODE not set)");
                 }
             }
             CursorAction::CheckStatus {
@@ -508,6 +533,51 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                         idx + 1
                     ));
                 }
+            }
+            CursorAction::AssertUpdateStatus {
+                description,
+                updater,
+            } => {
+                if mode == ActionExecutionMode::GenerateScreenshots {
+                    // In screenshot generation mode, update the mock status
+                    if let Some(status) = mock_status.as_mut() {
+                        log::info!("🔄 Updating mock status: {}", description);
+                        updater(status);
+                    } else {
+                        log::warn!("⚠️  AssertUpdateStatus called without mock_status provided");
+                    }
+                } else {
+                    // In normal mode, this action is a no-op (status is managed by real TUI)
+                    log::debug!(
+                        "Skipping AssertUpdateStatus in normal mode: {}",
+                        description
+                    );
+                }
+            }
+            CursorAction::DebugBreakpoint { description } => {
+                // Check if debug mode is enabled
+                let debug_mode = std::env::var("DEBUG_MODE").is_ok();
+                if debug_mode && mode == ActionExecutionMode::Normal {
+                    log::info!("🔴 DEBUG BREAKPOINT: {description}");
+                    let screen = cap
+                        .capture(session, &format!("debug_breakpoint_{description}"))
+                        .await?;
+                    log::info!("📺 Current screen state:\n{screen}\n");
+                    log::info!("⏸️ Debug breakpoint reached (execution continues)");
+                } else {
+                    log::debug!("Debug breakpoint '{description}' skipped");
+                }
+            }
+            // Catch-all for keyboard actions in screenshot mode - skip them
+            _ if mode == ActionExecutionMode::GenerateScreenshots => {
+                log::debug!(
+                    "Skipping keyboard action in screenshot generation mode: {:?}",
+                    action
+                );
+            }
+            // Catch-all for any unhandled action patterns
+            _ => {
+                log::warn!("Unhandled action or action in wrong mode: {:?}", action);
             }
         }
 

@@ -3,7 +3,7 @@
 /// Tests TUI acting as Modbus Master (server) with E2E process as CLI Slave (client).
 use anyhow::Result;
 
-use super::super::common::{make_station_config, run_single_station_master_test, RegisterMode};
+use super::super::common::{make_station_config, run_detailed_single_master_test, RegisterMode};
 use aoba_ci_utils::{ExecutionMode, ScreenshotContext};
 
 /// Test 01: TUI Master with Coils mode (0x0000, length 10)
@@ -16,10 +16,13 @@ pub async fn test_tui_master_coils(
 
     let config = make_station_config(1, RegisterMode::Coils, 0x0000, 10, true, None);
 
-    let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "tui_master_coils".into(), "default".into());
+    let screenshot_ctx = ScreenshotContext::new(
+        execution_mode,
+        "single_station/master_modes/coils".into(),
+        "default".into(),
+    );
 
-    run_single_station_master_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_master_test(port1, port2, config, &screenshot_ctx).await
 }
 
 /// Test 02: TUI Master with Discrete Inputs/Writable Coils mode (0x0010, length 10)
@@ -34,11 +37,11 @@ pub async fn test_tui_master_discrete_inputs(
 
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
-        "tui_master_discrete_inputs".into(),
+        "single_station/master_modes/discrete_inputs".into(),
         "default".into(),
     );
 
-    run_single_station_master_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_master_test(port1, port2, config, &screenshot_ctx).await
 }
 
 /// Test 03: TUI Master with Holding Registers mode (0x0020, length 10)
@@ -53,11 +56,11 @@ pub async fn test_tui_master_holding_registers(
 
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
-        "tui_master_holding".into(),
+        "single_station/master_modes/holding".into(),
         "default".into(),
     );
 
-    run_single_station_master_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_master_test(port1, port2, config, &screenshot_ctx).await
 }
 
 /// Test 04: TUI Master with Input Registers/Writable Registers mode (0x0030, length 10)
@@ -70,8 +73,11 @@ pub async fn test_tui_master_input_registers(
 
     let config = make_station_config(1, RegisterMode::Input, 0x0030, 10, true, None);
 
-    let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "tui_master_input".into(), "default".into());
+    let screenshot_ctx = ScreenshotContext::new(
+        execution_mode,
+        "single_station/master_modes/input".into(),
+        "default".into(),
+    );
 
-    run_single_station_master_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_master_test(port1, port2, config, &screenshot_ctx).await
 }
