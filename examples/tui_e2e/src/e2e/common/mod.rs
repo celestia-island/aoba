@@ -150,10 +150,9 @@ pub mod validation;
 pub use config::{make_station_config, RegisterMode, StationConfig, StationMode};
 #[allow(unused_imports)]
 pub use execution::{
-    run_detailed_multi_master_test, run_detailed_multi_slave_test,
-    run_detailed_single_master_test, run_detailed_single_slave_test,
-    run_multi_station_master_test, run_multi_station_slave_test, run_single_station_master_test,
-    run_single_station_slave_test,
+    run_detailed_multi_master_test, run_detailed_multi_slave_test, run_detailed_single_master_test,
+    run_detailed_single_slave_test, run_multi_station_master_test, run_multi_station_slave_test,
+    run_single_station_master_test, run_single_station_slave_test,
 };
 #[allow(unused_imports)]
 pub use validation::*;

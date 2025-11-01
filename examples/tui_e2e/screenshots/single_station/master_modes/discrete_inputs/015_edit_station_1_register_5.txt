@@ -5,12 +5,12 @@
 │ ────────────────────────────────────────────────────────────────             │
 │ #1 - ID: 1                                                                   │
 │   Station ID            0x01 (1)                                             │
-│   Register Type         Coils(01)                                            │
-│   Start Address         0x0000 (0)                                           │
+│   Register Type         Discrete Inputs(02)                                  │
+│   Start Address         0x0010 (16)                                          │
 │   Register Length       0x000A (10)                                          │
-│     0x0000              {{0b#000}}  {{0b#001}}  OFF  OFF                                   │
-│     0x0004              OFF  OFF  OFF  OFF                                   │
-│     0x0008              OFF  OFF  ____ ____                                  │
+│     0x0010              {{0b#000}}  {{0b#001}}  {{0b#002}}  {{0b#003}}                                   │
+│     0x0014              {{0b#004}}  {{0b#005}}  OFF  OFF                                   │
+│     0x0018              OFF  OFF  ____ ____                                  │
 │                                                                              │
 │                                                                              │
 │                                                                              │

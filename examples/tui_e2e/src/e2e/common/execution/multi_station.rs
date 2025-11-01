@@ -388,7 +388,7 @@ pub async fn configure_multiple_stations<T: Expect + ExpectSession>(
 /// - [`run_multi_station_slave_test`]: Inverse test (CLI Masters, TUI Slaves)
 /// - [`configure_multiple_stations`]: Multi-station configuration
 /// - [`verify_master_data`]: Data verification for Masters
-/// - [`generate_random_coils`], [`generate_random_registers`]: Test data generators
+/// - [`generate_random_coils`], [`generate_random_registers`]: Test data generators (coils default to OFF)
 pub async fn run_multi_station_master_test(
     port1: &str,
     port2: &str,

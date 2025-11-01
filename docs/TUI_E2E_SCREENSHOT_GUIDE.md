@@ -3,6 +3,7 @@
 ## Overview
 
 The TUI E2E test framework now includes screenshot assertion capabilities that allow tests to:
+
 1. Generate reference screenshots from predicted TUI states
 2. Verify actual TUI output against reference screenshots during test execution
 3. Support placeholders for random values (e.g., register values) to avoid brittle tests
@@ -25,9 +26,9 @@ The TUI E2E test framework now includes screenshot assertion capabilities that a
    - Combines state prediction with screenshot capture
 
 4. **Placeholder System** (`packages/ci_utils/src/placeholder.rs`)
-   - Registers random values that will appear in screenshots
-   - Replaces them with placeholders like `{{0x#001}}` in reference files
-   - Restores actual values during verification
+    - Registers dynamic values that will appear in screenshots
+    - Replaces them with placeholders like `{{0x#001}}` or `{{0b#002}}` in reference files
+    - Restores actual values during verification (boolean placeholders scan sequential `OFF`/`ON` states)
 
 ## How It Works
 
@@ -137,6 +138,7 @@ cargo run --package tui_e2e -- --module tui_master_coils --generate-screenshots
 ```
 
 This creates screenshot files in:
+
 ```
 examples/tui_e2e/screenshots/
   └── tui_master_coils/
@@ -157,27 +159,34 @@ This verifies actual terminal output matches reference screenshots.
 
 ## Placeholder System for Random Values
 
-When tests use random data (e.g., register values), use placeholders to make screenshots portable:
+When tests use dynamic data (e.g., register values), use placeholders to keep screenshots deterministic. Boolean data defaults to `OFF` and is numbered by match order, so mixing placeholder kinds is safe:
 
 ```rust
-use aoba_ci_utils::{reset_snapshot_placeholders, register_snapshot_hex_values};
+use aoba_ci_utils::{
+    reset_snapshot_placeholders,
+    register_placeholder_values,
+    PlaceholderValue,
+};
 
 // At start of test
 reset_snapshot_placeholders();
 
-// Register random values that will appear
-let random_values = vec![0x1234, 0x5678, 0xABCD];
-register_snapshot_hex_values(&random_values);
+// Register values exactly in the order they appear in MatchScreenCapture
+register_placeholder_values(&[
+    PlaceholderValue::Hex(0x1234),
+    PlaceholderValue::Dec(42),
+    PlaceholderValue::Boolean(false), // sequentially replaces OFF entries
+]);
 
 // Screenshot will replace:
-//   "0x1234" → "{{0x#001}}"
-//   "0x5678" → "{{0x#002}}"
-//   "0xABCD" → "{{0x#003}}"
+//   "0x1234" → "{{0x#000}}"
+//   "42"    → "{{#001}}"
+//   "OFF"   → "{{0b#002}}"
 ```
 
 ## Directory Structure
 
-```
+```text
 examples/tui_e2e/screenshots/
   ├── tui_master_coils/
   │   └── default/
@@ -203,6 +212,7 @@ examples/tui_e2e/screenshots/
 ### "Reference screenshot not found"
 
 Generate screenshots first:
+
 ```bash
 cargo run --package tui_e2e -- --module <module_name> --generate-screenshots
 ```

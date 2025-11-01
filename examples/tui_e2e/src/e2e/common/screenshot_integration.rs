@@ -23,7 +23,7 @@ fn apply_station_to_state(
 ) -> TuiStatus {
     let mut state = state;
     let register_type = format!("{:?}", register_mode);
-    
+
     if is_master {
         state = add_master_station(
             state,
@@ -41,7 +41,7 @@ fn apply_station_to_state(
             register_count,
         );
     }
-    
+
     state
 }
 
@@ -54,7 +54,8 @@ pub async fn screenshot_after_modbus_panel<T: ExpectSession>(
 ) -> Result<()> {
     if let Some(ctx) = screenshot_ctx {
         let state = create_modbus_dashboard_state(port_name);
-        ctx.capture_or_verify(session, cap, state, "modbus_dashboard").await?;
+        ctx.capture_or_verify(session, cap, state, "modbus_dashboard")
+            .await?;
     }
     Ok(())
 }
@@ -82,8 +83,9 @@ pub async fn screenshot_after_station_config<T: ExpectSession>(
             register_count,
             is_master,
         );
-        
-        ctx.capture_or_verify(session, cap, state, "station_configured").await?;
+
+        ctx.capture_or_verify(session, cap, state, "station_configured")
+            .await?;
     }
     Ok(())
 }
@@ -112,8 +114,9 @@ pub async fn screenshot_after_port_enabled<T: ExpectSession>(
             is_master,
         );
         let state = enable_port(state);
-        
-        ctx.capture_or_verify(session, cap, state, "port_enabled").await?;
+
+        ctx.capture_or_verify(session, cap, state, "port_enabled")
+            .await?;
     }
     Ok(())
 }

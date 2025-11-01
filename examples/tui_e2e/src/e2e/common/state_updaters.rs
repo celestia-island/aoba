@@ -19,7 +19,7 @@ pub fn add_discovered_ports(state: &mut TuiStatus, port1: &str, port2: &str) {
         modbus_slaves: Vec::new(),
         log_count: 0,
     });
-    
+
     // Add port2
     state.ports.push(TuiPort {
         name: port2.to_string(),

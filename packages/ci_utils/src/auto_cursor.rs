@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
-use regex::Regex;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::{sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture, TuiStatus};
+use crate::{
+    sleep_1s, sleep_3s, ArrowKey, ExpectKeyExt, ExpectSession, TerminalCapture, TuiStatus,
+};
 
 /// Read a screen capture from file
 fn read_screen_capture(test_name: &str, step_name: &str) -> Result<String> {
@@ -23,13 +24,13 @@ fn write_screen_capture(test_name: &str, step_name: &str, content: &str) -> Resu
     // Support hierarchical test names (e.g., "single_station/master_modes")
     let test_path = PathBuf::from(test_name);
     let dir_path = Path::new("examples/tui_e2e/screenshots").join(test_path);
-    
+
     // Create directory if it doesn't exist
     fs::create_dir_all(&dir_path)?;
-    
+
     let filepath = dir_path.join(format!("{}.txt", step_name));
     fs::write(&filepath, content)?;
-    
+
     log::info!("💾 Wrote screenshot: {}", filepath.display());
     Ok(())
 }
@@ -147,7 +148,15 @@ pub async fn execute_cursor_actions<T: ExpectSession>(
     actions: &[CursorAction],
     session_name: &str,
 ) -> Result<()> {
-    execute_cursor_actions_with_mode(session, cap, actions, session_name, ActionExecutionMode::Normal, None).await
+    execute_cursor_actions_with_mode(
+        session,
+        cap,
+        actions,
+        session_name,
+        ActionExecutionMode::Normal,
+        None,
+    )
+    .await
 }
 
 /// Execute cursor actions with specified execution mode and optional mock status
@@ -163,7 +172,9 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
     for (idx, action) in actions.iter().enumerate() {
         match action {
             // In screenshot mode, keyboard actions are skipped
-            CursorAction::PressArrow { direction, count } if mode == ActionExecutionMode::Normal => {
+            CursorAction::PressArrow { direction, count }
+                if mode == ActionExecutionMode::Normal =>
+            {
                 for _ in 0..*count {
                     session.send_arrow(*direction)?;
                 }
@@ -437,13 +448,14 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                 let current_region = extract_region(&current_screen);
 
                 // In verification mode, restore placeholders in expected before comparison
-                let expected_region = if mode == ActionExecutionMode::Normal && !placeholders.is_empty() {
-                    // Register placeholders with actual values before restoration
-                    crate::placeholder::register_placeholder_values(placeholders);
-                    crate::placeholder::restore_placeholders_for_verification(&expected_region)
-                } else {
-                    expected_region
-                };
+                let expected_region =
+                    if mode == ActionExecutionMode::Normal && !placeholders.is_empty() {
+                        // Register placeholders with actual values before restoration
+                        crate::placeholder::register_placeholder_values(placeholders);
+                        crate::placeholder::restore_placeholders_for_verification(&expected_region)
+                    } else {
+                        expected_region
+                    };
 
                 // Compare the regions
                 if expected_region == current_region {
@@ -522,7 +534,10 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                     ));
                 }
             }
-            CursorAction::AssertUpdateStatus { description, updater } => {
+            CursorAction::AssertUpdateStatus {
+                description,
+                updater,
+            } => {
                 if mode == ActionExecutionMode::GenerateScreenshots {
                     // In screenshot generation mode, update the mock status
                     if let Some(status) = mock_status.as_mut() {
@@ -533,7 +548,10 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                     }
                 } else {
                     // In normal mode, this action is a no-op (status is managed by real TUI)
-                    log::debug!("Skipping AssertUpdateStatus in normal mode: {}", description);
+                    log::debug!(
+                        "Skipping AssertUpdateStatus in normal mode: {}",
+                        description
+                    );
                 }
             }
             CursorAction::DebugBreakpoint { description } => {
@@ -552,7 +570,10 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
             }
             // Catch-all for keyboard actions in screenshot mode - skip them
             _ if mode == ActionExecutionMode::GenerateScreenshots => {
-                log::debug!("Skipping keyboard action in screenshot generation mode: {:?}", action);
+                log::debug!(
+                    "Skipping keyboard action in screenshot generation mode: {:?}",
+                    action
+                );
             }
             // Catch-all for any unhandled action patterns
             _ => {

@@ -42,9 +42,19 @@ struct PlaceholderEntry {
     actual: String,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct PlaceholderState {
     entries: Vec<PlaceholderEntry>,
+    next_index: usize,
+}
+
+impl Default for PlaceholderState {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            next_index: 0,
+        }
+    }
 }
 
 static PLACEHOLDER_STATE: Lazy<Mutex<PlaceholderState>> =
@@ -73,13 +83,16 @@ impl PlaceholderKind {
 pub fn reset_snapshot_placeholders() {
     let mut state = PLACEHOLDER_STATE.lock();
     state.entries.clear();
+    state.next_index = 0;
 }
 
 /// Register placeholder values that will appear in snapshot output.
 /// Index is based on order in the array (0, 1, 2, ...)
 pub fn register_placeholder_values(values: &[PlaceholderValue]) {
     let mut state = PLACEHOLDER_STATE.lock();
-    for (idx, value) in values.iter().enumerate() {
+    for value in values {
+        let idx = state.next_index;
+        state.next_index += 1;
         state.entries.push(PlaceholderEntry {
             index: idx,
             kind: value.kind(),
@@ -91,7 +104,9 @@ pub fn register_placeholder_values(values: &[PlaceholderValue]) {
 /// Register hexadecimal values that will appear in snapshot output.
 pub fn register_snapshot_hex_values(values: &[u16]) {
     let mut state = PLACEHOLDER_STATE.lock();
-    for (idx, &value) in values.iter().enumerate() {
+    for &value in values {
+        let idx = state.next_index;
+        state.next_index += 1;
         state.entries.push(PlaceholderEntry {
             index: idx,
             kind: PlaceholderKind::Hex,
@@ -104,7 +119,9 @@ pub fn register_snapshot_hex_values(values: &[u16]) {
 #[deprecated(note = "Use register_placeholder_values with PlaceholderValue::Boolean instead")]
 pub fn register_snapshot_switch_values(values: &[u16]) {
     let mut state = PLACEHOLDER_STATE.lock();
-    for (idx, &value) in values.iter().enumerate() {
+    for &value in values {
+        let idx = state.next_index;
+        state.next_index += 1;
         let text = if value != 0 { "ON" } else { "OFF" };
         state.entries.push(PlaceholderEntry {
             index: idx,
@@ -128,16 +145,23 @@ pub(crate) fn apply_placeholders_for_generation(screen: &str) -> String {
     }
 
     let mut result = screen.to_owned();
-    
-    // Process entries in order
+
+    // Track scan positions per kind to ensure sequential replacement
+    let mut bool_search_offset = 0usize;
+
     for entry in &entries {
         let placeholder = entry.kind.build_placeholder(entry.index);
-        
+
         match entry.kind {
             PlaceholderKind::Boolean => {
-                // For Boolean: Find the next occurrence of the actual value ("ON" or "OFF")
-                if let Some(pos) = result.find(&entry.actual) {
-                    result.replace_range(pos..pos + entry.actual.len(), &placeholder);
+                // For Boolean: sequentially scan for OFF/ON occurrences without random data
+                if let Some(relative_pos) = result[bool_search_offset..].find(&entry.actual) {
+                    let absolute_pos = bool_search_offset + relative_pos;
+                    result.replace_range(
+                        absolute_pos..absolute_pos + entry.actual.len(),
+                        &placeholder,
+                    );
+                    bool_search_offset = absolute_pos + placeholder.len();
                 } else {
                     warn!(
                         "Boolean placeholder target '{}' not found for index {} during generation",
@@ -150,7 +174,10 @@ pub(crate) fn apply_placeholders_for_generation(screen: &str) -> String {
                 let search_start = result.find("  0x").unwrap_or(0);
                 if let Some(pos) = result[search_start..].find(&entry.actual) {
                     let absolute_pos = search_start + pos;
-                    result.replace_range(absolute_pos..absolute_pos + entry.actual.len(), &placeholder);
+                    result.replace_range(
+                        absolute_pos..absolute_pos + entry.actual.len(),
+                        &placeholder,
+                    );
                 } else if let Some(pos) = result.find(&entry.actual) {
                     // Fallback: search from beginning
                     result.replace_range(pos..pos + entry.actual.len(), &placeholder);
@@ -182,7 +209,7 @@ pub(crate) fn restore_placeholders_for_verification(screen: &str) -> String {
 
     for entry in &entries {
         let placeholder = entry.kind.build_placeholder(entry.index);
-        
+
         if let Some(idx) = result.find(&placeholder) {
             result.replace_range(idx..idx + placeholder.len(), &entry.actual);
         } else {

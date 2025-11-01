@@ -7,8 +7,8 @@ pub mod single_station;
 pub use cli::{send_data_from_cli_master, verify_master_data, verify_slave_data};
 #[allow(unused_imports)]
 pub use detailed::{
-    run_detailed_multi_master_test, run_detailed_multi_slave_test,
-    run_detailed_single_master_test, run_detailed_single_slave_test,
+    run_detailed_multi_master_test, run_detailed_multi_slave_test, run_detailed_single_master_test,
+    run_detailed_single_slave_test,
 };
 #[allow(unused_imports)]
 pub use multi_station::{

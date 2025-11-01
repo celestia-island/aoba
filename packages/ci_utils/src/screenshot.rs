@@ -51,8 +51,7 @@ impl ScreenshotContext {
     /// * `test_name` - Test name for organizing screenshots (no longer used for directory structure)
     pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Self {
         // Remove the extra "default" folder layer - screenshots go directly under module name
-        let screenshot_dir = PathBuf::from("examples/tui_e2e/screenshots")
-            .join(&module_name);
+        let screenshot_dir = PathBuf::from("examples/tui_e2e/screenshots").join(&module_name);
 
         Self {
             mode,

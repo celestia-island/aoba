@@ -3,7 +3,6 @@
 /// This module provides test orchestrators that capture screenshots at every atomic
 /// operation, as requested in feedback. It replaces the high-level orchestrators
 /// with detailed step-by-step capture.
-
 use anyhow::Result;
 
 use super::super::{
@@ -59,7 +58,7 @@ pub async fn run_detailed_multi_master_test(
         .await?;
 
     log::info!("✅ Detailed multi-station Master test completed with comprehensive screenshots");
-    
+
     // Terminate session (only in normal mode)
     if !is_generation_mode {
         terminate_session(session, "TUI").await?;
@@ -104,7 +103,7 @@ pub async fn run_detailed_multi_slave_test(
         .await?;
 
     log::info!("✅ Detailed multi-station Slave test completed with comprehensive screenshots");
-    
+
     // Terminate session (only in normal mode)
     if !is_generation_mode {
         terminate_session(session, "TUI").await?;

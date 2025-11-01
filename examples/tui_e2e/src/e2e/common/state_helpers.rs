@@ -124,7 +124,7 @@ pub fn increment_log_count(state: TuiStatus, count: usize) -> TuiStatus {
 }
 
 /// Update a register value for a station
-/// 
+///
 /// # Arguments
 /// * `state` - Current TUI status
 /// * `_station_index` - Index of the station (0-based)

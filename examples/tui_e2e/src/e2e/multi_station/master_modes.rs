@@ -26,13 +26,7 @@ pub async fn test_tui_multi_master_mixed_register_types(
         "default".into(),
     );
 
-    run_detailed_multi_master_test(
-        port1,
-        port2,
-        &master_configs,
-        &screenshot_ctx,
-    )
-    .await
+    run_detailed_multi_master_test(port1, port2, &master_configs, &screenshot_ctx).await
 }
 
 /// Test: Spaced Addresses - Station 1 at 0x0000, Station 2 at 0x0100
@@ -55,13 +49,7 @@ pub async fn test_tui_multi_master_spaced_addresses(
         "default".into(),
     );
 
-    run_detailed_multi_master_test(
-        port1,
-        port2,
-        &master_configs,
-        &screenshot_ctx,
-    )
-    .await
+    run_detailed_multi_master_test(port1, port2, &master_configs, &screenshot_ctx).await
 }
 
 /// Test: Mixed Station IDs - Station 1 ID=1, Station 2 ID=2
@@ -84,11 +72,5 @@ pub async fn test_tui_multi_master_mixed_station_ids(
         "default".into(),
     );
 
-    run_detailed_multi_master_test(
-        port1,
-        port2,
-        &master_configs,
-        &screenshot_ctx,
-    )
-    .await
+    run_detailed_multi_master_test(port1, port2, &master_configs, &screenshot_ctx).await
 }

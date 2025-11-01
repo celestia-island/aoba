@@ -16,8 +16,11 @@ pub async fn test_tui_master_coils(
 
     let config = make_station_config(1, RegisterMode::Coils, 0x0000, 10, true, None);
 
-    let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "single_station/master_modes/coils".into(), "default".into());
+    let screenshot_ctx = ScreenshotContext::new(
+        execution_mode,
+        "single_station/master_modes/coils".into(),
+        "default".into(),
+    );
 
     run_detailed_single_master_test(port1, port2, config, &screenshot_ctx).await
 }
@@ -70,8 +73,11 @@ pub async fn test_tui_master_input_registers(
 
     let config = make_station_config(1, RegisterMode::Input, 0x0030, 10, true, None);
 
-    let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "single_station/master_modes/input".into(), "default".into());
+    let screenshot_ctx = ScreenshotContext::new(
+        execution_mode,
+        "single_station/master_modes/input".into(),
+        "default".into(),
+    );
 
     run_detailed_single_master_test(port1, port2, config, &screenshot_ctx).await
 }
