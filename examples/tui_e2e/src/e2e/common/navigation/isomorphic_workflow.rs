@@ -287,8 +287,10 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             .await?;
 
         // Step 3.5: Navigate to and edit registers with placeholder values
-        // Only edit registers in master mode - slaves don't modify registers during configuration
+        // Master mode: iteratively edit each register with keyboard actions
+        // Slave mode: batch update all registers in state at once (passive listening behavior)
         if is_master {
+            // Master mode: Edit registers one by one with keyboard interaction
             // After configuring register count, cursor automatically moves to register grid
             if !is_generation_mode {
                 execute_cursor_actions(
@@ -382,6 +384,54 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
                     )
                     .await?;
             }
+        } else {
+            // Slave mode: Batch update all 10 registers in state at once (passive listening behavior)
+            // No keyboard actions - just simulate receiving data from master
+            let num_registers_to_update = std::cmp::min(10, config.register_count() as usize);
+            
+            // Generate random values for Holding/Input, or use alternating booleans for Coils/DiscreteInputs
+            let random_values: Vec<u16> = if matches!(config.register_mode(), RegisterMode::Holding | RegisterMode::Input) {
+                let seed_str = format!("{}_{}_{}", port_name, idx, config.register_mode() as u8);
+                let seed = seed_str.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                let mut rng = StdRng::seed_from_u64(seed);
+                
+                (0..num_registers_to_update)
+                    .map(|_| rng.gen_range(1000..60000))
+                    .collect()
+            } else {
+                // For Coils/DiscreteInputs: alternating ON/OFF pattern
+                (0..num_registers_to_update)
+                    .map(|i| if i % 2 == 0 { 1 } else { 0 })
+                    .collect()
+            };
+            
+            // Register all placeholders at once for sequential numbering
+            let placeholders: Vec<PlaceholderValue> = random_values.iter().map(|&val| {
+                match config.register_mode() {
+                    RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                        PlaceholderValue::Boolean(val != 0)
+                    }
+                    RegisterMode::Holding | RegisterMode::Input => {
+                        PlaceholderValue::Hex(val)
+                    }
+                }
+            }).collect();
+            register_placeholder_values(&placeholders);
+            
+            // Batch update all registers in state
+            for (reg_idx, &value) in random_values.iter().enumerate() {
+                state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
+            }
+            
+            // Single screenshot capturing all 10 registers with placeholders
+            screenshot_ctx
+                .capture_or_verify(
+                    session,
+                    cap,
+                    state.clone(),
+                    &format!("station_{}_all_registers_updated", idx + 1),
+                )
+                .await?;
         }
 
         // Return to top for next station
