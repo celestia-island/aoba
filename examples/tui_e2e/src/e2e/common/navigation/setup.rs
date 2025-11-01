@@ -104,8 +104,21 @@ pub async fn setup_tui_test(
     if let Some(ctx) = screenshot_ctx {
         let mut state = create_entry_state();
         state_updaters::add_discovered_ports(&mut state, port1, _port2);
-        ctx.capture_or_verify(&mut tui_session, &mut tui_cap, state, "entry")
+        let entry_filename = ctx
+            .capture_or_verify(&mut tui_session, &mut tui_cap, state, "entry")
             .await?;
+
+        if !is_generation_mode {
+            let entry_step_name = entry_filename.trim_end_matches(".txt").to_string();
+            TuiStep::new("verify_entry_screen")
+                .with_assertions(vec![ScreenAssertion::capture(ScreenCaptureSpec::new(
+                    ctx.module_path().to_string(),
+                    entry_step_name,
+                    "Entry screen matches reference",
+                ))])
+                .run(&mut tui_session, &mut tui_cap)
+                .await?;
+        }
     }
 
     // Navigate to ConfigPanel (only in normal mode)
@@ -125,13 +138,26 @@ pub async fn setup_tui_test(
 
     // Generate/verify config_panel screenshot
     if let Some(ctx) = screenshot_ctx {
-        ctx.capture_or_verify(
-            &mut tui_session,
-            &mut tui_cap,
-            create_config_panel_state(port1),
-            "config_panel",
-        )
-        .await?;
+        let config_filename = ctx
+            .capture_or_verify(
+                &mut tui_session,
+                &mut tui_cap,
+                create_config_panel_state(port1),
+                "config_panel",
+            )
+            .await?;
+
+        if !is_generation_mode {
+            let step_name = config_filename.trim_end_matches(".txt").to_string();
+            TuiStep::new("verify_config_panel")
+                .with_assertions(vec![ScreenAssertion::capture(ScreenCaptureSpec::new(
+                    ctx.module_path().to_string(),
+                    step_name,
+                    "Config panel matches reference",
+                ))])
+                .run(&mut tui_session, &mut tui_cap)
+                .await?;
+        }
     }
 
     log::info!("✅ TUI test environment ready");
