@@ -6,11 +6,11 @@
 │ #1 - ID: 1                                                                   │
 │   Station ID            0x01 (1)                                             │
 │   Register Type         Holding Registers(03)                                │
-│   Start Address         0x0020 (32)                                          │
+│   Start Address         0x0000 (0)                                           │
 │   Register Length       0x000A (10)                                          │
-│     0x0020              0x0000 0x0000 0x0000 0x0000                          │
-│     0x0024              0x0000 0x0000 0x0000 0x0000                          │
-│     0x0028              0x0000 0x0000 ______ ______                          │
+│     0x0000              0x0000 0x0000 0x0000 0x0000                          │
+│     0x0004              0x0000 0x0000 0x0000 0x0000                          │
+│     0x0008              0x0000 0x0000 ______ ______                          │
 │                                                                              │
 │                                                                              │
 │                                                                              │
