@@ -3,7 +3,7 @@
 /// Tests TUI acting as Modbus Master with multiple stations configured.
 use anyhow::Result;
 
-use super::super::common::{make_station_config, run_multi_station_master_test, RegisterMode};
+use super::super::common::{make_station_config, run_detailed_multi_master_test, RegisterMode};
 use aoba_ci_utils::{ExecutionMode, ScreenshotContext};
 
 /// Test: Mixed Register Types - Station 1 Coils, Station 2 Holding
@@ -20,22 +20,16 @@ pub async fn test_tui_multi_master_mixed_register_types(
         make_station_config(1, RegisterMode::Holding, 0x0000, 10, true, None),
     ];
 
-    let slave_configs = vec![
-        make_station_config(1, RegisterMode::Coils, 0x0000, 10, false, None),
-        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
-    ];
-
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
         "tui_multi_master_mixed_types".into(),
         "default".into(),
     );
 
-    run_multi_station_master_test(
+    run_detailed_multi_master_test(
         port1,
         port2,
         &master_configs,
-        &slave_configs,
         &screenshot_ctx,
     )
     .await
@@ -55,22 +49,16 @@ pub async fn test_tui_multi_master_spaced_addresses(
         make_station_config(1, RegisterMode::Holding, 0x0100, 10, true, None),
     ];
 
-    let slave_configs = vec![
-        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
-        make_station_config(1, RegisterMode::Holding, 0x0100, 10, false, None),
-    ];
-
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
         "tui_multi_master_spaced_addresses".into(),
         "default".into(),
     );
 
-    run_multi_station_master_test(
+    run_detailed_multi_master_test(
         port1,
         port2,
         &master_configs,
-        &slave_configs,
         &screenshot_ctx,
     )
     .await
@@ -90,22 +78,16 @@ pub async fn test_tui_multi_master_mixed_station_ids(
         make_station_config(2, RegisterMode::Holding, 0x0000, 10, true, None),
     ];
 
-    let slave_configs = vec![
-        make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None),
-        make_station_config(2, RegisterMode::Holding, 0x0000, 10, false, None),
-    ];
-
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
         "tui_multi_master_mixed_ids".into(),
         "default".into(),
     );
 
-    run_multi_station_master_test(
+    run_detailed_multi_master_test(
         port1,
         port2,
         &master_configs,
-        &slave_configs,
         &screenshot_ctx,
     )
     .await
