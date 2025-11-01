@@ -37,12 +37,16 @@ pub async fn run_detailed_multi_master_test(
 
     reset_snapshot_placeholders();
 
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+
     // Steps 0-1: Setup (captures entry and config_panel)
     let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
 
-    // Step 2: Navigate to Modbus panel
-    navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
-    wait_for_tui_page("ModbusDashboard", 10, None).await?;
+    // Step 2: Navigate to Modbus panel (only in normal mode)
+    if !is_generation_mode {
+        navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
+        wait_for_tui_page("ModbusDashboard", 10, None).await?;
+    }
 
     // Screenshot: Initial ModbusDashboard
     let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
@@ -50,14 +54,16 @@ pub async fn run_detailed_multi_master_test(
         .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
         .await?;
 
-    // Steps 3-N: Configure stations with detailed screenshots
+    // Steps 3-N: Configure stations with detailed screenshots (isomorphic workflow)
     configure_stations_with_screenshots(&mut session, &mut cap, port1, configs, screenshot_ctx)
         .await?;
 
     log::info!("✅ Detailed multi-station Master test completed with comprehensive screenshots");
     
-    // Terminate session
-    terminate_session(session, "TUI").await?;
+    // Terminate session (only in normal mode)
+    if !is_generation_mode {
+        terminate_session(session, "TUI").await?;
+    }
 
     Ok(())
 }
@@ -76,12 +82,16 @@ pub async fn run_detailed_multi_slave_test(
 
     reset_snapshot_placeholders();
 
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+
     // Steps 0-1: Setup (captures entry and config_panel)
     let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
 
-    // Step 2: Navigate to Modbus panel
-    navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
-    wait_for_tui_page("ModbusDashboard", 10, None).await?;
+    // Step 2: Navigate to Modbus panel (only in normal mode)
+    if !is_generation_mode {
+        navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
+        wait_for_tui_page("ModbusDashboard", 10, None).await?;
+    }
 
     // Screenshot: Initial ModbusDashboard
     let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
@@ -89,14 +99,16 @@ pub async fn run_detailed_multi_slave_test(
         .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
         .await?;
 
-    // Steps 3-N: Configure stations with detailed screenshots
+    // Steps 3-N: Configure stations with detailed screenshots (isomorphic workflow)
     configure_stations_with_screenshots(&mut session, &mut cap, port1, configs, screenshot_ctx)
         .await?;
 
     log::info!("✅ Detailed multi-station Slave test completed with comprehensive screenshots");
     
-    // Terminate session
-    terminate_session(session, "TUI").await?;
+    // Terminate session (only in normal mode)
+    if !is_generation_mode {
+        terminate_session(session, "TUI").await?;
+    }
 
     Ok(())
 }

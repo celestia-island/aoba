@@ -78,40 +78,52 @@ pub async fn setup_tui_test(
 ) -> Result<(impl ExpectSession, TerminalCapture)> {
     log::info!("🔧 Setting up TUI test environment for port {port1}");
 
-    if !port_exists(port1) {
+    // Check if we're in generation mode
+    let is_generation_mode = screenshot_ctx
+        .map(|ctx| ctx.mode() == ExecutionMode::GenerateScreenshots)
+        .unwrap_or(false);
+
+    if !port_exists(port1) && !is_generation_mode {
         return Err(anyhow!("Port {port1} does not exist"));
     }
 
+    // Start TUI session (even in generation mode, but we won't interact with it much)
     log::info!("Starting TUI in debug mode with --no-config-cache...");
     let mut tui_session =
         spawn_expect_session(&["--tui", "--debug-ci-e2e-test", "--no-config-cache"])?;
     let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
 
-    sleep_3s().await;
+    // Only wait for pages in normal mode
+    if !is_generation_mode {
+        sleep_3s().await;
+        log::info!("Waiting for TUI Entry page...");
+        wait_for_tui_page("Entry", 10, None).await?;
+    }
 
-    log::info!("Waiting for TUI Entry page...");
-    wait_for_tui_page("Entry", 10, None).await?;
-
+    // Generate/verify entry screenshot
     if let Some(ctx) = screenshot_ctx {
         let mut state = create_entry_state();
-        // Add discovered ports to the entry state
         state_updaters::add_discovered_ports(&mut state, port1, _port2);
         ctx.capture_or_verify(&mut tui_session, &mut tui_cap, state, "entry")
             .await?;
     }
 
-    log::info!("Navigating to ConfigPanel...");
-    let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
-    execute_cursor_actions(
-        &mut tui_session,
-        &mut tui_cap,
-        &actions,
-        "enter_config_panel",
-    )
-    .await?;
+    // Navigate to ConfigPanel (only in normal mode)
+    if !is_generation_mode {
+        log::info!("Navigating to ConfigPanel...");
+        let actions = vec![CursorAction::PressEnter, CursorAction::Sleep1s];
+        execute_cursor_actions(
+            &mut tui_session,
+            &mut tui_cap,
+            &actions,
+            "enter_config_panel",
+        )
+        .await?;
 
-    wait_for_tui_page("ConfigPanel", 10, None).await?;
+        wait_for_tui_page("ConfigPanel", 10, None).await?;
+    }
 
+    // Generate/verify config_panel screenshot
     if let Some(ctx) = screenshot_ctx {
         ctx.capture_or_verify(
             &mut tui_session,
