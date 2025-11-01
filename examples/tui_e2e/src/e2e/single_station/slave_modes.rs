@@ -17,7 +17,7 @@ pub async fn test_tui_slave_coils(
     let config = make_station_config(1, RegisterMode::Coils, 0x0100, 10, false, None);
 
     let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "tui_slave_coils".into(), "default".into());
+        ScreenshotContext::new(execution_mode, "single_station/slave_modes/coils".into(), "default".into());
 
     run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
 }
@@ -34,7 +34,7 @@ pub async fn test_tui_slave_discrete_inputs(
 
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
-        "tui_slave_discrete_inputs".into(),
+        "single_station/slave_modes/discrete_inputs".into(),
         "default".into(),
     );
 
@@ -52,7 +52,7 @@ pub async fn test_tui_slave_holding_registers(
     let config = make_station_config(1, RegisterMode::Holding, 0x0300, 10, false, None);
 
     let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "tui_slave_holding".into(), "default".into());
+        ScreenshotContext::new(execution_mode, "single_station/slave_modes/holding".into(), "default".into());
 
     run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
 }
@@ -68,7 +68,7 @@ pub async fn test_tui_slave_input_registers(
     let config = make_station_config(1, RegisterMode::Input, 0x0400, 10, false, None);
 
     let screenshot_ctx =
-        ScreenshotContext::new(execution_mode, "tui_slave_input".into(), "default".into());
+        ScreenshotContext::new(execution_mode, "single_station/slave_modes/input".into(), "default".into());
 
     run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
 }

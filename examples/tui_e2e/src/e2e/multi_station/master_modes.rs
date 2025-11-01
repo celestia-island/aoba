@@ -22,7 +22,7 @@ pub async fn test_tui_multi_master_mixed_register_types(
 
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
-        "tui_multi_master_mixed_types".into(),
+        "multi_station/master_modes/mixed_types".into(),
         "default".into(),
     );
 
@@ -51,7 +51,7 @@ pub async fn test_tui_multi_master_spaced_addresses(
 
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
-        "tui_multi_master_spaced_addresses".into(),
+        "multi_station/master_modes/spaced_addresses".into(),
         "default".into(),
     );
 
@@ -80,7 +80,7 @@ pub async fn test_tui_multi_master_mixed_station_ids(
 
     let screenshot_ctx = ScreenshotContext::new(
         execution_mode,
-        "tui_multi_master_mixed_ids".into(),
+        "multi_station/master_modes/mixed_ids".into(),
         "default".into(),
     );
 
