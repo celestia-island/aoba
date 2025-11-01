@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
@@ -20,8 +22,6 @@ use crate::{
         },
     },
 };
-
-use anyhow::Result;
 
 /// Helper function to derive selection from page state (entry page specific)
 pub fn derive_selection_from_page(

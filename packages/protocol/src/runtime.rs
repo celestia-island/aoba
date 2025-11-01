@@ -1,11 +1,11 @@
 use anyhow::Result;
-use flume::{Receiver, Sender};
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+use flume::{Receiver, Sender};
 use serialport::{DataBits, Parity, SerialPort, StopBits};
 
 use crate::status::types::port::{SerialConfig, SerialParity};

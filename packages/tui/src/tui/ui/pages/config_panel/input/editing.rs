@@ -3,6 +3,7 @@ use strum::IntoEnumIterator;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
+use super::navigation::sanitize_configpanel_cursor;
 use crate::i18n::lang;
 use crate::tui::status::types::{
     self,
@@ -11,8 +12,6 @@ use crate::tui::status::types::{
 };
 use crate::tui::status::{read_status, write_status};
 use crate::tui::utils::bus::{Bus, UiToCore};
-
-use super::navigation::sanitize_configpanel_cursor;
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("ConfigPanel::handle_input: key={:?}", key.code);

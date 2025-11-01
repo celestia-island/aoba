@@ -1,14 +1,13 @@
-pub mod types;
-
-mod util;
-pub use util::*;
-
 pub mod debug_dump;
+pub mod types;
+mod util;
 
 use anyhow::{anyhow, Result};
 use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 use std::sync::Arc;
+
+pub use util::*;
 
 /// Generic read-only accessor for status with an explicit static reference.
 ///

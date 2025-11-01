@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use clap::ArgMatches;
 use std::{
     cell::RefCell,
     collections::{hash_map::DefaultHasher, HashMap},
@@ -8,7 +9,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
 use serialport::SerialPort;
 
