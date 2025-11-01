@@ -75,6 +75,7 @@ pub fn add_master_station(
                 register_type: register_type.to_string(),
                 start_address,
                 register_count,
+                registers: vec![0; register_count],  // Initialize with zeros
             });
         }
     })
@@ -95,6 +96,7 @@ pub fn add_slave_station(
                 register_type: register_type.to_string(),
                 start_address,
                 register_count,
+                registers: vec![0; register_count],  // Initialize with zeros
             });
         }
     })
@@ -140,18 +142,22 @@ pub fn update_register_value(
 ) -> TuiStatus {
     apply_state_change(state, |s| {
         if let Some(port) = s.ports.first_mut() {
-            let stations = if is_master {
-                &mut port.modbus_masters
-            } else {
-                &mut port.modbus_slaves
-            };
-
-            if let Some(station) = stations.get_mut(station_index) {
-                // Ensure registers vec is large enough
-                while station.registers.len() <= register_index {
-                    station.registers.push(0);
+            if is_master {
+                if let Some(station) = port.modbus_masters.get_mut(station_index) {
+                    // Ensure registers vec is large enough
+                    while station.registers.len() <= register_index {
+                        station.registers.push(0);
+                    }
+                    station.registers[register_index] = value;
                 }
-                station.registers[register_index] = value;
+            } else {
+                if let Some(station) = port.modbus_slaves.get_mut(station_index) {
+                    // Ensure registers vec is large enough
+                    while station.registers.len() <= register_index {
+                        station.registers.push(0);
+                    }
+                    station.registers[register_index] = value;
+                }
             }
         }
     })

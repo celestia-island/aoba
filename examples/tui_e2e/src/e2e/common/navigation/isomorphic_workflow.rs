@@ -287,98 +287,101 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             .await?;
 
         // Step 3.5: Navigate to and edit registers with placeholder values
-        // After configuring register count, cursor automatically moves to register grid
-        if !is_generation_mode {
-            execute_cursor_actions(
-                session,
-                cap,
-                &[CursorAction::Sleep1s],
-                "wait_for_register_grid",
-            )
-            .await?;
-        }
-
-        // Edit 10 registers per station for single-station tests
-        // (For multi-station tests, we'll handle more registers)
-        let num_registers_to_edit = std::cmp::min(10, config.register_count() as usize);
-
-        // For Holding/Input register types, create random number array
-        // Use deterministic seed for reproducibility: based on port name and station index
-        let random_values: Vec<u16> = if matches!(config.register_mode(), RegisterMode::Holding | RegisterMode::Input) {
-            let seed_str = format!("{}_{}_{}", port_name, idx, config.register_mode() as u8);
-            let seed = seed_str.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
-            let mut rng = StdRng::seed_from_u64(seed);
-            
-            (0..num_registers_to_edit)
-                .map(|_| rng.gen_range(1000..60000))  // Generate random values avoiding 0x0000
-                .collect()
-        } else {
-            vec![]
-        };
-
-        for reg_idx in 0..num_registers_to_edit {
-            let (value, placeholder) = match config.register_mode() {
-                RegisterMode::Coils | RegisterMode::DiscreteInputs => {
-                    (0x0000, PlaceholderValue::Boolean(false))
-                }
-                RegisterMode::Holding | RegisterMode::Input => {
-                    let random_val = random_values[reg_idx];
-                    // Use Hex placeholder for Holding/Input types since TUI displays in hex format
-                    (random_val, PlaceholderValue::Hex(random_val))
-                }
-            };
-
-            // Register placeholder immediately so numbering tracks MatchScreenCapture order
-            register_placeholder_values(&[placeholder]);
-
-            // Navigate to register (cursor should already be on first register after count config)
-            if reg_idx > 0 && !is_generation_mode {
-                execute_cursor_actions(
-                    session,
-                    cap,
-                    &[
-                        CursorAction::PressArrow {
-                            direction: ArrowKey::Right,
-                            count: 1,
-                        },
-                        CursorAction::Sleep1s,
-                    ],
-                    &format!("move_to_register_{}", reg_idx),
-                )
-                .await?;
-            }
-
-            // Get the value for this register
-            // Edit register value (only in normal mode)
+        // Only edit registers in master mode - slaves don't modify registers during configuration
+        if is_master {
+            // After configuring register count, cursor automatically moves to register grid
             if !is_generation_mode {
                 execute_cursor_actions(
                     session,
                     cap,
-                    &[
-                        CursorAction::PressEnter,
-                        CursorAction::Sleep1s,
-                        CursorAction::TypeString(format!("{:04x}", value)),
-                        CursorAction::PressEnter,
-                        CursorAction::Sleep1s,
-                    ],
-                    &format!("edit_register_{}", reg_idx),
+                    &[CursorAction::Sleep1s],
+                    "wait_for_register_grid",
                 )
                 .await?;
             }
 
-            // Update state with register value
-            state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
+            // Edit 10 registers per station for single-station tests
+            // (For multi-station tests, we'll handle more registers)
+            let num_registers_to_edit = std::cmp::min(10, config.register_count() as usize);
 
-            // Capture screenshot (placeholder system will handle the replacement automatically)
-            // Note: Placeholders were already registered above, so numbering is sequential
-            screenshot_ctx
-                .capture_or_verify(
-                    session,
-                    cap,
-                    state.clone(),
-                    &format!("edit_station_{}_register_{}", idx + 1, reg_idx),
-                )
-                .await?;
+            // For Holding/Input register types, create random number array
+            // Use deterministic seed for reproducibility: based on port name and station index
+            let random_values: Vec<u16> = if matches!(config.register_mode(), RegisterMode::Holding | RegisterMode::Input) {
+                let seed_str = format!("{}_{}_{}", port_name, idx, config.register_mode() as u8);
+                let seed = seed_str.bytes().fold(0u64, |acc, b| acc.wrapping_mul(31).wrapping_add(b as u64));
+                let mut rng = StdRng::seed_from_u64(seed);
+                
+                (0..num_registers_to_edit)
+                    .map(|_| rng.gen_range(1000..60000))  // Generate random values avoiding 0x0000
+                    .collect()
+            } else {
+                vec![]
+            };
+
+            for reg_idx in 0..num_registers_to_edit {
+                let (value, placeholder) = match config.register_mode() {
+                    RegisterMode::Coils | RegisterMode::DiscreteInputs => {
+                        (0x0000, PlaceholderValue::Boolean(false))
+                    }
+                    RegisterMode::Holding | RegisterMode::Input => {
+                        let random_val = random_values[reg_idx];
+                        // Use Hex placeholder for Holding/Input types since TUI displays in hex format
+                        (random_val, PlaceholderValue::Hex(random_val))
+                    }
+                };
+
+                // Register placeholder immediately so numbering tracks MatchScreenCapture order
+                register_placeholder_values(&[placeholder]);
+
+                // Navigate to register (cursor should already be on first register after count config)
+                if reg_idx > 0 && !is_generation_mode {
+                    execute_cursor_actions(
+                        session,
+                        cap,
+                        &[
+                            CursorAction::PressArrow {
+                                direction: ArrowKey::Right,
+                                count: 1,
+                            },
+                            CursorAction::Sleep1s,
+                        ],
+                        &format!("move_to_register_{}", reg_idx),
+                    )
+                    .await?;
+                }
+
+                // Edit register value (only in normal mode)
+                if !is_generation_mode {
+                    execute_cursor_actions(
+                        session,
+                        cap,
+                        &[
+                            CursorAction::PressEnter,
+                            CursorAction::Sleep1s,
+                            CursorAction::TypeString(format!("{:04x}", value)),
+                            CursorAction::PressEnter,
+                            CursorAction::Sleep1s,
+                        ],
+                        &format!("edit_register_{}", reg_idx),
+                    )
+                    .await?;
+                }
+
+                // CRITICAL: Update state with register value BEFORE capturing screenshot
+                // This ensures the TUI renders the actual value, not 0x0000
+                state = update_register_value(state.clone(), station_index, reg_idx, value, is_master);
+
+                // Capture screenshot (placeholder system will replace the actual value)
+                // Note: Placeholders were already registered above, so numbering is sequential
+                screenshot_ctx
+                    .capture_or_verify(
+                        session,
+                        cap,
+                        state.clone(),
+                        &format!("edit_station_{}_register_{}", idx + 1, reg_idx),
+                    )
+                    .await?;
+            }
         }
 
         // Return to top for next station
