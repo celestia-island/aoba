@@ -2,12 +2,11 @@ use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
+use super::actions::{handle_enter_action, handle_leave_page};
 use crate::i18n::lang;
 use crate::tui::status::types::{self, cursor::Cursor};
 use crate::tui::status::{read_status, write_status};
 use crate::tui::utils::bus::{Bus, UiToCore};
-
-use super::actions::{handle_enter_action, handle_leave_page};
 
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("🟠 ModbusDashboard navigation input: {:?}", key.code);

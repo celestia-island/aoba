@@ -1,5 +1,4 @@
 use anyhow::Result;
-use semver::Version;
 use serde_json::Value as JsonValue;
 use std::{
     collections::{HashMap, HashSet},
@@ -7,6 +6,8 @@ use std::{
     process::Command,
 };
 use toml::value::{Table, Value as TomlValue};
+
+use semver::Version;
 
 fn main() -> Result<()> {
     // Build a TOML table as cache

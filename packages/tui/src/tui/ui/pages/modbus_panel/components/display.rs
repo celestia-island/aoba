@@ -1,4 +1,5 @@
 use anyhow::Result;
+
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;

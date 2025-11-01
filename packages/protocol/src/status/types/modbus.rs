@@ -1,7 +1,6 @@
+use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum::{EnumIter, FromRepr};
-
-use serde::{Deserialize, Serialize};
 
 use crate::i18n::lang;
 

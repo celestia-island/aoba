@@ -1,17 +1,15 @@
-use ratatui::{prelude::*, text::Line};
+use anyhow::Result;
 
+use ratatui::{prelude::*, text::Line};
+use types::modbus::ParityOption;
+
+use super::utilities::{derive_selection, is_port_occupied_by_this};
 use crate::i18n::lang;
-use crate::tui::status::read_status;
-use crate::tui::status::types;
+use crate::tui::status::{read_status, types};
 use crate::tui::ui::components::{
     kv_line::render_kv_line,
     styled_label::{input_spans, link_spans, selector_spans, switch_spans, TextState},
 };
-
-use super::utilities::{derive_selection, is_port_occupied_by_this};
-use types::modbus::ParityOption;
-
-use anyhow::Result;
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.

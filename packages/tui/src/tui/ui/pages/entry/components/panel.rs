@@ -1,3 +1,5 @@
+use anyhow::Result;
+
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
@@ -12,8 +14,6 @@ use crate::tui::ui::components::boxed_paragraph::render_boxed_paragraph;
 use crate::tui::ui::pages::about::components::{
     init_about_cache, render_about_page_manifest_lines,
 };
-
-use anyhow::Result;
 
 /// Render the right details panel content
 pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {

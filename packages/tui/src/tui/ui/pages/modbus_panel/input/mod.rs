@@ -4,18 +4,15 @@ pub mod navigation;
 
 use anyhow::Result;
 
-use crossterm::event::KeyEvent;
-
-use crate::tui::status::read_status;
-use crate::tui::status::types;
-use crate::tui::utils::bus::Bus;
-
-use editing::handle_editing_input;
-use navigation::handle_navigation_input;
-
 pub use actions::{handle_enter_action, handle_leave_page};
+use crossterm::event::KeyEvent;
+use editing::handle_editing_input;
 pub use editing::handle_editing_input as handle_edit_input;
+use navigation::handle_navigation_input;
 pub use navigation::handle_navigation_input as handle_nav_input;
+
+use crate::tui::status::{read_status, types};
+use crate::tui::utils::bus::Bus;
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     let editing = read_status(|status| {

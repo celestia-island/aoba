@@ -5,9 +5,10 @@
 /// are verified. This "isomorphic" pattern allows the same workflow to describe both
 /// processes.
 use anyhow::Result;
-use expectrl::Expect;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+
+use expectrl::Expect;
 
 use super::super::{
     config::StationConfig,
@@ -21,9 +22,8 @@ use super::super::{
         focus_station,
     },
 };
-use aoba_ci_utils::*;
-
 use crate::e2e::common::config::RegisterMode;
+use aoba_ci_utils::*;
 
 /// Helper to create state with N stations configured
 fn create_state_with_stations(

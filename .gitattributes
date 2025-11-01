@@ -44,3 +44,4 @@ res/about_cache.toml linguist-generated
 .github/** linguist-vendored
 .cargo/** linguist-vendored
 scripts/** linguist-vendored
+scripts/*.py linguist-vendored

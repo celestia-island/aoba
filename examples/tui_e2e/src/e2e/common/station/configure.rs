@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
-use expectrl::Expect;
 use regex::Regex;
 use serde_json::json;
+
+use expectrl::Expect;
 
 use super::super::config::{RegisterMode, RegisterModeExt};
 use super::super::status_paths::station_field_path;

@@ -26,6 +26,28 @@ The remaining sections in this document focus on the `TUI E2E` testing layer, wh
 - Re-export workspace members through `[workspace.dependencies]`
 - Only add `[dependencies]` entries inside a package when the crate is the sole consumer
 
+## Rust `use` Statement Guidelines
+
+To keep import sections consistent across the workspace, apply the following rules:
+
+1. **Group order**
+    - **Group 1 – Shared utility crates:** `std`, core language crates, and broadly reusable third-party libraries such as `anyhow`, `serde`, `regex`, etc.
+    - **Group 2 – Domain-specific crates:** External crates that target terminal/Modbus/UI scenarios (e.g., `serialport`, `rmodbus`, `ratatui`, `expectrl`) or anything that is not clearly a general-purpose utility.
+    - **Group 3 – Workspace/internal crates:** Imports starting with `crate`, `super`, or any package within this workspace (e.g., `aoba_ci_utils`).
+2. **Spacing**
+    - Separate groups with a single blank line.
+    - After the final group, add one blank line before the rest of the code.
+3. **Module declarations**
+    - In `mod.rs`, `lib.rs`, and `main.rs`, emit every `mod`/`pub mod` declaration before the first `use` block.
+4. **Deduplicate paths**
+    - Merge repeated prefixes into brace groups. For example, consecutive `use std::collections::HashMap;` and `use std::sync::Arc;` become `use std::{collections::HashMap, sync::Arc};`.
+
+### Import Enforcement Script
+
+- The helper script `scripts/enforce_use_groups.py` automates every rule above. Run it before sending PRs or invoking the standard formatting toolchain.
+- The `basic-check` CI workflow must execute this script **before** `cargo fmt`, `cargo check`, and `cargo clippy` so diffs stay consistent.
+- Because it exists purely for formatting, Python helpers under `scripts/` are excluded from source-language statistics via `.gitattributes`.
+
 ## TUI E2E Testing with Status Monitoring
 
 ### Overview

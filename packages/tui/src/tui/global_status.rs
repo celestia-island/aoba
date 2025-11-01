@@ -4,10 +4,11 @@
 /// It is separate from the serializable E2E test status structures.
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
+
 use yuuka::derive_struct;
+use ui::InputMode;
 
 use crate::tui::status::types::{cursor, port, ui};
-use ui::InputMode;
 
 derive_struct! {
     pub Status {

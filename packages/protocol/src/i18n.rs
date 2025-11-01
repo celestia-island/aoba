@@ -1,5 +1,6 @@
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+
 use yuuka::derive_struct;
 
 const EN_US_TOML: &str = include_str!("../res/i18n/en_us.toml");

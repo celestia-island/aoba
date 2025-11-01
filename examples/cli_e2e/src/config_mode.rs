@@ -1,4 +1,5 @@
 use anyhow::Result;
+
 use aoba::cli::config::{
     CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
     PersistenceMode, RegisterType,

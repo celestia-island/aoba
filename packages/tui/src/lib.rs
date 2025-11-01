@@ -1,21 +1,19 @@
-pub use aoba_cli as cli;
-pub use aoba_protocol as protocol;
-
-pub use aoba_protocol::i18n;
 pub mod tui;
 
 use anyhow::Result;
-use clap::ArgMatches;
-
 #[cfg(debug_assertions)]
 use chrono::Local;
-#[cfg(debug_assertions)]
-use std::io::Write;
-
+use clap::ArgMatches;
 #[cfg(debug_assertions)]
 use env_logger::Builder;
 #[cfg(debug_assertions)]
 use log::LevelFilter;
+#[cfg(debug_assertions)]
+use std::io::Write;
+
+pub use aoba_cli as cli;
+pub use aoba_protocol as protocol;
+pub use aoba_protocol::i18n;
 
 /// Common initialization used by TUI entrypoint.
 pub fn init_common() {

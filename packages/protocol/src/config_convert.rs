@@ -3,11 +3,12 @@
 //! This module provides bidirectional conversion to maintain compatibility during the transition
 //! from the old configuration structure to the new station-based design.
 
+use std::time::Instant;
+
 use crate::status::types::modbus::{
     ModbusConnectionMode, ModbusRegisterItem, RegisterMap, RegisterMode, RegisterRange,
     StationConfig, StationMode,
 };
-use std::time::Instant;
 
 /// Convert a list of StationConfigs to ModbusRegisterItems
 ///
