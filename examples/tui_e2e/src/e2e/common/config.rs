@@ -140,30 +140,10 @@ pub fn make_station_config(
 /// Extension helpers for the shared RegisterMode enum that are only needed by
 /// the test harness (e.g. translating into CLI strings or navigation hints).
 pub trait RegisterModeExt {
-    fn as_cli_mode(&self) -> &'static str;
-    fn status_value(&self) -> &'static str;
     fn arrow_from_default(&self) -> (ArrowKey, usize);
 }
 
 impl RegisterModeExt for RegisterMode {
-    fn as_cli_mode(&self) -> &'static str {
-        match self {
-            RegisterMode::Coils => "coils",
-            RegisterMode::DiscreteInputs => "discrete_inputs",
-            RegisterMode::Holding => "holding",
-            RegisterMode::Input => "input",
-        }
-    }
-
-    fn status_value(&self) -> &'static str {
-        match self {
-            RegisterMode::Coils => "Coils",
-            RegisterMode::DiscreteInputs => "DiscreteInputs",
-            RegisterMode::Holding => "Holding",
-            RegisterMode::Input => "Input",
-        }
-    }
-
     fn arrow_from_default(&self) -> (ArrowKey, usize) {
         match self {
             RegisterMode::Coils => (ArrowKey::Left, 2),

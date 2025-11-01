@@ -241,17 +241,17 @@ pub async fn navigate_to_vcom<T: ExpectSession>(
         crate::auto_cursor::CursorAction::Sleep1s,
     ]);
 
-    let actions = vec![
-        crate::auto_cursor::CursorAction::PressEnter,
-        crate::auto_cursor::CursorAction::MatchPattern {
-            pattern: port_pattern_regex,
-            description: format!("In {detected_port_name} port details"),
-            line_range: Some((0, 3)),
-            col_range: None,
-            retry_action,
-        },
-    ];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "enter_port").await?;
+    let step = crate::auto_cursor::TuiStep::new("enter_port")
+        .with_actions(vec![crate::auto_cursor::CursorAction::PressEnter])
+        .with_assertions(vec![crate::auto_cursor::ScreenAssertion::pattern(
+            crate::auto_cursor::ScreenPatternSpec::new(
+                port_pattern_regex,
+                format!("In {detected_port_name} port details"),
+            )
+            .with_line_range(Some((0, 3)))
+            .with_retry_action(retry_action),
+        )]);
+    step.run(session, cap).await?;
 
     // Align focus with the "Enter Business Configuration" option so the next Enter
     // transitions directly into the Modbus dashboard instead of toggling Enable Port.
@@ -346,15 +346,17 @@ pub async fn enable_port_carefully<T: ExpectSession>(
     let enable_port_selected_regex = Regex::new(r">\s*Enable Port")?;
     let line_start = enable_idx.saturating_sub(1);
     let line_end = (enable_idx + 1).min(lines.len().saturating_sub(1));
-    let actions = vec![crate::auto_cursor::CursorAction::MatchPattern {
-        pattern: enable_port_selected_regex,
-        description: "Enable Port option focused".to_string(),
-        line_range: Some((line_start, line_end)),
-        col_range: None,
-        retry_action: None, // Already aligned, no retry needed
-    }];
-    crate::auto_cursor::execute_cursor_actions(session, cap, &actions, "align_enable_port_verify")
-        .await?;
+    let verify_step =
+        crate::auto_cursor::TuiStep::new("align_enable_port_verify").with_assertions(vec![
+            crate::auto_cursor::ScreenAssertion::pattern(
+                crate::auto_cursor::ScreenPatternSpec::new(
+                    enable_port_selected_regex,
+                    "Enable Port option focused",
+                )
+                .with_line_range(Some((line_start, line_end))),
+            ),
+        ]);
+    verify_step.run(session, cap).await?;
 
     log::info!("↩️ Pressing Enter to toggle port enable");
     let actions = vec![

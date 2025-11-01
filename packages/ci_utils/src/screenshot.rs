@@ -67,6 +67,11 @@ impl ScreenshotContext {
         self.mode
     }
 
+    /// Get the module path used for screenshot storage
+    pub fn module_path(&self) -> &str {
+        &self.module_name
+    }
+
     /// Get the next screenshot filename with step name
     fn next_filename(&self, step_name: &str) -> String {
         let step = self.step_counter.fetch_add(1, Ordering::SeqCst);
@@ -246,7 +251,7 @@ impl ScreenshotContext {
         cap: &mut TerminalCapture,
         predicted_state: TuiStatus,
         step_name: &str,
-    ) -> Result<()> {
+    ) -> Result<String> {
         let filename = self.next_filename(step_name);
 
         match self.mode {
@@ -268,7 +273,7 @@ impl ScreenshotContext {
             }
         }
 
-        Ok(())
+        Ok(filename)
     }
 }
 

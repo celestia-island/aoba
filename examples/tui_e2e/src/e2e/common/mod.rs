@@ -139,11 +139,9 @@ pub mod config;
 pub mod execution;
 pub mod navigation;
 pub mod retry;
-pub mod screenshot_integration;
 pub mod state_helpers;
 pub mod state_updaters;
 mod status_paths;
-pub mod validation;
 
 // Re-export commonly used types and functions
 #[allow(unused_imports)]
@@ -151,18 +149,14 @@ pub use config::{make_station_config, RegisterMode, StationConfig, StationMode};
 #[allow(unused_imports)]
 pub use execution::{
     run_detailed_multi_master_test, run_detailed_multi_slave_test, run_detailed_single_master_test,
-    run_detailed_single_slave_test, run_multi_station_master_test, run_multi_station_slave_test,
-    run_single_station_master_test, run_single_station_slave_test,
+    run_detailed_single_slave_test,
 };
-#[allow(unused_imports)]
-pub use validation::*;
-
 // Re-export station configuration helpers
 #[allow(unused_imports)]
 pub use station::{
     configure_register_count, configure_register_type, configure_start_address,
     configure_station_id, create_station, ensure_connection_mode, focus_create_station_button,
-    focus_station, initialize_slave_registers, save_configuration_and_verify,
+    focus_station,
 };
 
 mod station;

@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use regex::Regex;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -17,22 +18,6 @@ fn read_screen_capture(test_name: &str, step_name: &str) -> Result<String> {
 
     let content = fs::read_to_string(&filepath)?;
     Ok(content)
-}
-
-/// Write a screen capture to file
-fn write_screen_capture(test_name: &str, step_name: &str, content: &str) -> Result<()> {
-    // Support hierarchical test names (e.g., "single_station/master_modes")
-    let test_path = PathBuf::from(test_name);
-    let dir_path = Path::new("examples/tui_e2e/screenshots").join(test_path);
-
-    // Create directory if it doesn't exist
-    fs::create_dir_all(&dir_path)?;
-
-    let filepath = dir_path.join(format!("{}.txt", step_name));
-    fs::write(&filepath, content)?;
-
-    log::info!("💾 Wrote screenshot: {}", filepath.display());
-    Ok(())
 }
 
 /// Action instruction for automated cursor navigation
@@ -70,38 +55,6 @@ pub enum CursorAction {
     Sleep1s,
     /// Wait for 3 seconds (3000ms)
     Sleep3s,
-    /// Match a regex pattern against terminal output with retry logic
-    MatchPattern {
-        /// Regex pattern to match
-        pattern: regex::Regex,
-        /// Description for logging
-        description: String,
-        /// Optional line range to search (start, end) inclusive, default is entire screen
-        line_range: Option<(usize, usize)>,
-        /// Optional column range to search (start, end) inclusive, default is entire line
-        col_range: Option<(usize, usize)>,
-        /// Optional retry action to execute before retrying pattern match
-        retry_action: Option<Vec<CursorAction>>,
-    },
-    /// Match screen capture against saved screenshot (non-screenshot mode) or write screenshot (screenshot mode)
-    /// In non-screenshot mode: reads reference file and compares
-    /// In screenshot mode: writes current terminal output to file
-    MatchScreenCapture {
-        /// Test name (can be hierarchical path like "single_station/master_modes")
-        test_name: String,
-        /// Step name (e.g., "001_initial_screen", "002_after_navigation")
-        step_name: String,
-        /// Description for logging
-        description: String,
-        /// Optional line range to compare (start, end) inclusive
-        line_range: Option<(usize, usize)>,
-        /// Optional column range to compare (start, end) inclusive
-        col_range: Option<(usize, usize)>,
-        /// Placeholder values for random data (e.g., register values)
-        /// During generation: creates placeholders like {{#x}}, {{0x#x}}, {{0b#x}}
-        /// During verification: replaces placeholders with actual values before comparison
-        placeholders: Vec<crate::placeholder::PlaceholderValue>,
-    },
     /// Check status tree path matches expected value
     CheckStatus {
         /// Description for logging
@@ -115,22 +68,597 @@ pub enum CursorAction {
         /// Retry interval in milliseconds (default: 500)
         retry_interval_ms: Option<u64>,
     },
-    /// Update mock global status (screenshot mode only)
-    /// In screenshot mode: updates the mock TuiStatus using the provided closure
-    /// In non-screenshot mode: ignored
-    /// The closure receives a mutable reference to TuiStatus and can modify it
-    AssertUpdateStatus {
-        /// Description for logging
-        description: String,
-        /// Closure to update the status (similar to write_status pattern)
-        updater: fn(&mut TuiStatus),
-    },
     /// Debug breakpoint: capture screen, print it, reset ports, and exit
     /// Only active when debug mode is enabled
     DebugBreakpoint { description: String },
 }
 
-/// Execution mode for cursor actions
+/// Extract a sub-region from terminal screen text based on optional line/column ranges
+fn extract_screen_region(
+    screen: &str,
+    line_range: Option<(usize, usize)>,
+    col_range: Option<(usize, usize)>,
+) -> String {
+    let lines: Vec<&str> = screen.lines().collect();
+    let total_lines = lines.len();
+
+    if total_lines == 0 {
+        return String::new();
+    }
+
+    let (raw_start, raw_end) = line_range.unwrap_or((0, total_lines.saturating_sub(1)));
+    let start_line = raw_start.min(total_lines.saturating_sub(1));
+    let end_line = raw_end.min(total_lines.saturating_sub(1));
+
+    let mut region = String::new();
+    for idx in start_line..=end_line {
+        if idx >= lines.len() {
+            break;
+        }
+        let line = lines[idx];
+        let segment = if let Some((start_col, end_col)) = col_range {
+            let chars: Vec<char> = line.chars().collect();
+            if chars.is_empty() {
+                String::new()
+            } else {
+                let sc = start_col.min(chars.len().saturating_sub(1));
+                let ec = end_col.min(chars.len().saturating_sub(1));
+                chars[sc..=ec].iter().collect()
+            }
+        } else {
+            line.to_string()
+        };
+        region.push_str(&segment);
+        region.push('\n');
+    }
+
+    region
+}
+
+/// Update function signature for mock status adjustments in screenshot-generation mode
+pub type StateUpdater = Box<dyn Fn(&mut TuiStatus) + Send + Sync>;
+
+/// Specification for a regex-based screen pattern assertion
+#[derive(Clone)]
+pub struct ScreenPatternSpec {
+    pattern: Regex,
+    description: String,
+    line_range: Option<(usize, usize)>,
+    col_range: Option<(usize, usize)>,
+    retry_action: Option<Vec<CursorAction>>,
+    inner_retries: usize,
+    outer_retries: usize,
+    retry_interval_ms: u64,
+}
+
+impl ScreenPatternSpec {
+    /// Create a pattern spec with default retry parameters
+    pub fn new(pattern: Regex, description: impl Into<String>) -> Self {
+        Self {
+            pattern,
+            description: description.into(),
+            line_range: None,
+            col_range: None,
+            retry_action: None,
+            inner_retries: 3,
+            outer_retries: 3,
+            retry_interval_ms: 1000,
+        }
+    }
+
+    /// Restrict match to a subset of lines
+    pub fn with_line_range(mut self, range: Option<(usize, usize)>) -> Self {
+        self.line_range = range;
+        self
+    }
+
+    /// Restrict match to a subset of columns
+    pub fn with_col_range(mut self, range: Option<(usize, usize)>) -> Self {
+        self.col_range = range;
+        self
+    }
+
+    /// Provide additional cursor actions to perform before a retry cycle
+    pub fn with_retry_action(mut self, actions: Option<Vec<CursorAction>>) -> Self {
+        self.retry_action = actions;
+        self
+    }
+
+    /// Configure inner retry attempts (captures without replaying actions)
+    pub fn with_inner_retries(mut self, retries: usize) -> Self {
+        self.inner_retries = retries.max(1);
+        self
+    }
+
+    /// Configure outer retry attempts (after executing retry actions)
+    pub fn with_outer_retries(mut self, retries: usize) -> Self {
+        self.outer_retries = retries.max(1);
+        self
+    }
+
+    /// Configure retry interval in milliseconds between attempts
+    pub fn with_retry_interval_ms(mut self, interval_ms: u64) -> Self {
+        self.retry_interval_ms = interval_ms.max(1);
+        self
+    }
+
+    async fn verify<T: ExpectSession>(
+        &self,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        session_name: &str,
+        mode: ActionExecutionMode,
+    ) -> Result<()> {
+        if mode != ActionExecutionMode::Normal {
+            return Ok(());
+        }
+
+        let mut last_screen = String::new();
+        let mut total_attempts = 0usize;
+
+        for outer in 1..=self.outer_retries {
+            for inner in 1..=self.inner_retries {
+                total_attempts += 1;
+                let capture_name = format!("{session_name}_pattern_outer{}_inner{}", outer, inner);
+                let screen = cap
+                    .capture_with_logging(session, &capture_name, false)
+                    .await?;
+                last_screen = screen.clone();
+
+                let region = extract_screen_region(&screen, self.line_range, self.col_range);
+                if self.pattern.is_match(&region) {
+                    log::debug!(
+                        "✅ Pattern '{}' matched after {} attempt(s)",
+                        self.description,
+                        total_attempts
+                    );
+                    return Ok(());
+                }
+
+                tokio::time::sleep(std::time::Duration::from_millis(self.retry_interval_ms)).await;
+            }
+
+            if let Some(retry_actions) = &self.retry_action {
+                if outer < self.outer_retries {
+                    log::debug!(
+                        "Retrying pattern '{}' with additional actions (outer {}/{})",
+                        self.description,
+                        outer,
+                        self.outer_retries
+                    );
+                    Box::pin(execute_cursor_actions(
+                        session,
+                        cap,
+                        retry_actions,
+                        &format!("{session_name}_pattern_retry_outer{outer}"),
+                    ))
+                    .await?;
+                    tokio::time::sleep(std::time::Duration::from_millis(self.retry_interval_ms))
+                        .await;
+                }
+            }
+        }
+
+        log::error!(
+            "❌ Pattern '{}' did not match after {} attempts",
+            self.description,
+            total_attempts
+        );
+        log::error!("Last captured screen:");
+        log::error!("\n{}\n", last_screen);
+
+        Err(anyhow!(
+            "Pattern '{}' not found after {} attempts",
+            self.description,
+            total_attempts
+        ))
+    }
+}
+
+/// Specification for a screenshot comparison assertion
+#[derive(Clone)]
+pub struct ScreenCaptureSpec {
+    test_name: String,
+    step_name: String,
+    description: String,
+    line_range: Option<(usize, usize)>,
+    col_range: Option<(usize, usize)>,
+    placeholders: Vec<crate::placeholder::PlaceholderValue>,
+}
+
+impl ScreenCaptureSpec {
+    /// Create a screenshot comparison spec
+    pub fn new(
+        test_name: impl Into<String>,
+        step_name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        Self {
+            test_name: test_name.into(),
+            step_name: step_name.into(),
+            description: description.into(),
+            line_range: None,
+            col_range: None,
+            placeholders: Vec::new(),
+        }
+    }
+
+    /// Restrict comparison to a line range
+    pub fn with_line_range(mut self, range: Option<(usize, usize)>) -> Self {
+        self.line_range = range;
+        self
+    }
+
+    /// Restrict comparison to a column range
+    pub fn with_col_range(mut self, range: Option<(usize, usize)>) -> Self {
+        self.col_range = range;
+        self
+    }
+
+    /// Provide placeholder values for dynamic content
+    pub fn with_placeholders(
+        mut self,
+        placeholders: Vec<crate::placeholder::PlaceholderValue>,
+    ) -> Self {
+        self.placeholders = placeholders;
+        self
+    }
+
+    async fn verify<T: ExpectSession>(
+        &self,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        session_name: &str,
+        mode: ActionExecutionMode,
+    ) -> Result<()> {
+        if mode == ActionExecutionMode::GenerateScreenshots {
+            if !self.placeholders.is_empty() {
+                crate::placeholder::register_placeholder_values(&self.placeholders);
+            }
+            return Ok(());
+        }
+
+        let expected_screen = read_screen_capture(&self.test_name, &self.step_name)?;
+        let capture_step = format!(
+            "{}_capture_{}_{}",
+            session_name, self.test_name, self.step_name
+        );
+        let current_screen = cap.capture(session, &capture_step).await?;
+
+        let mut expected_region =
+            extract_screen_region(&expected_screen, self.line_range, self.col_range);
+        let current_region =
+            extract_screen_region(&current_screen, self.line_range, self.col_range);
+
+        if !self.placeholders.is_empty() {
+            crate::placeholder::register_placeholder_values(&self.placeholders);
+            expected_region =
+                crate::placeholder::restore_placeholders_for_verification(&expected_region);
+        }
+
+        if expected_region == current_region {
+            log::debug!(
+                "✅ Screen capture '{}' matched reference {}::{}",
+                self.description,
+                self.test_name,
+                self.step_name
+            );
+            return Ok(());
+        }
+
+        log::error!(
+            "❌ Screen capture mismatch for '{}' ({}::{})",
+            self.description,
+            self.test_name,
+            self.step_name
+        );
+        log::error!(
+            "Expected region (lines {:?}, cols {:?}):\n{}",
+            self.line_range,
+            self.col_range,
+            expected_region
+        );
+        log::error!(
+            "Actual region (lines {:?}, cols {:?}):\n{}",
+            self.line_range,
+            self.col_range,
+            current_region
+        );
+        log::error!("Full actual screen:\n{}", current_screen);
+
+        Err(anyhow!(
+            "Screen capture mismatch for '{}' ({}::{})",
+            self.description,
+            self.test_name,
+            self.step_name
+        ))
+    }
+}
+
+/// Screen-level assertion variants supported by [`TuiStep`]
+#[derive(Clone)]
+pub enum ScreenAssertion {
+    Pattern(ScreenPatternSpec),
+    Capture(ScreenCaptureSpec),
+}
+
+impl ScreenAssertion {
+    pub fn pattern(spec: ScreenPatternSpec) -> Self {
+        Self::Pattern(spec)
+    }
+
+    pub fn capture(spec: ScreenCaptureSpec) -> Self {
+        Self::Capture(spec)
+    }
+}
+
+/// Composite step definition combining cursor actions, state patches, and screen assertions
+pub struct TuiStep {
+    pub name: String,
+    pub actions: Vec<CursorAction>,
+    pub status_checks: Vec<CursorAction>,
+    pub assertions: Vec<ScreenAssertion>,
+    pub state_patch: Option<StateUpdater>,
+    pub retry_setup: Option<Vec<CursorAction>>,
+    pub max_attempts: usize,
+}
+
+impl TuiStep {
+    /// Create a new step with sensible defaults
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            actions: Vec::new(),
+            status_checks: Vec::new(),
+            assertions: Vec::new(),
+            state_patch: None,
+            retry_setup: None,
+            max_attempts: 3,
+        }
+    }
+
+    /// Override the actions for this step
+    pub fn with_actions(mut self, actions: Vec<CursorAction>) -> Self {
+        self.actions = actions;
+        self
+    }
+
+    /// Override status checks for this step
+    pub fn with_status_checks(mut self, checks: Vec<CursorAction>) -> Self {
+        self.status_checks = checks;
+        self
+    }
+
+    /// Override assertions for this step
+    pub fn with_assertions(mut self, assertions: Vec<ScreenAssertion>) -> Self {
+        self.assertions = assertions;
+        self
+    }
+
+    /// Attach a state patch closure (screenshot mode only)
+    pub fn with_state_patch<F>(mut self, patch: F) -> Self
+    where
+        F: Fn(&mut TuiStatus) + Send + Sync + 'static,
+    {
+        self.state_patch = Some(Box::new(patch));
+        self
+    }
+
+    /// Provide retry setup actions executed between attempts when a failure occurs
+    pub fn with_retry_setup(mut self, setup: Vec<CursorAction>) -> Self {
+        self.retry_setup = Some(setup);
+        self
+    }
+
+    /// Override maximum retry attempts (default: 3)
+    pub fn with_max_attempts(mut self, attempts: usize) -> Self {
+        self.max_attempts = attempts.max(1);
+        self
+    }
+
+    /// Execute the step in normal mode
+    pub async fn run<T: ExpectSession>(
+        &self,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+    ) -> Result<()> {
+        self.run_with_mode(session, cap, ActionExecutionMode::Normal, None)
+            .await
+    }
+
+    /// Execute the step with explicit execution mode and optional mock status
+    pub async fn run_with_mode<T: ExpectSession>(
+        &self,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        mode: ActionExecutionMode,
+        mut mock_status: Option<&mut TuiStatus>,
+    ) -> Result<()> {
+        let attempts = self.max_attempts.max(1);
+
+        for attempt in 1..=attempts {
+            if attempt == 1 && mode == ActionExecutionMode::GenerateScreenshots {
+                if let Some(updater) = &self.state_patch {
+                    if let Some(status) = mock_status.as_mut() {
+                        log::info!(
+                            "🔄 Applying state patch for step '{}' in screenshot mode",
+                            self.name
+                        );
+                        updater(*status);
+                    } else {
+                        log::warn!(
+                            "⚠️ Step '{}' configured a state patch but mock status is unavailable",
+                            self.name
+                        );
+                    }
+                }
+            }
+
+            let action_result = execute_cursor_actions_with_mode(
+                session,
+                cap,
+                &self.actions,
+                &format!("{}_actions_attempt_{}", self.name, attempt),
+                mode,
+            )
+            .await;
+
+            if let Err(err) = action_result {
+                if attempt < attempts {
+                    log::warn!(
+                        "⚠️ Step '{}' actions failed on attempt {}/{}: {}",
+                        self.name,
+                        attempt,
+                        attempts,
+                        err
+                    );
+                    sleep_1s().await;
+                    self.run_retry_setup(session, cap, mode, attempt).await?;
+                    continue;
+                } else {
+                    return Err(anyhow!(
+                        "Step '{}' actions failed after {} attempts: {}",
+                        self.name,
+                        attempts,
+                        err
+                    ));
+                }
+            }
+
+            let check_result = execute_cursor_actions_with_mode(
+                session,
+                cap,
+                &self.status_checks,
+                &format!("{}_checks_attempt_{}", self.name, attempt),
+                mode,
+            )
+            .await;
+
+            if let Err(err) = check_result {
+                if attempt < attempts {
+                    log::warn!(
+                        "⚠️ Step '{}' status checks failed on attempt {}/{}: {}",
+                        self.name,
+                        attempt,
+                        attempts,
+                        err
+                    );
+                    sleep_1s().await;
+                    self.run_retry_setup(session, cap, mode, attempt).await?;
+                    continue;
+                } else {
+                    return Err(anyhow!(
+                        "Step '{}' status checks failed after {} attempts: {}",
+                        self.name,
+                        attempts,
+                        err
+                    ));
+                }
+            }
+
+            if let Err(err) = self.run_assertions(session, cap, mode, attempt).await {
+                if attempt < attempts {
+                    log::warn!(
+                        "⚠️ Step '{}' assertions failed on attempt {}/{}: {}",
+                        self.name,
+                        attempt,
+                        attempts,
+                        err
+                    );
+                    sleep_1s().await;
+                    self.run_retry_setup(session, cap, mode, attempt).await?;
+                    continue;
+                } else {
+                    return Err(anyhow!(
+                        "Step '{}' assertions failed after {} attempts: {}",
+                        self.name,
+                        attempts,
+                        err
+                    ));
+                }
+            }
+
+            if attempt > 1 {
+                log::info!(
+                    "✅ Step '{}' succeeded on attempt {}/{}",
+                    self.name,
+                    attempt,
+                    attempts
+                );
+            }
+            return Ok(());
+        }
+
+        Err(anyhow!(
+            "Step '{}' exhausted {} attempts without success",
+            self.name,
+            attempts
+        ))
+    }
+
+    async fn run_retry_setup<T: ExpectSession>(
+        &self,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        mode: ActionExecutionMode,
+        attempt: usize,
+    ) -> Result<()> {
+        if mode != ActionExecutionMode::Normal {
+            return Ok(());
+        }
+
+        if let Some(setup) = &self.retry_setup {
+            log::debug!(
+                "Executing retry setup for step '{}' after attempt {}",
+                self.name,
+                attempt
+            );
+            execute_cursor_actions_with_mode(
+                session,
+                cap,
+                setup,
+                &format!("{}_retry_setup_{}", self.name, attempt),
+                mode,
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+
+    async fn run_assertions<T: ExpectSession>(
+        &self,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        mode: ActionExecutionMode,
+        attempt: usize,
+    ) -> Result<()> {
+        for assertion in &self.assertions {
+            match assertion {
+                ScreenAssertion::Pattern(spec) => {
+                    spec.verify(
+                        session,
+                        cap,
+                        &format!("{}_assertion_attempt_{}", self.name, attempt),
+                        mode,
+                    )
+                    .await?;
+                }
+                ScreenAssertion::Capture(spec) => {
+                    spec.verify(
+                        session,
+                        cap,
+                        &format!("{}_assertion_attempt_{}", self.name, attempt),
+                        mode,
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ActionExecutionMode {
     /// Normal mode: execute all actions including keyboard input
@@ -141,7 +669,7 @@ pub enum ActionExecutionMode {
 
 /// Execute a sequence of cursor actions on an expect session
 /// In Normal mode: executes all actions including keyboard input
-/// In GenerateScreenshots mode: skips keyboard actions, only processes MatchScreenCapture and AssertUpdateStatus
+/// In GenerateScreenshots mode: skips keyboard actions and only processes status patches/assertions
 pub async fn execute_cursor_actions<T: ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -154,7 +682,6 @@ pub async fn execute_cursor_actions<T: ExpectSession>(
         actions,
         session_name,
         ActionExecutionMode::Normal,
-        None,
     )
     .await
 }
@@ -167,8 +694,14 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
     actions: &[CursorAction],
     session_name: &str,
     mode: ActionExecutionMode,
-    mut mock_status: Option<&mut TuiStatus>,
 ) -> Result<()> {
+    log::debug!(
+        "Executing cursor action batch '{}' with {} steps (mode: {:?})",
+        session_name,
+        actions.len(),
+        mode
+    );
+
     for (idx, action) in actions.iter().enumerate() {
         match action {
             // In screenshot mode, keyboard actions are skipped
@@ -251,245 +784,6 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
             CursorAction::Sleep3s => {
                 sleep_3s().await;
             }
-            CursorAction::MatchPattern {
-                pattern,
-                description,
-                line_range,
-                col_range,
-                retry_action,
-            } if mode == ActionExecutionMode::Normal => {
-                const INNER_RETRIES: usize = 3;
-                const OUTER_RETRIES: usize = 3;
-                const RETRY_INTERVAL_MS: u64 = 1000;
-
-                let mut matched = false;
-                let mut last_screen = String::new();
-                let mut total_attempts = 0;
-
-                for outer_attempt in 1..=OUTER_RETRIES {
-                    for inner_attempt in 1..=INNER_RETRIES {
-                        total_attempts += 1;
-
-                        let screen = cap
-                            .capture_with_logging(
-                                session,
-                                &format!("{session_name} - match {description} (outer {outer_attempt}/{OUTER_RETRIES}, inner {inner_attempt}/{INNER_RETRIES})"),
-                                false,
-                            )
-                            .await?;
-                        last_screen = screen.clone();
-
-                        let lines: Vec<&str> = screen.lines().collect();
-                        let total_lines = lines.len();
-
-                        let (start_line, end_line) =
-                            line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-                        let start_line = start_line.min(total_lines.saturating_sub(1));
-                        let end_line = end_line.min(total_lines.saturating_sub(1));
-
-                        let mut search_text = String::new();
-                        for line_idx in start_line..=end_line {
-                            if line_idx >= lines.len() {
-                                break;
-                            }
-                            let line = lines[line_idx];
-                            let line_text = if let Some((start_col, end_col)) = col_range {
-                                let chars: Vec<char> = line.chars().collect();
-                                let char_count = chars.len();
-                                if char_count == 0 {
-                                    String::new()
-                                } else {
-                                    let sc = (*start_col).min(char_count.saturating_sub(1));
-                                    let ec = (*end_col).min(char_count.saturating_sub(1));
-                                    chars[sc..=ec].iter().collect()
-                                }
-                            } else {
-                                line.to_string()
-                            };
-                            search_text.push_str(&line_text);
-                            search_text.push('\n');
-                        }
-
-                        if pattern.is_match(&search_text) {
-                            matched = true;
-                            break;
-                        } else {
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
-                                .await;
-                        }
-                    }
-
-                    if matched {
-                        break;
-                    }
-
-                    if let Some(ref retry_actions) = retry_action {
-                        if outer_attempt < OUTER_RETRIES {
-                            Box::pin(execute_cursor_actions(
-                                session,
-                                cap,
-                                retry_actions,
-                                &format!("{session_name}_retry_{outer_attempt}"),
-                            ))
-                            .await?;
-
-                            tokio::time::sleep(std::time::Duration::from_millis(RETRY_INTERVAL_MS))
-                                .await;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-
-                if !matched {
-                    log::error!(
-                        "❌ Action Step {} FAILED: Pattern '{description}' NOT FOUND after {total_attempts} total attempts",
-                        idx + 1
-                    );
-                    log::error!("Expected pattern: {:?}", pattern.as_str());
-
-                    let lines: Vec<&str> = last_screen.lines().collect();
-                    let total_lines = lines.len();
-                    let (start_line, end_line) =
-                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-
-                    log::error!(
-                        "Search range: lines {start_line}..={end_line}, cols {col_range:?}"
-                    );
-                    log::error!("Last screen content for {session_name}:");
-                    log::error!("\n{last_screen}\n");
-
-                    return Err(anyhow!(
-                        "Action Step {}: Pattern '{description}' not found in {session_name} after {total_attempts} attempts",
-                        idx + 1
-                    ));
-                }
-            }
-            CursorAction::MatchScreenCapture {
-                test_name,
-                step_name,
-                description,
-                line_range,
-                col_range,
-                placeholders,
-            } => {
-                // In screenshot generation mode, register placeholders before capturing
-                if mode == ActionExecutionMode::GenerateScreenshots {
-                    if !placeholders.is_empty() {
-                        crate::placeholder::register_placeholder_values(placeholders);
-                    }
-                }
-
-                // Read the saved screen capture
-                let expected_screen = match read_screen_capture(test_name, step_name) {
-                    Ok(content) => content,
-                    Err(e) => {
-                        log::error!(
-                            "❌ Action Step {} FAILED: Failed to read screen capture for test '{}', step '{}': {}",
-                            idx + 1,
-                            test_name,
-                            step_name,
-                            e
-                        );
-                        return Err(anyhow!(
-                            "Action Step {}: Failed to read screen capture for test '{}', step '{}': {}",
-                            idx + 1,
-                            test_name,
-                            step_name,
-                            e
-                        ));
-                    }
-                };
-
-                // Capture current screen
-                let current_screen = cap
-                    .capture(
-                        session,
-                        &format!("match_screen_{}_{}", test_name, step_name),
-                    )
-                    .await?;
-
-                // Extract regions to compare based on line and column ranges
-                let extract_region = |screen: &str| -> String {
-                    let lines: Vec<&str> = screen.lines().collect();
-                    let total_lines = lines.len();
-
-                    let (start_line, end_line) =
-                        line_range.unwrap_or((0, total_lines.saturating_sub(1)));
-                    let start_line = start_line.min(total_lines.saturating_sub(1));
-                    let end_line = end_line.min(total_lines.saturating_sub(1));
-
-                    let mut region_text = String::new();
-                    for line_idx in start_line..=end_line {
-                        if line_idx >= lines.len() {
-                            break;
-                        }
-                        let line = lines[line_idx];
-                        let line_text = if let Some((start_col, end_col)) = col_range {
-                            let chars: Vec<char> = line.chars().collect();
-                            let char_count = chars.len();
-                            if char_count == 0 {
-                                String::new()
-                            } else {
-                                let sc = (*start_col).min(char_count.saturating_sub(1));
-                                let ec = (*end_col).min(char_count.saturating_sub(1));
-                                chars[sc..=ec].iter().collect()
-                            }
-                        } else {
-                            line.to_string()
-                        };
-                        region_text.push_str(&line_text);
-                        region_text.push('\n');
-                    }
-                    region_text
-                };
-
-                let expected_region = extract_region(&expected_screen);
-                let current_region = extract_region(&current_screen);
-
-                // In verification mode, restore placeholders in expected before comparison
-                let expected_region =
-                    if mode == ActionExecutionMode::Normal && !placeholders.is_empty() {
-                        // Register placeholders with actual values before restoration
-                        crate::placeholder::register_placeholder_values(placeholders);
-                        crate::placeholder::restore_placeholders_for_verification(&expected_region)
-                    } else {
-                        expected_region
-                    };
-
-                // Compare the regions
-                if expected_region == current_region {
-                    log::debug!("✅ Screen capture matched for '{}'", description);
-                } else {
-                    log::error!(
-                        "❌ Action Step {} FAILED: Screen capture mismatch for '{}'",
-                        idx + 1,
-                        description
-                    );
-                    log::error!(
-                        "Expected region (lines {:?}, cols {:?}):",
-                        line_range,
-                        col_range
-                    );
-                    log::error!("\n{}\n", expected_region);
-                    log::error!(
-                        "Current region (lines {:?}, cols {:?}):",
-                        line_range,
-                        col_range
-                    );
-                    log::error!("\n{}\n", current_region);
-                    log::error!("Full current screen:");
-                    log::error!("\n{}\n", current_screen);
-
-                    return Err(anyhow!(
-                        "Action Step {}: Screen capture mismatch for '{}' (test: '{}', step: '{}')",
-                        idx + 1,
-                        description,
-                        test_name,
-                        step_name
-                    ));
-                }
-            }
             CursorAction::CheckStatus {
                 description,
                 path,
@@ -532,26 +826,6 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                         "Action Step {}: Status check failed for '{description}': {e}",
                         idx + 1
                     ));
-                }
-            }
-            CursorAction::AssertUpdateStatus {
-                description,
-                updater,
-            } => {
-                if mode == ActionExecutionMode::GenerateScreenshots {
-                    // In screenshot generation mode, update the mock status
-                    if let Some(status) = mock_status.as_mut() {
-                        log::info!("🔄 Updating mock status: {}", description);
-                        updater(status);
-                    } else {
-                        log::warn!("⚠️  AssertUpdateStatus called without mock_status provided");
-                    }
-                } else {
-                    // In normal mode, this action is a no-op (status is managed by real TUI)
-                    log::debug!(
-                        "Skipping AssertUpdateStatus in normal mode: {}",
-                        description
-                    );
                 }
             }
             CursorAction::DebugBreakpoint { description } => {
@@ -990,105 +1264,18 @@ pub async fn execute_with_status_checks<T: ExpectSession>(
     cap: &mut TerminalCapture,
     actions: &[CursorAction],
     status_checks: &[CursorAction],
+    assertions: &[ScreenAssertion],
     session_name: &str,
     max_retries: Option<usize>,
 ) -> Result<()> {
-    let max_retries = max_retries.unwrap_or(3);
+    let mut step = TuiStep::new(session_name.to_string())
+        .with_actions(actions.to_vec())
+        .with_status_checks(status_checks.to_vec())
+        .with_assertions(assertions.to_vec());
 
-    for attempt in 1..=max_retries {
-        // Execute all actions
-        match execute_cursor_actions(
-            session,
-            cap,
-            actions,
-            &format!("{}_actions_attempt_{}", session_name, attempt),
-        )
-        .await
-        {
-            Ok(()) => {
-                // All actions succeeded, now check status
-                match execute_cursor_actions(
-                    session,
-                    cap,
-                    status_checks,
-                    &format!("{}_checks_attempt_{}", session_name, attempt),
-                )
-                .await
-                {
-                    Ok(()) => {
-                        // All checks passed
-                        if attempt > 1 {
-                            log::info!(
-                                "✅ {} succeeded on attempt {}/{}",
-                                session_name,
-                                attempt,
-                                max_retries
-                            );
-                        }
-                        return Ok(());
-                    }
-                    Err(e) => {
-                        // Status checks failed
-                        if attempt < max_retries {
-                            log::warn!(
-                                "⚠️  {} status checks failed on attempt {}/{}: {}",
-                                session_name,
-                                attempt,
-                                max_retries,
-                                e
-                            );
-                            log::warn!("   Retrying...");
-                            sleep_1s().await;
-                            continue;
-                        } else {
-                            log::error!(
-                                "❌ {} status checks failed after {} attempts",
-                                session_name,
-                                max_retries
-                            );
-                            return Err(anyhow!(
-                                "{} status checks failed after {} attempts: {}",
-                                session_name,
-                                max_retries,
-                                e
-                            ));
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                // Actions failed
-                if attempt < max_retries {
-                    log::warn!(
-                        "⚠️  {} actions failed on attempt {}/{}: {}",
-                        session_name,
-                        attempt,
-                        max_retries,
-                        e
-                    );
-                    log::warn!("   Retrying...");
-                    sleep_1s().await;
-                    continue;
-                } else {
-                    log::error!(
-                        "❌ {} actions failed after {} attempts",
-                        session_name,
-                        max_retries
-                    );
-                    return Err(anyhow!(
-                        "{} actions failed after {} attempts: {}",
-                        session_name,
-                        max_retries,
-                        e
-                    ));
-                }
-            }
-        }
+    if let Some(retries) = max_retries {
+        step = step.with_max_attempts(retries);
     }
 
-    Err(anyhow!(
-        "{} failed after {} attempts",
-        session_name,
-        max_retries
-    ))
+    step.run(session, cap).await
 }

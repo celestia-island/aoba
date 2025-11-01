@@ -7,8 +7,6 @@ mod configure;
 mod connection;
 mod creation;
 mod focus;
-mod persistence;
-mod registers;
 
 pub use configure::{
     configure_register_count, configure_register_type, configure_start_address,
@@ -17,8 +15,6 @@ pub use configure::{
 pub use connection::ensure_connection_mode;
 pub use creation::create_station;
 pub use focus::{focus_create_station_button, focus_station};
-pub use persistence::save_configuration_and_verify;
-pub use registers::initialize_slave_registers;
 
 const MODBUS_DASHBOARD_PAGE: &str = "modbus_dashboard";
 

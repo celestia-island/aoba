@@ -7,7 +7,8 @@ use super::super::config::{RegisterMode, RegisterModeExt};
 use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
 use aoba_ci_utils::{
-    execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, TerminalCapture,
+    execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, ScreenAssertion,
+    ScreenPatternSpec, TerminalCapture,
 };
 
 /// Configures the Station ID for a given station.
@@ -36,6 +37,7 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
         &[modbus_page_check(
             "ModbusDashboard active while entering Station ID edit",
         )],
+        &[],
         "enter_edit_station_id",
         None,
     )
@@ -53,6 +55,7 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
         &[modbus_page_check(
             "ModbusDashboard active while typing Station ID",
         )],
+        &[],
         "type_station_id",
         None,
     )
@@ -70,6 +73,7 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
             timeout_secs: Some(5),
             retry_interval_ms: Some(500),
         }],
+        &[],
         "commit_station_id",
         Some(3),
     )
@@ -127,16 +131,13 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
             session,
             cap,
             &actions,
-            &[
-                CursorAction::MatchPattern {
-                    pattern: register_type_focus_pattern.clone(),
-                    description: "Cursor positioned on Register Type".to_string(),
-                    line_range: None,
-                    col_range: None,
-                    retry_action: None,
-                },
-                modbus_page_check("ModbusDashboard active while locating Register Type"),
-            ],
+            &[modbus_page_check(
+                "ModbusDashboard active while locating Register Type",
+            )],
+            &[ScreenAssertion::pattern(ScreenPatternSpec::new(
+                register_type_focus_pattern.clone(),
+                "Cursor positioned on Register Type",
+            ))],
             &format!("nav_to_register_type_step_{}", attempt + 1),
             Some(3),
         )
@@ -174,21 +175,18 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressEnter, CursorAction::Sleep1s],
-        &[
-            CursorAction::MatchPattern {
-                pattern: register_type_edit_pattern,
-                description: "Register Type selector opened".to_string(),
-                line_range: None,
-                col_range: None,
-                retry_action: Some(vec![
+        &[modbus_page_check(
+            "ModbusDashboard active while entering Register Type selector",
+        )],
+        &[ScreenAssertion::pattern(
+            ScreenPatternSpec::new(register_type_edit_pattern, "Register Type selector opened")
+                .with_retry_action(Some(vec![
                     CursorAction::PressEscape,
                     CursorAction::Sleep1s,
                     CursorAction::PressEnter,
                     CursorAction::Sleep1s,
-                ]),
-            },
-            modbus_page_check("ModbusDashboard active while entering Register Type selector"),
-        ],
+                ])),
+        )],
         "enter_register_type_selector",
         None,
     )
@@ -206,6 +204,7 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
             &[modbus_page_check(
                 "ModbusDashboard active while selecting Register Type",
             )],
+            &[],
             "select_register_type_option",
             None,
         )
@@ -217,16 +216,13 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressEnter, CursorAction::Sleep1s],
-        &[
-            CursorAction::MatchPattern {
-                pattern: register_type_value_pattern,
-                description: format!("Register Type line shows {}", register_type_value_label),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
-            modbus_page_check("ModbusDashboard active after committing Register Type"),
-        ],
+        &[modbus_page_check(
+            "ModbusDashboard active after committing Register Type",
+        )],
+        &[ScreenAssertion::pattern(ScreenPatternSpec::new(
+            register_type_value_pattern,
+            format!("Register Type line shows {}", register_type_value_label),
+        ))],
         "confirm_register_type",
         Some(3),
     )
@@ -313,6 +309,7 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
         &[modbus_page_check(
             "ModbusDashboard active while navigating to field",
         )],
+        &[],
         &format!("nav_to_{}", field_name),
         None,
     )
@@ -337,13 +334,6 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
         cap,
         &actions,
         &[
-            CursorAction::MatchPattern {
-                pattern: field_display_pattern,
-                description: format!("{field_label} line shows {value}"),
-                line_range: None,
-                col_range: None,
-                retry_action: None,
-            },
             CursorAction::CheckStatus {
                 description: format!("{field_name} is {value}"),
                 path,
@@ -353,6 +343,10 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
             },
             modbus_page_check("ModbusDashboard active after committing numeric field"),
         ],
+        &[ScreenAssertion::pattern(ScreenPatternSpec::new(
+            field_display_pattern,
+            format!("{field_label} line shows {value}"),
+        ))],
         step_name,
         Some(3),
     )
