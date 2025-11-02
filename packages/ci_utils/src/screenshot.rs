@@ -173,9 +173,14 @@ impl ScreenshotContext {
 
         // Strict comparison
         if actual.trim() != expected.trim() {
+            // Save both to /tmp for debugging
+            std::fs::write("/tmp/expected_screenshot.txt", &expected)?;
+            std::fs::write("/tmp/actual_screenshot.txt", &actual)?;
             log::error!("❌ Screenshot mismatch at {}", filename);
             log::error!("Expected:\n{}", expected);
             log::error!("Actual:\n{}", actual);
+            log::error!("Debug: Saved expected to /tmp/expected_screenshot.txt");
+            log::error!("Debug: Saved actual to /tmp/actual_screenshot.txt");
             return Err(anyhow!(
                 "Screenshot verification failed for {}: content does not match reference",
                 filename
