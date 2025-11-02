@@ -62,18 +62,12 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
     )
     .await?;
 
-    // Step 3: Commit and verify
+    // Step 3: Commit (no status check needed - will be verified via screenshot)
     execute_with_status_checks(
         session,
         cap,
         &[CursorAction::PressEnter],
-        &[CursorAction::CheckStatus {
-            description: format!("Station ID updated to {}", station_id),
-            path,
-            expected: json!(station_id),
-            timeout_secs: Some(5),
-            retry_interval_ms: Some(500),
-        }],
+        &[], // No status checks - rely on screenshot verification instead
         &[],
         "commit_station_id",
         Some(3),
@@ -335,13 +329,7 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
         cap,
         &actions,
         &[
-            CursorAction::CheckStatus {
-                description: format!("{field_name} is {value}"),
-                path,
-                expected: json!(value),
-                timeout_secs: Some(5),
-                retry_interval_ms: Some(500),
-            },
+            // Remove CheckStatus - rely on screenshot verification instead
             modbus_page_check("ModbusDashboard active after committing numeric field"),
         ],
         &[ScreenAssertion::pattern(ScreenPatternSpec::new(

@@ -847,3 +847,48 @@ impl Default for StateBuilder {
         Self::new()
     }
 }
+
+/// Verify terminal screen content against JSON snapshot rules loaded via include_str!
+///
+/// This is a standalone verification function that can be used without SnapshotContext.
+/// It's designed to work with JSON rules embedded in the test binary via `include_str!`.
+///
+/// # Arguments
+/// * `screen_content` - The captured terminal screen content
+/// * `json_rules` - The JSON rules string (typically from `include_str!("path/to/rules.json")`)
+/// * `step_name` - The name of the step to verify (matches the "name" field in JSON)
+///
+/// # Example
+/// ```no_run
+/// use aoba_ci_utils::*;
+///
+/// const RULES: &str = include_str!("../screenshots/single_station/master_modes/coils.json");
+///
+/// async fn test_example() -> anyhow::Result<()> {
+///     let mut session = spawn_expect_process(&["--tui"])?;
+///     let mut cap = TerminalCapture::with_size(TerminalSize::Large);
+///     
+///     // Perform some actions...
+///     let screen = cap.capture(&mut session, "after_action").await?;
+///     
+///     // Verify against specific step
+///     verify_screen_with_json_rules(
+///         &screen,
+///         RULES,
+///         "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
+///     )?;
+///     
+///     Ok(())
+/// }
+/// ```
+pub fn verify_screen_with_json_rules(
+    screen_content: &str,
+    json_rules: &str,
+    step_name: &str,
+) -> Result<()> {
+    // Parse JSON rules
+    let definitions = SnapshotContext::load_snapshot_definitions_from_str(json_rules)?;
+    
+    // Verify using the step name
+    SnapshotContext::verify_screen_by_step_name(screen_content, &definitions, step_name)
+}

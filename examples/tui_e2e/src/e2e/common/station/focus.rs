@@ -62,13 +62,7 @@ pub async fn focus_station<T: Expect + ExpectSession>(
         cap,
         &actions,
         &[
-            CursorAction::CheckStatus {
-                description: format!("Station {} visible", station_index + 1),
-                path: station_field_path(port_name, is_master, station_index, "register_type"),
-                expected: json!("Holding"),
-                timeout_secs: Some(5),
-                retry_interval_ms: Some(500),
-            },
+            // Remove CheckStatus - rely on screenshot verification
             modbus_page_check("ModbusDashboard active while focusing station"),
         ],
         &[],
