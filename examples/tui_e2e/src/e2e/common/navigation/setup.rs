@@ -89,9 +89,14 @@ pub async fn setup_tui_test(
 
     // Start TUI session (even in generation mode, but we won't interact with it much)
     log::info!("Starting TUI in debug mode with --no-config-cache...");
-    let mut tui_session =
-        spawn_expect_session(&["--tui", "--debug-ci-e2e-test", "--no-config-cache"])?;
-    let mut tui_cap = TerminalCapture::with_size(TerminalSize::Small);
+    // Use Large terminal size to match screenshot generation (40 rows x 80 columns)
+    let terminal_size = TerminalSize::Large;
+    let (rows, cols) = terminal_size.dimensions();
+    let mut tui_session = spawn_expect_session_with_size(
+        &["--tui", "--debug-ci-e2e-test", "--no-config-cache"],
+        Some((rows, cols)),
+    )?;
+    let mut tui_cap = TerminalCapture::with_size(terminal_size);
 
     // Only wait for pages in normal mode
     if !is_generation_mode {
@@ -138,13 +143,18 @@ pub async fn setup_tui_test(
 
     // Generate/verify config_panel screenshot
     if let Some(ctx) = screenshot_ctx {
+        let mut config_state = create_config_panel_state(port1);
+        // Add the second discovered port
+        config_state.ports.push(TuiPort {
+            name: _port2.to_string(),
+            enabled: false,
+            state: E2EPortState::Free,
+            modbus_masters: Vec::new(),
+            modbus_slaves: Vec::new(),
+            log_count: 0,
+        });
         let config_filename = ctx
-            .capture_or_verify(
-                &mut tui_session,
-                &mut tui_cap,
-                create_config_panel_state(port1),
-                "config_panel",
-            )
+            .capture_or_verify(&mut tui_session, &mut tui_cap, config_state, "config_panel")
             .await?;
 
         if !is_generation_mode {

@@ -48,7 +48,16 @@ pub async fn run_detailed_multi_master_test(
     }
 
     // Screenshot: Initial ModbusDashboard
-    let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
+    let mut state = super::super::state_helpers::create_modbus_dashboard_state(port1);
+    // Add the second discovered port
+    state.ports.push(TuiPort {
+        name: port2.to_string(),
+        enabled: false,
+        state: E2EPortState::Free,
+        modbus_masters: Vec::new(),
+        modbus_slaves: Vec::new(),
+        log_count: 0,
+    });
     let _ = screenshot_ctx
         .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
         .await?;
@@ -93,7 +102,16 @@ pub async fn run_detailed_multi_slave_test(
     }
 
     // Screenshot: Initial ModbusDashboard
-    let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
+    let mut state = super::super::state_helpers::create_modbus_dashboard_state(port1);
+    // Add the second discovered port
+    state.ports.push(TuiPort {
+        name: port2.to_string(),
+        enabled: false,
+        state: E2EPortState::Free,
+        modbus_masters: Vec::new(),
+        modbus_slaves: Vec::new(),
+        log_count: 0,
+    });
     let _ = screenshot_ctx
         .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
         .await?;
