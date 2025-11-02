@@ -62,20 +62,6 @@ pub async fn navigate_to_modbus_panel<T: Expect + ExpectSession>(
 
     wait_for_tui_page("ModbusDashboard", 10, None).await?;
 
-    // Exit any edit mode and reset cursor to top of panel
-    execute_cursor_actions(
-        session,
-        cap,
-        &[
-            CursorAction::PressEscape,   // Exit edit mode if active
-            CursorAction::Sleep1s,
-            CursorAction::PressCtrlPageUp,  // Reset to top
-            CursorAction::Sleep1s,
-        ],
-        "reset_cursor_to_top",
-    )
-    .await?;
-
     log::info!("✅ Successfully entered Modbus panel");
     Ok(())
 }
