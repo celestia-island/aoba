@@ -860,26 +860,19 @@ impl Default for StateBuilder {
 ///
 /// # Example
 /// ```no_run
-/// use aoba_ci_utils::*;
-///
+/// # use aoba_ci_utils::*;
 /// const RULES: &str = include_str!("../screenshots/single_station/master_modes/coils.json");
 ///
-/// async fn test_example() -> anyhow::Result<()> {
-///     let mut session = spawn_expect_process(&["--tui"])?;
-///     let mut cap = TerminalCapture::with_size(TerminalSize::Large);
-///     
-///     // Perform some actions...
-///     let screen = cap.capture(&mut session, "after_action").await?;
-///     
-///     // Verify against specific step
-///     verify_screen_with_json_rules(
-///         &screen,
-///         RULES,
-///         "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
-///     )?;
-///     
-///     Ok(())
-/// }
+/// # async fn test_example() -> anyhow::Result<()> {
+/// # let screen = "test screen content";
+/// // Verify against specific step
+/// verify_screen_with_json_rules(
+///     screen,
+///     RULES,
+///     "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
+/// )?;
+/// # Ok(())
+/// # }
 /// ```
 pub fn verify_screen_with_json_rules(
     screen_content: &str,
