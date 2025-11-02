@@ -129,3 +129,111 @@ pub fn update_register_value(
         }
     })
 }
+
+/// Add a station with default values as created by the TUI (Holding registers, count 1)
+pub fn add_default_station(state: TuiStatus, is_master: bool) -> TuiStatus {
+    let default_station_id = 1;
+    let default_register_type = "Holding";
+    let default_start_address = 0u16;
+    let default_register_count = 1usize;
+
+    if is_master {
+        add_master_station(
+            state,
+            default_station_id,
+            default_register_type,
+            default_start_address,
+            default_register_count,
+        )
+    } else {
+        add_slave_station(
+            state,
+            default_station_id,
+            default_register_type,
+            default_start_address,
+            default_register_count,
+        )
+    }
+}
+
+/// Update the station ID for a given station
+pub fn update_station_id(
+    state: TuiStatus,
+    station_index: usize,
+    station_id: u8,
+    is_master: bool,
+) -> TuiStatus {
+    apply_state_change(state, |s| {
+        if let Some(port) = s.ports.first_mut() {
+            if is_master {
+                if let Some(station) = port.modbus_masters.get_mut(station_index) {
+                    station.station_id = station_id;
+                }
+            } else if let Some(station) = port.modbus_slaves.get_mut(station_index) {
+                station.station_id = station_id;
+            }
+        }
+    })
+}
+
+/// Update the register type for a given station
+pub fn update_register_type(
+    state: TuiStatus,
+    station_index: usize,
+    register_type: &str,
+    is_master: bool,
+) -> TuiStatus {
+    apply_state_change(state, |s| {
+        if let Some(port) = s.ports.first_mut() {
+            if is_master {
+                if let Some(station) = port.modbus_masters.get_mut(station_index) {
+                    station.register_type = register_type.to_string();
+                }
+            } else if let Some(station) = port.modbus_slaves.get_mut(station_index) {
+                station.register_type = register_type.to_string();
+            }
+        }
+    })
+}
+
+/// Update the start address for a given station
+pub fn update_start_address(
+    state: TuiStatus,
+    station_index: usize,
+    start_address: u16,
+    is_master: bool,
+) -> TuiStatus {
+    apply_state_change(state, |s| {
+        if let Some(port) = s.ports.first_mut() {
+            if is_master {
+                if let Some(station) = port.modbus_masters.get_mut(station_index) {
+                    station.start_address = start_address;
+                }
+            } else if let Some(station) = port.modbus_slaves.get_mut(station_index) {
+                station.start_address = start_address;
+            }
+        }
+    })
+}
+
+/// Update the register count for a given station, resizing register storage as needed
+pub fn update_register_count(
+    state: TuiStatus,
+    station_index: usize,
+    register_count: usize,
+    is_master: bool,
+) -> TuiStatus {
+    apply_state_change(state, |s| {
+        if let Some(port) = s.ports.first_mut() {
+            if is_master {
+                if let Some(station) = port.modbus_masters.get_mut(station_index) {
+                    station.register_count = register_count;
+                    station.registers.resize(register_count, 0);
+                }
+            } else if let Some(station) = port.modbus_slaves.get_mut(station_index) {
+                station.register_count = register_count;
+                station.registers.resize(register_count, 0);
+            }
+        }
+    })
+}

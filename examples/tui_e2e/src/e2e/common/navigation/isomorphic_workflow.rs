@@ -13,59 +13,16 @@ use expectrl::Expect;
 use super::super::{
     config::StationConfig,
     state_helpers::{
-        add_master_station, add_slave_station, create_modbus_dashboard_state, enable_port,
-        update_register_value,
+        add_default_station, create_modbus_dashboard_state, enable_port, update_register_count,
+        update_register_type, update_register_value, update_start_address, update_station_id,
     },
     station::{
         configure_register_count, configure_register_type, configure_start_address,
-        configure_station_id, create_station, ensure_connection_mode, focus_create_station_button,
-        focus_station,
+        configure_station_id, create_station, ensure_connection_mode, focus_station,
     },
 };
 use crate::e2e::common::config::RegisterMode;
 use aoba_ci_utils::*;
-
-/// Helper to create state with N stations configured
-fn create_state_with_stations(
-    port_name: &str,
-    configs: &[StationConfig],
-    is_master: bool,
-) -> TuiStatus {
-    let mut state = create_modbus_dashboard_state(port_name);
-
-    // Add port2 to state prediction (TUI discovers both ports)
-    state.ports.push(TuiPort {
-        name: "/tmp/vcom2".to_string(),
-        enabled: false,
-        state: E2EPortState::Free,
-        modbus_masters: Vec::new(),
-        modbus_slaves: Vec::new(),
-        log_count: 0,
-    });
-
-    for config in configs {
-        let register_type = format!("{:?}", config.register_mode());
-        if is_master {
-            state = add_master_station(
-                state,
-                config.station_id(),
-                &register_type,
-                config.start_address(),
-                config.register_count() as usize,
-            );
-        } else {
-            state = add_slave_station(
-                state,
-                config.station_id(),
-                &register_type,
-                config.start_address(),
-                config.register_count() as usize,
-            );
-        }
-    }
-
-    state
-}
 
 /// Isomorphic workflow: Configure stations with screenshots
 ///
@@ -85,12 +42,8 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     let is_master = configs[0].is_master();
     let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
 
-    // Step 1: Switch connection mode (Master/Slave)
-    if !is_generation_mode {
-        ensure_connection_mode(session, cap, is_master).await?;
-    }
+    // Shared state prediction that will be incrementally updated to mirror UI changes
     let mut state = create_modbus_dashboard_state(port_name);
-    // Add port2 to state prediction (TUI discovers both ports)
     state.ports.push(TuiPort {
         name: "/tmp/vcom2".to_string(),
         enabled: false,
@@ -99,11 +52,16 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         modbus_slaves: Vec::new(),
         log_count: 0,
     });
+
+    // Step 1: Switch connection mode (Master/Slave)
+    if !is_generation_mode {
+        ensure_connection_mode(session, cap, is_master).await?;
+    }
     let _ = screenshot_ctx
         .capture_or_verify(
             session,
             cap,
-            state,
+            state.clone(),
             &format!(
                 "connection_mode_{}",
                 if is_master { "master" } else { "slave" }
@@ -122,22 +80,20 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             station_indices.push(idx);
         }
 
+        state = add_default_station(state, is_master);
+
         // Screenshot: After creating each station
-        let state = create_state_with_stations(port_name, &configs[..=idx], is_master);
         let _ = screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
-                state,
+                state.clone(),
                 &format!("after_create_station_{}", idx + 1),
             )
             .await?;
     }
 
     // Step 3: Configure each station
-    // CRITICAL: Use a single mutable state variable that accumulates register values across all stations
-    let mut state = create_state_with_stations(port_name, configs, is_master);
-
     for (idx, config) in configs.iter().enumerate() {
         let station_index = station_indices[idx];
 
@@ -183,6 +139,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
+        state = update_station_id(state, station_index, config.station_id(), is_master);
         let _ = screenshot_ctx
             .capture_or_verify(
                 session,
@@ -221,6 +178,12 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
+        state = update_register_type(
+            state,
+            station_index,
+            &format!("{:?}", config.register_mode()),
+            is_master,
+        );
         let _ = screenshot_ctx
             .capture_or_verify(
                 session,
@@ -259,6 +222,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
+        state = update_start_address(state, station_index, config.start_address(), is_master);
         let _ = screenshot_ctx
             .capture_or_verify(
                 session,
@@ -297,6 +261,12 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
+        state = update_register_count(
+            state,
+            station_index,
+            config.register_count() as usize,
+            is_master,
+        );
         let _ = screenshot_ctx
             .capture_or_verify(
                 session,
@@ -463,11 +433,6 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
                     &format!("station_{}_all_registers_updated", idx + 1),
                 )
                 .await?;
-        }
-
-        // Return to top for next station
-        if !is_generation_mode {
-            focus_create_station_button(session, cap).await?;
         }
     }
 
