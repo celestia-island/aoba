@@ -188,6 +188,38 @@ aoba --slave-listen-persist /dev/ttyUSB0 \
 cat /tmp/modbus_output
 ```
 
+## Daemon Mode (Persistent Operation)
+
+The CLI supports daemon-like continuous operation through the **persist modes**:
+
+- **Slave daemon**: Use `--slave-listen-persist` for continuous listening and responding
+- **Master daemon**: Use `--master-provide-persist` for continuous data provision
+
+These modes run indefinitely until interrupted (Ctrl+C) and output JSONL (one JSON object per line) for each operation. They are ideal for:
+
+- Long-running monitoring applications
+- Data logging systems
+- Integration with other tools via pipes or files
+- TUI subprocess communication (when combined with `--ipc-channel`)
+
+Example daemon usage:
+
+```bash
+# Run as slave daemon with file output logging
+aoba --slave-listen-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-mode holding \
+  --output file:/var/log/modbus-slave.jsonl
+
+# Run as master daemon with pipe input
+aoba --master-provide-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-mode holding \
+  --data-source pipe:/tmp/modbus_data
+```
+
+**Note**: The TUI mode uses these persist modes internally with `--ipc-channel` for bidirectional communication with CLI subprocesses.
+
 ## Parameters
 
 | Parameter | Description | Default |
@@ -199,6 +231,8 @@ cat /tmp/modbus_output
 | `--data-source` | Data source: `file:<path>` or `pipe:<name>` | - |
 | `--output` | Output destination: `file:<path>` or `pipe:<name>` (default: stdout) | stdout |
 | `--baud-rate` | Serial port baud rate | 9600 |
+| `--debounce-seconds` | Debounce window for duplicate JSON output (seconds, float) | 1.0 |
+| `--ipc-channel` | IPC channel UUID for TUI communication (internal use) | - |
 
 ## Register Modes
 

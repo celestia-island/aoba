@@ -188,6 +188,38 @@ aoba --slave-listen-persist /dev/ttyUSB0 \
 cat /tmp/modbus_output
 ```
 
+## 守护进程模式（常驻运行）
+
+CLI 通过 **常驻模式（persist modes）** 支持类似守护进程的持续运行：
+
+- **从站守护进程**：使用 `--slave-listen-persist` 实现持续监听和响应
+- **主站守护进程**：使用 `--master-provide-persist` 实现持续数据提供
+
+这些模式会无限期运行直到被中断（Ctrl+C），并以 JSONL 格式输出（每行一个 JSON 对象）记录每次操作。它们适用于：
+
+- 长时间运行的监控应用
+- 数据记录系统
+- 通过管道或文件与其他工具集成
+- TUI 子进程通信（与 `--ipc-channel` 配合使用）
+
+守护进程模式使用示例：
+
+```bash
+# 作为从站守护进程运行，输出到文件日志
+aoba --slave-listen-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-mode holding \
+  --output file:/var/log/modbus-slave.jsonl
+
+# 作为主站守护进程运行，从管道读取输入
+aoba --master-provide-persist /dev/ttyUSB0 \
+  --station-id 1 \
+  --register-mode holding \
+  --data-source pipe:/tmp/modbus_data
+```
+
+**注意**：TUI 模式内部使用这些常驻模式配合 `--ipc-channel` 与 CLI 子进程进行双向通信。
+
 ## 参数
 
 | 参数 | 说明 | 默认值 |
@@ -199,6 +231,8 @@ cat /tmp/modbus_output
 | `--data-source` | 数据源：`file:<path>` 或 `pipe:<name>` | - |
 | `--output` | 输出目标：`file:<path>` 或 `pipe:<name>`（默认：标准输出） | stdout |
 | `--baud-rate` | 串口波特率 | 9600 |
+| `--debounce-seconds` | 重复 JSON 输出的去抖动窗口（秒，浮点数） | 1.0 |
+| `--ipc-channel` | TUI 通信的 IPC 通道 UUID（内部使用） | - |
 
 ## 寄存器模式
 
