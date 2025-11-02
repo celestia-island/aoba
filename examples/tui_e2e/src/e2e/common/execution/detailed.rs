@@ -45,7 +45,7 @@ pub async fn run_detailed_multi_master_test(
     if !is_generation_mode {
         navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
         wait_for_tui_page("ModbusDashboard", 10, None).await?;
-        
+
         // Wait extra time for cursor reset to complete and UI to stabilize
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }
@@ -102,7 +102,7 @@ pub async fn run_detailed_multi_slave_test(
     if !is_generation_mode {
         navigate_to_modbus_panel(&mut session, &mut cap, port1).await?;
         wait_for_tui_page("ModbusDashboard", 10, None).await?;
-        
+
         // Wait extra time for cursor reset to complete and UI to stabilize
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
     }

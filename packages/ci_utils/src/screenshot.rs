@@ -315,6 +315,8 @@ impl StateBuilder {
                 ports: Vec::new(),
                 page: crate::status_monitor::TuiPage::Entry,
                 timestamp: Local::now().to_rfc3339(),
+                cursor: None,
+                temporaries: None,
             },
         }
     }

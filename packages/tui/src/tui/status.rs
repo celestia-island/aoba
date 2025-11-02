@@ -30,6 +30,10 @@ pub mod serializable {
         pub ports: Vec<TuiPort>,
         pub page: TuiPage,
         pub timestamp: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub cursor: Option<PageCursor>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub temporaries: Option<TemporariesSnapshot>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -70,6 +74,46 @@ pub mod serializable {
         pub register_count: usize,
         #[serde(default)]
         pub registers: Vec<u16>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[serde(tag = "type", rename_all = "snake_case")]
+    pub enum PageCursor {
+        Entry {
+            position: String,
+        },
+        ConfigPanel {
+            cursor: String,
+            view_offset: usize,
+        },
+        ModbusDashboard {
+            cursor: String,
+            view_offset: usize,
+        },
+        LogPanel {
+            selected_item: Option<usize>,
+        },
+        About {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            view_offset: Option<usize>,
+        },
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct TemporariesSnapshot {
+        pub config_edit: ConfigEditSnapshot,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ConfigEditSnapshot {
+        pub active: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub port: Option<String>,
+        pub field_index: usize,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub field_key: Option<String>,
+        pub buffer: String,
+        pub cursor_pos: usize,
     }
 
     /// Convert from global Status to TuiStatus for serialization
@@ -119,6 +163,47 @@ pub mod serializable {
                 }
             }
 
+            let cursor = match &status.page {
+                super::Page::Entry { cursor, .. } => {
+                    cursor.as_ref().map(|entry_cursor| PageCursor::Entry {
+                        position: format!("{:?}", entry_cursor),
+                    })
+                }
+                super::Page::ConfigPanel {
+                    cursor,
+                    view_offset,
+                    ..
+                } => Some(PageCursor::ConfigPanel {
+                    cursor: format!("{:?}", cursor),
+                    view_offset: *view_offset,
+                }),
+                super::Page::ModbusDashboard {
+                    cursor,
+                    view_offset,
+                    ..
+                } => Some(PageCursor::ModbusDashboard {
+                    cursor: format!("{:?}", cursor),
+                    view_offset: *view_offset,
+                }),
+                super::Page::LogPanel { selected_item, .. } => Some(PageCursor::LogPanel {
+                    selected_item: *selected_item,
+                }),
+                super::Page::About { view_offset } => Some(PageCursor::About {
+                    view_offset: Some(*view_offset),
+                }),
+            };
+
+            let temporaries = TemporariesSnapshot {
+                config_edit: ConfigEditSnapshot {
+                    active: status.temporarily.config_edit.active,
+                    port: status.temporarily.config_edit.port.clone(),
+                    field_index: status.temporarily.config_edit.field_index,
+                    field_key: status.temporarily.config_edit.field_key.clone(),
+                    buffer: status.temporarily.config_edit.buffer.clone(),
+                    cursor_pos: status.temporarily.config_edit.cursor_pos,
+                },
+            };
+
             let page = match &status.page {
                 super::Page::Entry { .. } => TuiPage::Entry,
                 super::Page::ConfigPanel { .. } => TuiPage::ConfigPanel,
@@ -131,6 +216,8 @@ pub mod serializable {
                 ports,
                 page,
                 timestamp: chrono::Local::now().to_rfc3339(),
+                cursor,
+                temporaries: Some(temporaries),
             }
         }
 

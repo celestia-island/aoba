@@ -19,7 +19,8 @@ pub mod tui;
 pub mod verify;
 
 pub use atomic_ops::{
-    atomic_change_selection, atomic_move_cursor, atomic_type_text, SelectionKey,
+    atomic_change_selection, atomic_edit_steps, atomic_move_cursor, atomic_type_text,
+    wait_for_state_value, AtomicEditStep, EditKeyCommand, SelectionKey,
 };
 pub use auto_cursor::{
     execute_cursor_actions, execute_with_status_checks, CursorAction, ScreenAssertion,

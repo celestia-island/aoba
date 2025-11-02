@@ -8,7 +8,6 @@
 /// - State must stabilize (3 consecutive identical readings) before proceeding  
 /// - Failed keypresses are retried (up to 3 attempts)
 /// - All operations fail fast with clear error messages
-
 use anyhow::{anyhow, Result};
 use serde_json::Value;
 use std::fmt::Debug;
@@ -25,38 +24,104 @@ const STABILITY_CHECKS: usize = 3;
 /// Interval between state checks in milliseconds
 const STATE_CHECK_INTERVAL_MS: u64 = 1000;
 
+/// Key commands supported by the atomic edit engine
+#[derive(Debug, Clone, Copy)]
+pub enum EditKeyCommand {
+    Char(char),
+    Backspace,
+    CtrlA,
+    Enter,
+    Escape,
+    CtrlS,
+    Tab,
+    Arrow(ArrowKey),
+}
+
+/// Description of a single atomic edit step
+pub struct AtomicEditStep<'a> {
+    pub key: EditKeyCommand,
+    pub monitor_paths: Vec<&'a str>,
+    pub description: String,
+}
+
+fn format_edit_key(key: EditKeyCommand) -> String {
+    match key {
+        EditKeyCommand::Char(ch) => format!("char('{}')", ch),
+        EditKeyCommand::Backspace => "Backspace".to_string(),
+        EditKeyCommand::CtrlA => "Ctrl+A".to_string(),
+        EditKeyCommand::Enter => "Enter".to_string(),
+        EditKeyCommand::Escape => "Escape".to_string(),
+        EditKeyCommand::CtrlS => "Ctrl+S".to_string(),
+        EditKeyCommand::Tab => "Tab".to_string(),
+        EditKeyCommand::Arrow(dir) => format!("Arrow {:?}", dir),
+    }
+}
+
+fn send_edit_key<T: ExpectSession>(session: &mut T, key: EditKeyCommand) -> Result<()> {
+    match key {
+        EditKeyCommand::Char(ch) => session
+            .send_char(ch)
+            .map_err(|err| anyhow!("Failed to send char '{}': {err}", ch)),
+        EditKeyCommand::Backspace => session
+            .send_backspace()
+            .map_err(|err| anyhow!("Failed to send Backspace: {err}")),
+        EditKeyCommand::CtrlA => session
+            .send_ctrl_a()
+            .map_err(|err| anyhow!("Failed to send Ctrl+A: {err}")),
+        EditKeyCommand::Enter => session
+            .send_enter()
+            .map_err(|err| anyhow!("Failed to send Enter: {err}")),
+        EditKeyCommand::Escape => session
+            .send_escape()
+            .map_err(|err| anyhow!("Failed to send Escape: {err}")),
+        EditKeyCommand::CtrlS => session
+            .send_ctrl_s()
+            .map_err(|err| anyhow!("Failed to send Ctrl+S: {err}")),
+        EditKeyCommand::Tab => session
+            .send_tab()
+            .map_err(|err| anyhow!("Failed to send Tab: {err}")),
+        EditKeyCommand::Arrow(direction) => session
+            .send_arrow(direction)
+            .map_err(|err| anyhow!("Failed to send arrow {:?}: {err}", direction)),
+    }
+}
+
 /// Extract a value from TUI status using a JSON path
-/// 
+///
 /// # Arguments
 /// * `status` - The TUI status object
 /// * `path` - JSON path like "ports[0].enabled" or "page"
 fn extract_state_value(status: &crate::TuiStatus, path: &str) -> Result<Value> {
     let json = serde_json::to_value(status)?;
-    
+
     // Simple path parser - supports:
     // - "page" -> direct field access
     // - "ports[0].enabled" -> array index and field access
     let mut current = &json;
-    
+
     for segment in path.split('.') {
         if segment.contains('[') {
             // Handle array index like "ports[0]"
             let parts: Vec<&str> = segment.split('[').collect();
             let field = parts[0];
             let index_str = parts[1].trim_end_matches(']');
-            let index: usize = index_str.parse()
+            let index: usize = index_str
+                .parse()
                 .map_err(|_| anyhow!("Invalid array index: {}", index_str))?;
-            
-            current = current.get(field)
+
+            current = current
+                .get(field)
                 .ok_or_else(|| anyhow!("Field not found: {}", field))?;
-            current = current.get(index)
+            current = current
+                .get(index)
                 .ok_or_else(|| anyhow!("Array index out of bounds: {}", index))?;
         } else {
-            current = current.get(segment)
+            current = current
+                .get(segment)
                 .ok_or_else(|| anyhow!("Field not found: {}", segment))?;
         }
     }
-    
+
     Ok(current.clone())
 }
 
@@ -71,13 +136,13 @@ fn extract_state_value(status: &crate::TuiStatus, path: &str) -> Result<Value> {
 async fn wait_for_state_stability(path: &str, max_checks: usize) -> Result<Value> {
     let mut stable_value: Option<Value> = None;
     let mut stable_count = 0;
-    
+
     for _check_num in 0..max_checks {
         sleep(Duration::from_millis(STATE_CHECK_INTERVAL_MS)).await;
-        
+
         let status = read_tui_status()?;
         let current_value = extract_state_value(&status, path)?;
-        
+
         if let Some(ref prev_value) = stable_value {
             if *prev_value == current_value {
                 stable_count += 1;
@@ -88,7 +153,7 @@ async fn wait_for_state_stability(path: &str, max_checks: usize) -> Result<Value
                     path,
                     current_value
                 );
-                
+
                 if stable_count >= STABILITY_CHECKS {
                     log::info!("✅ State stabilized at '{}': {:?}", path, current_value);
                     return Ok(current_value);
@@ -108,7 +173,7 @@ async fn wait_for_state_stability(path: &str, max_checks: usize) -> Result<Value
             stable_count = 1;
         }
     }
-    
+
     Err(anyhow!(
         "State did not stabilize after {} checks (path: {})",
         max_checks,
@@ -132,18 +197,154 @@ async fn verify_state_changed(
 ) -> Result<bool> {
     for _ in 0..timeout_checks {
         sleep(Duration::from_millis(STATE_CHECK_INTERVAL_MS)).await;
-        
+
         let status = read_tui_status()?;
         let current_value = extract_state_value(&status, path)?;
-        
+
         if current_value != *initial_value {
-            log::debug!("State changed at '{}': {:?} -> {:?}", path, initial_value, current_value);
+            log::debug!(
+                "State changed at '{}': {:?} -> {:?}",
+                path,
+                initial_value,
+                current_value
+            );
             return Ok(true);
         }
     }
-    
-    log::warn!("State did not change at '{}' after {} checks", path, timeout_checks);
+
+    log::warn!(
+        "State did not change at '{}' after {} checks",
+        path,
+        timeout_checks
+    );
     Ok(false)
+}
+
+async fn press_key_and_wait<T: ExpectSession>(
+    session: &mut T,
+    key: EditKeyCommand,
+    monitor_paths: &[&str],
+    description: &str,
+) -> Result<Vec<Value>> {
+    let mut baseline_values = if monitor_paths.is_empty() {
+        Vec::new()
+    } else {
+        let status = read_tui_status()?;
+        monitor_paths
+            .iter()
+            .map(|path| extract_state_value(&status, path))
+            .collect::<Result<Vec<_>>>()?
+    };
+
+    for attempt in 1..=MAX_KEYPRESS_RETRIES {
+        log::debug!(
+            "➡️  Atomic edit step '{}' sending key {} (attempt {}/{})",
+            description,
+            format_edit_key(key),
+            attempt,
+            MAX_KEYPRESS_RETRIES
+        );
+
+        send_edit_key(session, key)?;
+
+        if monitor_paths.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        for check_idx in 1..=STABILITY_CHECKS {
+            sleep(Duration::from_millis(STATE_CHECK_INTERVAL_MS)).await;
+            let status = read_tui_status()?;
+
+            let mut new_values = Vec::with_capacity(monitor_paths.len());
+            let mut changed = false;
+
+            for (idx, path) in monitor_paths.iter().enumerate() {
+                let current = extract_state_value(&status, path)?;
+                if current != baseline_values[idx] {
+                    changed = true;
+                }
+                new_values.push(current);
+            }
+
+            if changed {
+                log::debug!(
+                    "    State change detected for '{}' on check {} of attempt {}",
+                    description,
+                    check_idx,
+                    attempt
+                );
+                baseline_values = new_values;
+                return Ok(baseline_values.clone());
+            }
+        }
+
+        if attempt < MAX_KEYPRESS_RETRIES {
+            log::warn!(
+                "⚠️  No state change detected for '{}' after key {} (attempt {}). Retrying...",
+                description,
+                format_edit_key(key),
+                attempt
+            );
+        }
+    }
+
+    Err(anyhow!(
+        "State did not change for '{}' after {} attempts",
+        description,
+        MAX_KEYPRESS_RETRIES
+    ))
+}
+
+/// Execute a sequence of atomic edit steps, ensuring each keypress mutates the monitored state.
+pub async fn atomic_edit_steps<T: ExpectSession>(
+    session: &mut T,
+    steps: &[AtomicEditStep<'_>],
+) -> Result<()> {
+    for step in steps {
+        log::info!(
+            "🧱 Executing atomic edit step '{}' with key {}",
+            step.description,
+            format_edit_key(step.key)
+        );
+        press_key_and_wait(session, step.key, &step.monitor_paths, &step.description).await?;
+    }
+
+    Ok(())
+}
+
+/// Wait until the target state path equals the expected value, polling once per second.
+pub async fn wait_for_state_value(path: &str, expected: Value, max_checks: usize) -> Result<()> {
+    for attempt in 1..=max_checks {
+        sleep(Duration::from_millis(STATE_CHECK_INTERVAL_MS)).await;
+        let status = read_tui_status()?;
+        let current = extract_state_value(&status, path)?;
+
+        if current == expected {
+            log::info!(
+                "✅ State '{}' reached expected value {:?} after {} checks",
+                path,
+                expected,
+                attempt
+            );
+            return Ok(());
+        }
+
+        log::debug!(
+            "State '{}' currently {:?}, waiting for {:?} (attempt {}/{})",
+            path,
+            current,
+            expected,
+            attempt,
+            max_checks
+        );
+    }
+
+    Err(anyhow!(
+        "State '{}' did not reach expected value {:?} within {} checks",
+        path,
+        expected,
+        max_checks
+    ))
 }
 
 /// Atomic text input operation with state verification
@@ -164,64 +365,36 @@ pub async fn atomic_type_text<T: ExpectSession>(
     state_path: &str,
     expected_value: Option<Value>,
 ) -> Result<()> {
-    log::info!("📝 Atomic type text: '{}' into '{}'", text, state_path);
-    
-    // Read initial state
-    let initial_status = read_tui_status()?;
-    let initial_value = extract_state_value(&initial_status, state_path)?;
-    
-    for attempt in 1..=MAX_KEYPRESS_RETRIES {
-        // Type the text
-        for ch in text.chars() {
-            session.send_char(ch)?;
+    log::info!(
+        "📝 Atomic type text '{}' targeting state path '{}'",
+        text,
+        state_path
+    );
+
+    if text.is_empty() {
+        if let Some(expected) = expected_value {
+            wait_for_state_value(state_path, expected, STABILITY_CHECKS * 3).await?;
         }
-        
-        // Wait for state to stabilize
-        match wait_for_state_stability(state_path, STABILITY_CHECKS * 3).await {
-            Ok(final_value) => {
-                // Verify the value changed
-                if final_value == initial_value {
-                    log::warn!(
-                        "Attempt {}: State unchanged after typing, retrying...",
-                        attempt
-                    );
-                    continue;
-                }
-                
-                // If expected value provided, verify it matches
-                if let Some(ref expected) = expected_value {
-                    if final_value != *expected {
-                        return Err(anyhow!(
-                            "State value mismatch: expected {:?}, got {:?}",
-                            expected,
-                            final_value
-                        ));
-                    }
-                }
-                
-                log::info!(
-                    "✅ Text typed successfully: '{}' -> {:?}",
-                    text,
-                    final_value
-                );
-                return Ok(());
-            }
-            Err(e) => {
-                if attempt < MAX_KEYPRESS_RETRIES {
-                    log::warn!("Attempt {}: Failed to stabilize state: {}, retrying...", attempt, e);
-                    continue;
-                } else {
-                    return Err(anyhow!(
-                        "Failed to type text after {} attempts: {}",
-                        MAX_KEYPRESS_RETRIES,
-                        e
-                    ));
-                }
-            }
-        }
+        return Ok(());
     }
-    
-    Err(anyhow!("Unexpected: exceeded retry loop"))
+
+    let steps: Vec<AtomicEditStep<'_>> = text
+        .chars()
+        .enumerate()
+        .map(|(idx, ch)| AtomicEditStep {
+            key: EditKeyCommand::Char(ch),
+            monitor_paths: vec![state_path],
+            description: format!("type_char_{}_{}", state_path, idx),
+        })
+        .collect();
+
+    atomic_edit_steps(session, &steps).await?;
+
+    if let Some(expected) = expected_value {
+        wait_for_state_value(state_path, expected, STABILITY_CHECKS * 3).await?;
+    }
+
+    Ok(())
 }
 
 /// Atomic cursor movement operation with state verification
@@ -250,16 +423,16 @@ pub async fn atomic_move_cursor<T: ExpectSession>(
         count,
         cursor_state_path
     );
-    
+
     for i in 0..count {
         // Read current cursor state
         let initial_status = read_tui_status()?;
         let initial_cursor = extract_state_value(&initial_status, cursor_state_path)?;
-        
+
         for attempt in 1..=MAX_KEYPRESS_RETRIES {
             // Press arrow key
             session.send_arrow(direction)?;
-            
+
             // Verify cursor state changed
             match verify_state_changed(cursor_state_path, &initial_cursor, STABILITY_CHECKS).await {
                 Ok(true) => {
@@ -280,7 +453,11 @@ pub async fn atomic_move_cursor<T: ExpectSession>(
                                 log::warn!("Cursor state didn't stabilize, retrying: {}", e);
                                 continue;
                             } else {
-                                return Err(anyhow!("Failed after {} attempts: {}", MAX_KEYPRESS_RETRIES, e));
+                                return Err(anyhow!(
+                                    "Failed after {} attempts: {}",
+                                    MAX_KEYPRESS_RETRIES,
+                                    e
+                                ));
                             }
                         }
                     }
@@ -302,12 +479,12 @@ pub async fn atomic_move_cursor<T: ExpectSession>(
             }
         }
     }
-    
+
     // If expected position provided, verify final position
     if let Some(ref expected) = expected_position {
         let final_status = read_tui_status()?;
         let final_cursor = extract_state_value(&final_status, cursor_state_path)?;
-        
+
         if final_cursor != *expected {
             return Err(anyhow!(
                 "Final cursor position mismatch: expected {:?}, got {:?}",
@@ -316,7 +493,7 @@ pub async fn atomic_move_cursor<T: ExpectSession>(
             ));
         }
     }
-    
+
     log::info!("✅ Cursor moved successfully {} times", count);
     Ok(())
 }
@@ -345,11 +522,11 @@ pub async fn atomic_change_selection<T: ExpectSession>(
         state_path,
         expected_value
     );
-    
+
     // Read initial state
     let initial_status = read_tui_status()?;
     let initial_value = extract_state_value(&initial_status, state_path)?;
-    
+
     for attempt in 1..=MAX_KEYPRESS_RETRIES {
         // Press the key
         match key {
@@ -358,7 +535,7 @@ pub async fn atomic_change_selection<T: ExpectSession>(
             SelectionKey::Right => session.send_arrow(ArrowKey::Right)?,
             SelectionKey::Escape => session.send_escape()?,
         }
-        
+
         // Wait for state to change
         match verify_state_changed(state_path, &initial_value, STABILITY_CHECKS).await {
             Ok(true) => {
@@ -372,7 +549,7 @@ pub async fn atomic_change_selection<T: ExpectSession>(
                                 final_value
                             ));
                         }
-                        
+
                         log::info!("✅ Selection changed successfully: {:?}", final_value);
                         return Ok(());
                     }
@@ -381,7 +558,11 @@ pub async fn atomic_change_selection<T: ExpectSession>(
                             log::warn!("State didn't stabilize, retrying: {}", e);
                             continue;
                         } else {
-                            return Err(anyhow!("Failed after {} attempts: {}", MAX_KEYPRESS_RETRIES, e));
+                            return Err(anyhow!(
+                                "Failed after {} attempts: {}",
+                                MAX_KEYPRESS_RETRIES,
+                                e
+                            ));
                         }
                     }
                 }
@@ -402,7 +583,7 @@ pub async fn atomic_change_selection<T: ExpectSession>(
             }
         }
     }
-    
+
     Err(anyhow!("Unexpected: exceeded retry loop"))
 }
 
@@ -426,8 +607,10 @@ mod tests {
             page: crate::TuiPage::Entry,
             ports: vec![],
             timestamp: "2025-11-02T00:00:00Z".to_string(),
+            cursor: None,
+            temporaries: None,
         };
-        
+
         let value = extract_state_value(&status, "page").unwrap();
         assert_eq!(value, json!("Entry"));
     }
@@ -436,19 +619,19 @@ mod tests {
     fn test_extract_array_field() {
         let status = crate::TuiStatus {
             page: crate::TuiPage::Entry,
-            ports: vec![
-                crate::TuiPort {
-                    name: "/tmp/vcom1".to_string(),
-                    enabled: true,
-                    state: crate::PortState::Free,
-                    modbus_masters: vec![],
-                    modbus_slaves: vec![],
-                    log_count: 0,
-                },
-            ],
+            ports: vec![crate::TuiPort {
+                name: "/tmp/vcom1".to_string(),
+                enabled: true,
+                state: crate::PortState::Free,
+                modbus_masters: vec![],
+                modbus_slaves: vec![],
+                log_count: 0,
+            }],
             timestamp: "2025-11-02T00:00:00Z".to_string(),
+            cursor: None,
+            temporaries: None,
         };
-        
+
         let value = extract_state_value(&status, "ports[0].enabled").unwrap();
         assert_eq!(value, json!(true));
     }

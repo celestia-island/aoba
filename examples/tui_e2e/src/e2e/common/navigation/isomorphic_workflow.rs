@@ -32,7 +32,7 @@ fn create_state_with_stations(
     is_master: bool,
 ) -> TuiStatus {
     let mut state = create_modbus_dashboard_state(port_name);
-    
+
     // Add port2 to state prediction (TUI discovers both ports)
     state.ports.push(TuiPort {
         name: "/tmp/vcom2".to_string(),
