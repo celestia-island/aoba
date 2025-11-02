@@ -1,4 +1,4 @@
-  🔌   AOBA > /tmp/vcom1 > ModBus Master/Slave Set                Not Started × 
+  🔌   AOBA > /tmp/vcom1 > ModBus Slave /Slave Set                Not Started × 
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ > Create Station                                                             │
 │   Connection Mode       Slave                                                │
@@ -34,7 +34,7 @@
 │                                                                              │
 │                                                                              │
 │                                                                              │
-│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
-               Press ↑ / k or ↓ / j to move    Press Enter to edit              
-                     d delete master    Press Esc to return                     
+Cannot enable port: Please configure at least one station first                 
+                                   clear logs                                   
+d delete slave     Press Ctrl+S to save config    Press Ctrl+Esc to discard chan
