@@ -14,7 +14,8 @@
         "type": "text",
         "value": "/tmp/vcom2"
       }
-    ]
+    ],
+    "name": "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
   },
   {
     "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ConfigPanel；快照，此时应当在 ConfigPanel",
@@ -26,7 +27,8 @@
         "type": "text",
         "value": "ConfigPanel"
       }
-    ]
+    ],
+    "name": "step_01_enter_1_次"
   },
   {
     "description": "进入页面阶段 - 向下 2 次；Mock 修改光标位置，指向 Enter Business Configuration；快照，此时大于号应当处于第三行",
@@ -42,7 +44,8 @@
         "type": "text",
         "value": "Enter Business Configuration"
       }
-    ]
+    ],
+    "name": "step_02_down_2_次"
   },
   {
     "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ModbusDashboard；快照，此时应当在 ModbusDashboard",
@@ -54,7 +57,8 @@
         "type": "text",
         "value": "ModbusDashboard"
       }
-    ]
+    ],
+    "name": "step_03_enter_1_次"
   },
   {
     "description": "创建站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入一个新的初始化站点；快照，此时下方多出了一个 `#1` 站点",
@@ -68,7 +72,8 @@
         "type": "text",
         "value": "#1"
       }
-    ]
+    ],
+    "name": "step_04_enter_1_次"
   },
   {
     "description": "配置站点阶段 - 先立即 Mock 修改光标位置，指向 `#1` 站点；快照，此时大于号应当处于第一行",
@@ -84,7 +89,8 @@
         "type": "text",
         "value": "#1"
       }
-    ]
+    ],
+    "name": "step_05_先立即_mock_modify光标位置指向_1_站点"
   },
   {
     "description": "配置站点阶段 - 向下 1 次；Mock 修改光标位置，指向 `#1` 站点的第二项 Register Type；快照，此时大于号应当处于第三行",
@@ -100,7 +106,8 @@
         "type": "text",
         "value": "Register Type"
       }
-    ]
+    ],
+    "name": "step_06_down_1_次"
   },
   {
     "description": "配置站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器模式下标 2（03 寄存器选项）；快照，此时屏幕中的 Holding Registers 附近应该有一对尖括号",
@@ -112,7 +119,8 @@
         "type": "text",
         "value": "> Holding Registers <"
       }
-    ]
+    ],
+    "name": "step_07_enter_1_次"
   },
   {
     "description": "配置站点阶段 - 向左 1 次；Mock 修改光标选项为下标 1（Discrete Inputs 寄存器选项）；快照，此时屏幕中的 Discrete Inputs 附近应该有一对尖括号",
@@ -124,7 +132,8 @@
         "type": "text",
         "value": "> Discrete Inputs <"
       }
-    ]
+    ],
+    "name": "step_08_left_1_次"
   },
   {
     "description": "配置站点阶段 - 回车 1 次；Mock 修改当前站点的寄存器模式为 Discrete Inputs；快照，此时 Holding Registers 附近的尖括号应当消失",
@@ -141,7 +150,8 @@
         "value": ">",
         "negate": true
       }
-    ]
+    ],
+    "name": "step_09_enter_1_次"
   },
   {
     "description": "配置站点阶段 - 向下 2 次；Mock 修改光标位置，指向 `#1` 站点的第四项 Register Length；快照，此时大于号应当处于第五行",
@@ -157,7 +167,8 @@
         "type": "text",
         "value": "Register Length"
       }
-    ]
+    ],
+    "name": "step_10_down_2_次"
   },
   {
     "description": "配置站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器长度下标 3（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
@@ -169,7 +180,8 @@
         "type": "text",
         "value": "> _ <"
       }
-    ]
+    ],
+    "name": "step_11_enter_1_次"
   },
   {
     "description": "配置站点阶段 - 输入数字 10；Mock 修改当前站点的寄存器长度为 10；快照，此时屏幕中对应位置应当显示为 `> 10_ <`",
@@ -181,7 +193,8 @@
         "type": "text",
         "value": "> 10_ <"
       }
-    ]
+    ],
+    "name": "step_12_input数字_10"
   },
   {
     "description": "配置站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的寄存器长度与实际寄存器暂存值；快照，此时屏幕中对应位置应当显示为 `10`，且两侧尖括号消失，下方多出了 10 个 OFF",
@@ -212,7 +225,8 @@
         "type": "text",
         "value": "OFF"
       }
-    ]
+    ],
+    "name": "step_13_pressenter键finish编辑"
   },
   {
     "description": "Master 模式特殊阶段 - 所有寄存器值批量更新为占位符；快照，此时所有寄存器位置应当显示为占位符 `{{0b#001}}` 到 `{{0b#010}}`",
@@ -234,7 +248,8 @@
         "value": "{{0b#010}}",
         "pattern": "any_boolean"
       }
-    ]
+    ],
+    "name": "step_14_master_模式特殊阶段_所有寄存器值批量更新为占位符"
   },
   {
     "description": "退出阶段 - 按下 Ctrl + S，保存当前配置，然后等待 3 秒；Mock 修改右上角状态为运行中状态；快照，此时右上角应当显示为运行中",
@@ -246,6 +261,7 @@
         "type": "text",
         "value": "运行中"
       }
-    ]
+    ],
+    "name": "step_15_press_ctrl_ssave当前配置然后wait_3_秒"
   }
 ]

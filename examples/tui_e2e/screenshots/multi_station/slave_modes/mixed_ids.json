@@ -14,7 +14,8 @@
         "type": "text",
         "value": "/tmp/vcom2"
       }
-    ]
+    ],
+    "name": "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
   },
   {
     "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ConfigPanel；快照，此时应当在 ConfigPanel",
@@ -26,7 +27,8 @@
         "type": "text",
         "value": "ConfigPanel"
       }
-    ]
+    ],
+    "name": "step_01_enter_1_次"
   },
   {
     "description": "进入页面阶段 - 向下 2 次；Mock 修改光标位置，指向 Enter Business Configuration；快照，此时大于号应当处于第三行",
@@ -42,7 +44,8 @@
         "type": "text",
         "value": "Enter Business Configuration"
       }
-    ]
+    ],
+    "name": "step_02_down_2_次"
   },
   {
     "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ModbusDashboard；快照，此时应当在 ModbusDashboard",
@@ -54,7 +57,8 @@
         "type": "text",
         "value": "ModbusDashboard"
       }
-    ]
+    ],
+    "name": "step_03_enter_1_次"
   },
   {
     "description": "创建第一个站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入一个新的初始化站点；快照，此时下方多出了一个 `#1` 站点",
@@ -68,7 +72,8 @@
         "type": "text",
         "value": "#1"
       }
-    ]
+    ],
+    "name": "step_04_创建第一个站点阶段_enter_1_次"
   },
   {
     "description": "创建第二个站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入第二个初始化站点；快照，此时下方多出了 `#1` 和 `#2` 站点",
@@ -86,7 +91,8 @@
         "type": "text",
         "value": "#2"
       }
-    ]
+    ],
+    "name": "step_05_创建第二个站点阶段_enter_1_次"
   },
   {
     "description": "配置第一个站点阶段 - 先立即 Mock 修改光标位置，指向 `#1` 站点；快照，此时大于号应当处于第一行",
@@ -102,7 +108,8 @@
         "type": "text",
         "value": "#1"
       }
-    ]
+    ],
+    "name": "step_06_配置第一个站点阶段_先立即_mock_modify光标位置指向_1_站点"
   },
   {
     "description": "配置第一个站点阶段 - 向下 3 次；Mock 修改光标位置，指向 `#1` 站点的第四项 Station ID；快照，此时大于号应当处于第五行",
@@ -118,7 +125,8 @@
         "type": "text",
         "value": "Station ID"
       }
-    ]
+    ],
+    "name": "step_07_配置第一个站点阶段_down_3_次"
   },
   {
     "description": "配置第一个站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的站点 ID 下标 0（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
@@ -130,7 +138,8 @@
         "type": "text",
         "value": "> _ <"
       }
-    ]
+    ],
+    "name": "step_08_配置第一个站点阶段_enter_1_次"
   },
   {
     "description": "配置第一个站点阶段 - 输入数字 10；Mock 修改当前站点的站点 ID 为 10；快照，此时屏幕中对应位置应当显示为 `> 10_ <`",
@@ -142,7 +151,8 @@
         "type": "text",
         "value": "> 10_ <"
       }
-    ]
+    ],
+    "name": "step_09_配置第一个站点阶段_input数字_10"
   },
   {
     "description": "配置第一个站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的站点 ID；快照，此时屏幕中对应位置应当显示为 `10`，且两侧尖括号消失",
@@ -159,7 +169,8 @@
         "value": ">",
         "negate": true
       }
-    ]
+    ],
+    "name": "step_10_配置第一个站点阶段_pressenter键finish编辑"
   },
   {
     "description": "配置第二个站点阶段 - 向上 3 次；Mock 修改光标位置，指向 `#2` 站点；快照，此时大于号应当处于第二行",
@@ -175,7 +186,8 @@
         "type": "text",
         "value": "#2"
       }
-    ]
+    ],
+    "name": "step_11_配置第二个站点阶段_向上_3_次"
   },
   {
     "description": "配置第二个站点阶段 - 向下 3 次；Mock 修改光标位置，指向 `#2` 站点的第四项 Station ID；快照，此时大于号应当处于第六行",
@@ -191,7 +203,8 @@
         "type": "text",
         "value": "Station ID"
       }
-    ]
+    ],
+    "name": "step_12_配置第二个站点阶段_down_3_次"
   },
   {
     "description": "配置第二个站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的站点 ID 下标 0（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
@@ -203,7 +216,8 @@
         "type": "text",
         "value": "> _ <"
       }
-    ]
+    ],
+    "name": "step_13_配置第二个站点阶段_enter_1_次"
   },
   {
     "description": "配置第二个站点阶段 - 输入数字 20；Mock 修改当前站点的站点 ID 为 20；快照，此时屏幕中对应位置应当显示为 `> 20_ <`",
@@ -215,7 +229,8 @@
         "type": "text",
         "value": "> 20_ <"
       }
-    ]
+    ],
+    "name": "step_14_配置第二个站点阶段_input数字_20"
   },
   {
     "description": "配置第二个站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的站点 ID；快照，此时屏幕中对应位置应当显示为 `20`，且两侧尖括号消失",
@@ -232,7 +247,8 @@
         "value": ">",
         "negate": true
       }
-    ]
+    ],
+    "name": "step_15_配置第二个站点阶段_pressenter键finish编辑"
   },
   {
     "description": "退出阶段 - 按下 Ctrl + S，保存当前配置，然后等待 3 秒；Mock 修改右上角状态为运行中状态；快照，此时右上角应当显示为运行中",
@@ -244,6 +260,7 @@
         "type": "text",
         "value": "运行中"
       }
-    ]
+    ],
+    "name": "step_16_press_ctrl_ssave当前配置然后wait_3_秒"
   }
 ]

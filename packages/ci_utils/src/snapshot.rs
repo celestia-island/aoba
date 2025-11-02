@@ -76,6 +76,8 @@ impl Default for PlaceholderPattern {
 /// Snapshot definition for JSON format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotDefinition {
+    /// Unique step name for identification (replaces index-based lookup)
+    pub name: String,
     /// Description of what this snapshot should show
     pub description: String,
     /// Lines to check (0-indexed)
@@ -163,6 +165,37 @@ impl SnapshotContext {
 
         log::info!("📖 Loaded {} snapshot definitions", definitions.len());
         Ok(definitions)
+    }
+
+    /// Load snapshot definitions from embedded JSON string (via include_str!)
+    pub fn load_snapshot_definitions_from_str(json_str: &str) -> Result<Vec<SnapshotDefinition>> {
+        let definitions: Vec<SnapshotDefinition> = serde_json::from_str(json_str)?;
+        log::info!(
+            "📖 Loaded {} snapshot definitions from embedded JSON",
+            definitions.len()
+        );
+        Ok(definitions)
+    }
+
+    /// Find a snapshot definition by its step name
+    pub fn find_definition_by_name<'a>(
+        definitions: &'a [SnapshotDefinition],
+        step_name: &str,
+    ) -> Result<&'a SnapshotDefinition> {
+        definitions
+            .iter()
+            .find(|def| def.name == step_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Snapshot definition not found for step '{}'. Available steps: {}",
+                    step_name,
+                    definitions
+                        .iter()
+                        .map(|d| d.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
     }
 
     /// Verify screen content against snapshot definitions
@@ -314,25 +347,215 @@ impl SnapshotContext {
         Ok(())
     }
 
+    /// Verify screen content against a specific named snapshot step
+    ///
+    /// This is the new recommended method that uses step names instead of indices.
+    pub fn verify_screen_by_step_name(
+        screen_content: &str,
+        definitions: &[SnapshotDefinition],
+        step_name: &str,
+    ) -> Result<()> {
+        let definition = Self::find_definition_by_name(definitions, step_name)?;
+        let lines: Vec<&str> = screen_content.lines().collect();
+
+        // Check specified lines exist
+        for &line_num in &definition.line {
+            if line_num >= lines.len() {
+                return Err(anyhow!(
+                    "Line {} not found in screen (only {} lines available) for step '{}'",
+                    line_num,
+                    lines.len(),
+                    step_name
+                ));
+            }
+        }
+
+        // Verify each search condition
+        for condition in &definition.search {
+            match condition {
+                SearchCondition::Text { value, negate } => {
+                    let mut found = false;
+                    for &line_num in &definition.line {
+                        if lines[line_num].contains(value) {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if *negate {
+                        if found {
+                            return Err(anyhow!(
+                                "Step '{}': Text '{}' should not be found in specified lines {:?}",
+                                step_name,
+                                value,
+                                definition.line
+                            ));
+                        }
+                    } else {
+                        if !found {
+                            return Err(anyhow!(
+                                "Step '{}': Text '{}' not found in specified lines {:?}",
+                                step_name,
+                                value,
+                                definition.line
+                            ));
+                        }
+                    }
+                }
+                SearchCondition::CursorLine { value } => {
+                    let mut found = false;
+                    for &line_num in &definition.line {
+                        if lines[line_num].contains('>') && line_num == *value {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        return Err(anyhow!(
+                            "Step '{}': Cursor not found at line {} in specified lines {:?}",
+                            step_name,
+                            value,
+                            definition.line
+                        ));
+                    }
+                }
+                SearchCondition::Placeholder { value, pattern } => {
+                    let mut found = false;
+                    for &line_num in &definition.line {
+                        let line = lines[line_num];
+
+                        match pattern {
+                            PlaceholderPattern::Exact => {
+                                if line.contains(value) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyBoolean => {
+                                if line.contains("{{0b#") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyDecimal => {
+                                if line.contains("{{#")
+                                    && !line.contains("{{0x#")
+                                    && !line.contains("{{0b#")
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyHexadecimal => {
+                                if line.contains("{{0x#") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Any => {
+                                if line.contains("{{") && line.contains("}}") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Range { start: _, end: _ } => {
+                                if line.contains("{{") && line.contains("}}") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Pattern { regex } => {
+                                if line.contains(&**regex) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if !found {
+                        return Err(anyhow!(
+                            "Step '{}': Placeholder pattern '{:?}' not found in specified lines {:?}",
+                            step_name,
+                            pattern,
+                            definition.line
+                        ));
+                    }
+                }
+            }
+        }
+
+        log::info!(
+            "✅ Snapshot verified for step '{}': {}",
+            step_name,
+            definition.description
+        );
+        Ok(())
+    }
+
     /// Capture or verify screenshot and state based on execution mode
     ///
     /// This is the main entry point for screenshot/state management.
-    /// - In GenerateScreenshots mode: Generates reference screenshot and saves predicted state
-    /// - In Normal mode: Verifies actual output against reference and checks state
+    /// - In GenerateScreenshots mode: 
+    ///   1. Write mock status to /tmp/status.json
+    ///   2. Spawn TUI in --debug-screen-capture mode
+    ///   3. Wait 3 seconds then kill the process
+    ///   4. Capture terminal output via expectrl + vt100
+    /// - In Normal mode: Verify actual terminal output against reference JSON rules
     pub async fn capture_or_verify<T: ExpectSession>(
         &self,
-        _session: &mut T,
-        _cap: &mut TerminalCapture,
-        _predicted_state: TuiStatus,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        predicted_state: TuiStatus,
         step_name: &str,
     ) -> Result<String> {
-        // For now, we'll use the old screenshot generation logic
-        // TODO: Implement JSON snapshot generation logic
-        log::warn!("⚠️  capture_or_verify not yet implemented for JSON snapshots");
-        log::info!("📸 Would capture/verify snapshot for step: {}", step_name);
-
-        // Return a dummy filename for now
-        Ok(format!("{}.txt", step_name))
+        match self.mode {
+            ExecutionMode::GenerateScreenshots => {
+                // Capture mode: Write state and spawn TUI to generate screenshot
+                log::info!("📸 Capture mode: Generating screenshot for step '{}'", step_name);
+                
+                // 1. Write mock global status to /tmp/status.json
+                let status_json = serde_json::to_string_pretty(&predicted_state)?;
+                std::fs::write("/tmp/status.json", &status_json)?;
+                log::info!("💾 Wrote mock status to /tmp/status.json");
+                
+                // 2. Spawn TUI in debug capture mode
+                log::info!("🚀 Spawning TUI in debug capture mode...");
+                let mut tui_session = crate::terminal::spawn_expect_session_with_size(
+                    &["--tui", "--debug-screen-capture", "--no-config-cache"],
+                    Some(cap.parser.screen().size()),
+                )?;
+                
+                // 3. Wait 3 seconds for rendering to complete
+                log::info!("⏳ Waiting 3 seconds for TUI to render...");
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+                
+                // 4. Capture terminal output
+                let screen = cap.capture(&mut tui_session, &format!("capture_{}", step_name)).await?;
+                
+                // 5. Kill the TUI process
+                log::info!("🛑 Killing TUI capture process...");
+                drop(tui_session);
+                
+                log::info!("✅ Captured screenshot for step '{}'", step_name);
+                Ok(screen)
+            }
+            ExecutionMode::Normal => {
+                // Verify mode: Capture actual terminal and verify against JSON rules
+                log::info!("🔍 Verify mode: Checking screenshot for step '{}'", step_name);
+                
+                // Capture current terminal state
+                let screen = cap.capture(session, &format!("verify_{}", step_name)).await?;
+                
+                // Load snapshot definitions
+                let definitions = self.load_snapshot_definitions()?;
+                
+                // Verify screen against the named step
+                Self::verify_screen_by_step_name(&screen, &definitions, step_name)?;
+                
+                log::info!("✅ Verified screenshot for step '{}'", step_name);
+                Ok(screen)
+            }
+        }
     }
 }
 

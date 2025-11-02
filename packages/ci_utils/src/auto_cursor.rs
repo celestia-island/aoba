@@ -690,7 +690,7 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
         mode
     );
 
-    for (idx, action) in actions.iter().enumerate() {
+    for (_idx, action) in actions.iter().enumerate() {
         match action {
             // In screenshot mode, keyboard actions are skipped
             CursorAction::PressArrow { direction, count }
