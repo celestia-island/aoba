@@ -32,6 +32,16 @@ fn create_state_with_stations(
     is_master: bool,
 ) -> TuiStatus {
     let mut state = create_modbus_dashboard_state(port_name);
+    
+    // Add port2 to state prediction (TUI discovers both ports)
+    state.ports.push(TuiPort {
+        name: "/tmp/vcom2".to_string(),
+        enabled: false,
+        state: E2EPortState::Free,
+        modbus_masters: Vec::new(),
+        modbus_slaves: Vec::new(),
+        log_count: 0,
+    });
 
     for config in configs {
         let register_type = format!("{:?}", config.register_mode());
@@ -79,7 +89,16 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     if !is_generation_mode {
         ensure_connection_mode(session, cap, is_master).await?;
     }
-    let state = create_modbus_dashboard_state(port_name);
+    let mut state = create_modbus_dashboard_state(port_name);
+    // Add port2 to state prediction (TUI discovers both ports)
+    state.ports.push(TuiPort {
+        name: "/tmp/vcom2".to_string(),
+        enabled: false,
+        state: E2EPortState::Free,
+        modbus_masters: Vec::new(),
+        modbus_slaves: Vec::new(),
+        log_count: 0,
+    });
     let _ = screenshot_ctx
         .capture_or_verify(
             session,
