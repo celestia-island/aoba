@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use super::super::common::{make_station_config, run_detailed_single_slave_test, RegisterMode};
-use aoba_ci_utils::{ExecutionMode, ScreenshotContext};
+use aoba_ci_utils::{ExecutionMode, SnapshotContext};
 
 /// Test 01: TUI Slave with Coils mode (0x0000, length 10)
 pub async fn test_tui_slave_coils(
@@ -16,13 +16,13 @@ pub async fn test_tui_slave_coils(
 
     let config = make_station_config(1, RegisterMode::Coils, 0x0000, 10, false, None);
 
-    let screenshot_ctx = ScreenshotContext::new(
+    let snapshot_ctx = SnapshotContext::new(
         execution_mode,
         "single_station/slave_modes/coils".into(),
         "default".into(),
     );
 
-    run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_slave_test(port1, port2, config, &snapshot_ctx).await
 }
 
 /// Test 02: TUI Slave with Discrete Inputs/Writable Coils mode (0x0000, length 10)
@@ -35,13 +35,13 @@ pub async fn test_tui_slave_discrete_inputs(
 
     let config = make_station_config(1, RegisterMode::DiscreteInputs, 0x0000, 10, false, None);
 
-    let screenshot_ctx = ScreenshotContext::new(
+    let snapshot_ctx = SnapshotContext::new(
         execution_mode,
         "single_station/slave_modes/discrete_inputs".into(),
         "default".into(),
     );
 
-    run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_slave_test(port1, port2, config, &snapshot_ctx).await
 }
 
 /// Test 03: TUI Slave with Holding Registers mode (0x0000, length 10)
@@ -54,13 +54,13 @@ pub async fn test_tui_slave_holding_registers(
 
     let config = make_station_config(1, RegisterMode::Holding, 0x0000, 10, false, None);
 
-    let screenshot_ctx = ScreenshotContext::new(
+    let snapshot_ctx = SnapshotContext::new(
         execution_mode,
         "single_station/slave_modes/holding".into(),
         "default".into(),
     );
 
-    run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_slave_test(port1, port2, config, &snapshot_ctx).await
 }
 
 /// Test 04: TUI Slave with Input Registers/Writable Registers mode (0x0000, length 10)
@@ -73,11 +73,11 @@ pub async fn test_tui_slave_input_registers(
 
     let config = make_station_config(1, RegisterMode::Input, 0x0000, 10, false, None);
 
-    let screenshot_ctx = ScreenshotContext::new(
+    let snapshot_ctx = SnapshotContext::new(
         execution_mode,
         "single_station/slave_modes/input".into(),
         "default".into(),
     );
 
-    run_detailed_single_slave_test(port1, port2, config, &screenshot_ctx).await
+    run_detailed_single_slave_test(port1, port2, config, &snapshot_ctx).await
 }

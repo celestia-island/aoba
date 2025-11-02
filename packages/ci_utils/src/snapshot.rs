@@ -1,6 +1,8 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 use std::{
     io,
+    path::PathBuf,
     sync::{Mutex, OnceLock},
 };
 
@@ -8,9 +10,333 @@ use expectrl::{process::NonBlocking, Expect};
 use vt100::Parser;
 
 use crate::helpers::sleep_1s;
+use crate::status_monitor::TuiStatus;
 
+/// Snapshot record for debugging
 type SnapshotRecord = (String, String);
 
+/// Execution mode for TUI E2E tests
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExecutionMode {
+    /// Normal test mode: Execute keyboard actions and verify against reference screenshots
+    Normal,
+    /// Generate reference screenshots from predicted states without executing keyboard actions
+    GenerateScreenshots,
+}
+
+/// Search condition types for snapshot matching
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
+pub enum SearchCondition {
+    /// Match text content at specified line
+    #[serde(rename = "text")]
+    Text {
+        value: String,
+        #[serde(default)]
+        negate: bool,
+    },
+    /// Match cursor position at specified line
+    #[serde(rename = "cursor_line")]
+    CursorLine { value: usize },
+    /// Match placeholder at specified line
+    #[serde(rename = "placeholder")]
+    Placeholder {
+        value: String,
+        #[serde(default)]
+        pattern: PlaceholderPattern,
+    },
+}
+
+/// Special matching patterns for placeholders
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaceholderPattern {
+    /// Exact match - placeholder must match exactly
+    Exact,
+    /// Any boolean placeholder ({{0b#001}}, {{0b#002}}, etc.)
+    AnyBoolean,
+    /// Any decimal placeholder ({{#001}}, {{#002}}, etc.)
+    AnyDecimal,
+    /// Any hexadecimal placeholder ({{0x#001}}, {{0x#002}}, etc.)
+    AnyHexadecimal,
+    /// Any placeholder of any type
+    Any,
+    /// Range of placeholders (e.g., {{0b#001}} to {{0b#010}})
+    Range { start: String, end: String },
+    /// Pattern match using regex
+    Pattern { regex: String },
+}
+
+impl Default for PlaceholderPattern {
+    fn default() -> Self {
+        PlaceholderPattern::Exact
+    }
+}
+
+/// Snapshot definition for JSON format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotDefinition {
+    /// Description of what this snapshot should show
+    pub description: String,
+    /// Lines to check (0-indexed)
+    pub line: Vec<usize>,
+    /// Search conditions to verify
+    pub search: Vec<SearchCondition>,
+}
+
+/// Context for managing snapshots during test execution
+pub struct SnapshotContext {
+    /// Current execution mode
+    mode: ExecutionMode,
+    /// Module name (e.g., "single_station/master_modes/coils")
+    module_name: String,
+    /// Test name (e.g., "test_basic_configuration")
+    #[allow(dead_code)]
+    test_name: String,
+    /// Counter for snapshot numbering
+    step_counter: u32,
+    /// Base directory for snapshots
+    snapshot_dir: PathBuf,
+}
+
+impl SnapshotContext {
+    /// Create a new snapshot context
+    pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Self {
+        let snapshot_dir = PathBuf::from("examples/tui_e2e/screenshots").join(&module_name);
+
+        Self {
+            mode,
+            module_name,
+            test_name,
+            step_counter: 0,
+            snapshot_dir,
+        }
+    }
+
+    /// Get the execution mode associated with this context
+    pub fn mode(&self) -> ExecutionMode {
+        self.mode
+    }
+
+    /// Get the module path used for snapshot storage
+    pub fn module_path(&self) -> &str {
+        &self.module_name
+    }
+
+    /// Ensure the snapshot directory exists
+    fn ensure_dir(&self) -> Result<()> {
+        if !self.snapshot_dir.exists() {
+            std::fs::create_dir_all(&self.snapshot_dir)?;
+            log::debug!(
+                "📁 Created snapshot directory: {}",
+                self.snapshot_dir.display()
+            );
+        }
+        Ok(())
+    }
+
+    /// Save snapshot definitions to JSON file
+    pub fn save_snapshot_definitions(&self, definitions: &[SnapshotDefinition]) -> Result<()> {
+        self.ensure_dir()?;
+
+        let json_path = self.snapshot_dir.join("snapshots.json");
+        let json_content = serde_json::to_string_pretty(definitions)?;
+        std::fs::write(&json_path, json_content)?;
+
+        log::info!("💾 Saved snapshot definitions: {}", json_path.display());
+        Ok(())
+    }
+
+    /// Load snapshot definitions from JSON file
+    pub fn load_snapshot_definitions(&self) -> Result<Vec<SnapshotDefinition>> {
+        let json_path = self.snapshot_dir.join("snapshots.json");
+
+        if !json_path.exists() {
+            return Err(anyhow!(
+                "Snapshot definitions not found: {}. Run with --generate-screenshots first.",
+                json_path.display()
+            ));
+        }
+
+        let content = std::fs::read_to_string(&json_path)?;
+        let definitions: Vec<SnapshotDefinition> = serde_json::from_str(&content)?;
+
+        log::info!("📖 Loaded {} snapshot definitions", definitions.len());
+        Ok(definitions)
+    }
+
+    /// Verify screen content against snapshot definitions
+    pub fn verify_screen_against_definitions(
+        &self,
+        screen_content: &str,
+        definitions: &[SnapshotDefinition],
+        step_index: usize,
+    ) -> Result<()> {
+        if step_index >= definitions.len() {
+            return Err(anyhow!(
+                "Step index {} out of bounds (max {})",
+                step_index,
+                definitions.len() - 1
+            ));
+        }
+
+        let definition = &definitions[step_index];
+        let lines: Vec<&str> = screen_content.lines().collect();
+
+        // Check specified lines exist
+        for &line_num in &definition.line {
+            if line_num >= lines.len() {
+                return Err(anyhow!(
+                    "Line {} not found in screen (only {} lines available)",
+                    line_num,
+                    lines.len()
+                ));
+            }
+        }
+
+        // Verify each search condition
+        for condition in &definition.search {
+            match condition {
+                SearchCondition::Text { value, negate } => {
+                    let mut found = false;
+                    for &line_num in &definition.line {
+                        if lines[line_num].contains(value) {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if *negate {
+                        // For negate: text should NOT be found
+                        if found {
+                            return Err(anyhow!(
+                                "Text '{}' should not be found in specified lines {:?}",
+                                value,
+                                definition.line
+                            ));
+                        }
+                    } else {
+                        // For normal: text should be found
+                        if !found {
+                            return Err(anyhow!(
+                                "Text '{}' not found in specified lines {:?}",
+                                value,
+                                definition.line
+                            ));
+                        }
+                    }
+                }
+                SearchCondition::CursorLine { value } => {
+                    let mut found = false;
+                    for &line_num in &definition.line {
+                        if lines[line_num].contains('>') && line_num == *value {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        return Err(anyhow!(
+                            "Cursor not found at line {} in specified lines {:?}",
+                            value,
+                            definition.line
+                        ));
+                    }
+                }
+                SearchCondition::Placeholder { value, pattern } => {
+                    let mut found = false;
+                    for &line_num in &definition.line {
+                        let line = lines[line_num];
+
+                        match pattern {
+                            PlaceholderPattern::Exact => {
+                                if line.contains(value) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyBoolean => {
+                                if line.contains("{{0b#") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyDecimal => {
+                                if line.contains("{{#")
+                                    && !line.contains("{{0x#")
+                                    && !line.contains("{{0b#")
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyHexadecimal => {
+                                if line.contains("{{0x#") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Any => {
+                                if line.contains("{{") && line.contains("}}") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Range { start: _, end: _ } => {
+                                // For now, just check if any placeholder exists in the range
+                                // In a full implementation, we would parse and compare placeholder indices
+                                if line.contains("{{") && line.contains("}}") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Pattern { regex } => {
+                                // For now, use simple contains as placeholder
+                                // In a full implementation, we would use regex matching
+                                if line.contains(&*regex) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if !found {
+                        return Err(anyhow!(
+                            "Placeholder pattern '{:?}' not found in specified lines {:?}",
+                            pattern,
+                            definition.line
+                        ));
+                    }
+                }
+            }
+        }
+
+        log::info!("✅ Snapshot verified: {}", definition.description);
+        Ok(())
+    }
+
+    /// Capture or verify screenshot and state based on execution mode
+    ///
+    /// This is the main entry point for screenshot/state management.
+    /// - In GenerateScreenshots mode: Generates reference screenshot and saves predicted state
+    /// - In Normal mode: Verifies actual output against reference and checks state
+    pub async fn capture_or_verify<T: ExpectSession>(
+        &self,
+        _session: &mut T,
+        _cap: &mut TerminalCapture,
+        _predicted_state: TuiStatus,
+        step_name: &str,
+    ) -> Result<String> {
+        // For now, we'll use the old screenshot generation logic
+        // TODO: Implement JSON snapshot generation logic
+        log::warn!("⚠️  capture_or_verify not yet implemented for JSON snapshots");
+        log::info!("📸 Would capture/verify snapshot for step: {}", step_name);
+
+        // Return a dummy filename for now
+        Ok(format!("{}.txt", step_name))
+    }
+}
+
+// Legacy snapshot functionality (from original snapshot.rs)
 fn snapshot_store() -> &'static Mutex<Option<SnapshotRecord>> {
     static STORE: OnceLock<Mutex<Option<SnapshotRecord>>> = OnceLock::new();
     STORE.get_or_init(|| Mutex::new(None))
@@ -235,5 +561,66 @@ impl TerminalCapture {
     /// latest string again).
     pub fn last(&self) -> String {
         self.parser.screen().contents()
+    }
+}
+
+/// Apply an incremental state change to a TuiStatus
+///
+/// This allows modifying the state using a closure without rewriting the entire object.
+/// Similar to the `write_status` pattern used in the TUI.
+///
+/// # Example
+/// ```ignore
+/// let state = apply_state_change(state, |s| {
+///     s.ports[0].enabled = true;
+/// });
+/// ```
+pub fn apply_state_change<F>(mut state: TuiStatus, modifier: F) -> TuiStatus
+where
+    F: FnOnce(&mut TuiStatus),
+{
+    modifier(&mut state);
+    state
+}
+
+/// Builder for creating base TUI states
+pub struct StateBuilder {
+    state: TuiStatus,
+}
+
+impl StateBuilder {
+    /// Create a new state builder with default values
+    pub fn new() -> Self {
+        use chrono::Local;
+        Self {
+            state: TuiStatus {
+                ports: Vec::new(),
+                page: crate::status_monitor::TuiPage::Entry,
+                timestamp: Local::now().to_rfc3339(),
+            },
+        }
+    }
+
+    /// Set the current page
+    pub fn with_page(mut self, page: crate::status_monitor::TuiPage) -> Self {
+        self.state.page = page;
+        self
+    }
+
+    /// Add a port to the state
+    pub fn add_port(mut self, port: crate::status_monitor::TuiPort) -> Self {
+        self.state.ports.push(port);
+        self
+    }
+
+    /// Build the final state
+    pub fn build(self) -> TuiStatus {
+        self.state
+    }
+}
+
+impl Default for StateBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

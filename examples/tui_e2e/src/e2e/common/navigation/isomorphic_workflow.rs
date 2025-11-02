@@ -66,7 +66,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     cap: &mut TerminalCapture,
     port_name: &str,
     configs: &[StationConfig],
-    screenshot_ctx: &ScreenshotContext,
+    screenshot_ctx: &SnapshotContext,
 ) -> Result<()> {
     if configs.is_empty() {
         return Ok(());
