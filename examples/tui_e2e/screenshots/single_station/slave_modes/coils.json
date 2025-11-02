@@ -1,0 +1,250 @@
+[
+  {
+    "description": "开头先快照一次，/tmp/vcom1 与 /tmp/vcom2 应当在屏幕上",
+    "line": [
+      2,
+      3
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "/tmp/vcom1"
+      },
+      {
+        "type": "text",
+        "value": "/tmp/vcom2"
+      }
+    ]
+  },
+  {
+    "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ConfigPanel；快照，此时应当在 ConfigPanel",
+    "line": [
+      0
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "ConfigPanel"
+      }
+    ]
+  },
+  {
+    "description": "进入页面阶段 - 向下 2 次；Mock 修改光标位置，指向 Enter Business Configuration；快照，此时大于号应当处于第三行",
+    "line": [
+      2
+    ],
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 2
+      },
+      {
+        "type": "text",
+        "value": "Enter Business Configuration"
+      }
+    ]
+  },
+  {
+    "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ModbusDashboard；快照，此时应当在 ModbusDashboard",
+    "line": [
+      0
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "ModbusDashboard"
+      }
+    ]
+  },
+  {
+    "description": "创建站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入一个新的初始化站点；快照，此时下方多出了一个 `#1` 站点",
+    "line": [
+      1,
+      2,
+      3
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 先立即 Mock 修改光标位置，指向 `#1` 站点；快照，此时大于号应当处于第一行",
+    "line": [
+      1
+    ],
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 1
+      },
+      {
+        "type": "text",
+        "value": "#1"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 向下 1 次；Mock 修改光标位置，指向 `#1` 站点的第二项 Register Type；快照，此时大于号应当处于第三行",
+    "line": [
+      3
+    ],
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 3
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器模式下标 2（03 寄存器选项）；快照，此时屏幕中的 Holding Registers 附近应该有一对尖括号",
+    "line": [
+      3
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "> Holding Registers <"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 向左 2 次；Mock 修改光标选项为下标 0（Coils 寄存器选项）；快照，此时屏幕中的 Coils 附近应该有一对尖括号",
+    "line": [
+      3
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "> Coils <"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 回车 1 次；Mock 修改当前站点的寄存器模式为 Coils；快照，此时 Holding Registers 附近的尖括号应当消失",
+    "line": [
+      3
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "Coils"
+      },
+      {
+        "type": "text",
+        "value": ">",
+        "negate": true
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 向下 2 次；Mock 修改光标位置，指向 `#1` 站点的第四项 Register Length；快照，此时大于号应当处于第五行",
+    "line": [
+      5
+    ],
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 5
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器长度下标 3（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
+    "line": [
+      5
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 输入数字 10；Mock 修改当前站点的寄存器长度为 10；快照，此时屏幕中对应位置应当显示为 `> 10_ <`",
+    "line": [
+      5
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "> 10_ <"
+      }
+    ]
+  },
+  {
+    "description": "配置站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的寄存器长度与实际寄存器暂存值；快照，此时屏幕中对应位置应当显示为 `10`，且两侧尖括号消失，下方多出了 10 个 OFF",
+    "line": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "10"
+      },
+      {
+        "type": "text",
+        "value": ">",
+        "negate": true
+      },
+      {
+        "type": "text",
+        "value": "OFF"
+      }
+    ]
+  },
+  {
+    "description": "Slave 模式特殊阶段 - 所有寄存器值批量更新为占位符；快照，此时所有寄存器位置应当显示为占位符 `{{0b#001}}` 到 `{{0b#010}}`",
+    "line": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0b#010}}"
+      }
+    ]
+  },
+  {
+    "description": "退出阶段 - 按下 Ctrl + S，保存当前配置，然后等待 3 秒；Mock 修改右上角状态为运行中状态；快照，此时右上角应当显示为运行中",
+    "line": [
+      0
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "运行中"
+      }
+    ]
+  }
+]

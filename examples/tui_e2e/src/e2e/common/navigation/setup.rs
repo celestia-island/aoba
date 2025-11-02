@@ -74,7 +74,7 @@ use aoba_ci_utils::*;
 pub async fn setup_tui_test(
     port1: &str,
     _port2: &str,
-    screenshot_ctx: Option<&ScreenshotContext>,
+    screenshot_ctx: Option<&SnapshotContext>,
 ) -> Result<(impl ExpectSession, TerminalCapture)> {
     log::info!("🔧 Setting up TUI test environment for port {port1}");
 

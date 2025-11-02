@@ -27,7 +27,7 @@ pub async fn run_detailed_multi_master_test(
     port1: &str,
     port2: &str,
     configs: &[StationConfig],
-    screenshot_ctx: &ScreenshotContext,
+    screenshot_ctx: &SnapshotContext,
 ) -> Result<()> {
     log::info!(
         "🧪 Running detailed multi-station Master test with {} stations",
@@ -72,7 +72,7 @@ pub async fn run_detailed_multi_slave_test(
     port1: &str,
     port2: &str,
     configs: &[StationConfig],
-    screenshot_ctx: &ScreenshotContext,
+    screenshot_ctx: &SnapshotContext,
 ) -> Result<()> {
     log::info!(
         "🧪 Running detailed multi-station Slave test with {} stations",
@@ -117,7 +117,7 @@ pub async fn run_detailed_single_master_test(
     port1: &str,
     port2: &str,
     config: StationConfig,
-    screenshot_ctx: &ScreenshotContext,
+    screenshot_ctx: &SnapshotContext,
 ) -> Result<()> {
     run_detailed_multi_master_test(port1, port2, &[config], screenshot_ctx).await
 }
@@ -127,7 +127,7 @@ pub async fn run_detailed_single_slave_test(
     port1: &str,
     port2: &str,
     config: StationConfig,
-    screenshot_ctx: &ScreenshotContext,
+    screenshot_ctx: &SnapshotContext,
 ) -> Result<()> {
     run_detailed_multi_slave_test(port1, port2, &[config], screenshot_ctx).await
 }
