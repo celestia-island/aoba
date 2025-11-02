@@ -1,6 +1,7 @@
 //! Test CI helpers (hidden from docs)
 #![doc(hidden)]
 
+pub mod atomic_ops;
 pub mod auto_cursor;
 pub mod cli;
 pub mod data;
@@ -17,6 +18,9 @@ pub mod terminal;
 pub mod tui;
 pub mod verify;
 
+pub use atomic_ops::{
+    atomic_change_selection, atomic_move_cursor, atomic_type_text, SelectionKey,
+};
 pub use auto_cursor::{
     execute_cursor_actions, execute_with_status_checks, CursorAction, ScreenAssertion,
     ScreenCaptureSpec, ScreenPatternSpec, TuiStep,
