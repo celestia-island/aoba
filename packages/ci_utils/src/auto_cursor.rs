@@ -56,18 +56,6 @@ pub enum CursorAction {
     /// Wait for 3 seconds (3000ms)
     Sleep3s,
     /// Check status tree path matches expected value
-    CheckStatus {
-        /// Description for logging
-        description: String,
-        /// JSONPath to check in status tree (e.g., "page" or "ports[0].enabled")
-        path: String,
-        /// Expected value at that path
-        expected: serde_json::Value,
-        /// Timeout in seconds (default: 10)
-        timeout_secs: Option<u64>,
-        /// Retry interval in milliseconds (default: 500)
-        retry_interval_ms: Option<u64>,
-    },
     /// Debug breakpoint: capture screen, print it, reset ports, and exit
     /// Only active when debug mode is enabled
     DebugBreakpoint { description: String },
@@ -783,50 +771,6 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
             }
             CursorAction::Sleep3s => {
                 sleep_3s().await;
-            }
-            CursorAction::CheckStatus {
-                description,
-                path,
-                expected,
-                timeout_secs,
-                retry_interval_ms,
-            } => {
-                let timeout = timeout_secs.unwrap_or(10);
-                let interval = retry_interval_ms.unwrap_or(500);
-
-                if let Err(e) = check_status_path(path, expected, timeout, interval).await {
-                    log::error!(
-                        "❌ Action Step {} FAILED: Status check FAILED for '{description}': {e}",
-                        idx + 1
-                    );
-
-                    // Capture terminal screen for debugging
-                    log::error!("📺 Capturing terminal screen for debugging...");
-                    match cap
-                        .capture(
-                            session,
-                            &format!("status_check_failed_{}", description.replace(' ', "_")),
-                        )
-                        .await
-                    {
-                        Ok(screen) => {
-                            log::error!("Current terminal content:");
-                            log::error!("\n{screen}\n");
-                        }
-                        Err(cap_err) => {
-                            log::error!("Failed to capture terminal: {cap_err}");
-                        }
-                    }
-
-                    // Dump all available status files
-                    log::error!("📋 Dumping all available status files:");
-                    dump_all_status_files();
-
-                    return Err(anyhow!(
-                        "Action Step {}: Status check failed for '{description}': {e}",
-                        idx + 1
-                    ));
-                }
             }
             CursorAction::DebugBreakpoint { description } => {
                 // Check if debug mode is enabled
