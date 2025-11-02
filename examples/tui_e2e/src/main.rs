@@ -318,11 +318,19 @@ async fn main() -> Result<()> {
     log::debug!("🧪 Cleaning up debug status files...");
     cleanup_debug_status_files()?;
 
-    // If no module specified, show available modules and exit
+    // If no module specified, show available modules and exit (unless generating screenshots)
     let module = match &args.module {
         Some(m) => m.as_str(),
         None => {
-            log::info!("📋 Available modules:");
+            // If generating screenshots without specifying module, run all modules
+            if args.generate_screenshots {
+                log::info!(
+                    "�️  No module specified with --generate-screenshots, running all modules..."
+                );
+                return run_all_modules_generate_screenshots(&args.port1, &args.port2).await;
+            }
+
+            log::info!("�📋 Available modules:");
             log::info!("  TUI Single-Station Master Mode:");
             log::info!("    - tui_master_coils");
             log::info!("    - tui_master_discrete_inputs");
@@ -343,6 +351,9 @@ async fn main() -> Result<()> {
             log::info!("    - tui_multi_slave_mixed_ids");
             log::info!("");
             log::info!("Usage: cargo run --package tui_e2e -- --module <module_name>");
+            log::info!(
+                "Or use: cargo run --package tui_e2e -- --generate-screenshots (runs all modules)"
+            );
             return Ok(());
         }
     };
@@ -435,4 +446,167 @@ async fn main() -> Result<()> {
             Err(err)
         }
     }
+}
+
+/// Run all test modules in generate screenshots mode
+async fn run_all_modules_generate_screenshots(port1: &str, port2: &str) -> Result<()> {
+    let modules = vec![
+        "tui_master_coils",
+        "tui_master_discrete_inputs",
+        "tui_master_holding",
+        "tui_master_input",
+        "tui_slave_coils",
+        "tui_slave_discrete_inputs",
+        "tui_slave_holding",
+        "tui_slave_input",
+        "tui_multi_master_mixed_types",
+        "tui_multi_master_spaced_addresses",
+        "tui_multi_master_mixed_ids",
+        "tui_multi_slave_mixed_types",
+        "tui_multi_slave_spaced_addresses",
+        "tui_multi_slave_mixed_ids",
+    ];
+
+    log::info!(
+        "🖼️  Generating screenshots for all {} modules...",
+        modules.len()
+    );
+
+    for module_name in modules {
+        log::info!("🖼️  Generating screenshots for module: {}", module_name);
+
+        let result = match module_name {
+            "tui_master_coils" => {
+                e2e::test_tui_master_coils(port1, port2, ExecutionMode::GenerateScreenshots).await
+            }
+            "tui_master_discrete_inputs" => {
+                e2e::test_tui_master_discrete_inputs(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_master_holding" => {
+                e2e::test_tui_master_holding_registers(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_master_input" => {
+                e2e::test_tui_master_input_registers(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_slave_coils" => {
+                e2e::test_tui_slave_coils(port1, port2, ExecutionMode::GenerateScreenshots).await
+            }
+            "tui_slave_discrete_inputs" => {
+                e2e::test_tui_slave_discrete_inputs(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_slave_holding" => {
+                e2e::test_tui_slave_holding_registers(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_slave_input" => {
+                e2e::test_tui_slave_input_registers(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_multi_master_mixed_types" => {
+                e2e::test_tui_multi_master_mixed_register_types(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_multi_master_spaced_addresses" => {
+                e2e::test_tui_multi_master_spaced_addresses(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_multi_master_mixed_ids" => {
+                e2e::test_tui_multi_master_mixed_station_ids(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_multi_slave_mixed_types" => {
+                e2e::test_tui_multi_slave_mixed_register_types(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_multi_slave_spaced_addresses" => {
+                e2e::test_tui_multi_slave_spaced_addresses(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            "tui_multi_slave_mixed_ids" => {
+                e2e::test_tui_multi_slave_mixed_station_ids(
+                    port1,
+                    port2,
+                    ExecutionMode::GenerateScreenshots,
+                )
+                .await
+            }
+            _ => unreachable!("All modules should be handled"),
+        };
+
+        match result {
+            Ok(()) => {
+                log::info!(
+                    "✅ Module '{}' screenshots generated successfully!",
+                    module_name
+                );
+            }
+            Err(err) => {
+                log::error!(
+                    "❌ Module '{}' screenshot generation failed: {:?}",
+                    module_name,
+                    err
+                );
+                aoba_ci_utils::log_last_terminal_snapshot(&format!(
+                    "Module '{}' screenshot generation failure",
+                    module_name
+                ));
+                return Err(err);
+            }
+        }
+
+        // Clean up between modules to ensure clean state
+        log::debug!("🧹 Cleaning up debug status files between modules...");
+        cleanup_debug_status_files()?;
+    }
+
+    log::info!("🎉 All modules screenshot generation completed!");
+    Ok(())
 }

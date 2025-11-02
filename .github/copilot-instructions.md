@@ -750,6 +750,28 @@ cargo run --package tui_e2e -- --module tui_multi_slave_spaced_addresses
 cargo run --package tui_e2e -- --module tui_multi_slave_mixed_ids
 ```
 
+### Generating Screenshots for All Modules
+
+The TUI E2E test framework supports generating reference screenshots for all test modules in a single command. This is useful for:
+
+- **Bulk screenshot generation**: Generate screenshots for all 14 TUI test modules at once
+- **Reference image updates**: Update all reference screenshots after UI changes
+- **CI/CD integration**: Automated screenshot generation for visual regression testing
+
+```bash
+# Generate screenshots for all TUI modules (14 modules total)
+cargo run --package tui_e2e -- --generate-screenshots
+
+# Generate screenshot for a specific module
+cargo run --package tui_e2e -- --module tui_master_coils --generate-screenshots
+
+# With custom ports
+cargo run --package tui_e2e -- --generate-screenshots --port1 /tmp/vcom1 --port2 /tmp/vcom2
+
+# With debug logging
+cargo run --package tui_e2e -- --generate-screenshots --debug
+```
+
 ### Test Implementation Guidelines
 
 1. **Station Configuration Workflow** (TUI tests)
