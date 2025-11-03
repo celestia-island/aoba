@@ -5,7 +5,7 @@
 /// with detailed step-by-step capture.
 use anyhow::Result;
 
-use super::super::{
+use super::{
     config::StationConfig,
     navigation::{configure_stations_with_screenshots, navigate_to_modbus_panel, setup_tui_test},
 };
@@ -48,7 +48,7 @@ pub async fn run_detailed_multi_master_test(
     }
 
     // Screenshot: Initial ModbusDashboard
-    let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
+    let state = super::state_helpers::create_modbus_dashboard_state(port1);
     let _ = screenshot_ctx
         .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
         .await?;
@@ -93,7 +93,7 @@ pub async fn run_detailed_multi_slave_test(
     }
 
     // Screenshot: Initial ModbusDashboard
-    let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
+    let state = super::state_helpers::create_modbus_dashboard_state(port1);
     let _ = screenshot_ctx
         .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
         .await?;
