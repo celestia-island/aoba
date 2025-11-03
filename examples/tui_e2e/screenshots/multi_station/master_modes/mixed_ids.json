@@ -2,10 +2,10 @@
   {
     "name": "00 Initial snapshot",
     "description": "初始快照",
-    "line": [
-      2,
-      3
-    ],
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -20,10 +20,10 @@
   {
     "name": "01 Press enter to config panel",
     "description": "进入配置面板",
-    "line": [
-      2,
-      3
-    ],
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -34,9 +34,10 @@
   {
     "name": "02 Navigate down to business config",
     "description": "导航到业务配置",
-    "line": [
-      2
-    ],
+    "line": {
+      "from": 2,
+      "to": 2
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -51,9 +52,10 @@
   {
     "name": "03 Enter modbus dashboard",
     "description": "进入 Modbus 面板",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",
@@ -64,11 +66,10 @@
   {
     "name": "04 Create station",
     "description": "创建站点",
-    "line": [
-      1,
-      2,
-      3
-    ],
+    "line": {
+      "from": 1,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -79,11 +80,10 @@
   {
     "name": "05 Create second station",
     "description": "创建第二个站点",
-    "line": [
-      1,
-      2,
-      3
-    ],
+    "line": {
+      "from": 1,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -98,9 +98,10 @@
   {
     "name": "06 Configure first station",
     "description": "配置第一个站点",
-    "line": [
-      1
-    ],
+    "line": {
+      "from": 1,
+      "to": 1
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -115,9 +116,10 @@
   {
     "name": "07 Navigate down to station ID",
     "description": "导航到站点 ID",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -132,9 +134,10 @@
   {
     "name": "08 Configure first station",
     "description": "配置第一个站点",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -145,9 +148,10 @@
   {
     "name": "09 Configure first station",
     "description": "配置第一个站点",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -158,9 +162,10 @@
   {
     "name": "10 Configure first station",
     "description": "配置第一个站点",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -176,9 +181,10 @@
   {
     "name": "11 Navigate up 3 times to second station",
     "description": "向上导航",
-    "line": [
-      2
-    ],
+    "line": {
+      "from": 2,
+      "to": 2
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -193,9 +199,10 @@
   {
     "name": "12 Navigate down to station ID",
     "description": "导航到站点 ID",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -210,9 +217,10 @@
   {
     "name": "13 Configure second station",
     "description": "配置第二个站点",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "text",
@@ -223,9 +231,10 @@
   {
     "name": "14 Configure second station",
     "description": "配置第二个站点",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "text",
@@ -236,9 +245,10 @@
   {
     "name": "15 Configure second station",
     "description": "配置第二个站点",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "text",
@@ -254,9 +264,10 @@
   {
     "name": "16 Save configuration with Ctrl+S",
     "description": "保存配置",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",

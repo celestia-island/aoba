@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{
-    io,
+    fmt, io,
+    ops::RangeInclusive,
     path::PathBuf,
     sync::{Mutex, OnceLock},
 };
@@ -74,6 +75,55 @@ impl Default for PlaceholderPattern {
     }
 }
 
+/// Line selection range for screenshot verification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LineRange {
+    /// Starting line index (inclusive)
+    pub from: usize,
+    /// Ending line index (inclusive)
+    pub to: usize,
+}
+
+impl LineRange {
+    /// Create a normalized range ensuring `from <= to`
+    pub fn new(from: usize, to: usize) -> Self {
+        if from <= to {
+            Self { from, to }
+        } else {
+            Self { from: to, to: from }
+        }
+    }
+
+    /// Iterate over each line index within the range (inclusive)
+    pub fn iter(&self) -> RangeInclusive<usize> {
+        self.from..=self.to
+    }
+
+    /// Determine whether the provided line index is covered by this range
+    pub fn contains(&self, line: usize) -> bool {
+        line >= self.from && line <= self.to
+    }
+}
+
+impl<'a> IntoIterator for &'a LineRange {
+    type Item = usize;
+    type IntoIter = RangeInclusive<usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl fmt::Display for LineRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.from == self.to {
+            write!(f, "{}", self.from)
+        } else {
+            write!(f, "{}-{}", self.from, self.to)
+        }
+    }
+}
+
 /// Snapshot definition for JSON format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotDefinition {
@@ -82,7 +132,7 @@ pub struct SnapshotDefinition {
     /// Description of what this snapshot should show
     pub description: String,
     /// Lines to check (0-indexed)
-    pub line: Vec<usize>,
+    pub line: LineRange,
     /// Search conditions to verify
     pub search: Vec<SearchCondition>,
 }
@@ -255,7 +305,7 @@ impl SnapshotContext {
         let lines: Vec<&str> = screen_content.lines().collect();
 
         // Check specified lines exist
-        for &line_num in &definition.line {
+        for line_num in &definition.line {
             if line_num >= lines.len() {
                 return Err(anyhow!(
                     "Line {} not found in screen (only {} lines available)",
@@ -270,7 +320,7 @@ impl SnapshotContext {
             match condition {
                 SearchCondition::Text { value, negate } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         if lines[line_num].contains(value) {
                             found = true;
                             break;
@@ -281,7 +331,7 @@ impl SnapshotContext {
                         // For negate: text should NOT be found
                         if found {
                             return Err(anyhow!(
-                                "Text '{}' should not be found in specified lines {:?}",
+                                "Text '{}' should not be found in specified lines {}",
                                 value,
                                 definition.line
                             ));
@@ -290,7 +340,7 @@ impl SnapshotContext {
                         // For normal: text should be found
                         if !found {
                             return Err(anyhow!(
-                                "Text '{}' not found in specified lines {:?}",
+                                "Text '{}' not found in specified lines {}",
                                 value,
                                 definition.line
                             ));
@@ -299,7 +349,7 @@ impl SnapshotContext {
                 }
                 SearchCondition::CursorLine { value } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         if lines[line_num].contains('>') && line_num == *value {
                             found = true;
                             break;
@@ -307,7 +357,7 @@ impl SnapshotContext {
                     }
                     if !found {
                         return Err(anyhow!(
-                            "Cursor not found at line {} in specified lines {:?}",
+                            "Cursor not found at line {} in specified lines {}",
                             value,
                             definition.line
                         ));
@@ -315,7 +365,7 @@ impl SnapshotContext {
                 }
                 SearchCondition::Placeholder { value, pattern } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         let line = lines[line_num];
 
                         match pattern {
@@ -372,7 +422,7 @@ impl SnapshotContext {
                     }
                     if !found {
                         return Err(anyhow!(
-                            "Placeholder pattern '{:?}' not found in specified lines {:?}",
+                            "Placeholder pattern '{:?}' not found in specified lines {}",
                             pattern,
                             definition.line
                         ));
@@ -397,7 +447,7 @@ impl SnapshotContext {
         let lines: Vec<&str> = screen_content.lines().collect();
 
         // Check specified lines exist
-        for &line_num in &definition.line {
+        for line_num in &definition.line {
             if line_num >= lines.len() {
                 return Err(anyhow!(
                     "Line {} not found in screen (only {} lines available) for step '{}'",
@@ -413,7 +463,7 @@ impl SnapshotContext {
             match condition {
                 SearchCondition::Text { value, negate } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         if lines[line_num].contains(value) {
                             found = true;
                             break;
@@ -423,7 +473,7 @@ impl SnapshotContext {
                     if *negate {
                         if found {
                             return Err(anyhow!(
-                                "Step '{}': Text '{}' should not be found in specified lines {:?}",
+                                "Step '{}': Text '{}' should not be found in specified lines {}",
                                 step_name,
                                 value,
                                 definition.line
@@ -432,7 +482,7 @@ impl SnapshotContext {
                     } else {
                         if !found {
                             return Err(anyhow!(
-                                "Step '{}': Text '{}' not found in specified lines {:?}",
+                                "Step '{}': Text '{}' not found in specified lines {}",
                                 step_name,
                                 value,
                                 definition.line
@@ -442,7 +492,7 @@ impl SnapshotContext {
                 }
                 SearchCondition::CursorLine { value } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         if lines[line_num].contains('>') && line_num == *value {
                             found = true;
                             break;
@@ -450,7 +500,7 @@ impl SnapshotContext {
                     }
                     if !found {
                         return Err(anyhow!(
-                            "Step '{}': Cursor not found at line {} in specified lines {:?}",
+                            "Step '{}': Cursor not found at line {} in specified lines {}",
                             step_name,
                             value,
                             definition.line
@@ -459,7 +509,7 @@ impl SnapshotContext {
                 }
                 SearchCondition::Placeholder { value, pattern } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         let line = lines[line_num];
 
                         match pattern {
@@ -512,7 +562,7 @@ impl SnapshotContext {
                     }
                     if !found {
                         return Err(anyhow!(
-                            "Step '{}': Placeholder pattern '{:?}' not found in specified lines {:?}",
+                            "Step '{}': Placeholder pattern '{:?}' not found in specified lines {}",
                             step_name,
                             pattern,
                             definition.line

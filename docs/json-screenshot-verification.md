@@ -11,11 +11,13 @@ This document describes the refactored TUI E2E screenshot capture and verificati
 Previously, tests referenced screenshot steps by array index (0, 1, 2, ...). This was error-prone when adding or removing steps. The new system uses explicit step names:
 
 **Old (index-based):**
+
 ```rust
 verify_screen_against_definitions(&screen, &definitions, 5)?; // What's step 5?
 ```
 
 **New (name-based):**
+
 ```rust
 verify_screen_with_json_rules(&screen, RULES, "step_05_configure_station")?;
 ```
@@ -28,7 +30,7 @@ Each step now has a `name` field in addition to `description`:
 {
   "name": "step_00_entry_page",
   "description": "开头先快照一次，/tmp/vcom1 与 /tmp/vcom2 应当在屏幕上",
-  "line": [2, 3],
+  "line": { "from": 2, "to": 3 },
   "search": [
     {
       "type": "text",
@@ -148,6 +150,7 @@ Match placeholder values (for dynamic content):
 ```
 
 Available patterns:
+
 - `exact`: Match exact placeholder
 - `any_boolean`: Match any boolean placeholder ({{0b#...}})
 - `any_decimal`: Match any decimal placeholder ({{#...}})
@@ -169,11 +172,13 @@ python3 scripts/add_name_field.py
 Replace index-based calls with name-based calls:
 
 **Before:**
+
 ```rust
 ctx.verify_screen_against_definitions(&screen, &definitions, 5)?;
 ```
 
 **After:**
+
 ```rust
 verify_screen_with_json_rules(&screen, RULES, "step_05_configure_station")?;
 ```
@@ -183,6 +188,7 @@ verify_screen_with_json_rules(&screen, RULES, "step_05_configure_station")?;
 The old `CursorAction::CheckStatus` has been removed. For status tree verification, use direct calls to status monitoring functions:
 
 **Before:**
+
 ```rust
 CursorAction::CheckStatus {
     description: "Port enabled".to_string(),
@@ -194,6 +200,7 @@ CursorAction::CheckStatus {
 ```
 
 **After:**
+
 ```rust
 // Direct status verification
 wait_for_port_enabled("/tmp/vcom1", 5, Some(500)).await?;
@@ -255,6 +262,7 @@ Find a snapshot definition by its step name.
 ## Examples
 
 See:
+
 - `packages/ci_utils/tests/json_verification.rs` - Unit tests demonstrating all features
 - `examples/tui_e2e/src/test_snapshot_json.rs` - Integration test example
 

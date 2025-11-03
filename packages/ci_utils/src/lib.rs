@@ -35,8 +35,8 @@ pub use ports::{
 };
 pub use snapshot::{
     apply_state_change, log_last_terminal_snapshot, verify_screen_with_json_rules, ExecutionMode,
-    ExpectSession, PlaceholderPattern, SearchCondition, SnapshotContext, SnapshotDefinition,
-    StateBuilder, TerminalCapture, TerminalSize,
+    ExpectSession, LineRange, PlaceholderPattern, SearchCondition, SnapshotContext,
+    SnapshotDefinition, StateBuilder, TerminalCapture, TerminalSize,
 };
 pub use status_monitor::{
     get_port_log_count, port_exists_in_tui, read_cli_status, read_tui_status, wait_for_cli_status,

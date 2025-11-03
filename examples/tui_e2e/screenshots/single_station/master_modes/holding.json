@@ -2,10 +2,10 @@
   {
     "name": "00 Initial snapshot",
     "description": "初始快照",
-    "line": [
-      2,
-      3
-    ],
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -20,10 +20,10 @@
   {
     "name": "01 Press enter to config panel",
     "description": "进入配置面板",
-    "line": [
-      2,
-      3
-    ],
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -34,9 +34,10 @@
   {
     "name": "02 Navigate down to business config",
     "description": "导航到业务配置",
-    "line": [
-      2
-    ],
+    "line": {
+      "from": 2,
+      "to": 2
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -51,9 +52,10 @@
   {
     "name": "03 Enter modbus dashboard",
     "description": "进入 Modbus 面板",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",
@@ -64,11 +66,10 @@
   {
     "name": "04 Press enter",
     "description": "步骤操作",
-    "line": [
-      1,
-      2,
-      3
-    ],
+    "line": {
+      "from": 1,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -79,9 +80,10 @@
   {
     "name": "05 Configure station",
     "description": "配置站点",
-    "line": [
-      1
-    ],
+    "line": {
+      "from": 1,
+      "to": 1
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -96,9 +98,10 @@
   {
     "name": "06 Configure register type",
     "description": "配置寄存器类型",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -113,9 +116,10 @@
   {
     "name": "07 Configure station",
     "description": "配置站点",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -126,9 +130,10 @@
   {
     "name": "08 Configure station",
     "description": "配置站点",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -144,9 +149,10 @@
   {
     "name": "09 Navigate down to register length",
     "description": "导航到寄存器长度",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -161,9 +167,10 @@
   {
     "name": "10 Enter register length edit mode",
     "description": "进入寄存器长度编辑模式",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -174,9 +181,10 @@
   {
     "name": "11 Input register length 10",
     "description": "输入寄存器长度 10",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -187,19 +195,10 @@
   {
     "name": "12 Confirm register length",
     "description": "确认寄存器长度",
-    "line": [
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15
-    ],
+    "line": {
+      "from": 5,
+      "to": 15
+    },
     "search": [
       {
         "type": "text",
@@ -219,18 +218,10 @@
   {
     "name": "13 Master mode bulk placeholder update",
     "description": "主站模式批量更新",
-    "line": [
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15
-    ],
+    "line": {
+      "from": 6,
+      "to": 15
+    },
     "search": [
       {
         "type": "placeholder",
@@ -242,9 +233,10 @@
   {
     "name": "14 Save configuration with Ctrl+S",
     "description": "保存配置",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",

@@ -1,6 +1,6 @@
 //! Test script to verify the new JSON snapshot format with step names
 use aoba_ci_utils::{
-    verify_screen_with_json_rules, ExecutionMode, SearchCondition, SnapshotContext,
+    verify_screen_with_json_rules, ExecutionMode, LineRange, SearchCondition, SnapshotContext,
     SnapshotDefinition,
 };
 
@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
             for (i, def) in definitions.iter().take(3).enumerate() {
                 println!("Definition {}: {}", i, def.description);
                 println!("  Name: {}", def.name);
-                println!("  Lines: {:?}", def.line);
+                println!("  Lines: {}", def.line);
                 println!("  Search conditions: {}", def.search.len());
                 for condition in &def.search {
                     match condition {
@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
         {
             "name": "test_step_01",
             "description": "Test step 1",
-            "line": [0, 1],
+            "line": { "from": 0, "to": 1 },
             "search": [
                 {
                     "type": "text",
@@ -95,7 +95,7 @@ async fn main() -> anyhow::Result<()> {
         SnapshotDefinition {
             name: "test_entry_page".to_string(),
             description: "Test definition 1".to_string(),
-            line: vec![0, 1],
+            line: LineRange::new(0, 1),
             search: vec![
                 SearchCondition::Text {
                     value: "Test Text".to_string(),
@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
         SnapshotDefinition {
             name: "test_config_page".to_string(),
             description: "Test definition 2".to_string(),
-            line: vec![2, 3],
+            line: LineRange::new(2, 3),
             search: vec![SearchCondition::Placeholder {
                 value: "{{0b#001}}".to_string(),
                 pattern: aoba_ci_utils::snapshot::PlaceholderPattern::Exact,

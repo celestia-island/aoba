@@ -13,8 +13,7 @@ use expectrl::Expect;
 use super::super::{
     config::StationConfig,
     state_helpers::{
-        add_master_station, add_slave_station, create_modbus_dashboard_state,
-        update_register_value,
+        add_master_station, add_slave_station, create_modbus_dashboard_state, update_register_value,
     },
     station::{
         configure_register_count, configure_register_type, configure_start_address,
@@ -83,12 +82,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     }
     let state = create_modbus_dashboard_state(port_name);
     screenshot_ctx
-        .capture_or_verify(
-            session,
-            cap,
-            state,
-            "03 Enter modbus dashboard",
-        )
+        .capture_or_verify(session, cap, state, "03 Enter modbus dashboard")
         .await?;
 
     // Step 3: Create all stations (step 04 for first station)
@@ -447,7 +441,12 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     }
     // Use the accumulated state with all register values
     screenshot_ctx
-        .capture_or_verify(session, cap, state.clone(), "55 Save configuration with Ctrl+S")
+        .capture_or_verify(
+            session,
+            cap,
+            state.clone(),
+            "55 Save configuration with Ctrl+S",
+        )
         .await?;
 
     // Port enabled state - for single station tests, this is the final step
@@ -456,6 +455,6 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         wait_for_port_enabled(port_name, 20, Some(500)).await?;
     }
     // Note: No separate "port_enabled" step in JSON - it's part of save step
-    
+
     Ok(())
 }

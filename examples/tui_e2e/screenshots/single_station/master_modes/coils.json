@@ -2,10 +2,10 @@
   {
     "name": "00 Initial snapshot",
     "description": "初始快照",
-    "line": [
-      2,
-      3
-    ],
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -20,10 +20,10 @@
   {
     "name": "01 Press enter to config panel",
     "description": "进入配置面板",
-    "line": [
-      2,
-      3
-    ],
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -34,9 +34,10 @@
   {
     "name": "02 Navigate down to business config",
     "description": "导航到业务配置",
-    "line": [
-      2
-    ],
+    "line": {
+      "from": 2,
+      "to": 2
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -51,9 +52,10 @@
   {
     "name": "03 Enter modbus dashboard",
     "description": "进入 Modbus 面板",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",
@@ -64,28 +66,10 @@
   {
     "name": "after_create_station_1",
     "description": "创建站点后",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -112,28 +96,10 @@
   {
     "name": "navigate_station_1",
     "description": "导航到站点 1",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -160,28 +126,10 @@
   {
     "name": "edit_station_1_id",
     "description": "编辑站点 1 ID",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -208,28 +156,10 @@
   {
     "name": "edit_station_1_reg_type",
     "description": "编辑站点 1 寄存器类型",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -256,28 +186,10 @@
   {
     "name": "edit_station_1_start_addr",
     "description": "编辑站点 1 起始地址",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -304,28 +216,10 @@
   {
     "name": "edit_station_1_reg_count",
     "description": "编辑站点 1 寄存器数量",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -352,28 +246,10 @@
   {
     "name": "edit_station_1_register_0",
     "description": "编辑站点 1 寄存器 0",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -400,28 +276,10 @@
   {
     "name": "edit_station_1_register_1",
     "description": "编辑站点 1 寄存器 1",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -448,28 +306,10 @@
   {
     "name": "edit_station_1_register_2",
     "description": "编辑站点 1 寄存器 2",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -496,28 +336,10 @@
   {
     "name": "edit_station_1_register_3",
     "description": "编辑站点 1 寄存器 3",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -544,28 +366,10 @@
   {
     "name": "edit_station_1_register_4",
     "description": "编辑站点 1 寄存器 4",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -592,28 +396,10 @@
   {
     "name": "edit_station_1_register_5",
     "description": "编辑站点 1 寄存器 5",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -640,28 +426,10 @@
   {
     "name": "edit_station_1_register_6",
     "description": "编辑站点 1 寄存器 6",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -688,28 +456,10 @@
   {
     "name": "edit_station_1_register_7",
     "description": "编辑站点 1 寄存器 7",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -736,28 +486,10 @@
   {
     "name": "edit_station_1_register_8",
     "description": "编辑站点 1 寄存器 8",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -784,28 +516,10 @@
   {
     "name": "edit_station_1_register_9",
     "description": "编辑站点 1 寄存器 9",
-    "line": [
-      0,
-      1,
-      2,
-      3,
-      4,
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15,
-      16,
-      17,
-      18,
-      19
-    ],
+    "line": {
+      "from": 0,
+      "to": 19
+    },
     "search": [
       {
         "type": "text",
@@ -832,11 +546,10 @@
   {
     "name": "04 Press enter",
     "description": "步骤操作",
-    "line": [
-      1,
-      2,
-      3
-    ],
+    "line": {
+      "from": 1,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -847,9 +560,10 @@
   {
     "name": "05 Configure station",
     "description": "配置站点",
-    "line": [
-      1
-    ],
+    "line": {
+      "from": 1,
+      "to": 1
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -864,9 +578,10 @@
   {
     "name": "06 Configure register type",
     "description": "配置寄存器类型",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -881,9 +596,10 @@
   {
     "name": "07 Configure station",
     "description": "配置站点",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -894,9 +610,10 @@
   {
     "name": "08 Configure station",
     "description": "配置站点",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -907,9 +624,10 @@
   {
     "name": "09 Configure station",
     "description": "配置站点",
-    "line": [
-      3
-    ],
+    "line": {
+      "from": 3,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -925,9 +643,10 @@
   {
     "name": "10 Navigate down to register length",
     "description": "导航到寄存器长度",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -942,9 +661,10 @@
   {
     "name": "11 Enter register length edit mode",
     "description": "进入寄存器长度编辑模式",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -955,9 +675,10 @@
   {
     "name": "12 Input register length 10",
     "description": "输入寄存器长度 10",
-    "line": [
-      5
-    ],
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -968,19 +689,10 @@
   {
     "name": "13 Confirm register length",
     "description": "确认寄存器长度",
-    "line": [
-      5,
-      6,
-      7,
-      8,
-      9,
-      10,
-      11,
-      12,
-      13,
-      14,
-      15
-    ],
+    "line": {
+      "from": 5,
+      "to": 15
+    },
     "search": [
       {
         "type": "text",
@@ -1000,9 +712,10 @@
   {
     "name": "14 Navigate to first register",
     "description": "步骤操作",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -1017,9 +730,10 @@
   {
     "name": "15 Navigate to register 1",
     "description": "导航到寄存器 1",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1030,9 +744,10 @@
   {
     "name": "16 Enter edit mode for register 1",
     "description": "进入寄存器 1 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1043,9 +758,10 @@
   {
     "name": "17 Input placeholder value for register 1",
     "description": "输入寄存器 1 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1057,9 +773,10 @@
   {
     "name": "18 Confirm value for register 1",
     "description": "确认寄存器 1 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1070,9 +787,10 @@
   {
     "name": "19 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1083,9 +801,10 @@
   {
     "name": "20 Enter edit mode for register 2",
     "description": "进入寄存器 2 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1096,9 +815,10 @@
   {
     "name": "21 Input placeholder value for register 2",
     "description": "输入寄存器 2 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1110,9 +830,10 @@
   {
     "name": "22 Confirm value for register 2",
     "description": "确认寄存器 2 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1123,9 +844,10 @@
   {
     "name": "23 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1136,9 +858,10 @@
   {
     "name": "24 Enter edit mode for register 3",
     "description": "进入寄存器 3 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1149,9 +872,10 @@
   {
     "name": "25 Input placeholder value for register 3",
     "description": "输入寄存器 3 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1163,9 +887,10 @@
   {
     "name": "26 Confirm value for register 3",
     "description": "确认寄存器 3 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1176,9 +901,10 @@
   {
     "name": "27 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1189,9 +915,10 @@
   {
     "name": "28 Enter edit mode for register 4",
     "description": "进入寄存器 4 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1202,9 +929,10 @@
   {
     "name": "29 Input placeholder value for register 4",
     "description": "输入寄存器 4 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1216,9 +944,10 @@
   {
     "name": "30 Confirm value for register 4",
     "description": "确认寄存器 4 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1229,9 +958,10 @@
   {
     "name": "31 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1242,9 +972,10 @@
   {
     "name": "32 Enter edit mode for register 5",
     "description": "进入寄存器 5 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1255,9 +986,10 @@
   {
     "name": "33 Input placeholder value for register 5",
     "description": "输入寄存器 5 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1269,9 +1001,10 @@
   {
     "name": "34 Confirm value for register 5",
     "description": "确认寄存器 5 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1282,9 +1015,10 @@
   {
     "name": "35 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1295,9 +1029,10 @@
   {
     "name": "36 Enter edit mode for register 6",
     "description": "进入寄存器 6 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1308,9 +1043,10 @@
   {
     "name": "37 Input placeholder value for register 6",
     "description": "输入寄存器 6 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1322,9 +1058,10 @@
   {
     "name": "38 Confirm value for register 6",
     "description": "确认寄存器 6 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1335,9 +1072,10 @@
   {
     "name": "39 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1348,9 +1086,10 @@
   {
     "name": "40 Enter edit mode for register 7",
     "description": "进入寄存器 7 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1361,9 +1100,10 @@
   {
     "name": "41 Input placeholder value for register 7",
     "description": "输入寄存器 7 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1375,9 +1115,10 @@
   {
     "name": "42 Confirm value for register 7",
     "description": "确认寄存器 7 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1388,9 +1129,10 @@
   {
     "name": "43 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1401,9 +1143,10 @@
   {
     "name": "44 Enter edit mode for register 8",
     "description": "进入寄存器 8 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1414,9 +1157,10 @@
   {
     "name": "45 Input placeholder value for register 8",
     "description": "输入寄存器 8 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1428,9 +1172,10 @@
   {
     "name": "46 Confirm value for register 8",
     "description": "确认寄存器 8 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1441,9 +1186,10 @@
   {
     "name": "47 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1454,9 +1200,10 @@
   {
     "name": "48 Enter edit mode for register 9",
     "description": "进入寄存器 9 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1467,9 +1214,10 @@
   {
     "name": "49 Input placeholder value for register 9",
     "description": "输入寄存器 9 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1481,9 +1229,10 @@
   {
     "name": "50 Confirm value for register 9",
     "description": "确认寄存器 9 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1494,9 +1243,10 @@
   {
     "name": "51 Navigate right to next register",
     "description": "向右导航",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1507,9 +1257,10 @@
   {
     "name": "52 Enter edit mode for register 10",
     "description": "进入寄存器 10 编辑模式",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1520,9 +1271,10 @@
   {
     "name": "53 Input placeholder value for register 10",
     "description": "输入寄存器 10 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1534,9 +1286,10 @@
   {
     "name": "54 Confirm value for register 10",
     "description": "确认寄存器 10 的值",
-    "line": [
-      6
-    ],
+    "line": {
+      "from": 6,
+      "to": 6
+    },
     "search": [
       {
         "type": "placeholder",
@@ -1547,9 +1300,10 @@
   {
     "name": "55 Save configuration with Ctrl+S",
     "description": "保存配置",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",
@@ -1560,9 +1314,10 @@
   {
     "name": "56 After save wait for running",
     "description": "保存后等待运行状态",
-    "line": [
-      0
-    ],
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",

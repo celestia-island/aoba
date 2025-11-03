@@ -4,7 +4,9 @@
 //! JSON rule definitions with named steps instead of array indices.
 
 use anyhow::Result;
-use aoba_ci_utils::{verify_screen_with_json_rules, SearchCondition, SnapshotContext, SnapshotDefinition};
+use aoba_ci_utils::{
+    verify_screen_with_json_rules, LineRange, SearchCondition, SnapshotContext, SnapshotDefinition,
+};
 
 #[test]
 fn test_simple_text_matching() -> Result<()> {
@@ -12,7 +14,7 @@ fn test_simple_text_matching() -> Result<()> {
         {
             "name": "test_entry_page",
             "description": "Verify entry page shows port options",
-            "line": [2, 3],
+            "line": { "from": 2, "to": 3 },
             "search": [
                 {
                     "type": "text",
@@ -25,16 +27,16 @@ fn test_simple_text_matching() -> Result<()> {
             ]
         }
     ]"#;
-    
+
     let screen = "Header Line\n\n/tmp/vcom1\n/tmp/vcom2\nFooter";
-    
+
     // Should succeed when both texts are found
     verify_screen_with_json_rules(screen, RULES, "test_entry_page")?;
-    
+
     // Should fail when text is missing
     let bad_screen = "Header Line\n\n/tmp/vcom1\nFooter";
     assert!(verify_screen_with_json_rules(bad_screen, RULES, "test_entry_page").is_err());
-    
+
     Ok(())
 }
 
@@ -44,7 +46,7 @@ fn test_cursor_line_matching() -> Result<()> {
         {
             "name": "test_cursor_position",
             "description": "Verify cursor is on the correct line",
-            "line": [2],
+            "line": { "from": 2, "to": 2 },
             "search": [
                 {
                     "type": "cursor_line",
@@ -57,16 +59,16 @@ fn test_cursor_line_matching() -> Result<()> {
             ]
         }
     ]"#;
-    
+
     let screen = "Header\nLine 1\n> Enter Business Configuration\nLine 3";
-    
+
     // Should succeed when cursor is on line 2 (0-indexed)
     verify_screen_with_json_rules(screen, RULES, "test_cursor_position")?;
-    
+
     // Should fail when cursor is on wrong line
     let bad_screen = "Header\n> Line 1\nEnter Business Configuration\nLine 3";
     assert!(verify_screen_with_json_rules(bad_screen, RULES, "test_cursor_position").is_err());
-    
+
     Ok(())
 }
 
@@ -76,7 +78,7 @@ fn test_placeholder_matching() -> Result<()> {
         {
             "name": "test_register_values",
             "description": "Verify register placeholder values",
-            "line": [0, 1, 2],
+            "line": { "from": 0, "to": 2 },
             "search": [
                 {
                     "type": "placeholder",
@@ -86,16 +88,16 @@ fn test_placeholder_matching() -> Result<()> {
             ]
         }
     ]"#;
-    
+
     let screen = "Register 1: {{0b#001}}\nRegister 2: {{0b#002}}\nRegister 3: {{0b#003}}";
-    
+
     // Should succeed when placeholder is found
     verify_screen_with_json_rules(screen, RULES, "test_register_values")?;
-    
+
     // Should fail when placeholder is missing
     let bad_screen = "Register 1: OFF\nRegister 2: {{0b#002}}\nRegister 3: {{0b#003}}";
     assert!(verify_screen_with_json_rules(bad_screen, RULES, "test_register_values").is_err());
-    
+
     Ok(())
 }
 
@@ -105,7 +107,7 @@ fn test_negation() -> Result<()> {
         {
             "name": "test_negation",
             "description": "Verify certain text is NOT present",
-            "line": [0, 1],
+            "line": { "from": 0, "to": 1 },
             "search": [
                 {
                     "type": "text",
@@ -115,16 +117,16 @@ fn test_negation() -> Result<()> {
             ]
         }
     ]"#;
-    
+
     let screen = "Success message\nOperation completed";
-    
+
     // Should succeed when text is NOT found
     verify_screen_with_json_rules(screen, RULES, "test_negation")?;
-    
+
     // Should fail when text IS found (because negate is true)
     let bad_screen = "Error occurred\nOperation failed";
     assert!(verify_screen_with_json_rules(bad_screen, RULES, "test_negation").is_err());
-    
+
     Ok(())
 }
 
@@ -134,7 +136,7 @@ fn test_step_not_found() {
         {
             "name": "test_step_1",
             "description": "Step 1",
-            "line": [0],
+            "line": { "from": 0, "to": 0 },
             "search": [
                 {
                     "type": "text",
@@ -143,9 +145,9 @@ fn test_step_not_found() {
             ]
         }
     ]"#;
-    
+
     let screen = "test";
-    
+
     // Should fail when step name doesn't exist
     let result = verify_screen_with_json_rules(screen, RULES, "nonexistent_step");
     assert!(result.is_err());
@@ -158,7 +160,7 @@ fn test_load_definitions_from_str() -> Result<()> {
         {
             "name": "step_1",
             "description": "First step",
-            "line": [0],
+            "line": { "from": 0, "to": 0 },
             "search": [
                 {
                     "type": "text",
@@ -169,7 +171,7 @@ fn test_load_definitions_from_str() -> Result<()> {
         {
             "name": "step_2",
             "description": "Second step",
-            "line": [1],
+            "line": { "from": 1, "to": 1 },
             "search": [
                 {
                     "type": "text",
@@ -178,12 +180,12 @@ fn test_load_definitions_from_str() -> Result<()> {
             ]
         }
     ]"#;
-    
+
     let definitions = SnapshotContext::load_snapshot_definitions_from_str(RULES)?;
     assert_eq!(definitions.len(), 2);
     assert_eq!(definitions[0].name, "step_1");
     assert_eq!(definitions[1].name, "step_2");
-    
+
     Ok(())
 }
 
@@ -193,7 +195,7 @@ fn test_find_definition_by_name() -> Result<()> {
         SnapshotDefinition {
             name: "step_a".to_string(),
             description: "Step A".to_string(),
-            line: vec![0],
+            line: LineRange::new(0, 0),
             search: vec![SearchCondition::Text {
                 value: "A".to_string(),
                 negate: false,
@@ -202,20 +204,20 @@ fn test_find_definition_by_name() -> Result<()> {
         SnapshotDefinition {
             name: "step_b".to_string(),
             description: "Step B".to_string(),
-            line: vec![1],
+            line: LineRange::new(1, 1),
             search: vec![SearchCondition::Text {
                 value: "B".to_string(),
                 negate: false,
             }],
         },
     ];
-    
+
     let found = SnapshotContext::find_definition_by_name(&definitions, "step_b")?;
     assert_eq!(found.name, "step_b");
     assert_eq!(found.description, "Step B");
-    
+
     // Should fail when name doesn't exist
     assert!(SnapshotContext::find_definition_by_name(&definitions, "step_c").is_err());
-    
+
     Ok(())
 }
