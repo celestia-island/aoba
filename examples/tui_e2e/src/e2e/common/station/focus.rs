@@ -1,15 +1,11 @@
-use anyhow::Result;
-use regex::Regex;
-use serde_json::json;
-
-use expectrl::Expect;
-
-use super::super::status_paths::station_field_path;
 use super::modbus_page_check;
+use anyhow::Result;
 use aoba_ci_utils::{
     execute_with_status_checks, CursorAction, ExpectSession, ScreenAssertion, ScreenPatternSpec,
     TerminalCapture,
 };
+use expectrl::Expect;
+use regex::Regex;
 
 /// Ensure the cursor is focused on the "Create Station" button at the top of the dashboard.
 pub async fn focus_create_station_button<T: Expect + ExpectSession>(
@@ -44,9 +40,9 @@ pub async fn focus_create_station_button<T: Expect + ExpectSession>(
 pub async fn focus_station<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    port_name: &str,
+    _port_name: &str,
     station_index: usize,
-    is_master: bool,
+    _is_master: bool,
 ) -> Result<()> {
     let mut actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep1s];
     actions.push(CursorAction::PressPageDown);

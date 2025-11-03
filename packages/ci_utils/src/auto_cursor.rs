@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
-use serde_json::Value;
+// serde_json::Value not needed here after removing unused helper functions
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -805,124 +805,9 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
     Ok(())
 }
 
-/// Dump all available status files for debugging
-fn dump_all_status_files() {
-    // TUI status
-    log::error!("📄 /tmp/ci_tui_status.json:");
-    match std::fs::read_to_string("/tmp/ci_tui_status.json") {
-        Ok(content) => {
-            log::error!("{content}");
-        }
-        Err(e) => {
-            log::error!("  (not available: {e})");
-        }
-    }
+// `dump_all_status_files` removed — it was a debugging helper not referenced elsewhere.
 
-    // CLI status files - check for common port names (only vcom1/vcom2 in CI)
-    let common_ports = vec!["vcom1", "vcom2"];
-    for port in common_ports {
-        let cli_path = format!("/tmp/ci_cli_{port}_status.json");
-        log::error!("📄 {cli_path}:");
-        match std::fs::read_to_string(&cli_path) {
-            Ok(content) => {
-                log::error!("{content}");
-            }
-            Err(_) => {
-                // Silently skip if file doesn't exist (expected for unused ports)
-            }
-        }
-    }
-
-    // Also try to list all ci_cli_*_status.json files in /tmp
-    match std::fs::read_dir("/tmp") {
-        Ok(entries) => {
-            for entry in entries.flatten() {
-                if let Ok(name) = entry.file_name().into_string() {
-                    if name.starts_with("ci_cli_") && name.ends_with("_status.json") {
-                        let path = entry.path();
-                        log::error!("📄 {}:", path.display());
-                        if let Ok(content) = std::fs::read_to_string(&path) {
-                            log::error!("{content}");
-                        }
-                    }
-                }
-            }
-        }
-        Err(e) => {
-            log::error!("Failed to read /tmp directory: {e}");
-        }
-    }
-}
-
-/// Check a JSON path in the TUI status and verify it matches the expected value
-/// Retries with timeout and interval until the path matches or timeout is reached
-async fn check_status_path(
-    path: &str,
-    expected: &Value,
-    timeout_secs: u64,
-    retry_interval_ms: u64,
-) -> Result<()> {
-    use serde_json_path::JsonPath;
-    use tokio::time::{sleep, Duration};
-
-    let start = std::time::Instant::now();
-    let timeout = Duration::from_secs(timeout_secs);
-    let interval = Duration::from_millis(retry_interval_ms);
-
-    // Compile the JSONPath once outside the loop
-    let json_path_str = if path.starts_with('$') {
-        path.to_string()
-    } else {
-        format!("$.{path}")
-    };
-
-    let json_path = JsonPath::parse(&json_path_str)
-        .map_err(|e| anyhow!("Invalid JSONPath '{json_path_str}': {e}"))?;
-
-    loop {
-        if start.elapsed() > timeout {
-            return Err(anyhow!(
-                "Timeout waiting for status path '{path}' to equal {expected:?} (waited {timeout_secs}s)"
-            ));
-        }
-
-        // Read current TUI status
-        match crate::read_tui_status() {
-            Ok(status) => {
-                // Serialize status to JSON for path lookup
-                let status_json = serde_json::to_value(&status)
-                    .map_err(|e| anyhow!("Failed to serialize status: {e}"))?;
-
-                // Query the JSON path using the library
-                let nodes = json_path.query(&status_json);
-
-                // Check if we got exactly one result
-                match nodes.exactly_one() {
-                    Ok(actual) => {
-                        if actual == expected {
-                            log::debug!(
-                                "✓ Status path '{path}' matches expected value: {expected:?}"
-                            );
-                            return Ok(());
-                        } else {
-                            log::debug!(
-                                "Status path '{path}' is {actual:?}, waiting for {expected:?}"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        log::debug!("Failed to find unique value at path '{path}': {e}");
-                    }
-                }
-            }
-            Err(e) => {
-                log::debug!("Failed to read TUI status: {e}");
-            }
-        }
-
-        sleep(interval).await;
-    }
-}
+// `check_status_path` removed — this helper was unused and deleted.
 
 /// Factory function for executing actions with automatic status validation and retry
 ///

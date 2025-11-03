@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
-use serde_json::json;
+// serde_json::json not needed here
 
 use expectrl::Expect;
 
@@ -28,7 +28,7 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
     station_id: u8,
     is_master: bool,
 ) -> Result<()> {
-    let path = station_field_path(port_name, is_master, station_index, "station_id");
+    let _path = station_field_path(port_name, is_master, station_index, "station_id");
 
     // Step 1: Enter edit mode
     execute_with_status_checks(
@@ -282,7 +282,7 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
     field_label: &str,
     step_name: &str,
 ) -> Result<()> {
-    let path = station_field_path(port_name, is_master, station_index, field_name);
+    let _path = station_field_path(port_name, is_master, station_index, field_name);
     let field_display_pattern = Regex::new(&format!(
         r">\s*{}\s+(?:0x{:04X}\s+\({}\)|>\s*[0-9_\s]*<)",
         regex::escape(field_label),

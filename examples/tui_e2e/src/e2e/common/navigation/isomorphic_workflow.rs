@@ -80,7 +80,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         ensure_connection_mode(session, cap, is_master).await?;
     }
     let state = create_modbus_dashboard_state(port_name);
-    let _ = screenshot_ctx
+    screenshot_ctx
         .capture_or_verify(
             session,
             cap,
@@ -105,7 +105,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Screenshot: After creating each station
         let state = create_state_with_stations(port_name, &configs[..=idx], is_master);
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -126,7 +126,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         if !is_generation_mode {
             focus_station(session, cap, port_name, station_index, is_master).await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -164,7 +164,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -202,7 +202,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -240,7 +240,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -278,7 +278,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -382,7 +382,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
                 // Capture screenshot (placeholder system will replace the actual value)
                 // Note: Placeholders were already registered above, so numbering is sequential
-                let _ = screenshot_ctx
+                screenshot_ctx
                     .capture_or_verify(
                         session,
                         cap,
@@ -436,7 +436,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             }
 
             // Single screenshot capturing all 10 registers with placeholders
-            let _ = screenshot_ctx
+            screenshot_ctx
                 .capture_or_verify(
                     session,
                     cap,
@@ -463,7 +463,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         .await?;
     }
     // Use the accumulated state with all register values
-    let _ = screenshot_ctx
+    screenshot_ctx
         .capture_or_verify(session, cap, state.clone(), "after_save")
         .await?;
 
@@ -472,7 +472,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         wait_for_port_enabled(port_name, 20, Some(500)).await?;
     }
     state = enable_port(state);
-    let _ = screenshot_ctx
+    screenshot_ctx
         .capture_or_verify(session, cap, state, "port_enabled")
         .await?;
 

@@ -96,7 +96,7 @@ pub struct SnapshotContext {
     #[allow(dead_code)]
     test_name: String,
     /// Counter for snapshot numbering
-    step_counter: u32,
+    _step_counter: u32,
     /// Base directory for snapshots
     snapshot_dir: PathBuf,
 }
@@ -110,7 +110,7 @@ impl SnapshotContext {
             mode,
             module_name,
             test_name,
-            step_counter: 0,
+            _step_counter: 0,
             snapshot_dir,
         }
     }
@@ -495,7 +495,7 @@ impl SnapshotContext {
     /// Capture or verify screenshot and state based on execution mode
     ///
     /// This is the main entry point for screenshot/state management.
-    /// - In GenerateScreenshots mode: 
+    /// - In GenerateScreenshots mode:
     ///   1. Write mock status to /tmp/status.json
     ///   2. Spawn TUI in --debug-screen-capture mode
     ///   3. Wait 3 seconds then kill the process
@@ -511,47 +511,57 @@ impl SnapshotContext {
         match self.mode {
             ExecutionMode::GenerateScreenshots => {
                 // Capture mode: Write state and spawn TUI to generate screenshot
-                log::info!("📸 Capture mode: Generating screenshot for step '{}'", step_name);
-                
+                log::info!(
+                    "📸 Capture mode: Generating screenshot for step '{}'",
+                    step_name
+                );
+
                 // 1. Write mock global status to /tmp/status.json
                 let status_json = serde_json::to_string_pretty(&predicted_state)?;
                 std::fs::write("/tmp/status.json", &status_json)?;
                 log::info!("💾 Wrote mock status to /tmp/status.json");
-                
+
                 // 2. Spawn TUI in debug capture mode
                 log::info!("🚀 Spawning TUI in debug capture mode...");
                 let mut tui_session = crate::terminal::spawn_expect_session_with_size(
                     &["--tui", "--debug-screen-capture", "--no-config-cache"],
                     Some(cap.parser.screen().size()),
                 )?;
-                
+
                 // 3. Wait 3 seconds for rendering to complete
                 log::info!("⏳ Waiting 3 seconds for TUI to render...");
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
-                
+
                 // 4. Capture terminal output
-                let screen = cap.capture(&mut tui_session, &format!("capture_{}", step_name)).await?;
-                
+                let screen = cap
+                    .capture(&mut tui_session, &format!("capture_{}", step_name))
+                    .await?;
+
                 // 5. Kill the TUI process
                 log::info!("🛑 Killing TUI capture process...");
                 drop(tui_session);
-                
+
                 log::info!("✅ Captured screenshot for step '{}'", step_name);
                 Ok(screen)
             }
             ExecutionMode::Normal => {
                 // Verify mode: Capture actual terminal and verify against JSON rules
-                log::info!("🔍 Verify mode: Checking screenshot for step '{}'", step_name);
-                
+                log::info!(
+                    "🔍 Verify mode: Checking screenshot for step '{}'",
+                    step_name
+                );
+
                 // Capture current terminal state
-                let screen = cap.capture(session, &format!("verify_{}", step_name)).await?;
-                
+                let screen = cap
+                    .capture(session, &format!("verify_{}", step_name))
+                    .await?;
+
                 // Load snapshot definitions
                 let definitions = self.load_snapshot_definitions()?;
-                
+
                 // Verify screen against the named step
                 Self::verify_screen_by_step_name(&screen, &definitions, step_name)?;
-                
+
                 log::info!("✅ Verified screenshot for step '{}'", step_name);
                 Ok(screen)
             }
@@ -881,7 +891,7 @@ pub fn verify_screen_with_json_rules(
 ) -> Result<()> {
     // Parse JSON rules
     let definitions = SnapshotContext::load_snapshot_definitions_from_str(json_rules)?;
-    
+
     // Verify using the step name
     SnapshotContext::verify_screen_by_step_name(screen_content, &definitions, step_name)
 }
