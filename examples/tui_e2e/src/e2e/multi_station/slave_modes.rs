@@ -24,7 +24,7 @@ pub async fn test_tui_multi_slave_mixed_register_types(
         execution_mode,
         "multi_station/slave_modes/mixed_types".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_multi_slave_test(port1, port2, &configs, &snapshot_ctx).await
 }
@@ -47,7 +47,7 @@ pub async fn test_tui_multi_slave_spaced_addresses(
         execution_mode,
         "multi_station/slave_modes/spaced_addresses".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_multi_slave_test(port1, port2, &configs, &snapshot_ctx).await
 }
@@ -70,7 +70,7 @@ pub async fn test_tui_multi_slave_mixed_station_ids(
         execution_mode,
         "multi_station/slave_modes/mixed_ids".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_multi_slave_test(port1, port2, &configs, &snapshot_ctx).await
 }

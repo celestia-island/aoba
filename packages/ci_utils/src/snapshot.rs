@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{
-    io,
+    fmt, io,
+    ops::RangeInclusive,
     path::PathBuf,
     sync::{Mutex, OnceLock},
 };
@@ -20,8 +21,9 @@ type SnapshotRecord = (String, String);
 pub enum ExecutionMode {
     /// Normal test mode: Execute keyboard actions and verify against reference screenshots
     Normal,
-    /// Generate reference screenshots from predicted states without executing keyboard actions
-    GenerateScreenshots,
+    /// Only verify screenshots mode: Validate JSON rules match TUI rendering
+    /// Writes status to /tmp/status.json, spawns TUI in debug mode, verifies rendered output
+    OnlyVerifyScreenshots,
 }
 
 /// Search condition types for snapshot matching
@@ -73,13 +75,64 @@ impl Default for PlaceholderPattern {
     }
 }
 
+/// Line selection range for screenshot verification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LineRange {
+    /// Starting line index (inclusive)
+    pub from: usize,
+    /// Ending line index (inclusive)
+    pub to: usize,
+}
+
+impl LineRange {
+    /// Create a normalized range ensuring `from <= to`
+    pub fn new(from: usize, to: usize) -> Self {
+        if from <= to {
+            Self { from, to }
+        } else {
+            Self { from: to, to: from }
+        }
+    }
+
+    /// Iterate over each line index within the range (inclusive)
+    pub fn iter(&self) -> RangeInclusive<usize> {
+        self.from..=self.to
+    }
+
+    /// Determine whether the provided line index is covered by this range
+    pub fn contains(&self, line: usize) -> bool {
+        line >= self.from && line <= self.to
+    }
+}
+
+impl<'a> IntoIterator for &'a LineRange {
+    type Item = usize;
+    type IntoIter = RangeInclusive<usize>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl fmt::Display for LineRange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.from == self.to {
+            write!(f, "{}", self.from)
+        } else {
+            write!(f, "{}-{}", self.from, self.to)
+        }
+    }
+}
+
 /// Snapshot definition for JSON format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnapshotDefinition {
+    /// Unique step name for identification (replaces index-based lookup)
+    pub name: String,
     /// Description of what this snapshot should show
     pub description: String,
     /// Lines to check (0-indexed)
-    pub line: Vec<usize>,
+    pub line: LineRange,
     /// Search conditions to verify
     pub search: Vec<SearchCondition>,
 }
@@ -93,24 +146,47 @@ pub struct SnapshotContext {
     /// Test name (e.g., "test_basic_configuration")
     #[allow(dead_code)]
     test_name: String,
-    /// Counter for snapshot numbering
-    step_counter: u32,
     /// Base directory for snapshots
     snapshot_dir: PathBuf,
 }
 
 impl SnapshotContext {
     /// Create a new snapshot context
-    pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Self {
-        let snapshot_dir = PathBuf::from("examples/tui_e2e/screenshots").join(&module_name);
+    pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Result<Self> {
+        // Extract the directory and filename from module_name
+        // e.g., "single_station/master_modes/coils" -> dir: "single_station/master_modes", file: "coils"
+        let parts: Vec<&str> = module_name.split('/').collect();
 
-        Self {
+        let workspace_root = {
+            let mut current = std::env::current_dir()
+                .map_err(|err| anyhow!("Failed to determine current directory: {err}"))?;
+
+            loop {
+                if current.join("Cargo.toml").exists() {
+                    break current;
+                }
+
+                if !current.pop() {
+                    return Err(anyhow!("Failed to determine workspace root"));
+                }
+            }
+        };
+
+        let snapshot_dir = if parts.len() > 1 {
+            let dir_parts = &parts[..parts.len() - 1];
+            workspace_root
+                .join("examples/tui_e2e/screenshots")
+                .join(dir_parts.join("/"))
+        } else {
+            workspace_root.join("examples/tui_e2e/screenshots")
+        };
+
+        Ok(Self {
             mode,
             module_name,
             test_name,
-            step_counter: 0,
             snapshot_dir,
-        }
+        })
     }
 
     /// Get the execution mode associated with this context
@@ -148,12 +224,22 @@ impl SnapshotContext {
     }
 
     /// Load snapshot definitions from JSON file
+    /// The JSON file is determined from the module_name
+    /// (e.g., "single_station/master_modes/coils" -> "coils.json")
     pub fn load_snapshot_definitions(&self) -> Result<Vec<SnapshotDefinition>> {
-        let json_path = self.snapshot_dir.join("snapshots.json");
+        // Extract the base filename from the module path
+        // e.g., "single_station/master_modes/coils" -> "coils"
+        let json_filename = self
+            .module_name
+            .split('/')
+            .last()
+            .ok_or_else(|| anyhow!("Invalid module name: {}", self.module_name))?;
+
+        let json_path = self.snapshot_dir.join(format!("{}.json", json_filename));
 
         if !json_path.exists() {
             return Err(anyhow!(
-                "Snapshot definitions not found: {}. Run with --generate-screenshots first.",
+                "Snapshot definitions not found: {}. Ensure JSON file exists in screenshots directory.",
                 json_path.display()
             ));
         }
@@ -161,8 +247,43 @@ impl SnapshotContext {
         let content = std::fs::read_to_string(&json_path)?;
         let definitions: Vec<SnapshotDefinition> = serde_json::from_str(&content)?;
 
-        log::info!("📖 Loaded {} snapshot definitions", definitions.len());
+        log::info!(
+            "📖 Loaded {} snapshot definitions from {}",
+            definitions.len(),
+            json_path.display()
+        );
         Ok(definitions)
+    }
+
+    /// Load snapshot definitions from embedded JSON string (via include_str!)
+    pub fn load_snapshot_definitions_from_str(json_str: &str) -> Result<Vec<SnapshotDefinition>> {
+        let definitions: Vec<SnapshotDefinition> = serde_json::from_str(json_str)?;
+        log::info!(
+            "📖 Loaded {} snapshot definitions from embedded JSON",
+            definitions.len()
+        );
+        Ok(definitions)
+    }
+
+    /// Find a snapshot definition by its step name
+    pub fn find_definition_by_name<'a>(
+        definitions: &'a [SnapshotDefinition],
+        step_name: &str,
+    ) -> Result<&'a SnapshotDefinition> {
+        definitions
+            .iter()
+            .find(|def| def.name == step_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Snapshot definition not found for step '{}'. Available steps: {}",
+                    step_name,
+                    definitions
+                        .iter()
+                        .map(|d| d.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })
     }
 
     /// Verify screen content against snapshot definitions
@@ -184,7 +305,7 @@ impl SnapshotContext {
         let lines: Vec<&str> = screen_content.lines().collect();
 
         // Check specified lines exist
-        for &line_num in &definition.line {
+        for line_num in &definition.line {
             if line_num >= lines.len() {
                 return Err(anyhow!(
                     "Line {} not found in screen (only {} lines available)",
@@ -199,7 +320,7 @@ impl SnapshotContext {
             match condition {
                 SearchCondition::Text { value, negate } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         if lines[line_num].contains(value) {
                             found = true;
                             break;
@@ -210,7 +331,7 @@ impl SnapshotContext {
                         // For negate: text should NOT be found
                         if found {
                             return Err(anyhow!(
-                                "Text '{}' should not be found in specified lines {:?}",
+                                "Text '{}' should not be found in specified lines {}",
                                 value,
                                 definition.line
                             ));
@@ -219,7 +340,7 @@ impl SnapshotContext {
                         // For normal: text should be found
                         if !found {
                             return Err(anyhow!(
-                                "Text '{}' not found in specified lines {:?}",
+                                "Text '{}' not found in specified lines {}",
                                 value,
                                 definition.line
                             ));
@@ -228,7 +349,7 @@ impl SnapshotContext {
                 }
                 SearchCondition::CursorLine { value } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         if lines[line_num].contains('>') && line_num == *value {
                             found = true;
                             break;
@@ -236,7 +357,7 @@ impl SnapshotContext {
                     }
                     if !found {
                         return Err(anyhow!(
-                            "Cursor not found at line {} in specified lines {:?}",
+                            "Cursor not found at line {} in specified lines {}",
                             value,
                             definition.line
                         ));
@@ -244,7 +365,7 @@ impl SnapshotContext {
                 }
                 SearchCondition::Placeholder { value, pattern } => {
                     let mut found = false;
-                    for &line_num in &definition.line {
+                    for line_num in &definition.line {
                         let line = lines[line_num];
 
                         match pattern {
@@ -301,7 +422,7 @@ impl SnapshotContext {
                     }
                     if !found {
                         return Err(anyhow!(
-                            "Placeholder pattern '{:?}' not found in specified lines {:?}",
+                            "Placeholder pattern '{:?}' not found in specified lines {}",
                             pattern,
                             definition.line
                         ));
@@ -314,25 +435,214 @@ impl SnapshotContext {
         Ok(())
     }
 
+    /// Verify screen content against a specific named snapshot step
+    ///
+    /// This is the new recommended method that uses step names instead of indices.
+    pub fn verify_screen_by_step_name(
+        screen_content: &str,
+        definitions: &[SnapshotDefinition],
+        step_name: &str,
+    ) -> Result<()> {
+        let definition = Self::find_definition_by_name(definitions, step_name)?;
+        let lines: Vec<&str> = screen_content.lines().collect();
+
+        // Check specified lines exist
+        for line_num in &definition.line {
+            if line_num >= lines.len() {
+                return Err(anyhow!(
+                    "Line {} not found in screen (only {} lines available) for step '{}'",
+                    line_num,
+                    lines.len(),
+                    step_name
+                ));
+            }
+        }
+
+        // Verify each search condition
+        for condition in &definition.search {
+            match condition {
+                SearchCondition::Text { value, negate } => {
+                    let mut found = false;
+                    for line_num in &definition.line {
+                        if lines[line_num].contains(value) {
+                            found = true;
+                            break;
+                        }
+                    }
+
+                    if *negate {
+                        if found {
+                            return Err(anyhow!(
+                                "Step '{}': Text '{}' should not be found in specified lines {}",
+                                step_name,
+                                value,
+                                definition.line
+                            ));
+                        }
+                    } else {
+                        if !found {
+                            return Err(anyhow!(
+                                "Step '{}': Text '{}' not found in specified lines {}",
+                                step_name,
+                                value,
+                                definition.line
+                            ));
+                        }
+                    }
+                }
+                SearchCondition::CursorLine { value } => {
+                    let mut found = false;
+                    for line_num in &definition.line {
+                        if lines[line_num].contains('>') && line_num == *value {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if !found {
+                        return Err(anyhow!(
+                            "Step '{}': Cursor not found at line {} in specified lines {}",
+                            step_name,
+                            value,
+                            definition.line
+                        ));
+                    }
+                }
+                SearchCondition::Placeholder { value, pattern } => {
+                    let mut found = false;
+                    for line_num in &definition.line {
+                        let line = lines[line_num];
+
+                        match pattern {
+                            PlaceholderPattern::Exact => {
+                                if line.contains(value) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyBoolean => {
+                                if line.contains("{{0b#") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyDecimal => {
+                                if line.contains("{{#")
+                                    && !line.contains("{{0x#")
+                                    && !line.contains("{{0b#")
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::AnyHexadecimal => {
+                                if line.contains("{{0x#") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Any => {
+                                if line.contains("{{") && line.contains("}}") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Range { start: _, end: _ } => {
+                                if line.contains("{{") && line.contains("}}") {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            PlaceholderPattern::Pattern { regex } => {
+                                if line.contains(&**regex) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if !found {
+                        return Err(anyhow!(
+                            "Step '{}': Placeholder pattern '{:?}' not found in specified lines {}",
+                            step_name,
+                            pattern,
+                            definition.line
+                        ));
+                    }
+                }
+            }
+        }
+
+        log::info!(
+            "✅ Snapshot verified for step '{}': {}",
+            step_name,
+            definition.description
+        );
+        Ok(())
+    }
+
     /// Capture or verify screenshot and state based on execution mode
     ///
     /// This is the main entry point for screenshot/state management.
-    /// - In GenerateScreenshots mode: Generates reference screenshot and saves predicted state
-    /// - In Normal mode: Verifies actual output against reference and checks state
+    /// - In OnlyVerifyScreenshots mode:
+    ///   1. Write mock status to /tmp/status.json
+    ///   2. Spawn TUI in --debug-screen-capture mode
+    ///   3. Wait 3 seconds then kill the process
+    ///   4. Capture terminal output via expectrl + vt100
+    ///   5. Verify against JSON rules
+    /// - In Normal mode: Execute keyboard actions normally
     pub async fn capture_or_verify<T: ExpectSession>(
         &self,
-        _session: &mut T,
-        _cap: &mut TerminalCapture,
-        _predicted_state: TuiStatus,
+        session: &mut T,
+        cap: &mut TerminalCapture,
+        predicted_state: TuiStatus,
         step_name: &str,
     ) -> Result<String> {
-        // For now, we'll use the old screenshot generation logic
-        // TODO: Implement JSON snapshot generation logic
-        log::warn!("⚠️  capture_or_verify not yet implemented for JSON snapshots");
-        log::info!("📸 Would capture/verify snapshot for step: {}", step_name);
+        match self.mode {
+            ExecutionMode::OnlyVerifyScreenshots => {
+                // Verify screenshots mode: Write state, spawn TUI, capture and verify
+                log::info!(
+                    "📸 Screenshot verification mode: Validating rules for step '{}'",
+                    step_name
+                );
 
-        // Return a dummy filename for now
-        Ok(format!("{}.txt", step_name))
+                // 1. Write mock global status to /tmp/status.json
+                let status_json = serde_json::to_string_pretty(&predicted_state)?;
+                std::fs::write("/tmp/status.json", &status_json)?;
+                log::debug!("💾 Wrote mock status to /tmp/status.json");
+
+                // 2. Spawn TUI in debug capture mode
+                log::debug!("🚀 Spawning TUI in debug capture mode...");
+                let mut tui_session = crate::terminal::spawn_expect_session_with_size(
+                    &["--tui", "--debug-screen-capture", "--no-config-cache"],
+                    Some(cap.parser.screen().size()),
+                )?;
+
+                // 3. Wait 3 seconds for rendering to complete
+                log::debug!("⏳ Waiting 3 seconds for TUI to render...");
+                tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
+
+                // 4. Capture terminal output
+                let screen = cap
+                    .capture(&mut tui_session, &format!("verify_{}", step_name))
+                    .await?;
+
+                // 5. Kill the TUI process
+                log::debug!("🛑 Killing TUI capture process...");
+                drop(tui_session);
+
+                // 6. Load snapshot definitions and verify
+                let definitions = self.load_snapshot_definitions()?;
+                Self::verify_screen_by_step_name(&screen, &definitions, step_name)?;
+
+                log::info!("✅ Screenshot verified for step '{}'", step_name);
+                Ok(screen)
+            }
+            ExecutionMode::Normal => {
+                // Normal mode: Just execute actions, don't do screenshot verification
+                log::debug!("🔄 Normal mode: Processing step '{}'", step_name);
+                Ok(String::new())
+            }
+        }
     }
 }
 
@@ -623,4 +933,42 @@ impl Default for StateBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Verify terminal screen content against JSON snapshot rules loaded via include_str!
+///
+/// This is a standalone verification function that can be used without SnapshotContext.
+/// It's designed to work with JSON rules embedded in the test binary via `include_str!`.
+///
+/// # Arguments
+/// * `screen_content` - The captured terminal screen content
+/// * `json_rules` - The JSON rules string (typically from `include_str!("path/to/rules.json")`)
+/// * `step_name` - The name of the step to verify (matches the "name" field in JSON)
+///
+/// # Example
+/// ```no_run
+/// # use aoba_ci_utils::*;
+/// const RULES: &str = include_str!("../screenshots/single_station/master_modes/coils.json");
+///
+/// # async fn test_example() -> anyhow::Result<()> {
+/// # let screen = "test screen content";
+/// // Verify against specific step
+/// verify_screen_with_json_rules(
+///     screen,
+///     RULES,
+///     "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
+/// )?;
+/// # Ok(())
+/// # }
+/// ```
+pub fn verify_screen_with_json_rules(
+    screen_content: &str,
+    json_rules: &str,
+    step_name: &str,
+) -> Result<()> {
+    // Parse JSON rules
+    let definitions = SnapshotContext::load_snapshot_definitions_from_str(json_rules)?;
+
+    // Verify using the step name
+    SnapshotContext::verify_screen_by_step_name(screen_content, &definitions, step_name)
 }

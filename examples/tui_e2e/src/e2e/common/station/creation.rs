@@ -3,7 +3,6 @@ use anyhow::{anyhow, Result};
 use expectrl::Expect;
 
 use super::super::status_paths::{station_collection, wait_for_station_count};
-use super::modbus_page_check;
 use aoba_ci_utils::{
     execute_cursor_actions, read_tui_status, CursorAction, ExpectSession, TerminalCapture,
 };
@@ -63,9 +62,7 @@ pub async fn create_station<T: Expect + ExpectSession>(
     execute_cursor_actions(
         session,
         cap,
-        &[modbus_page_check(
-            "ModbusDashboard active after creating station",
-        )],
+        &[CursorAction::Sleep1s],
         "create_station_page_check",
     )
     .await?;

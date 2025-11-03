@@ -1,10 +1,11 @@
 [
   {
-    "description": "开头先快照一次，/tmp/vcom1 与 /tmp/vcom2 应当在屏幕上",
-    "line": [
-      2,
-      3
-    ],
+    "name": "00 Initial snapshot",
+    "description": "初始快照",
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -17,22 +18,26 @@
     ]
   },
   {
-    "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ConfigPanel；快照，此时应当在 ConfigPanel",
-    "line": [
-      0
-    ],
+    "name": "01 Press enter to config panel",
+    "description": "进入配置面板",
+    "line": {
+      "from": 2,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
-        "value": "ConfigPanel"
+        "value": "Enable Port"
       }
     ]
   },
   {
-    "description": "进入页面阶段 - 向下 2 次；Mock 修改光标位置，指向 Enter Business Configuration；快照，此时大于号应当处于第三行",
-    "line": [
-      2
-    ],
+    "name": "02 Navigate down to business config",
+    "description": "导航到业务配置",
+    "line": {
+      "from": 2,
+      "to": 2
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -45,10 +50,12 @@
     ]
   },
   {
-    "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ModbusDashboard；快照，此时应当在 ModbusDashboard",
-    "line": [
-      0
-    ],
+    "name": "03 Enter modbus dashboard",
+    "description": "进入 Modbus 面板",
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",
@@ -57,12 +64,12 @@
     ]
   },
   {
-    "description": "创建第一个站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入一个新的初始化站点；快照，此时下方多出了一个 `#1` 站点",
-    "line": [
-      1,
-      2,
-      3
-    ],
+    "name": "04 Create station",
+    "description": "创建站点",
+    "line": {
+      "from": 1,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -71,12 +78,12 @@
     ]
   },
   {
-    "description": "创建第二个站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入第二个初始化站点；快照，此时下方多出了 `#1` 和 `#2` 站点",
-    "line": [
-      1,
-      2,
-      3
-    ],
+    "name": "05 Create second station",
+    "description": "创建第二个站点",
+    "line": {
+      "from": 1,
+      "to": 3
+    },
     "search": [
       {
         "type": "text",
@@ -89,10 +96,12 @@
     ]
   },
   {
-    "description": "配置第一个站点阶段 - 先立即 Mock 修改光标位置，指向 `#1` 站点；快照，此时大于号应当处于第一行",
-    "line": [
-      1
-    ],
+    "name": "06 Configure first station",
+    "description": "配置第一个站点",
+    "line": {
+      "from": 1,
+      "to": 1
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -105,10 +114,12 @@
     ]
   },
   {
-    "description": "配置第一个站点阶段 - 向下 2 次；Mock 修改光标位置，指向 `#1` 站点的第三项 Register Address；快照，此时大于号应当处于第四行",
-    "line": [
-      4
-    ],
+    "name": "07 Navigate down 2 times",
+    "description": "向下导航",
+    "line": {
+      "from": 4,
+      "to": 4
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -121,10 +132,12 @@
     ]
   },
   {
-    "description": "配置第一个站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器地址下标 0（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
-    "line": [
-      4
-    ],
+    "name": "08 Configure first station",
+    "description": "配置第一个站点",
+    "line": {
+      "from": 4,
+      "to": 4
+    },
     "search": [
       {
         "type": "text",
@@ -133,10 +146,12 @@
     ]
   },
   {
-    "description": "配置第一个站点阶段 - 输入数字 100；Mock 修改当前站点的寄存器地址为 100；快照，此时屏幕中对应位置应当显示为 `> 100_ <`",
-    "line": [
-      4
-    ],
+    "name": "09 Configure first station",
+    "description": "配置第一个站点",
+    "line": {
+      "from": 4,
+      "to": 4
+    },
     "search": [
       {
         "type": "text",
@@ -145,10 +160,12 @@
     ]
   },
   {
-    "description": "配置第一个站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的寄存器地址；快照，此时屏幕中对应位置应当显示为 `100`，且两侧尖括号消失",
-    "line": [
-      4
-    ],
+    "name": "10 Configure first station",
+    "description": "配置第一个站点",
+    "line": {
+      "from": 4,
+      "to": 4
+    },
     "search": [
       {
         "type": "text",
@@ -162,10 +179,12 @@
     ]
   },
   {
-    "description": "配置第二个站点阶段 - 向上 2 次；Mock 修改光标位置，指向 `#2` 站点；快照，此时大于号应当处于第二行",
-    "line": [
-      2
-    ],
+    "name": "11 Navigate up 2 times to second station",
+    "description": "向上导航",
+    "line": {
+      "from": 2,
+      "to": 2
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -178,10 +197,12 @@
     ]
   },
   {
-    "description": "配置第二个站点阶段 - 向下 2 次；Mock 修改光标位置，指向 `#2` 站点的第三项 Register Address；快照，此时大于号应当处于第五行",
-    "line": [
-      5
-    ],
+    "name": "12 Navigate down 2 times",
+    "description": "向下导航",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "cursor_line",
@@ -194,10 +215,12 @@
     ]
   },
   {
-    "description": "配置第二个站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器地址下标 0（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
-    "line": [
-      5
-    ],
+    "name": "13 Configure second station",
+    "description": "配置第二个站点",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -206,10 +229,12 @@
     ]
   },
   {
-    "description": "配置第二个站点阶段 - 输入数字 200；Mock 修改当前站点的寄存器地址为 200；快照，此时屏幕中对应位置应当显示为 `> 200_ <`",
-    "line": [
-      5
-    ],
+    "name": "14 Configure second station",
+    "description": "配置第二个站点",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -218,10 +243,12 @@
     ]
   },
   {
-    "description": "配置第二个站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的寄存器地址；快照，此时屏幕中对应位置应当显示为 `200`，且两侧尖括号消失",
-    "line": [
-      5
-    ],
+    "name": "15 Configure second station",
+    "description": "配置第二个站点",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
     "search": [
       {
         "type": "text",
@@ -235,10 +262,12 @@
     ]
   },
   {
-    "description": "退出阶段 - 按下 Ctrl + S，保存当前配置，然后等待 3 秒；Mock 修改右上角状态为运行中状态；快照，此时右上角应当显示为运行中",
-    "line": [
-      0
-    ],
+    "name": "16 Save configuration with Ctrl+S",
+    "description": "保存配置",
+    "line": {
+      "from": 0,
+      "to": 0
+    },
     "search": [
       {
         "type": "text",
