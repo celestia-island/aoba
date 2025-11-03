@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
+use crate::utils::{DEFAULT_PORT1, DEFAULT_PORT2, run_binary_sync, should_run_vcom_tests_with_ports, vcom_matchers_with_ports};
 
-use aoba_ci_utils::{
-    run_binary_sync, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, DEFAULT_PORT1,
-    DEFAULT_PORT2,
-};
+
+
+
 
 pub async fn test_cli_list_ports_json() -> Result<()> {
     let output = run_binary_sync(&["--list-ports", "--json"])?;

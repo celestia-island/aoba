@@ -8,6 +8,10 @@ use aoba::cli::config::{
     CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
     StationConfig, StationMode,
 };
+use crate::utils::{build_debug_bin};
+
+
+
 
 /// Test multiple slaves with adjacent and non-adjacent register addresses
 pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
@@ -61,7 +65,7 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
     log::info!("🧪 Created configuration file for adjacent registers test");
 
     // Build the binary
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = crate::utils::build_debug_bin("aoba")?;
 
     // Start configuration mode
     log::info!("🧪 Starting multi-slaves with adjacent registers configuration...");

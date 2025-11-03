@@ -21,8 +21,5 @@ expectrl.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix = { version = "^0.28", default-features = false, features = ["fs"] }
 
-[dependencies.aoba_ci_utils]
-path = "../../packages/ci_utils"
-
 [dependencies.aoba]
 path = "../../packages/tui"

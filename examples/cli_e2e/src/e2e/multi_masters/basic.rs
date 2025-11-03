@@ -8,6 +8,10 @@ use aoba::cli::config::{
     CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
     StationConfig, StationMode,
 };
+use crate::utils::{build_debug_bin};
+
+
+
 
 /// Test multiple masters configuration
 pub async fn test_multi_masters() -> Result<()> {
@@ -75,7 +79,7 @@ pub async fn test_multi_masters() -> Result<()> {
     log::info!("🧪 Created configuration file: {config_file:?}");
 
     // Build the binary
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = crate::utils::build_debug_bin("aoba")?;
 
     // Start configuration mode
     log::info!("🧪 Starting multi-masters configuration...");

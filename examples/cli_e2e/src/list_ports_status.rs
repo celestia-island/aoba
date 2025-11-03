@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
+use crate::utils::{run_binary_sync};
 
-use aoba_ci_utils::run_binary_sync;
+
+
 
 pub async fn test_cli_list_ports_json_with_status() -> Result<()> {
     let output = run_binary_sync(&["--list-ports", "--json"])?;
