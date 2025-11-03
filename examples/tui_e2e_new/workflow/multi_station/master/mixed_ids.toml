@@ -1,0 +1,24 @@
+# Multi-Station - Master Mode - Mixed Station IDs
+[manifest]
+id = "multi_station_master_mixed_ids"
+description = "Multi-station Master mode with mixed station IDs"
+is_master = true
+
+[[manifest.stations]]
+station_id = 1
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+
+[[manifest.stations]]
+station_id = 5
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+
+init_order = ["navigate_to_entry", "save_configuration"]
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom1"
+at_line = 2
+[[workflow.save_configuration]]
+key = "ctrl-s"

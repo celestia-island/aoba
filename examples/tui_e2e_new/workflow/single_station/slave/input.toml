@@ -1,0 +1,15 @@
+# Single Station - Slave Mode - Input (04)
+[manifest]
+id = "single_station_slave_input"
+description = "Single station Slave mode with Input registers"
+station_id = 1
+register_type = "Input"
+start_address = 0x0000
+register_count = 10
+is_master = false
+init_order = ["navigate_to_entry", "save_configuration"]
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom1"
+at_line = 2
+[[workflow.save_configuration]]
+key = "ctrl-s"

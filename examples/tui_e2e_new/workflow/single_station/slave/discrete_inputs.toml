@@ -1,0 +1,16 @@
+# Single Station - Slave Mode - Discrete Inputs (02)
+[manifest]
+id = "single_station_slave_discrete_inputs"
+description = "Single station Slave mode with Discrete Inputs registers"
+station_id = 1
+register_type = "DiscreteInputs"
+start_address = 0x0000
+register_count = 10
+is_master = false
+
+init_order = ["navigate_to_entry", "enter_config_panel", "save_configuration"]
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom1"
+at_line = 2
+[[workflow.save_configuration]]
+key = "ctrl-s"

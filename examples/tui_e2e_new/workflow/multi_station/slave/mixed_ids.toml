@@ -1,0 +1,24 @@
+# Multi-Station - Slave Mode - Mixed Station IDs
+[manifest]
+id = "multi_station_slave_mixed_ids"
+description = "Multi-station Slave mode with mixed station IDs"
+is_master = false
+
+[[manifest.stations]]
+station_id = 2
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+
+[[manifest.stations]]
+station_id = 6
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+
+init_order = ["navigate_to_entry", "save_configuration"]
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom1"
+at_line = 2
+[[workflow.save_configuration]]
+key = "ctrl-s"
