@@ -194,11 +194,12 @@ struct Args {
     #[arg(long)]
     debug: bool,
 
-    /// Generate reference screenshots instead of running tests
-    /// This mode captures terminal output at each test step and saves
-    /// reference screenshots for future verification
+    /// Only verify screenshots mode
+    /// This mode writes mock status to /tmp/status.json, spawns TUI in debug mode,
+    /// captures terminal output, and verifies it matches JSON rules.
+    /// Used to validate that JSON screenshot rules are correct before running full tests.
     #[arg(long)]
-    generate_screenshots: bool,
+    only_verify_screenshots: bool,
 }
 
 /// Clean up debug status files from previous test runs
@@ -349,7 +350,7 @@ async fn main() -> Result<()> {
 
     log::info!("🧪 Running module: {module}");
 
-    let execution_mode = if args.generate_screenshots {
+    let execution_mode = if args.only_verify_screenshots {
         ExecutionMode::OnlyVerifyScreenshots
     } else {
         ExecutionMode::Normal

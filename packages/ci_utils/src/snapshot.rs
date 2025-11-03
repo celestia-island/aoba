@@ -105,7 +105,15 @@ pub struct SnapshotContext {
 impl SnapshotContext {
     /// Create a new snapshot context
     pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Self {
-        let snapshot_dir = PathBuf::from("examples/tui_e2e/screenshots").join(&module_name);
+        // Extract the directory and filename from module_name
+        // e.g., "single_station/master_modes/coils" -> dir: "single_station/master_modes", file: "coils"
+        let parts: Vec<&str> = module_name.split('/').collect();
+        let snapshot_dir = if parts.len() > 1 {
+            let dir_parts = &parts[..parts.len() - 1];
+            PathBuf::from("examples/tui_e2e/screenshots").join(dir_parts.join("/"))
+        } else {
+            PathBuf::from("examples/tui_e2e/screenshots")
+        };
 
         Self {
             mode,
