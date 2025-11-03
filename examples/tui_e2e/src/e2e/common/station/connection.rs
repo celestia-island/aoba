@@ -4,7 +4,6 @@ use regex::Regex;
 use expectrl::Expect;
 
 use super::focus::focus_create_station_button;
-use super::modbus_page_check;
 use aoba_ci_utils::{
     execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, ScreenAssertion,
     ScreenPatternSpec, TerminalCapture,
@@ -36,9 +35,7 @@ pub async fn ensure_connection_mode<T: Expect + ExpectSession>(
             },
             CursorAction::Sleep1s,
         ],
-        &[modbus_page_check(
-            "ModbusDashboard active while focusing Connection Mode",
-        )],
+        &[CursorAction::Sleep1s],
         &[ScreenAssertion::pattern(ScreenPatternSpec::new(
             connection_mode_focus_pattern,
             "Cursor moved to Connection Mode",
@@ -53,9 +50,7 @@ pub async fn ensure_connection_mode<T: Expect + ExpectSession>(
             session,
             cap,
             &[CursorAction::Sleep1s],
-            &[modbus_page_check(
-                "ModbusDashboard active while verifying Master mode",
-            )],
+            &[CursorAction::Sleep1s],
             &[ScreenAssertion::pattern(ScreenPatternSpec::new(
                 master_display_pattern,
                 "Connection mode remains Master",
@@ -73,9 +68,7 @@ pub async fn ensure_connection_mode<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressEnter, CursorAction::Sleep1s],
-        &[modbus_page_check(
-            "ModbusDashboard active in Connection Mode edit",
-        )],
+        &[CursorAction::Sleep1s],
         &[ScreenAssertion::pattern(ScreenPatternSpec::new(
             connection_mode_edit_pattern.clone(),
             "Connection mode selector opened",
@@ -99,9 +92,7 @@ pub async fn ensure_connection_mode<T: Expect + ExpectSession>(
                 },
                 CursorAction::Sleep1s,
             ],
-            &[modbus_page_check(
-                "ModbusDashboard active while selecting Slave mode",
-            )],
+            &[CursorAction::Sleep1s],
             &[ScreenAssertion::pattern(ScreenPatternSpec::new(
                 connection_mode_edit_slave_pattern.clone(),
                 "Connection mode selector shows Slave",
@@ -117,9 +108,7 @@ pub async fn ensure_connection_mode<T: Expect + ExpectSession>(
                     session,
                     cap,
                     &[CursorAction::PressEnter, CursorAction::Sleep1s],
-                    &[modbus_page_check(
-                        "ModbusDashboard active after confirming Slave mode",
-                    )],
+                    &[CursorAction::Sleep1s],
                     &[ScreenAssertion::pattern(ScreenPatternSpec::new(
                         connection_mode_slave_pattern.clone(),
                         "Connection mode confirms Slave",

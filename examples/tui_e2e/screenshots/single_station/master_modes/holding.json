@@ -1,0 +1,1104 @@
+[
+  {
+    "name": "00 Initial snapshot",
+    "description": "初始快照",
+    "line": {
+      "from": 2,
+      "to": 3
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "/tmp/vcom1"
+      },
+      {
+        "type": "text",
+        "value": "/tmp/vcom2"
+      }
+    ]
+  },
+  {
+    "name": "01 Press enter to config panel",
+    "description": "进入配置面板",
+    "line": {
+      "from": 2,
+      "to": 3
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "Enable Port"
+      }
+    ]
+  },
+  {
+    "name": "02 Navigate down to business config",
+    "description": "导航到业务配置",
+    "line": {
+      "from": 2,
+      "to": 2
+    },
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 2
+      },
+      {
+        "type": "text",
+        "value": "Enter Business Configuration"
+      }
+    ]
+  },
+  {
+    "name": "03 Enter modbus dashboard",
+    "description": "进入 Modbus 面板",
+    "line": {
+      "from": 0,
+      "to": 0
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "ModbusDashboard"
+      }
+    ]
+  },
+  {
+    "name": "04 Press enter",
+    "description": "步骤操作",
+    "line": {
+      "from": 1,
+      "to": 3
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "#1"
+      }
+    ]
+  },
+  {
+    "name": "05 Configure station",
+    "description": "配置站点",
+    "line": {
+      "from": 1,
+      "to": 1
+    },
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 1
+      },
+      {
+        "type": "text",
+        "value": "#1"
+      }
+    ]
+  },
+  {
+    "name": "06 Configure register type",
+    "description": "配置寄存器类型",
+    "line": {
+      "from": 3,
+      "to": 3
+    },
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 3
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      }
+    ]
+  },
+  {
+    "name": "07 Configure station",
+    "description": "配置站点",
+    "line": {
+      "from": 3,
+      "to": 3
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> Holding Registers <"
+      }
+    ]
+  },
+  {
+    "name": "08 Configure station",
+    "description": "配置站点",
+    "line": {
+      "from": 3,
+      "to": 3
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "Holding Registers"
+      },
+      {
+        "type": "text",
+        "value": ">",
+        "negate": true
+      }
+    ]
+  },
+  {
+    "name": "09 Navigate down to register length",
+    "description": "导航到寄存器长度",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 5
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "10 Enter register length edit mode",
+    "description": "进入寄存器长度编辑模式",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "11 Input register length 10",
+    "description": "输入寄存器长度 10",
+    "line": {
+      "from": 5,
+      "to": 5
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> 10_ <"
+      }
+    ]
+  },
+  {
+    "name": "12 Confirm register length",
+    "description": "确认寄存器长度",
+    "line": {
+      "from": 5,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "10"
+      },
+      {
+        "type": "text",
+        "value": ">",
+        "negate": true
+      },
+      {
+        "type": "text",
+        "value": "0x0000"
+      }
+    ]
+  },
+  {
+    "name": "13 Navigate to first register",
+    "description": "步骤操作",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "cursor_line",
+        "value": 6
+      },
+      {
+        "type": "text",
+        "value": "0x0000"
+      }
+    ]
+  },
+  {
+    "name": "14 Navigate to register 1",
+    "description": "导航到寄存器 1",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#001}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "15 Enter edit mode for register 1",
+    "description": "进入寄存器 1 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "16 Input decimal value for register 1",
+    "description": "输入寄存器 1 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#001}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "17 Confirm value for register 1",
+    "description": "确认寄存器 1 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#001}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#001}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "18 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#002}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "19 Enter edit mode for register 2",
+    "description": "进入寄存器 2 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "20 Input decimal value for register 2",
+    "description": "输入寄存器 2 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#002}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "21 Confirm value for register 2",
+    "description": "确认寄存器 2 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#002}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#002}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "22 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#003}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "23 Enter edit mode for register 3",
+    "description": "进入寄存器 3 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "24 Input decimal value for register 3",
+    "description": "输入寄存器 3 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#003}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "25 Confirm value for register 3",
+    "description": "确认寄存器 3 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#003}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#003}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "26 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#004}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "27 Enter edit mode for register 4",
+    "description": "进入寄存器 4 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "28 Input decimal value for register 4",
+    "description": "输入寄存器 4 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#004}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "29 Confirm value for register 4",
+    "description": "确认寄存器 4 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#004}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#004}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "30 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#005}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "31 Enter edit mode for register 5",
+    "description": "进入寄存器 5 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "32 Input decimal value for register 5",
+    "description": "输入寄存器 5 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#005}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "33 Confirm value for register 5",
+    "description": "确认寄存器 5 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#005}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#005}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "34 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#006}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "35 Enter edit mode for register 6",
+    "description": "进入寄存器 6 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "36 Input decimal value for register 6",
+    "description": "输入寄存器 6 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#006}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "37 Confirm value for register 6",
+    "description": "确认寄存器 6 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#006}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#006}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "38 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#007}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "39 Enter edit mode for register 7",
+    "description": "进入寄存器 7 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "40 Input decimal value for register 7",
+    "description": "输入寄存器 7 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#007}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "41 Confirm value for register 7",
+    "description": "确认寄存器 7 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#007}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#007}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "42 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#008}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "43 Enter edit mode for register 8",
+    "description": "进入寄存器 8 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "44 Input decimal value for register 8",
+    "description": "输入寄存器 8 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#008}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "45 Confirm value for register 8",
+    "description": "确认寄存器 8 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#008}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#008}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "46 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#009}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "47 Enter edit mode for register 9",
+    "description": "进入寄存器 9 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "48 Input decimal value for register 9",
+    "description": "输入寄存器 9 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#009}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "49 Confirm value for register 9",
+    "description": "确认寄存器 9 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#009}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#009}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "50 Navigate right to next register",
+    "description": "向右导航",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "placeholder",
+        "value": "{{0x#00A}}",
+        "pattern": "any_hexadecimal"
+      }
+    ]
+  },
+  {
+    "name": "51 Enter edit mode for register 10",
+    "description": "进入寄存器 10 编辑模式",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> _ <"
+      }
+    ]
+  },
+  {
+    "name": "52 Input decimal value for register 10",
+    "description": "输入寄存器 10 的十进制值",
+    "line": {
+      "from": 6,
+      "to": 6
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "> "
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#010}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": "_ <"
+      }
+    ]
+  },
+  {
+    "name": "53 Confirm value for register 10",
+    "description": "确认寄存器 10 的值",
+    "line": {
+      "from": 6,
+      "to": 15
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "0x"
+      },
+      {
+        "type": "placeholder",
+        "value": "{{0x#00A}}",
+        "pattern": "any_hexadecimal"
+      },
+      {
+        "type": "text",
+        "value": " ("
+      },
+      {
+        "type": "placeholder",
+        "value": "{{#010}}",
+        "pattern": "any_decimal"
+      },
+      {
+        "type": "text",
+        "value": ")"
+      }
+    ]
+  },
+  {
+    "name": "54 Save configuration with Ctrl+S",
+    "description": "保存配置",
+    "line": {
+      "from": 0,
+      "to": 0
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "运行中"
+      }
+    ]
+  },
+  {
+    "name": "55 After save wait for running",
+    "description": "保存后等待运行状态",
+    "line": {
+      "from": 0,
+      "to": 0
+    },
+    "search": [
+      {
+        "type": "text",
+        "value": "运行中"
+      }
+    ]
+  }
+]

@@ -20,7 +20,7 @@ pub async fn test_tui_master_coils(
         execution_mode,
         "single_station/master_modes/coils".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_single_master_test(port1, port2, config, &snapshot_ctx).await
 }
@@ -39,7 +39,7 @@ pub async fn test_tui_master_discrete_inputs(
         execution_mode,
         "single_station/master_modes/discrete_inputs".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_single_master_test(port1, port2, config, &snapshot_ctx).await
 }
@@ -58,7 +58,7 @@ pub async fn test_tui_master_holding_registers(
         execution_mode,
         "single_station/master_modes/holding".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_single_master_test(port1, port2, config, &snapshot_ctx).await
 }
@@ -77,7 +77,7 @@ pub async fn test_tui_master_input_registers(
         execution_mode,
         "single_station/master_modes/input".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_single_master_test(port1, port2, config, &snapshot_ctx).await
 }

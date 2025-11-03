@@ -101,68 +101,7 @@ pub fn register_placeholder_values(values: &[PlaceholderValue]) {
     }
 }
 
-/// Apply placeholders to a generated screenshot so random values are hidden in the reference file.
-/// For Boolean placeholders: Scans for "OFF" (or "ON") and replaces sequentially by index
-/// For Dec/Hex placeholders: Replaces actual values with their respective placeholder formats
-pub(crate) fn apply_placeholders_for_generation(screen: &str) -> String {
-    let entries = {
-        let state = PLACEHOLDER_STATE.lock();
-        state.entries.clone()
-    };
-
-    if entries.is_empty() {
-        return screen.to_owned();
-    }
-
-    let mut result = screen.to_owned();
-
-    // Track scan positions per kind to ensure sequential replacement
-    let mut bool_search_offset = 0usize;
-
-    for entry in &entries {
-        let placeholder = entry.kind.build_placeholder(entry.index);
-
-        match entry.kind {
-            PlaceholderKind::Boolean => {
-                // For Boolean: sequentially scan for OFF/ON occurrences without random data
-                if let Some(relative_pos) = result[bool_search_offset..].find(&entry.actual) {
-                    let absolute_pos = bool_search_offset + relative_pos;
-                    result.replace_range(
-                        absolute_pos..absolute_pos + entry.actual.len(),
-                        &placeholder,
-                    );
-                    bool_search_offset = absolute_pos + placeholder.len();
-                } else {
-                    warn!(
-                        "Boolean placeholder target '{}' not found for index {} during generation",
-                        entry.actual, entry.index
-                    );
-                }
-            }
-            PlaceholderKind::Dec | PlaceholderKind::Hex => {
-                // For numeric: Replace the first occurrence after register grid area
-                let search_start = result.find("  0x").unwrap_or(0);
-                if let Some(pos) = result[search_start..].find(&entry.actual) {
-                    let absolute_pos = search_start + pos;
-                    result.replace_range(
-                        absolute_pos..absolute_pos + entry.actual.len(),
-                        &placeholder,
-                    );
-                } else if let Some(pos) = result.find(&entry.actual) {
-                    // Fallback: search from beginning
-                    result.replace_range(pos..pos + entry.actual.len(), &placeholder);
-                } else {
-                    warn!(
-                        "Numeric placeholder value '{}' not found for index {} during generation",
-                        entry.actual, entry.index
-                    );
-                }
-            }
-        }
-    }
-
-    result
-}
+// `apply_placeholders_for_generation` removed — generation-only helper deleted per request.
 
 /// Restore placeholders to their actual values prior to verification.
 pub(crate) fn restore_placeholders_for_verification(screen: &str) -> String {

@@ -5,7 +5,7 @@
 /// with detailed step-by-step capture.
 use anyhow::Result;
 
-use super::super::{
+use super::{
     config::StationConfig,
     navigation::{configure_stations_with_screenshots, navigate_to_modbus_panel, setup_tui_test},
 };
@@ -36,7 +36,7 @@ pub async fn run_detailed_multi_master_test(
 
     reset_snapshot_placeholders();
 
-    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
     // Steps 0-1: Setup (captures entry and config_panel)
     let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
@@ -48,9 +48,9 @@ pub async fn run_detailed_multi_master_test(
     }
 
     // Screenshot: Initial ModbusDashboard
-    let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
-    let _ = screenshot_ctx
-        .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
+    let state = super::state_helpers::create_modbus_dashboard_state(port1);
+    screenshot_ctx
+        .capture_or_verify(&mut session, &mut cap, state, "03 Enter modbus dashboard")
         .await?;
 
     // Steps 3-N: Configure stations with detailed screenshots (isomorphic workflow)
@@ -81,7 +81,7 @@ pub async fn run_detailed_multi_slave_test(
 
     reset_snapshot_placeholders();
 
-    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
     // Steps 0-1: Setup (captures entry and config_panel)
     let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
@@ -93,9 +93,9 @@ pub async fn run_detailed_multi_slave_test(
     }
 
     // Screenshot: Initial ModbusDashboard
-    let state = super::super::state_helpers::create_modbus_dashboard_state(port1);
-    let _ = screenshot_ctx
-        .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
+    let state = super::state_helpers::create_modbus_dashboard_state(port1);
+    screenshot_ctx
+        .capture_or_verify(&mut session, &mut cap, state, "03 Enter modbus dashboard")
         .await?;
 
     // Steps 3-N: Configure stations with detailed screenshots (isomorphic workflow)
