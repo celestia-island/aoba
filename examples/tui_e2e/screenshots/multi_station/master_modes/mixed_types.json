@@ -15,7 +15,7 @@
         "value": "/tmp/vcom2"
       }
     ],
-    "name": "step_00_snapshot一次tmpvcom1_与_tmpvcom2_应当在屏幕上"
+    "name": "00 Initial snapshot"
   },
   {
     "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ConfigPanel；快照，此时应当在 ConfigPanel",
@@ -28,7 +28,7 @@
         "value": "ConfigPanel"
       }
     ],
-    "name": "step_01_enter_1_次"
+    "name": "01 Press enter to config panel"
   },
   {
     "description": "进入页面阶段 - 向下 2 次；Mock 修改光标位置，指向 Enter Business Configuration；快照，此时大于号应当处于第三行",
@@ -45,7 +45,7 @@
         "value": "Enter Business Configuration"
       }
     ],
-    "name": "step_02_down_2_次"
+    "name": "02 Navigate down to business config"
   },
   {
     "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ModbusDashboard；快照，此时应当在 ModbusDashboard",
@@ -58,7 +58,7 @@
         "value": "ModbusDashboard"
       }
     ],
-    "name": "step_03_enter_1_次"
+    "name": "03 Enter modbus dashboard"
   },
   {
     "description": "创建第一个站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入一个新的初始化站点；快照，此时下方多出了一个 `#1` 站点",
@@ -73,7 +73,7 @@
         "value": "#1"
       }
     ],
-    "name": "step_04_创建第一个站点阶段_enter_1_次"
+    "name": "04 Create station"
   },
   {
     "description": "创建第二个站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入第二个初始化站点；快照，此时下方多出了 `#1` 和 `#2` 站点",
@@ -92,7 +92,7 @@
         "value": "#2"
       }
     ],
-    "name": "step_05_创建第二个站点阶段_enter_1_次"
+    "name": "05 Create second station"
   },
   {
     "description": "配置第一个站点阶段 - 先立即 Mock 修改光标位置，指向 `#1` 站点；快照，此时大于号应当处于第一行",
@@ -109,7 +109,7 @@
         "value": "#1"
       }
     ],
-    "name": "step_06_配置第一个站点阶段_先立即_mock_modify光标位置指向_1_站点"
+    "name": "06 Configure first station"
   },
   {
     "description": "配置第一个站点阶段 - 向下 1 次；Mock 修改光标位置，指向 `#1` 站点的第二项 Register Type；快照，此时大于号应当处于第三行",
@@ -126,7 +126,7 @@
         "value": "Register Type"
       }
     ],
-    "name": "step_07_配置第一个站点阶段_down_1_次"
+    "name": "07 Configure register type"
   },
   {
     "description": "配置第一个站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器模式下标 2（03 寄存器选项）；快照，此时屏幕中的 Holding Registers 附近应该有一对尖括号",
@@ -139,7 +139,7 @@
         "value": "> Holding Registers <"
       }
     ],
-    "name": "step_08_配置第一个站点阶段_enter_1_次"
+    "name": "08 Configure first station"
   },
   {
     "description": "配置第一个站点阶段 - 向左 2 次；Mock 修改光标选项为下标 0（Coils 寄存器选项）；快照，此时屏幕中的 Coils 附近应该有一对尖括号",
@@ -152,7 +152,7 @@
         "value": "> Coils <"
       }
     ],
-    "name": "step_09_配置第一个站点阶段_left_2_次"
+    "name": "09 Configure first station"
   },
   {
     "description": "配置第一个站点阶段 - 回车 1 次；Mock 修改当前站点的寄存器模式为 Coils；快照，此时 Holding Registers 附近的尖括号应当消失",
@@ -170,7 +170,7 @@
         "negate": true
       }
     ],
-    "name": "step_10_配置第一个站点阶段_enter_1_次"
+    "name": "10 Configure first station"
   },
   {
     "description": "配置第二个站点阶段 - 向上 2 次；Mock 修改光标位置，指向 `#2` 站点；快照，此时大于号应当处于第二行",
@@ -187,7 +187,7 @@
         "value": "#2"
       }
     ],
-    "name": "step_11_配置第二个站点阶段_向上_2_次"
+    "name": "11 Navigate up 2 times to second station"
   },
   {
     "description": "配置第二个站点阶段 - 向下 1 次；Mock 修改光标位置，指向 `#2` 站点的第二项 Register Type；快照，此时大于号应当处于第四行",
@@ -204,7 +204,7 @@
         "value": "Register Type"
       }
     ],
-    "name": "step_12_配置第二个站点阶段_down_1_次"
+    "name": "12 Configure register type"
   },
   {
     "description": "配置第二个站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器模式下标 2（03 寄存器选项）；快照，此时屏幕中的 Holding Registers 附近应该有一对尖括号",
@@ -217,7 +217,7 @@
         "value": "> Holding Registers <"
       }
     ],
-    "name": "step_13_配置第二个站点阶段_enter_1_次"
+    "name": "13 Configure second station"
   },
   {
     "description": "配置第二个站点阶段 - 回车 1 次；Mock 修改当前站点的寄存器模式为 Holding Registers；快照，此时 Holding Registers 附近的尖括号应当消失",
@@ -235,7 +235,7 @@
         "negate": true
       }
     ],
-    "name": "step_14_配置第二个站点阶段_enter_1_次"
+    "name": "14 Configure second station"
   },
   {
     "description": "退出阶段 - 按下 Ctrl + S，保存当前配置，然后等待 3 秒；Mock 修改右上角状态为运行中状态；快照，此时右上角应当显示为运行中",
@@ -248,6 +248,6 @@
         "value": "运行中"
       }
     ],
-    "name": "step_15_press_ctrl_ssave当前配置然后wait_3_秒"
+    "name": "15 Save configuration with Ctrl+S"
   }
 ]
