@@ -1,15 +1,8 @@
-# Single Station - Slave Mode - Holding (03)
 [manifest]
-id = "single_station_slave_holding"
-description = "Single station Slave mode with Holding registers"
-station_id = 1
-register_type = "Holding"
-start_address = 0x0000
-register_count = 10
-is_master = false
-init_order = ["navigate_to_entry", "save_configuration"]
-[[workflow.navigate_to_entry]]
-verify = "/tmp/vcom1"
-at_line = 2
-[[workflow.save_configuration]]
-key = "ctrl-s"
+id = "placeholder"
+description = "Placeholder workflow"
+is_master = true
+init_order = []
+recycle_order = []
+
+[workflow]

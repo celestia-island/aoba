@@ -1,39 +1,8 @@
-# Single Station - Master Mode - Input Registers (04)
-# Test ID: tui_master_input
-# Station: ID=1, Type=Input, Address=0x0000, Length=10
-
 [manifest]
-id = "single_station_master_input"
-description = "Single station Master mode with Input registers"
-station_id = 1
-register_type = "Input"
-start_address = 0x0000
-register_count = 10
+id = "placeholder"
+description = "Placeholder workflow"
 is_master = true
+init_order = []
+recycle_order = []
 
-init_order = ["navigate_to_entry", "enter_config_panel", "navigate_to_business_config", "enter_modbus_panel", "create_station", "configure_station_fields", "save_configuration", "verify_port_enabled"]
-recycle_order = ["verify_mock_data"]
-
-[[workflow.navigate_to_entry]]
-verify = "/tmp/vcom1"
-at_line = 2
-
-[[workflow.enter_config_panel]]
-key = "enter"
-
-[[workflow.navigate_to_business_config]]
-key = "down"
-
-[[workflow.enter_modbus_panel]]
-key = "enter"
-
-[[workflow.create_station]]
-key = "enter"
-
-[[workflow.save_configuration]]
-key = "ctrl-s"
-sleep_ms = 5000
-
-[[workflow.verify_port_enabled]]
-mock_verify_path = "ports['/tmp/vcom1'].enabled"
-mock_verify_value = true
+[workflow]

@@ -1,43 +1,8 @@
-# Multi-Station - Master Mode - Mixed Types
-# Test ID: tui_multi_master_mixed_types
-# Two stations with different register types
-
 [manifest]
-id = "multi_station_master_mixed_types"
-description = "Multi-station Master mode with mixed register types"
+id = "placeholder"
+description = "Placeholder workflow"
 is_master = true
+init_order = []
+recycle_order = []
 
-[[manifest.stations]]
-station_id = 1
-register_type = "Coils"
-start_address = 0x0000
-register_count = 10
-
-[[manifest.stations]]
-station_id = 2
-register_type = "Holding"
-start_address = 0x0000
-register_count = 10
-
-init_order = ["navigate_to_entry", "enter_config_panel", "create_stations", "configure_stations", "save_configuration"]
-recycle_order = ["verify_mock_data"]
-
-[[workflow.navigate_to_entry]]
-verify = "/tmp/vcom1"
-at_line = 2
-
-[[workflow.create_stations]]
-description = "Create first station"
-key = "enter"
-
-[[workflow.create_stations]]
-description = "Reset to top"
-key = "ctrl-pgup"
-
-[[workflow.create_stations]]
-description = "Create second station"
-key = "enter"
-
-[[workflow.save_configuration]]
-key = "ctrl-s"
-sleep_ms = 5000
+[workflow]

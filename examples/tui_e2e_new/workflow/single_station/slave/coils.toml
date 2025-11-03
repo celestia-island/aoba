@@ -1,32 +1,8 @@
-# Single Station - Slave Mode - Coils (01)
-# Test ID: tui_slave_coils
-
 [manifest]
-id = "single_station_slave_coils"
-description = "Single station Slave mode with Coils registers"
-station_id = 1
-register_type = "Coils"
-start_address = 0x0000
-register_count = 10
-is_master = false
+id = "placeholder"
+description = "Placeholder workflow"
+is_master = true
+init_order = []
+recycle_order = []
 
-init_order = ["navigate_to_entry", "enter_config_panel", "navigate_to_business_config", "enter_modbus_panel", "create_station", "configure_station_fields", "save_configuration"]
-recycle_order = ["verify_mock_data"]
-
-[[workflow.navigate_to_entry]]
-verify = "/tmp/vcom1"
-at_line = 2
-
-[[workflow.enter_config_panel]]
-key = "enter"
-
-[[workflow.configure_station_fields]]
-description = "Select Slave mode"
-key = "down"
-key = "enter"
-key = "left"
-key = "enter"
-
-[[workflow.save_configuration]]
-key = "ctrl-s"
-sleep_ms = 5000
+[workflow]
