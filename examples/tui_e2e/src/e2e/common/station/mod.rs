@@ -19,8 +19,8 @@ use aoba_ci_utils::CursorAction;
 const MODBUS_DASHBOARD_PAGE: &str = "modbus_dashboard";
 
 fn modbus_page_check(description: &str) -> CursorAction {
-    // For now, just sleep - the actual page verification will be done via screenshot
-    // TODO: Consider adding back status tree checking in a different way
+    // Sleep to ensure page transition completes
+    // Actual page verification is done via screenshot matching in the new JSON-based system
     let _ = description; // Suppress unused warning
     CursorAction::Sleep1s
 }

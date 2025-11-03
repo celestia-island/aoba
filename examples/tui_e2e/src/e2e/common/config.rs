@@ -154,5 +154,5 @@ impl RegisterModeExt for RegisterMode {
     }
 }
 
-// TODO: The legacy harness used bespoke accessors; callers should migrate to the
+// Note: The legacy harness used bespoke accessors; callers have migrated to the
 // inherent `StationConfig` helpers (`station_id()`, `register_values_owned()`, etc.).
