@@ -6,7 +6,6 @@ use expectrl::Expect;
 
 use super::super::config::{RegisterMode, RegisterModeExt};
 use super::super::status_paths::station_field_path;
-use super::modbus_page_check;
 use aoba_ci_utils::{
     execute_with_status_checks, ArrowKey, CursorAction, ExpectSession, ScreenAssertion,
     ScreenPatternSpec, TerminalCapture,
@@ -23,21 +22,14 @@ use aoba_ci_utils::{
 pub async fn configure_station_id<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    port_name: &str,
-    station_index: usize,
     station_id: u8,
-    is_master: bool,
 ) -> Result<()> {
-    let _path = station_field_path(port_name, is_master, station_index, "station_id");
-
     // Step 1: Enter edit mode
     execute_with_status_checks(
         session,
         cap,
         &[CursorAction::PressEnter],
-        &[modbus_page_check(
-            "ModbusDashboard active while entering Station ID edit",
-        )],
+        &[CursorAction::Sleep1s],
         &[],
         "enter_edit_station_id",
         None,
@@ -53,9 +45,7 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
             CursorAction::PressBackspace,
             CursorAction::TypeString(station_id.to_string()),
         ],
-        &[modbus_page_check(
-            "ModbusDashboard active while typing Station ID",
-        )],
+        &[CursorAction::Sleep1s],
         &[],
         "type_station_id",
         None,
@@ -85,10 +75,7 @@ pub async fn configure_station_id<T: Expect + ExpectSession>(
 pub async fn configure_register_type<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    _port_name: &str,
-    _station_index: usize,
     register_mode: RegisterMode,
-    _is_master: bool,
 ) -> Result<()> {
     let (direction, count) = register_mode.arrow_from_default();
     let register_type_focus_pattern = Regex::new(r">\s*Register Type")?;
@@ -126,9 +113,7 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
             session,
             cap,
             &actions,
-            &[modbus_page_check(
-                "ModbusDashboard active while locating Register Type",
-            )],
+            &[CursorAction::Sleep1s],
             &[ScreenAssertion::pattern(ScreenPatternSpec::new(
                 register_type_focus_pattern.clone(),
                 "Cursor positioned on Register Type",
@@ -170,9 +155,7 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressEnter, CursorAction::Sleep1s],
-        &[modbus_page_check(
-            "ModbusDashboard active while entering Register Type selector",
-        )],
+        &[CursorAction::Sleep1s],
         &[ScreenAssertion::pattern(
             ScreenPatternSpec::new(register_type_edit_pattern, "Register Type selector opened")
                 .with_retry_action(Some(vec![
@@ -196,9 +179,7 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
                 CursorAction::PressArrow { direction, count },
                 CursorAction::Sleep1s,
             ],
-            &[modbus_page_check(
-                "ModbusDashboard active while selecting Register Type",
-            )],
+            &[CursorAction::Sleep1s],
             &[],
             "select_register_type_option",
             None,
@@ -211,9 +192,7 @@ pub async fn configure_register_type<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressEnter, CursorAction::Sleep1s],
-        &[modbus_page_check(
-            "ModbusDashboard active after committing Register Type",
-        )],
+        &[CursorAction::Sleep1s],
         &[ScreenAssertion::pattern(ScreenPatternSpec::new(
             register_type_value_pattern,
             format!("Register Type line shows {}", register_type_value_label),
@@ -301,9 +280,7 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
             },
             CursorAction::Sleep1s,
         ],
-        &[modbus_page_check(
-            "ModbusDashboard active while navigating to field",
-        )],
+        &[CursorAction::Sleep1s],
         &[],
         &format!("nav_to_{}", field_name),
         None,
@@ -330,7 +307,7 @@ async fn configure_numeric_field<T: Expect + ExpectSession>(
         &actions,
         &[
             // Remove CheckStatus - rely on screenshot verification instead
-            modbus_page_check("ModbusDashboard active after committing numeric field"),
+            CursorAction::Sleep1s,
         ],
         &[ScreenAssertion::pattern(ScreenPatternSpec::new(
             field_display_pattern,

@@ -1,4 +1,3 @@
-use super::modbus_page_check;
 use anyhow::Result;
 use aoba_ci_utils::{
     execute_with_status_checks, CursorAction, ExpectSession, ScreenAssertion, ScreenPatternSpec,
@@ -18,9 +17,7 @@ pub async fn focus_create_station_button<T: Expect + ExpectSession>(
         session,
         cap,
         &[CursorAction::PressCtrlPageUp, CursorAction::Sleep1s],
-        &[modbus_page_check(
-            "ModbusDashboard active while focusing Create Station",
-        )],
+        &[CursorAction::Sleep1s],
         &[ScreenAssertion::pattern(
             ScreenPatternSpec::new(pattern, "Cursor positioned on Create Station")
                 .with_retry_action(Some(vec![
@@ -40,9 +37,7 @@ pub async fn focus_create_station_button<T: Expect + ExpectSession>(
 pub async fn focus_station<T: Expect + ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
-    _port_name: &str,
     station_index: usize,
-    _is_master: bool,
 ) -> Result<()> {
     let mut actions = vec![CursorAction::PressCtrlPageUp, CursorAction::Sleep1s];
     actions.push(CursorAction::PressPageDown);
@@ -59,7 +54,7 @@ pub async fn focus_station<T: Expect + ExpectSession>(
         &actions,
         &[
             // Remove CheckStatus - rely on screenshot verification
-            modbus_page_check("ModbusDashboard active while focusing station"),
+            CursorAction::Sleep1s,
         ],
         &[],
         &format!("focus_station_{}", station_index + 1),

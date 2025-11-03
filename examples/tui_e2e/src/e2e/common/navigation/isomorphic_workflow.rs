@@ -94,7 +94,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
     // Step 2: Create all stations
     let mut station_indices = Vec::new();
-    for (idx, _config) in configs.iter().enumerate() {
+    for idx in 0..configs.len() {
         if !is_generation_mode {
             let station_index = create_station(session, cap, port_name, is_master).await?;
             station_indices.push(station_index);
@@ -124,7 +124,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Navigate to station
         if !is_generation_mode {
-            focus_station(session, cap, port_name, station_index, is_master).await?;
+            focus_station(session, cap, station_index).await?;
         }
         screenshot_ctx
             .capture_or_verify(
@@ -154,15 +154,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Configure Station ID
         if !is_generation_mode {
-            configure_station_id(
-                session,
-                cap,
-                port_name,
-                station_index,
-                config.station_id(),
-                is_master,
-            )
-            .await?;
+            configure_station_id(session, cap, config.station_id()).await?;
         }
         screenshot_ctx
             .capture_or_verify(
@@ -192,15 +184,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Configure Register Type
         if !is_generation_mode {
-            configure_register_type(
-                session,
-                cap,
-                port_name,
-                station_index,
-                config.register_mode(),
-                is_master,
-            )
-            .await?;
+            configure_register_type(session, cap, config.register_mode()).await?;
         }
         screenshot_ctx
             .capture_or_verify(
