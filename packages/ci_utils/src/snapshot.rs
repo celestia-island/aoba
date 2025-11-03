@@ -96,32 +96,47 @@ pub struct SnapshotContext {
     /// Test name (e.g., "test_basic_configuration")
     #[allow(dead_code)]
     test_name: String,
-    /// Counter for snapshot numbering
-    _step_counter: u32,
     /// Base directory for snapshots
     snapshot_dir: PathBuf,
 }
 
 impl SnapshotContext {
     /// Create a new snapshot context
-    pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Self {
+    pub fn new(mode: ExecutionMode, module_name: String, test_name: String) -> Result<Self> {
         // Extract the directory and filename from module_name
         // e.g., "single_station/master_modes/coils" -> dir: "single_station/master_modes", file: "coils"
         let parts: Vec<&str> = module_name.split('/').collect();
-        let snapshot_dir = if parts.len() > 1 {
-            let dir_parts = &parts[..parts.len() - 1];
-            PathBuf::from("examples/tui_e2e/screenshots").join(dir_parts.join("/"))
-        } else {
-            PathBuf::from("examples/tui_e2e/screenshots")
+
+        let workspace_root = {
+            let mut current = std::env::current_dir()
+                .map_err(|err| anyhow!("Failed to determine current directory: {err}"))?;
+
+            loop {
+                if current.join("Cargo.toml").exists() {
+                    break current;
+                }
+
+                if !current.pop() {
+                    return Err(anyhow!("Failed to determine workspace root"));
+                }
+            }
         };
 
-        Self {
+        let snapshot_dir = if parts.len() > 1 {
+            let dir_parts = &parts[..parts.len() - 1];
+            workspace_root
+                .join("examples/tui_e2e/screenshots")
+                .join(dir_parts.join("/"))
+        } else {
+            workspace_root.join("examples/tui_e2e/screenshots")
+        };
+
+        Ok(Self {
             mode,
             module_name,
             test_name,
-            _step_counter: 0,
             snapshot_dir,
-        }
+        })
     }
 
     /// Get the execution mode associated with this context
@@ -159,7 +174,7 @@ impl SnapshotContext {
     }
 
     /// Load snapshot definitions from JSON file
-    /// The JSON file is determined from the module_name 
+    /// The JSON file is determined from the module_name
     /// (e.g., "single_station/master_modes/coils" -> "coils.json")
     pub fn load_snapshot_definitions(&self) -> Result<Vec<SnapshotDefinition>> {
         // Extract the base filename from the module path
@@ -169,7 +184,7 @@ impl SnapshotContext {
             .split('/')
             .last()
             .ok_or_else(|| anyhow!("Invalid module name: {}", self.module_name))?;
-        
+
         let json_path = self.snapshot_dir.join(format!("{}.json", json_filename));
 
         if !json_path.exists() {
@@ -182,7 +197,11 @@ impl SnapshotContext {
         let content = std::fs::read_to_string(&json_path)?;
         let definitions: Vec<SnapshotDefinition> = serde_json::from_str(&content)?;
 
-        log::info!("📖 Loaded {} snapshot definitions from {}", definitions.len(), json_path.display());
+        log::info!(
+            "📖 Loaded {} snapshot definitions from {}",
+            definitions.len(),
+            json_path.display()
+        );
         Ok(definitions)
     }
 

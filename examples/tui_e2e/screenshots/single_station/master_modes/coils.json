@@ -57,7 +57,775 @@
     "search": [
       {
         "type": "text",
-        "value": "ModbusDashboard"
+        "value": "ModBus Master/Slave Set"
+      }
+    ]
+  },
+  {
+    "name": "after_create_station_1",
+    "description": "创建站点后",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "navigate_station_1",
+    "description": "导航到站点 1",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_id",
+    "description": "编辑站点 1 ID",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_reg_type",
+    "description": "编辑站点 1 寄存器类型",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_start_addr",
+    "description": "编辑站点 1 起始地址",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_reg_count",
+    "description": "编辑站点 1 寄存器数量",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_0",
+    "description": "编辑站点 1 寄存器 0",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_1",
+    "description": "编辑站点 1 寄存器 1",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_2",
+    "description": "编辑站点 1 寄存器 2",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_3",
+    "description": "编辑站点 1 寄存器 3",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_4",
+    "description": "编辑站点 1 寄存器 4",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_5",
+    "description": "编辑站点 1 寄存器 5",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_6",
+    "description": "编辑站点 1 寄存器 6",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_7",
+    "description": "编辑站点 1 寄存器 7",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_8",
+    "description": "编辑站点 1 寄存器 8",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
+      }
+    ]
+  },
+  {
+    "name": "edit_station_1_register_9",
+    "description": "编辑站点 1 寄存器 9",
+    "line": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "#1 - ID: 1"
+      },
+      {
+        "type": "text",
+        "value": "Station ID"
+      },
+      {
+        "type": "text",
+        "value": "Register Type"
+      },
+      {
+        "type": "text",
+        "value": "Start Address"
+      },
+      {
+        "type": "text",
+        "value": "Register Length"
       }
     ]
   },
@@ -785,7 +1553,20 @@
     "search": [
       {
         "type": "text",
-        "value": "运行中"
+        "value": "Not Started"
+      }
+    ]
+  },
+  {
+    "name": "56 After save wait for running",
+    "description": "保存后等待运行状态",
+    "line": [
+      0
+    ],
+    "search": [
+      {
+        "type": "text",
+        "value": "Running"
       }
     ]
   }

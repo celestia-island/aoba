@@ -24,7 +24,7 @@ pub async fn test_tui_multi_master_mixed_register_types(
         execution_mode,
         "multi_station/master_modes/mixed_types".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_multi_master_test(port1, port2, &master_configs, &snapshot_ctx).await
 }
@@ -47,7 +47,7 @@ pub async fn test_tui_multi_master_spaced_addresses(
         execution_mode,
         "multi_station/master_modes/spaced_addresses".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_multi_master_test(port1, port2, &master_configs, &snapshot_ctx).await
 }
@@ -70,7 +70,7 @@ pub async fn test_tui_multi_master_mixed_station_ids(
         execution_mode,
         "multi_station/master_modes/mixed_ids".into(),
         "default".into(),
-    );
+    )?;
 
     run_detailed_multi_master_test(port1, port2, &master_configs, &snapshot_ctx).await
 }

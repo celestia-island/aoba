@@ -1,7 +1,7 @@
 //! Test script to verify the new JSON snapshot format with step names
 use aoba_ci_utils::{
-    ExecutionMode, SearchCondition, SnapshotContext, SnapshotDefinition,
-    verify_screen_with_json_rules,
+    verify_screen_with_json_rules, ExecutionMode, SearchCondition, SnapshotContext,
+    SnapshotDefinition,
 };
 
 #[tokio::main]
@@ -11,7 +11,7 @@ async fn main() -> anyhow::Result<()> {
         ExecutionMode::Normal,
         "single_station/master_modes/coils".to_string(),
         "test_basic_configuration".to_string(),
-    );
+    )?;
 
     // Test loading snapshot definitions
     match ctx.load_snapshot_definitions() {
