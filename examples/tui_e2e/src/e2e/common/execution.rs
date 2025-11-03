@@ -36,7 +36,7 @@ pub async fn run_detailed_multi_master_test(
 
     reset_snapshot_placeholders();
 
-    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
     // Steps 0-1: Setup (captures entry and config_panel)
     let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;
@@ -81,7 +81,7 @@ pub async fn run_detailed_multi_slave_test(
 
     reset_snapshot_placeholders();
 
-    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
     // Steps 0-1: Setup (captures entry and config_panel)
     let (mut session, mut cap) = setup_tui_test(port1, port2, Some(screenshot_ctx)).await?;

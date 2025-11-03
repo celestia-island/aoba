@@ -350,7 +350,7 @@ async fn main() -> Result<()> {
     log::info!("🧪 Running module: {module}");
 
     let execution_mode = if args.generate_screenshots {
-        ExecutionMode::GenerateScreenshots
+        ExecutionMode::OnlyVerifyScreenshots
     } else {
         ExecutionMode::Normal
     };

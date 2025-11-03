@@ -20,8 +20,9 @@ type SnapshotRecord = (String, String);
 pub enum ExecutionMode {
     /// Normal test mode: Execute keyboard actions and verify against reference screenshots
     Normal,
-    /// Generate reference screenshots from predicted states without executing keyboard actions
-    GenerateScreenshots,
+    /// Only verify screenshots mode: Validate JSON rules match TUI rendering
+    /// Writes status to /tmp/status.json, spawns TUI in debug mode, verifies rendered output
+    OnlyVerifyScreenshots,
 }
 
 /// Search condition types for snapshot matching
@@ -150,12 +151,22 @@ impl SnapshotContext {
     }
 
     /// Load snapshot definitions from JSON file
+    /// The JSON file is determined from the module_name 
+    /// (e.g., "single_station/master_modes/coils" -> "coils.json")
     pub fn load_snapshot_definitions(&self) -> Result<Vec<SnapshotDefinition>> {
-        let json_path = self.snapshot_dir.join("snapshots.json");
+        // Extract the base filename from the module path
+        // e.g., "single_station/master_modes/coils" -> "coils"
+        let json_filename = self
+            .module_name
+            .split('/')
+            .last()
+            .ok_or_else(|| anyhow!("Invalid module name: {}", self.module_name))?;
+        
+        let json_path = self.snapshot_dir.join(format!("{}.json", json_filename));
 
         if !json_path.exists() {
             return Err(anyhow!(
-                "Snapshot definitions not found: {}. Run with --generate-screenshots first.",
+                "Snapshot definitions not found: {}. Ensure JSON file exists in screenshots directory.",
                 json_path.display()
             ));
         }
@@ -163,7 +174,7 @@ impl SnapshotContext {
         let content = std::fs::read_to_string(&json_path)?;
         let definitions: Vec<SnapshotDefinition> = serde_json::from_str(&content)?;
 
-        log::info!("📖 Loaded {} snapshot definitions", definitions.len());
+        log::info!("📖 Loaded {} snapshot definitions from {}", definitions.len(), json_path.display());
         Ok(definitions)
     }
 
@@ -495,12 +506,13 @@ impl SnapshotContext {
     /// Capture or verify screenshot and state based on execution mode
     ///
     /// This is the main entry point for screenshot/state management.
-    /// - In GenerateScreenshots mode:
+    /// - In OnlyVerifyScreenshots mode:
     ///   1. Write mock status to /tmp/status.json
     ///   2. Spawn TUI in --debug-screen-capture mode
     ///   3. Wait 3 seconds then kill the process
     ///   4. Capture terminal output via expectrl + vt100
-    /// - In Normal mode: Verify actual terminal output against reference JSON rules
+    ///   5. Verify against JSON rules
+    /// - In Normal mode: Execute keyboard actions normally
     pub async fn capture_or_verify<T: ExpectSession>(
         &self,
         session: &mut T,
@@ -509,61 +521,49 @@ impl SnapshotContext {
         step_name: &str,
     ) -> Result<String> {
         match self.mode {
-            ExecutionMode::GenerateScreenshots => {
-                // Capture mode: Write state and spawn TUI to generate screenshot
+            ExecutionMode::OnlyVerifyScreenshots => {
+                // Verify screenshots mode: Write state, spawn TUI, capture and verify
                 log::info!(
-                    "📸 Capture mode: Generating screenshot for step '{}'",
+                    "📸 Screenshot verification mode: Validating rules for step '{}'",
                     step_name
                 );
 
                 // 1. Write mock global status to /tmp/status.json
                 let status_json = serde_json::to_string_pretty(&predicted_state)?;
                 std::fs::write("/tmp/status.json", &status_json)?;
-                log::info!("💾 Wrote mock status to /tmp/status.json");
+                log::debug!("💾 Wrote mock status to /tmp/status.json");
 
                 // 2. Spawn TUI in debug capture mode
-                log::info!("🚀 Spawning TUI in debug capture mode...");
+                log::debug!("🚀 Spawning TUI in debug capture mode...");
                 let mut tui_session = crate::terminal::spawn_expect_session_with_size(
                     &["--tui", "--debug-screen-capture", "--no-config-cache"],
                     Some(cap.parser.screen().size()),
                 )?;
 
                 // 3. Wait 3 seconds for rendering to complete
-                log::info!("⏳ Waiting 3 seconds for TUI to render...");
+                log::debug!("⏳ Waiting 3 seconds for TUI to render...");
                 tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
 
                 // 4. Capture terminal output
                 let screen = cap
-                    .capture(&mut tui_session, &format!("capture_{}", step_name))
+                    .capture(&mut tui_session, &format!("verify_{}", step_name))
                     .await?;
 
                 // 5. Kill the TUI process
-                log::info!("🛑 Killing TUI capture process...");
+                log::debug!("🛑 Killing TUI capture process...");
                 drop(tui_session);
 
-                log::info!("✅ Captured screenshot for step '{}'", step_name);
+                // 6. Load snapshot definitions and verify
+                let definitions = self.load_snapshot_definitions()?;
+                Self::verify_screen_by_step_name(&screen, &definitions, step_name)?;
+
+                log::info!("✅ Screenshot verified for step '{}'", step_name);
                 Ok(screen)
             }
             ExecutionMode::Normal => {
-                // Verify mode: Capture actual terminal and verify against JSON rules
-                log::info!(
-                    "🔍 Verify mode: Checking screenshot for step '{}'",
-                    step_name
-                );
-
-                // Capture current terminal state
-                let screen = cap
-                    .capture(session, &format!("verify_{}", step_name))
-                    .await?;
-
-                // Load snapshot definitions
-                let definitions = self.load_snapshot_definitions()?;
-
-                // Verify screen against the named step
-                Self::verify_screen_by_step_name(&screen, &definitions, step_name)?;
-
-                log::info!("✅ Verified screenshot for step '{}'", step_name);
-                Ok(screen)
+                // Normal mode: Just execute actions, don't do screenshot verification
+                log::debug!("🔄 Normal mode: Processing step '{}'", step_name);
+                Ok(String::new())
             }
         }
     }

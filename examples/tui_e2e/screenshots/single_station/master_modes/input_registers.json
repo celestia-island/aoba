@@ -1,6 +1,7 @@
 [
   {
-    "description": "开头先快照一次，/tmp/vcom1 与 /tmp/vcom2 应当在屏幕上",
+    "name": "00 Initial snapshot",
+    "description": "初始快照",
     "line": [
       2,
       3
@@ -14,11 +15,11 @@
         "type": "text",
         "value": "/tmp/vcom2"
       }
-    ],
-    "name": "00 Initial snapshot"
+    ]
   },
   {
-    "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ConfigPanel；快照，此时应当在 ConfigPanel",
+    "name": "01 Press enter to config panel",
+    "description": "进入配置面板",
     "line": [
       0
     ],
@@ -27,11 +28,11 @@
         "type": "text",
         "value": "ConfigPanel"
       }
-    ],
-    "name": "01 Press enter to config panel"
+    ]
   },
   {
-    "description": "进入页面阶段 - 向下 2 次；Mock 修改光标位置，指向 Enter Business Configuration；快照，此时大于号应当处于第三行",
+    "name": "02 Navigate down to business config",
+    "description": "导航到业务配置",
     "line": [
       2
     ],
@@ -44,11 +45,11 @@
         "type": "text",
         "value": "Enter Business Configuration"
       }
-    ],
-    "name": "02 Navigate down to business config"
+    ]
   },
   {
-    "description": "进入页面阶段 - 回车 1 次；Mock 修改页面位置为 ModbusDashboard；快照，此时应当在 ModbusDashboard",
+    "name": "03 Enter modbus dashboard",
+    "description": "进入 Modbus 面板",
     "line": [
       0
     ],
@@ -57,11 +58,11 @@
         "type": "text",
         "value": "ModbusDashboard"
       }
-    ],
-    "name": "03 Enter modbus dashboard"
+    ]
   },
   {
-    "description": "创建站点阶段 - 回车 1 次；Mock 给 ports 中第一个端口对象插入一个新的初始化站点；快照，此时下方多出了一个 `#1` 站点",
+    "name": "04 Press enter",
+    "description": "步骤操作",
     "line": [
       1,
       2,
@@ -72,11 +73,11 @@
         "type": "text",
         "value": "#1"
       }
-    ],
-    "name": "04 Press enter"
+    ]
   },
   {
-    "description": "配置站点阶段 - 先立即 Mock 修改光标位置，指向 `#1` 站点；快照，此时大于号应当处于第一行",
+    "name": "05 Configure station",
+    "description": "配置站点",
     "line": [
       1
     ],
@@ -89,11 +90,11 @@
         "type": "text",
         "value": "#1"
       }
-    ],
-    "name": "05 Configure station"
+    ]
   },
   {
-    "description": "配置站点阶段 - 向下 1 次；Mock 修改光标位置，指向 `#1` 站点的第二项 Register Type；快照，此时大于号应当处于第三行",
+    "name": "06 Configure register type",
+    "description": "配置寄存器类型",
     "line": [
       3
     ],
@@ -106,11 +107,11 @@
         "type": "text",
         "value": "Register Type"
       }
-    ],
-    "name": "06 Configure register type"
+    ]
   },
   {
-    "description": "配置站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器模式下标 2（03 寄存器选项）；快照，此时屏幕中的 Holding Registers 附近应该有一对尖括号",
+    "name": "07 Configure station",
+    "description": "配置站点",
     "line": [
       3
     ],
@@ -119,11 +120,11 @@
         "type": "text",
         "value": "> Holding Registers <"
       }
-    ],
-    "name": "07 Configure station"
+    ]
   },
   {
-    "description": "配置站点阶段 - 向右 1 次；Mock 修改光标选项为下标 3（Input Registers 寄存器选项）；快照，此时屏幕中的 Input Registers 附近应该有一对尖括号",
+    "name": "08 Configure station",
+    "description": "配置站点",
     "line": [
       3
     ],
@@ -132,11 +133,11 @@
         "type": "text",
         "value": "> Input Registers <"
       }
-    ],
-    "name": "08 Configure station"
+    ]
   },
   {
-    "description": "配置站点阶段 - 回车 1 次；Mock 修改当前站点的寄存器模式为 Input Registers；快照，此时 Input Registers 附近的尖括号应当消失",
+    "name": "09 Configure station",
+    "description": "配置站点",
     "line": [
       3
     ],
@@ -150,11 +151,11 @@
         "value": ">",
         "negate": true
       }
-    ],
-    "name": "09 Configure station"
+    ]
   },
   {
-    "description": "配置站点阶段 - 向下 2 次；Mock 修改光标位置，指向 `#1` 站点的第四项 Register Length；快照，此时大于号应当处于第五行",
+    "name": "10 Navigate down to register length",
+    "description": "导航到寄存器长度",
     "line": [
       5
     ],
@@ -167,11 +168,11 @@
         "type": "text",
         "value": "Register Length"
       }
-    ],
-    "name": "10 Navigate down to register length"
+    ]
   },
   {
-    "description": "配置站点阶段 - 回车 1 次；Mock 修改光标为选项编辑模式，并且指向目前 ports 默认的寄存器长度下标 3（目前为空的）；快照，此时屏幕中对应位置应该是 `> _ <`",
+    "name": "11 Enter register length edit mode",
+    "description": "进入寄存器长度编辑模式",
     "line": [
       5
     ],
@@ -180,11 +181,11 @@
         "type": "text",
         "value": "> _ <"
       }
-    ],
-    "name": "11 Enter register length edit mode"
+    ]
   },
   {
-    "description": "配置站点阶段 - 输入数字 10；Mock 修改当前站点的寄存器长度为 10；快照，此时屏幕中对应位置应当显示为 `> 10_ <`",
+    "name": "12 Input register length 10",
+    "description": "输入寄存器长度 10",
     "line": [
       5
     ],
@@ -193,11 +194,11 @@
         "type": "text",
         "value": "> 10_ <"
       }
-    ],
-    "name": "12 Input register length 10"
+    ]
   },
   {
-    "description": "配置站点阶段 - 按下回车键结束编辑；Mock 修改光标为普通模式，并同步修改 ports 中的寄存器长度与实际寄存器暂存值；快照，此时屏幕中对应位置应当显示为 `10`，且两侧尖括号消失，下方多出了 10 个 0x0000",
+    "name": "13 Confirm register length",
+    "description": "确认寄存器长度",
     "line": [
       5,
       6,
@@ -225,11 +226,11 @@
         "type": "text",
         "value": "0x0000"
       }
-    ],
-    "name": "13 Confirm register length"
+    ]
   },
   {
-    "description": "Master 模式特殊阶段 - 所有寄存器值批量更新为占位符；快照，此时所有寄存器位置应当显示为占位符 `{{0x#001}}` 到 `{{0x#010}}`",
+    "name": "14 Master mode bulk placeholder update",
+    "description": "主站模式批量更新",
     "line": [
       6,
       7,
@@ -248,11 +249,11 @@
         "value": "{{0x#010}}",
         "pattern": "any_hexadecimal"
       }
-    ],
-    "name": "14 Master mode bulk placeholder update"
+    ]
   },
   {
-    "description": "退出阶段 - 按下 Ctrl + S，保存当前配置，然后等待 3 秒；Mock 修改右上角状态为运行中状态；快照，此时右上角应当显示为运行中",
+    "name": "15 Save configuration with Ctrl+S",
+    "description": "保存配置",
     "line": [
       0
     ],
@@ -261,7 +262,6 @@
         "type": "text",
         "value": "运行中"
       }
-    ],
-    "name": "15 Save configuration with Ctrl+S"
+    ]
   }
 ]

@@ -299,7 +299,7 @@ impl ScreenCaptureSpec {
         session_name: &str,
         mode: ActionExecutionMode,
     ) -> Result<()> {
-        if mode == ActionExecutionMode::GenerateScreenshots {
+        if mode == ActionExecutionMode::OnlyVerifyScreenshots {
             if !self.placeholders.is_empty() {
                 crate::placeholder::register_placeholder_values(&self.placeholders);
             }
@@ -465,7 +465,7 @@ impl TuiStep {
         let attempts = self.max_attempts.max(1);
 
         for attempt in 1..=attempts {
-            if attempt == 1 && mode == ActionExecutionMode::GenerateScreenshots {
+            if attempt == 1 && mode == ActionExecutionMode::OnlyVerifyScreenshots {
                 if let Some(updater) = &self.state_patch {
                     if let Some(status) = mock_status.as_mut() {
                         log::info!(
@@ -652,12 +652,12 @@ pub enum ActionExecutionMode {
     /// Normal mode: execute all actions including keyboard input
     Normal,
     /// Screenshot generation mode: skip keyboard actions, only process screenshots and status updates
-    GenerateScreenshots,
+    OnlyVerifyScreenshots,
 }
 
 /// Execute a sequence of cursor actions on an expect session
 /// In Normal mode: executes all actions including keyboard input
-/// In GenerateScreenshots mode: skips keyboard actions and only processes status patches/assertions
+/// In OnlyVerifyScreenshots mode: skips keyboard actions and only processes status patches/assertions
 pub async fn execute_cursor_actions<T: ExpectSession>(
     session: &mut T,
     cap: &mut TerminalCapture,
@@ -787,7 +787,7 @@ pub async fn execute_cursor_actions_with_mode<T: ExpectSession>(
                 }
             }
             // Catch-all for keyboard actions in screenshot mode - skip them
-            _ if mode == ActionExecutionMode::GenerateScreenshots => {
+            _ if mode == ActionExecutionMode::OnlyVerifyScreenshots => {
                 log::debug!(
                     "Skipping keyboard action in screenshot generation mode: {:?}",
                     action

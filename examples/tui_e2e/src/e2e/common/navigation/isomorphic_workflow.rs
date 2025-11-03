@@ -73,7 +73,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     }
 
     let is_master = configs[0].is_master();
-    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
     // Step 1: Switch connection mode (Master/Slave)
     if !is_generation_mode {

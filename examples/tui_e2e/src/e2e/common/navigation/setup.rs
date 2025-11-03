@@ -80,7 +80,7 @@ pub async fn setup_tui_test(
 
     // Check if we're in generation mode
     let is_generation_mode = screenshot_ctx
-        .map(|ctx| ctx.mode() == ExecutionMode::GenerateScreenshots)
+        .map(|ctx| ctx.mode() == ExecutionMode::OnlyVerifyScreenshots)
         .unwrap_or(false);
 
     if !port_exists(port1) && !is_generation_mode {
