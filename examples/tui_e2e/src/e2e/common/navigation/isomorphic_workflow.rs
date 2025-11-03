@@ -13,7 +13,7 @@ use expectrl::Expect;
 use super::super::{
     config::StationConfig,
     state_helpers::{
-        add_master_station, add_slave_station, create_modbus_dashboard_state, enable_port,
+        add_master_station, add_slave_station, create_modbus_dashboard_state,
         update_register_value,
     },
     station::{
@@ -75,7 +75,9 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     let is_master = configs[0].is_master();
     let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
-    // Step 1: Switch connection mode (Master/Slave)
+    // Step 1: Navigate down to business config (step 02)
+    // Step 2: Enter modbus dashboard (step 03)
+    // Note: Steps 00-01 are handled in setup_tui_test
     if !is_generation_mode {
         ensure_connection_mode(session, cap, is_master).await?;
     }
@@ -85,14 +87,11 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             session,
             cap,
             state,
-            &format!(
-                "connection_mode_{}",
-                if is_master { "master" } else { "slave" }
-            ),
+            "03 Enter modbus dashboard",
         )
         .await?;
 
-    // Step 2: Create all stations
+    // Step 3: Create all stations (step 04 for first station)
     let mut station_indices = Vec::new();
     for idx in 0..configs.len() {
         if !is_generation_mode {
@@ -448,17 +447,15 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     }
     // Use the accumulated state with all register values
     screenshot_ctx
-        .capture_or_verify(session, cap, state.clone(), "after_save")
+        .capture_or_verify(session, cap, state.clone(), "55 Save configuration with Ctrl+S")
         .await?;
 
-    // Step 5: Wait for port enabled
+    // Port enabled state - for single station tests, this is the final step
+    // Multi-station tests may have different final step numbers
     if !is_generation_mode {
         wait_for_port_enabled(port_name, 20, Some(500)).await?;
     }
-    state = enable_port(state);
-    screenshot_ctx
-        .capture_or_verify(session, cap, state, "port_enabled")
-        .await?;
-
+    // Note: No separate "port_enabled" step in JSON - it's part of save step
+    
     Ok(())
 }

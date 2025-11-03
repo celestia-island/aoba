@@ -21,12 +21,13 @@
     "name": "01 Press enter to config panel",
     "description": "进入配置面板",
     "line": [
-      0
+      2,
+      3
     ],
     "search": [
       {
         "type": "text",
-        "value": "ConfigPanel"
+        "value": "Enable Port"
       }
     ]
   },

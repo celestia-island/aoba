@@ -50,7 +50,7 @@ pub async fn run_detailed_multi_master_test(
     // Screenshot: Initial ModbusDashboard
     let state = super::state_helpers::create_modbus_dashboard_state(port1);
     screenshot_ctx
-        .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
+        .capture_or_verify(&mut session, &mut cap, state, "03 Enter modbus dashboard")
         .await?;
 
     // Steps 3-N: Configure stations with detailed screenshots (isomorphic workflow)
@@ -95,7 +95,7 @@ pub async fn run_detailed_multi_slave_test(
     // Screenshot: Initial ModbusDashboard
     let state = super::state_helpers::create_modbus_dashboard_state(port1);
     screenshot_ctx
-        .capture_or_verify(&mut session, &mut cap, state, "modbus_dashboard_init")
+        .capture_or_verify(&mut session, &mut cap, state, "03 Enter modbus dashboard")
         .await?;
 
     // Steps 3-N: Configure stations with detailed screenshots (isomorphic workflow)
