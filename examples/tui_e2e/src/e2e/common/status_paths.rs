@@ -4,9 +4,6 @@ use tokio::time::{sleep, Duration};
 
 use aoba_ci_utils::read_tui_status;
 
-/// JSON path to the current page "type" field in the status dump.
-pub(super) const PAGE_TYPE_PATH: &str = "page.type";
-
 /// Build a JSONPath segment that filters ports by name.
 pub(super) fn port_selector(port_name: &str) -> String {
     // serde_json::to_string already adds surrounding quotes and escapes special characters
@@ -55,10 +52,8 @@ pub(super) fn station_field_path(
     }
 }
 
-/// Return the JSONPath to the page type field.
-pub(super) fn page_type_path() -> &'static str {
-    PAGE_TYPE_PATH
-}
+// `page_type_path` and `PAGE_TYPE_PATH` were removed because they're not used in the
+// current E2E status-based verification flow.
 
 /// Wait until the specified port reports at least `expected_count` stations in the TUI status dump.
 pub async fn wait_for_station_count(

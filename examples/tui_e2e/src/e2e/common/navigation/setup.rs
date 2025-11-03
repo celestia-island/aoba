@@ -80,7 +80,7 @@ pub async fn setup_tui_test(
 
     // Check if we're in generation mode
     let is_generation_mode = screenshot_ctx
-        .map(|ctx| ctx.mode() == ExecutionMode::GenerateScreenshots)
+        .map(|ctx| ctx.mode() == ExecutionMode::OnlyVerifyScreenshots)
         .unwrap_or(false);
 
     if !port_exists(port1) && !is_generation_mode {
@@ -105,7 +105,7 @@ pub async fn setup_tui_test(
         let mut state = create_entry_state();
         state_updaters::add_discovered_ports(&mut state, port1, _port2);
         let entry_filename = ctx
-            .capture_or_verify(&mut tui_session, &mut tui_cap, state, "entry")
+            .capture_or_verify(&mut tui_session, &mut tui_cap, state, "00 Initial snapshot")
             .await?;
 
         if !is_generation_mode {
@@ -143,7 +143,7 @@ pub async fn setup_tui_test(
                 &mut tui_session,
                 &mut tui_cap,
                 create_config_panel_state(port1),
-                "config_panel",
+                "01 Press enter to config panel",
             )
             .await?;
 

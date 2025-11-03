@@ -13,8 +13,7 @@ use expectrl::Expect;
 use super::super::{
     config::StationConfig,
     state_helpers::{
-        add_master_station, add_slave_station, create_modbus_dashboard_state, enable_port,
-        update_register_value,
+        add_master_station, add_slave_station, create_modbus_dashboard_state, update_register_value,
     },
     station::{
         configure_register_count, configure_register_type, configure_start_address,
@@ -73,28 +72,22 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
     }
 
     let is_master = configs[0].is_master();
-    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::GenerateScreenshots;
+    let is_generation_mode = screenshot_ctx.mode() == ExecutionMode::OnlyVerifyScreenshots;
 
-    // Step 1: Switch connection mode (Master/Slave)
+    // Step 1: Navigate down to business config (step 02)
+    // Step 2: Enter modbus dashboard (step 03)
+    // Note: Steps 00-01 are handled in setup_tui_test
     if !is_generation_mode {
         ensure_connection_mode(session, cap, is_master).await?;
     }
     let state = create_modbus_dashboard_state(port_name);
-    let _ = screenshot_ctx
-        .capture_or_verify(
-            session,
-            cap,
-            state,
-            &format!(
-                "connection_mode_{}",
-                if is_master { "master" } else { "slave" }
-            ),
-        )
+    screenshot_ctx
+        .capture_or_verify(session, cap, state, "03 Enter modbus dashboard")
         .await?;
 
-    // Step 2: Create all stations
+    // Step 3: Create all stations (step 04 for first station)
     let mut station_indices = Vec::new();
-    for (idx, _config) in configs.iter().enumerate() {
+    for idx in 0..configs.len() {
         if !is_generation_mode {
             let station_index = create_station(session, cap, port_name, is_master).await?;
             station_indices.push(station_index);
@@ -105,7 +98,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Screenshot: After creating each station
         let state = create_state_with_stations(port_name, &configs[..=idx], is_master);
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -124,9 +117,9 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Navigate to station
         if !is_generation_mode {
-            focus_station(session, cap, port_name, station_index, is_master).await?;
+            focus_station(session, cap, station_index).await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -154,17 +147,9 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Configure Station ID
         if !is_generation_mode {
-            configure_station_id(
-                session,
-                cap,
-                port_name,
-                station_index,
-                config.station_id(),
-                is_master,
-            )
-            .await?;
+            configure_station_id(session, cap, config.station_id()).await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -192,17 +177,9 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
         // Configure Register Type
         if !is_generation_mode {
-            configure_register_type(
-                session,
-                cap,
-                port_name,
-                station_index,
-                config.register_mode(),
-                is_master,
-            )
-            .await?;
+            configure_register_type(session, cap, config.register_mode()).await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -240,7 +217,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -278,7 +255,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             )
             .await?;
         }
-        let _ = screenshot_ctx
+        screenshot_ctx
             .capture_or_verify(
                 session,
                 cap,
@@ -382,7 +359,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
 
                 // Capture screenshot (placeholder system will replace the actual value)
                 // Note: Placeholders were already registered above, so numbering is sequential
-                let _ = screenshot_ctx
+                screenshot_ctx
                     .capture_or_verify(
                         session,
                         cap,
@@ -436,7 +413,7 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
             }
 
             // Single screenshot capturing all 10 registers with placeholders
-            let _ = screenshot_ctx
+            screenshot_ctx
                 .capture_or_verify(
                     session,
                     cap,
@@ -463,18 +440,21 @@ pub async fn configure_stations_with_screenshots<T: Expect + ExpectSession>(
         .await?;
     }
     // Use the accumulated state with all register values
-    let _ = screenshot_ctx
-        .capture_or_verify(session, cap, state.clone(), "after_save")
+    screenshot_ctx
+        .capture_or_verify(
+            session,
+            cap,
+            state.clone(),
+            "55 Save configuration with Ctrl+S",
+        )
         .await?;
 
-    // Step 5: Wait for port enabled
+    // Port enabled state - for single station tests, this is the final step
+    // Multi-station tests may have different final step numbers
     if !is_generation_mode {
         wait_for_port_enabled(port_name, 20, Some(500)).await?;
     }
-    state = enable_port(state);
-    let _ = screenshot_ctx
-        .capture_or_verify(session, cap, state, "port_enabled")
-        .await?;
+    // Note: No separate "port_enabled" step in JSON - it's part of save step
 
     Ok(())
 }
