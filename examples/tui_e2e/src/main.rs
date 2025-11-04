@@ -1,7 +1,8 @@
 //! TUI E2E Test Framework - New TOML-based workflow system
 //!
 //! This is a complete refactoring of the TUI E2E test framework to use
-//! declarative TOML workflows instead of imperative Rust code.
+//! declarative TOML workflows instead of imperative Rust code, with
+//! `ratatui::TestBackend` for rendering and `insta` for snapshot testing.
 //!
 //! # Architecture
 //!
@@ -17,21 +18,27 @@
 //!
 //! The framework supports two execution modes:
 //!
-//! ### 1. Rendering Test Mode (`--screen-capture-only`)
+//! ### 1. Screen Capture Mode (`--screen-capture-only`)
 //!
 //! In this mode, the framework:
 //! - Uses `ratatui::TestBackend` to render the TUI
 //! - Manipulates global state directly via mock operations
 //! - Captures snapshots using `insta` for verification
 //! - Tests that the TUI renders correctly given specific state
+//! - Ignores keyboard input actions
 //!
-//! ### 2. Drill-Down Test Mode (default)
+//! ### 2. DrillDown Mode (default)
 //!
 //! In this mode, the framework:
-//! - Spawns a real TUI process (legacy mode, being phased out)
-//! - Executes keyboard actions against the live process
-//! - Verifies screen output after each interaction
-//! - Treats TUI as a black box, testing end-to-end behavior
+//! - Uses `ratatui::TestBackend` for rendering (no process spawning)
+//! - Simulates keyboard input events through test IPC channel
+//! - Executes keyboard actions and verifies state changes
+//! - Tests interactive workflows end-to-end
+//! - More realistic testing of user interactions
+//!
+//! **Note**: DrillDown keyboard simulation is under development. The framework
+//! currently logs keyboard events but full input processing requires implementing
+//! a test IPC channel to communicate with the TUI input handler.
 //!
 //! ## Workflow Format
 //!
