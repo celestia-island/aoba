@@ -62,6 +62,33 @@ else
     exit 1
 fi
 
+PYTHON_CMD="${PYTHON_CMD:-python3}"
+WATCHDOG_HELPER="${SCRIPT_DIR}/run_with_watchdog.py"
+
+INACTIVITY_TIMEOUT_SECS="${INACTIVITY_TIMEOUT_SECS:-60}"
+INACTIVITY_NOTIFY_SECS="${INACTIVITY_NOTIFY_SECS:-10}"
+
+if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
+    echo -e "${RED}Error: ${PYTHON_CMD} not found in PATH${NC}"
+    exit 1
+fi
+
+if [[ ! -f "$WATCHDOG_HELPER" ]]; then
+    echo -e "${RED}Error: Watchdog helper not found at ${WATCHDOG_HELPER}${NC}"
+    echo -e "${RED}Please ensure scripts/run_with_watchdog.py exists.${NC}"
+    exit 1
+fi
+
+if [[ ! "$INACTIVITY_TIMEOUT_SECS" =~ ^[0-9]+$ ]]; then
+    echo -e "${RED}Error: INACTIVITY_TIMEOUT_SECS must be a non-negative integer (current: ${INACTIVITY_TIMEOUT_SECS})${NC}"
+    exit 1
+fi
+
+if [[ ! "$INACTIVITY_NOTIFY_SECS" =~ ^[0-9]+$ ]]; then
+    echo -e "${RED}Error: INACTIVITY_NOTIFY_SECS must be a non-negative integer (current: ${INACTIVITY_NOTIFY_SECS})${NC}"
+    exit 1
+fi
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -114,6 +141,17 @@ if [[ $USE_TIMEOUT -eq 1 ]]; then
 else
     echo -e "  Module Timeout:${GREEN}disabled${NC}"
 fi
+if (( INACTIVITY_TIMEOUT_SECS > 0 )); then
+    echo -e "  Inactivity Timeout:${GREEN}${INACTIVITY_TIMEOUT_SECS}s${NC}"
+else
+    echo -e "  Inactivity Timeout:${GREEN}disabled${NC}"
+fi
+if (( INACTIVITY_NOTIFY_SECS > 0 )); then
+    echo -e "  Inactivity Notify :${GREEN}${INACTIVITY_NOTIFY_SECS}s${NC}"
+else
+    echo -e "  Inactivity Notify :${GREEN}disabled${NC}"
+fi
+echo -e "  Python Runner  : ${GREEN}${PYTHON_CMD}${NC}"
 echo ""
 
 # Define test modules
@@ -150,18 +188,25 @@ declare -a CLI_MODULES=(
 # Returns the exit code of the command (not tee). Uses bash -c to run the provided string.
 run_and_log_cmd() {
     local result_file="$1"; shift
+    local label="$1"; shift
     local cmd="$*"
-    # disable errexit while we run pipeline so we can capture PIPESTATUS
+
+    local watchdog_args=("--cmd" "$cmd" "--log-file" "$result_file" "--label" "$label")
+    watchdog_args+=("--inactivity-timeout" "$INACTIVITY_TIMEOUT_SECS")
+    watchdog_args+=("--notify-interval" "$INACTIVITY_NOTIFY_SECS")
+
+    # disable errexit while we run the helper so we can capture its exit code
     set +e
-    bash -c "$cmd" 2>&1 | tee -a "$result_file"
-    local ps=(${PIPESTATUS[@]})
-    local exit_code=${ps[0]:-1}
+    "$PYTHON_CMD" "$WATCHDOG_HELPER" "${watchdog_args[@]}"
+    local exit_code=$?
     set -e
+
     if [[ $exit_code -eq 124 && $USE_TIMEOUT -eq 1 ]]; then
         echo "Command timed out after ${MODULE_TIMEOUT_SECS}s and was terminated." | tee -a "$result_file"
     elif [[ $exit_code -eq 137 && $USE_TIMEOUT -eq 1 ]]; then
         echo "Command exceeded the timeout and was killed (exit ${exit_code})." | tee -a "$result_file"
     fi
+
     return $exit_code
 }
 
@@ -184,7 +229,7 @@ run_workflow_tests() {
         case "$workflow_type" in
             tui-rendering|tui-drilldown)
                 echo "=== Building (local) packages: aoba, tui_e2e ==="
-                run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package tui_e2e"
+                run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package tui_e2e"
                 local build_exit=$?
                 if [[ $build_exit -ne 0 ]]; then
                     echo -e "${RED}Build failed for workflow ${workflow_type} (exit ${build_exit}). See $OUTPUT_DIR/${workflow_type}_build.log${NC}"
@@ -194,7 +239,7 @@ run_workflow_tests() {
                 ;;
             cli)
                 echo "=== Building (local) packages: aoba, aoba_cli, cli_e2e ==="
-                run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package aoba_cli --package cli_e2e"
+                run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package aoba_cli --package cli_e2e"
                 local build_exit=$?
                 if [[ $build_exit -ne 0 ]]; then
                     echo -e "${RED}Build failed for workflow ${workflow_type} (exit ${build_exit}). See $OUTPUT_DIR/${workflow_type}_build.log${NC}"
@@ -225,7 +270,7 @@ run_workflow_tests() {
             # Ensure socat reset script runs before every module
             if [[ -x "${REPO_ROOT}/scripts/socat_init.sh" ]]; then
                 echo "=== Resetting virtual serial ports before module: ${module} ===" | tee -a "$result_file"
-                run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ./scripts/socat_init.sh" || true
+                run_and_log_cmd "$result_file" "socat_init" "cd \"${REPO_ROOT}\" && ./scripts/socat_init.sh" || true
             else
                 echo "Warning: ${REPO_ROOT}/scripts/socat_init.sh not found or not executable" | tee -a "$result_file"
             fi
@@ -234,15 +279,15 @@ run_workflow_tests() {
             local exit_code=0
             case "$workflow_type" in
                 tui-rendering)
-                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only"
+                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only"
                     exit_code=$?
                     ;;
                 tui-drilldown)
-                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\""
+                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\""
                     exit_code=$?
                     ;;
                 cli)
-                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\""
+                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\""
                     exit_code=$?
                     ;;
                 *)
