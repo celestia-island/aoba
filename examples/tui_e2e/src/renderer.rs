@@ -11,9 +11,13 @@ use ratatui::{backend::TestBackend, Terminal};
 /// This function ensures the TUI global state is initialized (if not already)
 /// and renders the current page to a TestBackend, returning the rendered buffer as a string.
 ///
-/// Note: Currently, mock state synchronization is not fully implemented.
-/// The renderer will render the default TUI state. Mock state manipulation
-/// will need to be implemented through direct TUI status writes.
+/// **Current Limitation**: Mock state synchronization is not yet implemented.
+/// The renderer will render the default TUI state. For workflows that need specific state,
+/// mock state manipulation must be implemented through direct TUI status writes using
+/// `aoba::tui::status::write_status()`.
+///
+/// **Future Enhancement**: See implementation plan in TODO comment below for details
+/// on how to add mock state synchronization when needed by workflow tests.
 ///
 /// # Arguments
 /// * `width` - Terminal width in characters

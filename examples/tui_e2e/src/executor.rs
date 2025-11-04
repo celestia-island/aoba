@@ -13,12 +13,18 @@ use crate::workflow::{Workflow, WorkflowStep};
 use anyhow::Result;
 use std::time::Duration;
 
+/// Path to snapshots directory relative to executor
+const SNAPSHOT_PATH: &str = "../snapshots";
+
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionMode {
     /// Screen capture only - test rendering with mocked state
     ScreenCaptureOnly,
-    /// Drill down - test real TUI with keyboard input (deprecated)
+    /// Drill down - test real TUI with keyboard input
+    /// 
+    /// **Deprecated**: This mode is no longer supported. Use ScreenCaptureOnly instead.
+    #[deprecated(note = "DrillDown mode is no longer supported. Use ScreenCaptureOnly mode with TestBackend rendering.")]
     DrillDown,
 }
 
@@ -173,7 +179,7 @@ async fn execute_single_step(
 
         // Use insta to assert snapshot
         insta::with_settings!({
-            snapshot_path => "../snapshots",
+            snapshot_path => SNAPSHOT_PATH,
             prepend_module_to_snapshot => false,
         }, {
             insta::assert_snapshot!(snapshot_name.as_str(), screen_content);
