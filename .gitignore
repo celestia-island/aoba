@@ -16,3 +16,6 @@ examples/tui_debug*.rs
 
 # TUI configuration cache (stored in working directory)
 aoba_tui_config.json
+
+# CI local test results
+ci-results/

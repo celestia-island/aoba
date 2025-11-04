@@ -1,0 +1,8 @@
+[manifest]
+id = "placeholder"
+description = "Placeholder workflow"
+is_master = true
+init_order = []
+recycle_order = []
+
+[workflow]

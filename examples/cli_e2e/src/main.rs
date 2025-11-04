@@ -5,6 +5,7 @@ mod list_ports_json;
 mod list_ports_status;
 mod modbus_cli;
 mod modbus_e2e;
+mod utils;
 
 use anyhow::Result;
 use clap::Parser;
