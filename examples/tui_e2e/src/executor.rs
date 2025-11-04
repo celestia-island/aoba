@@ -176,7 +176,7 @@ async fn execute_single_step(
             snapshot_path => "../snapshots",
             prepend_module_to_snapshot => false,
         }, {
-            insta::assert_snapshot!(&snapshot_name, screen_content);
+            insta::assert_snapshot!(snapshot_name.as_str(), screen_content);
         });
 
         // Also verify the expected text is present
@@ -205,7 +205,7 @@ async fn execute_single_step(
             );
         }
 
-        log::debug!("✅ Screen snapshot verified: {}", snapshot_name);
+        log::debug!("✅ Screen snapshot verified: {}", &snapshot_name);
     }
 
     // Handle sleep
