@@ -183,6 +183,7 @@ declare -a CLI_MODULES=(
 )
 
 ## Docker support removed: this script runs tests locally only.
+TUI_E2E_EXTRA_ARGS="${TUI_E2E_EXTRA_ARGS:-}"
 
 # Helper: run a shell command string and append its combined stdout/stderr to a log file
 # Returns the exit code of the command (not tee). Uses bash -c to run the provided string.
@@ -279,11 +280,11 @@ run_workflow_tests() {
             local exit_code=0
             case "$workflow_type" in
                 tui-rendering)
-                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only"
+                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only ${TUI_E2E_EXTRA_ARGS}"
                     exit_code=$?
                     ;;
                 tui-drilldown)
-                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\""
+                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" ${TUI_E2E_EXTRA_ARGS}"
                     exit_code=$?
                     ;;
                 cli)
