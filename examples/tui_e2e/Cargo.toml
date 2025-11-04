@@ -16,7 +16,7 @@ rand.workspace = true
 regex.workspace = true
 once_cell.workspace = true
 chrono.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "process"] }
 ratatui.workspace = true
 parking_lot.workspace = true
 insta = { version = "^1.40", features = ["yaml", "redactions"] }
