@@ -216,4 +216,4 @@ Common issues:
 
 - [insta Documentation](https://insta.rs/)
 - [ratatui TestBackend](https://docs.rs/ratatui/latest/ratatui/backend/struct.TestBackend.html)
-- [CLAUDE.md](../../.github/copilot-instructions.md) - TUI E2E testing guidelines
+- [copilot-instructions.md](../../.github/copilot-instructions.md) - TUI E2E testing guidelines
