@@ -11,8 +11,8 @@ use std::sync::Mutex;
 /// Global mock state storage
 static MOCK_STATE: Lazy<Mutex<Value>> = Lazy::new(|| {
     Mutex::new(json!({
-        "ports": {},
-        "page": "Entry",
+        "ports": [],
+        "page": "entry",
         "timestamp": chrono::Utc::now().to_rfc3339()
     }))
 });
@@ -21,11 +21,28 @@ static MOCK_STATE: Lazy<Mutex<Value>> = Lazy::new(|| {
 pub fn init_mock_state() {
     let mut state = MOCK_STATE.lock().unwrap();
     *state = json!({
-        "ports": {},
-        "page": "Entry",
+        "ports": [
+            {
+                "name": "/tmp/vcom1",
+                "enabled": false,
+                "state": "NotStarted",
+                "modbus_masters": [],
+                "modbus_slaves": [],
+                "log_count": 0
+            },
+            {
+                "name": "/tmp/vcom2",
+                "enabled": false,
+                "state": "NotStarted",
+                "modbus_masters": [],
+                "modbus_slaves": [],
+                "log_count": 0
+            }
+        ],
+        "page": "entry",
         "timestamp": chrono::Utc::now().to_rfc3339()
     });
-    log::debug!("🔧 Initialized mock state");
+    log::debug!("🔧 Initialized mock state with default ports");
 }
 
 /// Set a value in mock state using path notation

@@ -11,6 +11,10 @@ use ratatui::{backend::TestBackend, Terminal};
 /// This function ensures the TUI global state is initialized (if not already)
 /// and renders the current page to a TestBackend, returning the rendered buffer as a string.
 ///
+/// Note: Currently, mock state synchronization is not fully implemented.
+/// The renderer will render the default TUI state. Mock state manipulation
+/// will need to be implemented through direct TUI status writes.
+///
 /// # Arguments
 /// * `width` - Terminal width in characters
 /// * `height` - Terminal height in characters
@@ -21,6 +25,9 @@ pub fn render_tui_to_string(width: u16, height: u16) -> Result<String> {
     // Ensure global status is initialized
     // Note: If already initialized, this is a no-op due to init_status implementation
     ensure_status_initialized()?;
+
+    // TODO: Sync mock state to TUI global status
+    // For now, we render whatever is in the TUI global status
 
     // Create TestBackend
     let backend = TestBackend::new(width, height);
