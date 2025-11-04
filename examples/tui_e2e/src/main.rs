@@ -278,5 +278,11 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
         ))?,
     );
 
+    // IPC test workflows
+    workflows.insert(
+        "ipc_communication_test".to_string(),
+        parse_workflow(include_str!("../workflow/ipc_test/basic.toml"))?,
+    );
+
     Ok(workflows)
 }

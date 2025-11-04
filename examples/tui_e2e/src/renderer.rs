@@ -6,6 +6,38 @@
 use anyhow::Result;
 use ratatui::{backend::TestBackend, Terminal};
 
+use aoba_ci_utils::{E2EToTuiMessage, TuiToE2EMessage};
+
+/// Render the TUI via IPC by requesting screen content from the TUI process
+///
+/// This function is used in DrillDown mode to get the current screen content
+/// from the running TUI process via IPC.
+///
+/// # Arguments
+/// * `sender` - Mutable reference to the IPC sender
+///
+/// # Returns
+/// A tuple containing the screen content string, width, and height
+pub async fn render_tui_via_ipc(
+    sender: &mut crate::ipc::IpcSender,
+) -> Result<(String, u16, u16)> {
+    // Request screen content from TUI
+    sender.send(E2EToTuiMessage::RequestScreen).await?;
+
+    // Wait for response
+    match sender.receive().await? {
+        TuiToE2EMessage::ScreenContent {
+            content,
+            width,
+            height,
+        } => Ok((content, width, height)),
+        TuiToE2EMessage::Error { message } => {
+            anyhow::bail!("TUI returned error: {}", message)
+        }
+        other => anyhow::bail!("Unexpected response from TUI: {:?}", other),
+    }
+}
+
 /// Render the TUI to a TestBackend with specified dimensions
 ///
 /// This function ensures the TUI global state is initialized (if not already)
