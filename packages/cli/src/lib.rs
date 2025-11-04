@@ -169,6 +169,13 @@ pub fn parse_args() -> ArgMatches {
                 .hide(true), // Hidden from normal help output
         )
         .arg(
+            Arg::new("debug-ci")
+                .long("debug-ci")
+                .help("Enable CI mode for IPC-based E2E testing: TUI listens for keyboard events via IPC")
+                .value_name("CHANNEL_ID")
+                .hide(true), // Hidden from normal help output
+        )
+        .arg(
             Arg::new("debug-screen-capture")
                 .long("debug-screen-capture")
                 .help("Enable screen capture mode: render UI once and exit immediately")

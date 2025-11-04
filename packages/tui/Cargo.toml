@@ -58,13 +58,12 @@ libc.workspace = true
 serialport.workspace = true
 interprocess.workspace = true
 
-expectrl.workspace = true
 regex.workspace = true
-vt100.workspace = true
 ctrlc.workspace = true
 
 aoba_cli = { path = "../cli" }
 aoba_protocol = { path = "../protocol" }
+aoba_ci_utils = { path = "../ci_utils" }
 
 [dev-dependencies]
 tokio-test.workspace = true

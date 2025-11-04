@@ -2,33 +2,31 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
+use std::time::Duration;
+
+use anyhow::Result;
+
+use crate::ipc::{IpcChannelId, IpcSender};
 use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
 };
 use crate::placeholder::{
     clear_placeholders, generate_value, replace_placeholders, set_placeholder,
 };
+use crate::renderer::render_tui_to_string;
 use crate::workflow::{Workflow, WorkflowStep};
-use anyhow::{Context, Result};
-use expectrl::Expect;
-use std::time::Duration;
-
-#[cfg(unix)]
-type TuiSession =
-    expectrl::Session<expectrl::process::unix::UnixProcess, expectrl::process::unix::PtyStream>;
-
-#[cfg(windows)]
-type TuiSession = expectrl::Session<
-    expectrl::process::windows::WinProcess,
-    expectrl::process::windows::WinptyStream,
->;
+use aoba_ci_utils::E2EToTuiMessage;
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionMode {
     /// Screen capture only - test rendering with mocked state
+    /// Uses TestBackend directly without TUI process
     ScreenCaptureOnly,
-    /// Drill down - test real TUI with keyboard input
+    /// Drill down - test real TUI with keyboard input via IPC
+    /// 
+    /// This mode spawns a real TUI process with `--debug-ci` flag and communicates
+    /// via IPC channel, sending keyboard events and receiving rendered frames.
     DrillDown,
 }
 
@@ -38,28 +36,30 @@ pub struct ExecutionContext {
     pub port1: String,
     pub port2: String,
     pub debug: bool,
+    pub ipc_sender: Option<IpcSender>,
 }
 
 /// Execute a complete workflow
-pub async fn execute_workflow(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
+pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -> Result<()> {
     log::info!("🚀 Starting workflow execution: {}", workflow.manifest.id);
     log::info!("   Mode: {:?}", ctx.mode);
 
     // Clear placeholders from previous runs
     clear_placeholders();
 
-    // Initialize mock state if in screen-capture mode
-    if ctx.mode == ExecutionMode::ScreenCaptureOnly {
-        init_mock_state();
-        log::info!("🔧 Initialized mock state for screen-capture testing");
+    // Initialize based on mode
+    match ctx.mode {
+        ExecutionMode::ScreenCaptureOnly => {
+            // Screen capture mode: use mock state and TestBackend directly
+            init_mock_state();
+            log::info!("🔧 Initialized mock state for screen-capture testing");
+        }
+        ExecutionMode::DrillDown => {
+            // DrillDown mode: spawn TUI process with IPC
+            log::info!("🚀 Starting TUI process with IPC communication");
+            spawn_tui_with_ipc(ctx, &workflow.manifest.id).await?;
+        }
     }
-
-    // Spawn TUI process (or mock it in screen-capture mode)
-    let mut session = if ctx.mode == ExecutionMode::DrillDown {
-        spawn_tui_process(&ctx.port1)?
-    } else {
-        spawn_mock_tui_process()?
-    };
 
     // Execute init_order steps
     log::info!("📋 Executing init_order steps...");
@@ -71,7 +71,7 @@ pub async fn execute_workflow(ctx: &ExecutionContext, workflow: &Workflow) -> Re
             .get(step_name)
             .ok_or_else(|| anyhow::anyhow!("Step '{}' not found in workflow", step_name))?;
 
-        execute_step_sequence(ctx, &mut session, steps).await?;
+        execute_step_sequence(ctx, &workflow.manifest.id, steps).await?;
     }
 
     // Execute recycle_order steps if any
@@ -85,30 +85,79 @@ pub async fn execute_workflow(ctx: &ExecutionContext, workflow: &Workflow) -> Re
                 .get(step_name)
                 .ok_or_else(|| anyhow::anyhow!("Step '{}' not found in workflow", step_name))?;
 
-            execute_step_sequence(ctx, &mut session, steps).await?;
+            execute_step_sequence(ctx, &workflow.manifest.id, steps).await?;
         }
     }
 
     // Save mock state if in debug mode
-    if ctx.debug && ctx.mode == ExecutionMode::ScreenCaptureOnly {
+    if ctx.debug {
         save_mock_state_to_file("/tmp/tui_e2e_new_mock_state.json")?;
     }
 
-    // Cleanup
+    // Cleanup: shutdown TUI process if in DrillDown mode
     if ctx.mode == ExecutionMode::DrillDown {
-        log::debug!("🧹 Terminating TUI process...");
-        let _ = session.send("\x03"); // ETX (Ctrl+C)
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        if let Some(sender) = &mut ctx.ipc_sender {
+            log::info!("🛑 Shutting down TUI process");
+            if let Err(err) = sender.send(E2EToTuiMessage::Shutdown).await {
+                log::warn!("Failed to deliver shutdown message over IPC: {err}");
+            }
+        }
     }
 
     log::info!("✅ Workflow execution completed successfully");
     Ok(())
 }
 
+/// Spawn TUI process with IPC communication
+async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Result<()> {
+    // Generate unique IPC channel ID
+    let channel_id = IpcChannelId(format!("{}_{}", workflow_id, std::process::id()));
+
+    log::debug!("Generated IPC channel ID: {}", channel_id.0);
+
+    // Start TUI process with --debug-ci flag
+    let mut cmd = tokio::process::Command::new("cargo");
+    cmd.args(&[
+        "run",
+        "--package",
+        "aoba",
+        "--",
+        "--tui",
+        "--debug-ci",
+        &channel_id.0,
+    ]);
+
+    log::info!(
+        "🚀 Spawning TUI process: cargo run --package aoba -- --tui --debug-ci {}",
+        channel_id.0
+    );
+
+    let child = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to spawn TUI process: {}", e))?;
+
+    log::info!("✅ TUI process spawned with PID {}", child.id().unwrap_or(0));
+
+    // Give TUI time to start and create IPC sockets
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    // Create IPC sender
+    log::debug!("Connecting to IPC channel...");
+    let sender = IpcSender::new(channel_id.clone()).await?;
+    log::info!("✅ IPC connection established");
+
+    ctx.ipc_sender = Some(sender);
+
+    Ok(())
+}
+
 /// Execute a sequence of workflow steps
 async fn execute_step_sequence(
-    ctx: &ExecutionContext,
-    session: &mut TuiSession,
+    ctx: &mut ExecutionContext,
+    workflow_id: &str,
     steps: &[WorkflowStep],
 ) -> Result<()> {
     for (i, step) in steps.iter().enumerate() {
@@ -116,26 +165,28 @@ async fn execute_step_sequence(
             log::debug!("    [{}] {}", i, desc);
         }
 
-        execute_single_step(ctx, session, step).await?;
+        execute_single_step(ctx, workflow_id, step).await?;
     }
     Ok(())
 }
 
 /// Execute a single workflow step
 async fn execute_single_step(
-    ctx: &ExecutionContext,
-    session: &mut TuiSession,
+    ctx: &mut ExecutionContext,
+    _workflow_id: &str,
     step: &WorkflowStep,
 ) -> Result<()> {
-    // Handle key press (drill-down mode only)
+    // Handle keyboard input (DrillDown mode)
     if let Some(key) = &step.key {
         if ctx.mode == ExecutionMode::DrillDown {
             let times = step.times.unwrap_or(1);
             for _ in 0..times {
-                send_key(session, key)?;
+                // Send keyboard input via IPC
+                simulate_key_input(ctx, key).await?;
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
         }
+        // In ScreenCaptureOnly mode, keyboard actions are ignored
     }
 
     // Handle input generation and storage
@@ -156,43 +207,14 @@ async fn execute_single_step(
 
             set_placeholder(index, value.clone());
 
-            // Type the value if in drill-down mode
+            // In DrillDown mode, simulate typing the value
             if ctx.mode == ExecutionMode::DrillDown {
                 for ch in value.chars() {
-                    session.send(&ch.to_string())?;
+                    simulate_char_input(ctx, ch).await?;
                     tokio::time::sleep(Duration::from_millis(20)).await;
                 }
             }
         }
-    }
-
-    // Handle screen verification
-    if let Some(expected_text) = &step.verify {
-        if let Some(line_num) = step.at_line {
-            verify_screen_text(session, expected_text, line_num)?;
-        } else {
-            verify_screen_contains(session, expected_text)?;
-        }
-    }
-
-    // Handle screen verification with placeholders
-    if let Some(template) = &step.verify_with_placeholder {
-        let expected_text = replace_placeholders(template)?;
-        if let Some(line_num) = step.at_line {
-            verify_screen_text(session, &expected_text, line_num)?;
-        } else {
-            verify_screen_contains(session, &expected_text)?;
-        }
-    }
-
-    // Handle cursor verification
-    if let Some(line_num) = step.cursor_at_line {
-        verify_cursor_position(session, line_num)?;
-    }
-
-    // Handle sleep
-    if let Some(sleep_ms) = step.sleep_ms {
-        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
     }
 
     // Handle mock state operations (screen-capture mode only)
@@ -220,142 +242,108 @@ async fn execute_single_step(
         }
     }
 
+    // Handle screen verification - render and verify content
+    if step.verify.is_some() || step.verify_with_placeholder.is_some() {
+        // Render the TUI to a string based on execution mode
+        let screen_content = match ctx.mode {
+            ExecutionMode::ScreenCaptureOnly => {
+                // Use TestBackend directly
+                render_tui_to_string(120, 40)?
+            }
+            ExecutionMode::DrillDown => {
+                // Request screen from TUI process via IPC
+                if let Some(sender) = ctx.ipc_sender.as_mut() {
+                    let (content, _width, _height) =
+                        crate::renderer::render_tui_via_ipc(sender).await?;
+                    content
+                } else {
+                    anyhow::bail!("DrillDown mode requires IPC sender");
+                }
+            }
+        };
+
+        // Determine expected text
+        let expected_text = if let Some(template) = &step.verify_with_placeholder {
+            replace_placeholders(template)?
+        } else if let Some(text) = &step.verify {
+            text.clone()
+        } else {
+            String::new()
+        };
+
+        // Verify the expected text is present
+        if let Some(line_num) = step.at_line {
+            let lines: Vec<&str> = screen_content.lines().collect();
+            if line_num >= lines.len() {
+                anyhow::bail!(
+                    "Line {} out of bounds (screen has {} lines)",
+                    line_num,
+                    lines.len()
+                );
+            }
+            let actual_line = lines[line_num];
+            if !actual_line.contains(&expected_text) {
+                anyhow::bail!(
+                    "Screen verification failed at line {}:\n  Expected text: '{}'\n  Actual line: '{}'\n  Full screen:\n{}",
+                    line_num,
+                    expected_text,
+                    actual_line,
+                    screen_content
+                );
+            }
+        } else if !screen_content.contains(&expected_text) {
+            anyhow::bail!(
+                "Screen verification failed:\n  Expected text: '{}'\n  Not found in screen content:\n{}",
+                expected_text,
+                screen_content
+            );
+        }
+        
+        log::debug!("✅ Screen verified: '{}'", expected_text);
+    }
+
+    // Handle sleep
+    if let Some(sleep_ms) = step.sleep_ms {
+        tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+    }
+
     Ok(())
 }
 
-/// Spawn a TUI process for drill-down testing
-fn spawn_tui_process(_port: &str) -> Result<TuiSession> {
-    log::debug!("🚀 Spawning TUI process...");
+/// Simulate keyboard input by sending it via IPC
+///
+/// This function is used in DrillDown mode to simulate keyboard events.
+/// It sends the keyboard event through the IPC channel to the TUI process.
+async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()> {
+    log::debug!("🎹 Simulating key press: {}", key);
 
-    // Build the TUI binary
-    let binary_path = build_tui_binary()?;
-
-    // Create command
-    let mut cmd = std::process::Command::new(&binary_path);
-    cmd.args(&["--tui", "--debug-ci-e2e-test", "--no-config-cache"]);
-
-    // Force deterministic locale
-    cmd.env("LANGUAGE", "en_US:en");
-    cmd.env("LC_ALL", "en_US.UTF-8");
-    cmd.env("LANG", "en_US.UTF-8");
-
-    // Spawn with expectrl
-    let session = expectrl::Session::spawn(cmd).context("Failed to spawn TUI process")?;
-
-    // Wait for initial render
-    std::thread::sleep(Duration::from_secs(2));
-
-    log::debug!("✅ TUI process spawned");
-    Ok(session)
-}
-
-/// Build TUI binary
-fn build_tui_binary() -> Result<String> {
-    use std::process::Command;
-
-    log::debug!("🔨 Building TUI binary...");
-
-    let output = Command::new("cargo")
-        .args(&["build", "--package", "aoba"])
-        .output()
-        .context("Failed to build TUI binary")?;
-
-    if !output.status.success() {
-        anyhow::bail!(
-            "Failed to build TUI binary:\n{}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+    if let Some(sender) = ctx.ipc_sender.as_mut() {
+        sender
+            .send(E2EToTuiMessage::KeyPress {
+                key: key.to_string(),
+            })
+            .await?;
+        log::debug!("   ✅ Key sent via IPC: {}", key);
+    } else {
+        log::warn!("   ⚠️  No IPC sender available");
     }
 
-    // Return path to built binary
-    Ok("target/debug/aoba".to_string())
-}
-
-/// Spawn a mock TUI process (for screen-capture testing)
-fn spawn_mock_tui_process() -> Result<TuiSession> {
-    log::debug!("🎭 Creating mock TUI session (screen-capture mode)");
-
-    // For screen-capture mode, we don't actually spawn a process
-    // Instead, we create a pseudo-terminal that we can write to/read from
-    // This is a stub - in a real implementation, you'd mock the terminal
-
-    // For now, return an error indicating this needs implementation
-    anyhow::bail!("Mock TUI session not yet implemented - screen-capture mode requires further implementation")
-}
-
-/// Send a key to the terminal session
-fn send_key(session: &mut TuiSession, key: &str) -> Result<()> {
-    match key {
-        "enter" => session.send("\r")?,
-        "escape" => session.send("\x1b")?,
-        "up" => session.send("\x1b[A")?,
-        "down" => session.send("\x1b[B")?,
-        "left" => session.send("\x1b[D")?,
-        "right" => session.send("\x1b[C")?,
-        "ctrl-a" => session.send("\x01")?, // SOH
-        "ctrl-s" => session.send("\x13")?, // DC3
-        "ctrl-pgup" => session.send("\x1b[5;5~")?,
-        "backspace" => session.send("\x7f")?,
-        "tab" => session.send("\t")?,
-        _ => anyhow::bail!("Unknown key: {}", key),
-    }
     Ok(())
 }
 
-/// Verify screen contains expected text
-fn verify_screen_contains(session: &mut TuiSession, expected: &str) -> Result<()> {
-    let screen = capture_screen(session)?;
+/// Simulate character input (typing) by sending it via IPC
+///
+/// This function is used in DrillDown mode to simulate typing characters.
+async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()> {
+    log::debug!("🎹 Simulating character input: '{}'", ch);
 
-    if !screen.contains(expected) {
-        anyhow::bail!(
-            "Screen verification failed: expected text '{}' not found\nScreen content:\n{}",
-            expected,
-            screen
-        );
+    if let Some(sender) = ctx.ipc_sender.as_mut() {
+        sender.send(E2EToTuiMessage::CharInput { ch }).await?;
+        log::debug!("   ✅ Character sent via IPC: '{}'", ch);
+    } else {
+        log::warn!("   ⚠️  No IPC sender available");
     }
 
-    log::debug!("✅ Screen contains: '{}'", expected);
     Ok(())
 }
 
-/// Verify specific line contains expected text
-fn verify_screen_text(session: &mut TuiSession, expected: &str, line_num: usize) -> Result<()> {
-    let screen = capture_screen(session)?;
-    let lines: Vec<&str> = screen.lines().collect();
-
-    if line_num >= lines.len() {
-        anyhow::bail!(
-            "Line {} out of bounds (screen has {} lines)",
-            line_num,
-            lines.len()
-        );
-    }
-
-    let actual_line = lines[line_num];
-    if !actual_line.contains(expected) {
-        anyhow::bail!(
-            "Screen verification failed at line {}:\n  Expected: '{}'\n  Actual: '{}'",
-            line_num,
-            expected,
-            actual_line
-        );
-    }
-
-    log::debug!("✅ Line {} contains: '{}'", line_num, expected);
-    Ok(())
-}
-
-/// Verify cursor position
-fn verify_cursor_position(_session: &mut TuiSession, _line_num: usize) -> Result<()> {
-    // This would need terminal cursor tracking
-    log::warn!("⚠️  Cursor position verification not yet implemented");
-    Ok(())
-}
-
-/// Capture current screen content
-fn capture_screen(_session: &mut TuiSession) -> Result<String> {
-    // For now, return a stub
-    // Real implementation would need to properly parse the terminal buffer
-    log::warn!("⚠️  Screen capture not fully implemented yet");
-    Ok(String::new())
-}
