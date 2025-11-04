@@ -1,0 +1,26 @@
+# IPC Communication Test Workflow
+# This workflow tests basic IPC communication without complex TUI interactions
+
+[manifest]
+id = "ipc_communication_test"
+description = "Basic IPC communication test - keyboard input and screen rendering"
+init_order = ["setup", "test_keyboard", "test_screen"]
+recycle_order = []
+
+[workflow.setup]
+description = "Initial setup"
+steps = []
+
+[workflow.test_keyboard]
+description = "Test keyboard input via IPC"
+steps = [
+    { description = "Send Enter key", key = "enter" },
+    { description = "Send Down key", key = "down" },
+    { description = "Type character 'a'", input = "text", value = "a", index = 1 },
+]
+
+[workflow.test_screen]
+description = "Test screen rendering via IPC"
+steps = [
+    { description = "Verify screen content", verify = "aoba" },
+]
