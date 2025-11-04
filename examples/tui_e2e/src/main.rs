@@ -1,7 +1,8 @@
 //! TUI E2E Test Framework - New TOML-based workflow system
 //!
 //! This is a complete refactoring of the TUI E2E test framework to use
-//! declarative TOML workflows instead of imperative Rust code.
+//! declarative TOML workflows instead of imperative Rust code, with
+//! `ratatui::TestBackend` for rendering and IPC-based screen verification.
 //!
 //! # Architecture
 //!
@@ -17,36 +18,43 @@
 //!
 //! The framework supports two execution modes:
 //!
-//! ### 1. Rendering Test Mode (`--screen-capture-only`)
+//! ### 1. Screen Capture Mode (`--screen-capture-only`)
 //!
 //! In this mode, the framework:
-//! - Ignores all `key` actions (keyboard input)
-//! - Executes `mock_*` actions to manipulate global state
-//! - Verifies screen output matches expected patterns
+//! - Uses `ratatui::TestBackend` to render the TUI
+//! - Manipulates global state directly via mock operations
+//! - Verifies screen content using TOML `verify` fields
 //! - Tests that the TUI renders correctly given specific state
+//! - Ignores keyboard input actions
 //!
-//! ### 2. Drill-Down Test Mode (default)
+//! ### 2. DrillDown Mode (default)
 //!
 //! In this mode, the framework:
-//! - Executes all `key` actions against a live TUI process
-//! - Ignores `mock_*` actions (tests real TUI behavior)
-//! - Verifies screen output after each interaction
-//! - Treats TUI as a black box, testing end-to-end behavior
+//! - Spawns a real TUI process with `--debug-ci` flag
+//! - Simulates keyboard input events through IPC channel
+//! - Receives rendered screen content from TUI via IPC
+//! - Executes keyboard actions and verifies state changes
+//! - Tests interactive workflows end-to-end
+//! - More realistic testing of user interactions
 //!
 //! ## Workflow Format
 //!
 //! See `workflow/single_station/master/coils.toml` for a complete example.
 
 mod executor;
+mod ipc;
 mod mock_state;
 mod parser;
 mod placeholder;
+mod renderer;
 mod workflow;
 
 pub use executor::*;
+pub use ipc::*;
 pub use mock_state::*;
 pub use parser::*;
 pub use placeholder::*;
+pub use renderer::*;
 pub use workflow::*;
 
 use anyhow::Result;
@@ -165,14 +173,15 @@ async fn main() -> Result<()> {
     log::info!("📝 Description: {}", workflow.manifest.description);
 
     // Execute the workflow
-    let context = ExecutionContext {
+    let mut context = ExecutionContext {
         mode: exec_mode,
         port1: args.port1.clone(),
         port2: args.port2.clone(),
         debug: args.debug,
+        ipc_sender: None, // Will be initialized in DrillDown mode
     };
 
-    execute_workflow(&context, workflow).await?;
+    execute_workflow(&mut context, workflow).await?;
 
     log::info!("✅ Module '{}' completed successfully!", module);
     Ok(())
@@ -264,6 +273,12 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
         parse_workflow(include_str!(
             "../workflow/multi_station/slave/mixed_ids.toml"
         ))?,
+    );
+
+    // IPC test workflows
+    workflows.insert(
+        "ipc_communication_test".to_string(),
+        parse_workflow(include_str!("../workflow/ipc_test/basic.toml"))?,
     );
 
     Ok(workflows)

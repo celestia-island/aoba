@@ -47,6 +47,46 @@ Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, T
 2. `cargo build --bins`
 3. `cargo run` or run the generated executable
 
+## Testing
+
+Aoba includes comprehensive E2E testing for both CLI and TUI components using an IPC-based architecture.
+
+### Running Tests Locally
+
+Use the provided CI script to run tests locally:
+
+```bash
+# Run all tests (CLI + TUI)
+./scripts/run_ci_locally.sh --workflow all
+
+# Run only TUI tests
+./scripts/run_ci_locally.sh --workflow tui-rendering    # Fast UI tests
+./scripts/run_ci_locally.sh --workflow tui-drilldown   # Full integration tests
+
+# Run only CLI tests
+./scripts/run_ci_locally.sh --workflow cli
+
+# Run specific test module
+./scripts/run_ci_locally.sh --workflow tui-drilldown --module single_station_master_coils
+```
+
+### Test Architecture
+
+- **TUI E2E Tests** (`examples/tui_e2e`): IPC-based testing using Unix domain sockets
+  - Screen Capture mode: Fast UI regression testing without process spawning
+  - DrillDown mode: Full integration testing with real TUI process
+  - No terminal emulation dependencies (expectrl/vt100 removed)
+  
+- **CLI E2E Tests** (`examples/cli_e2e`): Modbus protocol testing with virtual serial ports
+  - Single and multi-station configurations
+  - All register types (Coils, Discrete Inputs, Holding, Input)
+  - Master/Slave communication validation
+
+For more details, see:
+- [TUI E2E Testing Documentation](examples/tui_e2e/README.md)
+- [IPC Architecture Details](examples/tui_e2e/IPC_ARCHITECTURE.md)
+- [IPC Mode Documentation](docs/IPC_MODE.md)
+
 ## Contribution
 
 Feel free to submit issues or PRs!
