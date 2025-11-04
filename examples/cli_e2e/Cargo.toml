@@ -6,15 +6,20 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
+
 clap = { workspace = true, features = ["derive"] }
 env_logger.workspace = true
 log.workspace = true
+
 serde.workspace = true
 serde_json.workspace = true
+
 rand.workspace = true
 regex.workspace = true
 chrono = { workspace = true, features = ["serde", "alloc"] }
+
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
 expectrl.workspace = true
 
 [target.'cfg(windows)'.dependencies]

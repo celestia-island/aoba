@@ -6,19 +6,31 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
+parking_lot.workspace = true
+once_cell.workspace = true
+
 clap = { workspace = true, features = ["derive"] }
 env_logger.workspace = true
 log.workspace = true
+
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+serde_json_path.workspace = true
 toml.workspace = true
+
 rand.workspace = true
 regex.workspace = true
-once_cell.workspace = true
 chrono.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "process"] }
+
+tokio = { workspace = true, features = [
+  "rt-multi-thread",
+  "macros",
+  "net",
+  "io-util",
+  "process",
+] }
+
 ratatui.workspace = true
-parking_lot.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "^0.28", default-features = false, features = ["fs"] }
