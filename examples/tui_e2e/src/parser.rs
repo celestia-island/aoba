@@ -1,12 +1,11 @@
 //! TOML workflow parser
 
-use anyhow::{Context, Result};
 use crate::workflow::Workflow;
+use anyhow::{Context, Result};
 
 /// Parse a workflow from TOML string
 pub fn parse_workflow(toml_content: &str) -> Result<Workflow> {
-    toml::from_str(toml_content)
-        .context("Failed to parse workflow TOML")
+    toml::from_str(toml_content).context("Failed to parse workflow TOML")
 }
 
 #[cfg(test)]
@@ -70,7 +69,13 @@ key = "enter"
 
         let workflow = parse_workflow(toml).unwrap();
         assert_eq!(workflow.manifest.stations.as_ref().unwrap().len(), 2);
-        assert_eq!(workflow.manifest.stations.as_ref().unwrap()[0].station_id, 1);
-        assert_eq!(workflow.manifest.stations.as_ref().unwrap()[1].station_id, 2);
+        assert_eq!(
+            workflow.manifest.stations.as_ref().unwrap()[0].station_id,
+            1
+        );
+        assert_eq!(
+            workflow.manifest.stations.as_ref().unwrap()[1].station_id,
+            2
+        );
     }
 }

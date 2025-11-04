@@ -17,6 +17,7 @@ pub const DEFAULT_PORT2: &str = "/tmp/vcom2";
 
 /// Helper struct describing the regexes and display names used to detect
 /// the two expected virtual serial ports in TUI output.
+#[allow(dead_code)]
 pub struct VcomMatchers {
     pub port1_rx: Regex,
     pub port2_rx: Regex,
@@ -31,7 +32,7 @@ pub struct VcomMatchers {
 pub fn vcom_matchers_with_ports(port1: &str, port2: &str) -> VcomMatchers {
     let port1_pattern = regex::escape(port1);
     let port2_pattern = regex::escape(port2);
-    
+
     VcomMatchers {
         port1_rx: Regex::new(&port1_pattern).unwrap(),
         port2_rx: Regex::new(&port2_pattern).unwrap(),
@@ -67,20 +68,27 @@ pub fn build_debug_bin(bin_name: &str) -> Result<PathBuf> {
     };
 
     let bin_paths = [
-        workspace_root.join("target").join("release").join(&exe_name),
+        workspace_root
+            .join("target")
+            .join("release")
+            .join(&exe_name),
         workspace_root.join("target").join("debug").join(&exe_name),
     ];
 
-    let bin_path = bin_paths.iter()
+    let bin_path = bin_paths
+        .iter()
         .find(|p| p.exists())
-        .ok_or_else(|| anyhow!(
-            "Binary not found at any of: {}. Run `cargo build --bin {}` first.",
-            bin_paths.iter()
-                .map(|p| p.display().to_string())
-                .collect::<Vec<_>>()
-                .join(", "),
-            bin_name
-        ))?
+        .ok_or_else(|| {
+            anyhow!(
+                "Binary not found at any of: {}. Run `cargo build --bin {}` first.",
+                bin_paths
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                bin_name
+            )
+        })?
         .to_path_buf();
 
     log::info!("✅ Using prebuilt binary: {}", bin_path.display());
@@ -106,6 +114,7 @@ pub async fn sleep_1s() {
 }
 
 /// Check if a serial port exists
+#[allow(dead_code)]
 pub fn port_exists(port_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -128,6 +137,10 @@ pub fn port_exists(port_name: &str) -> bool {
 
 /// Check if VCOM tests should run with the specified ports
 pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
+    // Silence unused-variable warnings on non-Windows platforms where these
+    // parameters are not referenced by the function body.
+    let _port1 = port1;
+    let _port2 = port2;
     // Allow explicit override via environment variable
     if let Ok(val) = std::env::var("CI_FORCE_VCOM") {
         let should_run = val == "1" || val.eq_ignore_ascii_case("true");
@@ -148,9 +161,7 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
         );
 
         if !port1_exists || !port2_exists {
-            log::info!(
-                "Virtual serial port tests disabled on Windows: missing ports"
-            );
+            log::info!("Virtual serial port tests disabled on Windows: missing ports");
             return false;
         }
         log::info!("Both ports available, tests will run");

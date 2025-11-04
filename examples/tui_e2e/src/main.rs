@@ -37,17 +37,17 @@
 //!
 //! See `workflow/single_station/master/coils.toml` for a complete example.
 
-mod workflow;
 mod executor;
+mod mock_state;
 mod parser;
 mod placeholder;
-mod mock_state;
+mod workflow;
 
-pub use workflow::*;
 pub use executor::*;
+pub use mock_state::*;
 pub use parser::*;
 pub use placeholder::*;
-pub use mock_state::*;
+pub use workflow::*;
 
 use anyhow::Result;
 use clap::Parser;
@@ -106,11 +106,15 @@ async fn main() -> Result<()> {
     };
 
     log::info!("🔧 Execution mode: {:?}", exec_mode);
-    log::info!("📍 Port configuration: port1={}, port2={}", args.port1, args.port2);
+    log::info!(
+        "📍 Port configuration: port1={}, port2={}",
+        args.port1,
+        args.port2
+    );
 
     // Load all available workflows
     let workflows = load_all_workflows()?;
-    
+
     log::info!("✅ Loaded {} workflow definitions", workflows.len());
 
     // If list flag is set, list all modules and exit
@@ -153,7 +157,8 @@ async fn main() -> Result<()> {
     };
 
     // Find the requested workflow
-    let workflow = workflows.get(module)
+    let workflow = workflows
+        .get(module)
         .ok_or_else(|| anyhow::anyhow!("Unknown module: {}", module))?;
 
     log::info!("🧪 Running module: {}", module);
@@ -184,11 +189,15 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
     );
     workflows.insert(
         "single_station_master_discrete_inputs".to_string(),
-        parse_workflow(include_str!("../workflow/single_station/master/discrete_inputs.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/single_station/master/discrete_inputs.toml"
+        ))?,
     );
     workflows.insert(
         "single_station_master_holding".to_string(),
-        parse_workflow(include_str!("../workflow/single_station/master/holding.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/single_station/master/holding.toml"
+        ))?,
     );
     workflows.insert(
         "single_station_master_input".to_string(),
@@ -202,11 +211,15 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
     );
     workflows.insert(
         "single_station_slave_discrete_inputs".to_string(),
-        parse_workflow(include_str!("../workflow/single_station/slave/discrete_inputs.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/single_station/slave/discrete_inputs.toml"
+        ))?,
     );
     workflows.insert(
         "single_station_slave_holding".to_string(),
-        parse_workflow(include_str!("../workflow/single_station/slave/holding.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/single_station/slave/holding.toml"
+        ))?,
     );
     workflows.insert(
         "single_station_slave_input".to_string(),
@@ -216,29 +229,41 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
     // Multi-station master workflows
     workflows.insert(
         "multi_station_master_mixed_types".to_string(),
-        parse_workflow(include_str!("../workflow/multi_station/master/mixed_types.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/multi_station/master/mixed_types.toml"
+        ))?,
     );
     workflows.insert(
         "multi_station_master_spaced_addresses".to_string(),
-        parse_workflow(include_str!("../workflow/multi_station/master/spaced_addresses.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/multi_station/master/spaced_addresses.toml"
+        ))?,
     );
     workflows.insert(
         "multi_station_master_mixed_ids".to_string(),
-        parse_workflow(include_str!("../workflow/multi_station/master/mixed_ids.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/multi_station/master/mixed_ids.toml"
+        ))?,
     );
 
     // Multi-station slave workflows
     workflows.insert(
         "multi_station_slave_mixed_types".to_string(),
-        parse_workflow(include_str!("../workflow/multi_station/slave/mixed_types.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/multi_station/slave/mixed_types.toml"
+        ))?,
     );
     workflows.insert(
         "multi_station_slave_spaced_addresses".to_string(),
-        parse_workflow(include_str!("../workflow/multi_station/slave/spaced_addresses.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/multi_station/slave/spaced_addresses.toml"
+        ))?,
     );
     workflows.insert(
         "multi_station_slave_mixed_ids".to_string(),
-        parse_workflow(include_str!("../workflow/multi_station/slave/mixed_ids.toml"))?,
+        parse_workflow(include_str!(
+            "../workflow/multi_station/slave/mixed_ids.toml"
+        ))?,
     );
 
     Ok(workflows)

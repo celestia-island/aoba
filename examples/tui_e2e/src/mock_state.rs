@@ -3,10 +3,10 @@
 //! This module manages a mock TUI global state that can be manipulated
 //! and verified during screen-capture-only testing.
 
+use anyhow::{Context, Result};
+use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::sync::Mutex;
-use once_cell::sync::Lazy;
-use anyhow::{Context, Result};
 
 /// Global mock state storage
 static MOCK_STATE: Lazy<Mutex<Value>> = Lazy::new(|| {
@@ -34,26 +34,29 @@ pub fn init_mock_state() {
 /// - "ports['/tmp/vcom1'].modbus_masters[0].registers[5]" = 42
 pub fn set_mock_state(path: &str, value: Value) -> Result<()> {
     let mut state = MOCK_STATE.lock().unwrap();
-    
+
     // Parse the path and navigate to the target
     set_value_at_path(&mut state, path, value)
         .context(format!("Failed to set mock state at path: {}", path))?;
-    
-    log::debug!("🔧 Mock state updated: {} = {:?}", path, get_value_at_path(&state, path).ok());
+
+    log::debug!(
+        "🔧 Mock state updated: {} = {:?}",
+        path,
+        get_value_at_path(&state, path).ok()
+    );
     Ok(())
 }
 
 /// Get a value from mock state using path notation
 pub fn get_mock_state(path: &str) -> Result<Value> {
     let state = MOCK_STATE.lock().unwrap();
-    get_value_at_path(&state, path)
-        .context(format!("Failed to get mock state at path: {}", path))
+    get_value_at_path(&state, path).context(format!("Failed to get mock state at path: {}", path))
 }
 
 /// Verify a value in mock state matches expected
 pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
     let actual = get_mock_state(path)?;
-    
+
     if &actual != expected {
         anyhow::bail!(
             "Mock state verification failed at path '{}'\n  Expected: {:?}\n  Actual: {:?}",
@@ -62,7 +65,7 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
             actual
         );
     }
-    
+
     log::debug!("✅ Mock state verified: {} = {:?}", path, expected);
     Ok(())
 }
@@ -86,7 +89,7 @@ pub fn save_mock_state_to_file(path: &str) -> Result<()> {
 fn set_value_at_path(root: &mut Value, path: &str, value: Value) -> Result<Value> {
     let parts = parse_path(path)?;
     let mut current = root;
-    
+
     // Navigate to the parent of the target
     for (i, part) in parts.iter().enumerate() {
         if i == parts.len() - 1 {
@@ -113,7 +116,7 @@ fn set_value_at_path(root: &mut Value, path: &str, value: Value) -> Result<Value
             }
             return Ok(value);
         }
-        
+
         // Navigate deeper
         current = match part {
             PathPart::Key(key) => {
@@ -135,14 +138,14 @@ fn set_value_at_path(root: &mut Value, path: &str, value: Value) -> Result<Value
             }
         };
     }
-    
+
     Ok(value)
 }
 
 fn get_value_at_path(root: &Value, path: &str) -> Result<Value> {
     let parts = parse_path(path)?;
     let mut current = root;
-    
+
     for part in &parts {
         current = match part {
             PathPart::Key(key) => {
@@ -163,7 +166,7 @@ fn get_value_at_path(root: &Value, path: &str) -> Result<Value> {
             }
         };
     }
-    
+
     Ok(current.clone())
 }
 
@@ -178,7 +181,7 @@ fn parse_path(path: &str) -> Result<Vec<PathPart>> {
     let mut current = String::new();
     let mut in_brackets = false;
     let mut bracket_content = String::new();
-    
+
     for ch in path.chars() {
         match ch {
             '[' => {
@@ -220,11 +223,11 @@ fn parse_path(path: &str) -> Result<Vec<PathPart>> {
             }
         }
     }
-    
+
     if !current.is_empty() {
         parts.push(PathPart::Key(current));
     }
-    
+
     Ok(parts)
 }
 
@@ -236,7 +239,7 @@ mod tests {
     fn test_parse_path() {
         let parts = parse_path("ports['/tmp/vcom1'].enabled").unwrap();
         assert_eq!(parts.len(), 2);
-        
+
         let parts = parse_path("ports['/tmp/vcom1'].modbus_masters[0].registers[5]").unwrap();
         assert_eq!(parts.len(), 5);
     }
@@ -244,14 +247,14 @@ mod tests {
     #[test]
     fn test_mock_state_operations() {
         init_mock_state();
-        
+
         // Set nested value
         set_mock_state("ports['/tmp/vcom1'].enabled", json!(true)).unwrap();
-        
+
         // Get value back
         let value = get_mock_state("ports['/tmp/vcom1'].enabled").unwrap();
         assert_eq!(value, json!(true));
-        
+
         // Verify value
         assert!(verify_mock_state("ports['/tmp/vcom1'].enabled", &json!(true)).is_ok());
         assert!(verify_mock_state("ports['/tmp/vcom1'].enabled", &json!(false)).is_err());

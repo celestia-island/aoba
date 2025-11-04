@@ -4,14 +4,11 @@ use std::{
     time::Duration,
 };
 
+use crate::utils::build_debug_bin;
 use aoba::cli::config::{
     CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
     StationConfig, StationMode,
 };
-use crate::utils::{build_debug_bin};
-
-
-
 
 /// Test multiple masters with same station ID but different register types
 pub async fn test_multi_masters_same_station() -> Result<()> {
@@ -63,7 +60,7 @@ pub async fn test_multi_masters_same_station() -> Result<()> {
     log::info!("🧪 Created configuration file for same station test");
 
     // Build the binary
-    let binary = crate::utils::build_debug_bin("aoba")?;
+    let binary = build_debug_bin("aoba")?;
 
     // Start configuration mode
     log::info!("🧪 Starting multi-masters with same station configuration...");
