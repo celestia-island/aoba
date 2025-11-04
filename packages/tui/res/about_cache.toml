@@ -51,10 +51,6 @@ name = "env_logger"
 version = ""
 
 [[dependencies]]
-name = "expectrl"
-version = ""
-
-[[dependencies]]
 name = "flume"
 version = ""
 
@@ -167,10 +163,6 @@ name = "uuid"
 version = ""
 
 [[dependencies]]
-name = "vt100"
-version = ""
-
-[[dependencies]]
 name = "whoami"
 version = ""
 
@@ -192,7 +184,6 @@ derive_more = "MIT"
 eframe = "MIT OR Apache-2.0"
 egui = "MIT OR Apache-2.0"
 env_logger = "MIT OR Apache-2.0"
-expectrl = "MIT"
 flume = "Apache-2.0/MIT"
 futures = "MIT OR Apache-2.0"
 image = "MIT OR Apache-2.0"
@@ -221,7 +212,6 @@ tracing-appender = "MIT"
 tracing-subscriber = "MIT"
 unicode-width = "MIT OR Apache-2.0"
 uuid = "Apache-2.0 OR MIT"
-vt100 = "MIT"
 whoami = "Apache-2.0 OR BSL-1.0 OR MIT"
 yuuka = "Apache-2.0"
 
