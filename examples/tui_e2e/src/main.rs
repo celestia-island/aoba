@@ -20,16 +20,16 @@
 //! ### 1. Rendering Test Mode (`--screen-capture-only`)
 //!
 //! In this mode, the framework:
-//! - Ignores all `key` actions (keyboard input)
-//! - Executes `mock_*` actions to manipulate global state
-//! - Verifies screen output matches expected patterns
+//! - Uses `ratatui::TestBackend` to render the TUI
+//! - Manipulates global state directly via mock operations
+//! - Captures snapshots using `insta` for verification
 //! - Tests that the TUI renders correctly given specific state
 //!
 //! ### 2. Drill-Down Test Mode (default)
 //!
 //! In this mode, the framework:
-//! - Executes all `key` actions against a live TUI process
-//! - Ignores `mock_*` actions (tests real TUI behavior)
+//! - Spawns a real TUI process (legacy mode, being phased out)
+//! - Executes keyboard actions against the live process
 //! - Verifies screen output after each interaction
 //! - Treats TUI as a black box, testing end-to-end behavior
 //!
@@ -41,12 +41,14 @@ mod executor;
 mod mock_state;
 mod parser;
 mod placeholder;
+mod renderer;
 mod workflow;
 
 pub use executor::*;
 pub use mock_state::*;
 pub use parser::*;
 pub use placeholder::*;
+pub use renderer::*;
 pub use workflow::*;
 
 use anyhow::Result;

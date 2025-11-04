@@ -17,7 +17,9 @@ regex.workspace = true
 once_cell.workspace = true
 chrono.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
-expectrl.workspace = true
+ratatui.workspace = true
+parking_lot.workspace = true
+insta = { version = "^1.40", features = ["yaml", "redactions"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "^0.28", default-features = false, features = ["fs"] }

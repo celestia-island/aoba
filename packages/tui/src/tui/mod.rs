@@ -1256,6 +1256,14 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
     Ok(())
 }
 
+/// Public wrapper for render_ui for testing purposes
+///
+/// This allows E2E tests to render the TUI to a TestBackend without
+/// spawning a real process.
+pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
+    render_ui(frame)
+}
+
 /// Run screen capture mode: render UI once and exit immediately
 fn run_screen_capture_mode() -> Result<()> {
     log::info!("📸 Starting screen capture mode");
