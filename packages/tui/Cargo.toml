@@ -65,6 +65,7 @@ ctrlc.workspace = true
 
 aoba_cli = { path = "../cli" }
 aoba_protocol = { path = "../protocol" }
+aoba_ci_utils = { path = "../ci_utils" }
 
 [dev-dependencies]
 tokio-test.workspace = true

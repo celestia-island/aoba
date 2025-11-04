@@ -2,6 +2,10 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
+use std::time::Duration;
+
+use anyhow::Result;
+
 use crate::ipc::{IpcChannelId, IpcSender};
 use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
@@ -11,8 +15,7 @@ use crate::placeholder::{
 };
 use crate::renderer::render_tui_to_string;
 use crate::workflow::{Workflow, WorkflowStep};
-use anyhow::Result;
-use std::time::Duration;
+use aoba_ci_utils::E2EToTuiMessage;
 
 /// Path to snapshots directory relative to executor (for legacy insta support)
 const SNAPSHOT_PATH: &str = "../snapshots";
@@ -98,10 +101,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
     if ctx.mode == ExecutionMode::DrillDown {
         if let Some(sender) = &mut ctx.ipc_sender {
             log::info!("🛑 Shutting down TUI process");
-            if let Err(err) = sender
-                .send(crate::ipc::E2EToTuiMessage::Shutdown)
-                .await
-            {
+            if let Err(err) = sender.send(E2EToTuiMessage::Shutdown).await {
                 log::warn!("Failed to deliver shutdown message over IPC: {err}");
             }
         }
@@ -115,18 +115,45 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
 async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Result<()> {
     // Generate unique IPC channel ID
     let channel_id = IpcChannelId(format!("{}_{}", workflow_id, std::process::id()));
-    
+
     log::debug!("Generated IPC channel ID: {}", channel_id.0);
-    
+
+    // Start TUI process with --debug-ci flag
+    let mut cmd = tokio::process::Command::new("cargo");
+    cmd.args(&[
+        "run",
+        "--package",
+        "aoba",
+        "--",
+        "--tui",
+        "--debug-ci",
+        &channel_id.0,
+    ]);
+
+    log::info!(
+        "🚀 Spawning TUI process: cargo run --package aoba -- --tui --debug-ci {}",
+        channel_id.0
+    );
+
+    let child = cmd
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to spawn TUI process: {}", e))?;
+
+    log::info!("✅ TUI process spawned with PID {}", child.id().unwrap_or(0));
+
+    // Give TUI time to start and create IPC sockets
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
     // Create IPC sender
+    log::debug!("Connecting to IPC channel...");
     let sender = IpcSender::new(channel_id.clone()).await?;
+    log::info!("✅ IPC connection established");
+
     ctx.ipc_sender = Some(sender);
-    
-    // TODO: Spawn TUI process with --debug-ci flag
-    // For now, this is a placeholder
-    log::info!("📝 TODO: Spawn TUI process with --debug-ci {}", channel_id.0);
-    log::info!("    Command would be: cargo run --package aoba -- --tui --debug-ci {}", channel_id.0);
-    
+
     Ok(())
 }
 
@@ -148,7 +175,7 @@ async fn execute_step_sequence(
 
 /// Execute a single workflow step
 async fn execute_single_step(
-    ctx: &ExecutionContext,
+    ctx: &mut ExecutionContext,
     workflow_id: &str,
     step: &WorkflowStep,
 ) -> Result<()> {
@@ -157,9 +184,8 @@ async fn execute_single_step(
         if ctx.mode == ExecutionMode::DrillDown {
             let times = step.times.unwrap_or(1);
             for _ in 0..times {
-                // Simulate keyboard input by directly manipulating TUI status
-                // In DrillDown mode, we process keyboard events as they would happen in real TUI
-                simulate_key_input(key)?;
+                // Send keyboard input via IPC
+                simulate_key_input(ctx, key).await?;
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
         }
@@ -187,7 +213,7 @@ async fn execute_single_step(
             // In DrillDown mode, simulate typing the value
             if ctx.mode == ExecutionMode::DrillDown {
                 for ch in value.chars() {
-                    simulate_char_input(ch)?;
+                    simulate_char_input(ctx, ch).await?;
                     tokio::time::sleep(Duration::from_millis(20)).await;
                 }
             }
@@ -219,10 +245,25 @@ async fn execute_single_step(
         }
     }
 
-    // Handle screen verification - render to TestBackend and create snapshot
+    // Handle screen verification - render and create snapshot
     if step.verify.is_some() || step.verify_with_placeholder.is_some() {
-        // Render the TUI to a string
-        let screen_content = render_tui_to_string(120, 40)?;
+        // Render the TUI to a string based on execution mode
+        let screen_content = match ctx.mode {
+            ExecutionMode::ScreenCaptureOnly => {
+                // Use TestBackend directly
+                render_tui_to_string(120, 40)?
+            }
+            ExecutionMode::DrillDown => {
+                // Request screen from TUI process via IPC
+                if let Some(sender) = ctx.ipc_sender.as_mut() {
+                    let (content, _width, _height) =
+                        crate::renderer::render_tui_via_ipc(sender).await?;
+                    content
+                } else {
+                    anyhow::bail!("DrillDown mode requires IPC sender");
+                }
+            }
+        };
 
         // Determine expected text
         let expected_text = if let Some(template) = &step.verify_with_placeholder {
@@ -298,52 +339,40 @@ fn sanitize_snapshot_name(desc: &str) -> String {
         .collect()
 }
 
-/// Simulate keyboard input by processing it through TUI's input handler
+/// Simulate keyboard input by sending it via IPC
 ///
 /// This function is used in DrillDown mode to simulate keyboard events.
-/// Instead of using expectrl to send keys to a real process, we directly
-/// invoke the TUI's input handling logic with the simulated key event.
-///
-/// TODO: Implement proper keyboard event simulation via test IPC channel
-/// For now, this is a placeholder that logs the simulated key press.
-fn simulate_key_input(key: &str) -> Result<()> {
+/// It sends the keyboard event through the IPC channel to the TUI process.
+async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()> {
     log::debug!("🎹 Simulating key press: {}", key);
-    
-    // TODO: Send keyboard event through test IPC channel to TUI input handler
-    // This will require:
-    // 1. Creating a test-specific IPC channel
-    // 2. Having the TUI input handler listen to this channel in test mode
-    // 3. Processing the keyboard event through the normal input flow
-    
-    // For now, just log that we would process this key
-    match key {
-        "enter" => log::debug!("   → Would send Enter key"),
-        "escape" => log::debug!("   → Would send Escape key"),
-        "up" => log::debug!("   → Would send Up arrow"),
-        "down" => log::debug!("   → Would send Down arrow"),
-        "left" => log::debug!("   → Would send Left arrow"),
-        "right" => log::debug!("   → Would send Right arrow"),
-        "ctrl-a" => log::debug!("   → Would send Ctrl+A"),
-        "ctrl-s" => log::debug!("   → Would send Ctrl+S"),
-        "ctrl-pgup" => log::debug!("   → Would send Ctrl+PgUp"),
-        "backspace" => log::debug!("   → Would send Backspace"),
-        "tab" => log::debug!("   → Would send Tab"),
-        _ => log::warn!("   ⚠️  Unknown key: {}", key),
+
+    if let Some(sender) = ctx.ipc_sender.as_mut() {
+        sender
+            .send(E2EToTuiMessage::KeyPress {
+                key: key.to_string(),
+            })
+            .await?;
+        log::debug!("   ✅ Key sent via IPC: {}", key);
+    } else {
+        log::warn!("   ⚠️  No IPC sender available");
     }
-    
+
     Ok(())
 }
 
-/// Simulate character input (typing)
+/// Simulate character input (typing) by sending it via IPC
 ///
 /// This function is used in DrillDown mode to simulate typing characters.
-/// 
-/// TODO: Implement proper character input simulation via test IPC channel
-fn simulate_char_input(ch: char) -> Result<()> {
+async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()> {
     log::debug!("🎹 Simulating character input: '{}'", ch);
-    
-    // TODO: Send character input through test IPC channel to TUI input handler
-    
+
+    if let Some(sender) = ctx.ipc_sender.as_mut() {
+        sender.send(E2EToTuiMessage::CharInput { ch }).await?;
+        log::debug!("   ✅ Character sent via IPC: '{}'", ch);
+    } else {
+        log::warn!("   ⚠️  No IPC sender available");
+    }
+
     Ok(())
 }
 
