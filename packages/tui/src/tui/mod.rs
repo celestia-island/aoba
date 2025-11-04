@@ -546,6 +546,13 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
         return run_screen_capture_mode();
     }
 
+    // Check if debug-ci mode is enabled
+    let debug_ci_mode = matches.get_flag("debug-ci");
+    if debug_ci_mode {
+        log::info!("🔧 Debug CI mode enabled - starting with IPC");
+        return start_with_ipc(matches);
+    }
+
     // Terminal is initialized inside the rendering thread to avoid sharing
     // a Terminal instance across threads. The rendering loop will create
     // and restore the terminal on its own.
@@ -1262,6 +1269,231 @@ fn render_ui(frame: &mut Frame) -> Result<()> {
 /// spawning a real process.
 pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
     render_ui(frame)
+}
+
+/// Start TUI in IPC mode for E2E testing
+/// 
+/// In this mode:
+/// - TUI receives keyboard events via IPC from E2E tests
+/// - TUI renders to TestBackend and sends screen content via IPC
+/// - No real terminal is used
+fn start_with_ipc(_matches: &clap::ArgMatches) -> Result<()> {
+    use ratatui::backend::TestBackend;
+    use std::io::BufRead;
+    
+    log::info!("🔧 Starting TUI in IPC mode");
+    
+    // Initialize global status
+    let app = Arc::new(RwLock::new(Status::default()));
+    self::status::init_status(app.clone())?;
+    
+    // Get IPC channel ID from command line (passed as value to --debug-ci)
+    // For now, we'll use a default channel ID since the flag is a boolean
+    // TODO: Update to accept a channel ID value
+    let channel_id = format!("tui_e2e_{}", std::process::id());
+    log::info!("🔧 IPC Channel ID: {}", channel_id);
+    
+    // Create IPC receiver paths
+    let temp_dir = std::env::temp_dir();
+    let to_tui_path = temp_dir.join(format!("aoba_e2e_to_tui_{}.sock", channel_id));
+    let from_tui_path = temp_dir.join(format!("aoba_tui_to_e2e_{}.sock", channel_id));
+    
+    log::info!("🔧 IPC paths:");
+    log::info!("   To TUI: {}", to_tui_path.display());
+    log::info!("   From TUI: {}", from_tui_path.display());
+    
+    // Create TestBackend for rendering
+    let backend = TestBackend::new(120, 40);
+    let mut terminal = Terminal::new(backend)?;
+    
+    // Create core processing channels
+    let (core_tx, core_rx) = flume::unbounded::<CoreToUi>();
+    let (ui_tx, ui_rx) = flume::unbounded::<UiToCore>();
+    
+    // Start core thread
+    let core_handle = thread::spawn({
+        let core_tx = core_tx.clone();
+        let ui_rx = ui_rx.clone();
+        
+        move || run_core_thread(ui_rx, core_tx)
+    });
+    
+    // Send Ready message to E2E test
+    log::info!("📤 Sending Ready message to E2E test");
+    // TODO: Implement actual IPC send
+    
+    // Main IPC loop - receive messages from E2E test
+    log::info!("🔄 Starting IPC message loop");
+    loop {
+        // TODO: Implement actual IPC receive
+        // For now, this is a placeholder that will be completed
+        // when the E2E test IPC infrastructure is fully implemented
+        
+        // Placeholder: Read from stdin for testing
+        let stdin = std::io::stdin();
+        let mut handle = stdin.lock();
+        let mut line = String::new();
+        
+        match handle.read_line(&mut line) {
+            Ok(0) => {
+                log::info!("📥 IPC connection closed");
+                break;
+            }
+            Ok(_) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                
+                log::debug!("📥 Received IPC message: {}", trimmed);
+                
+                // Parse message as JSON
+                match serde_json::from_str::<serde_json::Value>(trimmed) {
+                    Ok(json) => {
+                        if let Some(msg_type) = json.get("type").and_then(|v| v.as_str()) {
+                            match msg_type {
+                                "key_press" => {
+                                    if let Some(key) = json.get("key").and_then(|v| v.as_str()) {
+                                        log::info!("⌨️  Processing key press: {}", key);
+                                        // Convert to crossterm KeyEvent and process
+                                        if let Ok(event) = parse_key_string(key) {
+                                            // Route to input handler
+                                            let bus = Bus::new(core_rx.clone(), ui_tx.clone());
+                                            if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                                                log::warn!("Failed to handle key event: {}", err);
+                                            }
+                                        }
+                                    }
+                                }
+                                "char_input" => {
+                                    if let Some(ch) = json.get("ch").and_then(|v| v.as_str()) {
+                                        if let Some(c) = ch.chars().next() {
+                                            log::info!("📝 Processing char input: {}", c);
+                                            let event = crossterm::event::Event::Key(
+                                                crossterm::event::KeyEvent::new(
+                                                    crossterm::event::KeyCode::Char(c),
+                                                    crossterm::event::KeyModifiers::NONE,
+                                                )
+                                            );
+                                            let bus = Bus::new(core_rx.clone(), ui_tx.clone());
+                                            if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                                                log::warn!("Failed to handle char input: {}", err);
+                                            }
+                                        }
+                                    }
+                                }
+                                "request_screen" => {
+                                    log::info!("🖼️  Rendering screen to TestBackend");
+                                    // Render to TestBackend
+                                    terminal.draw(|frame| {
+                                        if let Err(err) = render_ui(frame) {
+                                            log::error!("Render error: {}", err);
+                                        }
+                                    })?;
+                                    
+                                    // Get rendered content
+                                    let buffer = terminal.backend().buffer();
+                                    let area = buffer.area();
+                                    let width = area.width as usize;
+                                    let height = area.height as usize;
+                                    
+                                    let mut lines = Vec::new();
+                                    for row in 0..height {
+                                        let start = row * width;
+                                        let line: String = buffer.content()
+                                            .iter()
+                                            .skip(start)
+                                            .take(width)
+                                            .map(|cell| cell.symbol())
+                                            .collect();
+                                        lines.push(line);
+                                    }
+                                    let content = lines.join("\n");
+                                    
+                                    // Send response
+                                    let response = serde_json::json!({
+                                        "type": "screen_content",
+                                        "content": content,
+                                        "width": buffer.area().width,
+                                        "height": buffer.area().height,
+                                    });
+                                    
+                                    println!("{}", serde_json::to_string(&response)?);
+                                    log::info!("📤 Sent screen content");
+                                }
+                                "shutdown" => {
+                                    log::info!("🛑 Received shutdown message");
+                                    break;
+                                }
+                                _ => {
+                                    log::warn!("Unknown message type: {}", msg_type);
+                                }
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::warn!("Failed to parse IPC message: {}", err);
+                    }
+                }
+            }
+            Err(err) => {
+                log::error!("IPC read error: {}", err);
+                break;
+            }
+        }
+    }
+    
+    // Cleanup
+    log::info!("🧹 Cleaning up IPC mode");
+    ui_tx.send(UiToCore::Quit)?;
+    core_handle.join().map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;
+    
+    Ok(())
+}
+
+/// Parse a key string into a crossterm Event
+/// Supports format like "Enter", "Esc", "Up", "Down", "Left", "Right", "Char(a)", etc.
+fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+    
+    let (code, modifiers) = if let Some(rest) = key.strip_prefix("Ctrl+") {
+        match rest {
+            "c" => (KeyCode::Char('c'), KeyModifiers::CONTROL),
+            "s" => (KeyCode::Char('s'), KeyModifiers::CONTROL),
+            "a" => (KeyCode::Char('a'), KeyModifiers::CONTROL),
+            "Esc" => (KeyCode::Esc, KeyModifiers::CONTROL),
+            "PageUp" => (KeyCode::PageUp, KeyModifiers::CONTROL),
+            _ => return Err(anyhow!("Unsupported Ctrl+ combination: {}", rest)),
+        }
+    } else {
+        match key {
+            "Enter" => (KeyCode::Enter, KeyModifiers::NONE),
+            "Esc" => (KeyCode::Esc, KeyModifiers::NONE),
+            "Escape" => (KeyCode::Esc, KeyModifiers::NONE),
+            "Backspace" => (KeyCode::Backspace, KeyModifiers::NONE),
+            "Tab" => (KeyCode::Tab, KeyModifiers::NONE),
+            "Up" => (KeyCode::Up, KeyModifiers::NONE),
+            "Down" => (KeyCode::Down, KeyModifiers::NONE),
+            "Left" => (KeyCode::Left, KeyModifiers::NONE),
+            "Right" => (KeyCode::Right, KeyModifiers::NONE),
+            "PageUp" => (KeyCode::PageUp, KeyModifiers::NONE),
+            "PageDown" => (KeyCode::PageDown, KeyModifiers::NONE),
+            "Home" => (KeyCode::Home, KeyModifiers::NONE),
+            "End" => (KeyCode::End, KeyModifiers::NONE),
+            _ if key.starts_with("Char(") && key.ends_with(")") => {
+                let ch = key[5..key.len()-1].chars().next()
+                    .ok_or_else(|| anyhow!("Empty Char() specification"))?;
+                (KeyCode::Char(ch), KeyModifiers::NONE)
+            }
+            _ if key.len() == 1 => {
+                let ch = key.chars().next().unwrap();
+                (KeyCode::Char(ch), KeyModifiers::NONE)
+            }
+            _ => return Err(anyhow!("Unsupported key string: {}", key)),
+        }
+    };
+    
+    Ok(Event::Key(KeyEvent::new(code, modifiers)))
 }
 
 /// Run screen capture mode: render UI once and exit immediately
