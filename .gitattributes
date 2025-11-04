@@ -40,7 +40,6 @@ res/** linguist-vendored
 
 # Mark generated files
 res/about_cache.toml linguist-generated
-examples/tui_e2e/screenshots/** linguist-generated
 
 # Mark TUI E2E workflow files as vendored (test data)
 examples/tui_e2e_new/workflow/** linguist-vendored
