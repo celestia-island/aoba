@@ -291,16 +291,15 @@ async fn execute_single_step(
                     screen_content
                 );
             }
-            log::debug!("✅ Screen verified at line {}: '{}'", line_num, expected_text);
         } else if !screen_content.contains(&expected_text) {
             anyhow::bail!(
                 "Screen verification failed:\n  Expected text: '{}'\n  Not found in screen content:\n{}",
                 expected_text,
                 screen_content
             );
-        } else {
-            log::debug!("✅ Screen verified: '{}'", expected_text);
         }
+        
+        log::debug!("✅ Screen verified: '{}'", expected_text);
     }
 
     // Handle sleep
