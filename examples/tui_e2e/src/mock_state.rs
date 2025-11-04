@@ -3,19 +3,21 @@
 //! This module manages a mock TUI global state that can be manipulated
 //! and verified during screen-capture-only testing.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use once_cell::sync::Lazy;
-use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::{collections::HashMap, convert::TryFrom, sync::Mutex, time::Instant};
+use serde_json_path::JsonPath;
+use std::{convert::TryFrom, sync::Mutex, time::Instant};
 
-use aoba::tui::status::types::{
-    cursor::{ConfigPanelCursor, ModbusDashboardCursor},
-    modbus::{ModbusConnectionMode, ModbusRegisterItem, RegisterMode},
-    port::{PortConfig, PortData, PortState, PortStatusIndicator},
-    ui::InputMode,
+use aoba::tui::status::{
+    types::{
+        cursor::{ConfigPanelCursor, ModbusDashboardCursor},
+        modbus::{ModbusConnectionMode, ModbusRegisterItem, RegisterMode},
+        port::{PortConfig, PortData, PortState, PortStatusIndicator},
+        ui::InputMode,
+    },
+    {self, Page as TuiPage},
 };
-use aoba::tui::status::{self, Page as TuiPage};
 
 /// Global mock state storage
 static MOCK_STATE: Lazy<Mutex<Value>> = Lazy::new(|| {
@@ -61,51 +63,6 @@ pub fn init_mock_state() {
     log::debug!("🔧 Initialized mock state with default ports");
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct MockStateData {
-    ports: HashMap<String, MockPort>,
-    #[serde(default)]
-    port_order: Vec<String>,
-    #[serde(default = "default_page_name")]
-    page: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct MockPort {
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    enabled: bool,
-    #[serde(default = "default_port_state_name")]
-    state: String,
-    #[serde(default)]
-    modbus_masters: Vec<MockModbusStation>,
-    #[serde(default)]
-    modbus_slaves: Vec<MockModbusStation>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct MockModbusStation {
-    #[serde(default)]
-    station_id: u8,
-    #[serde(default)]
-    register_type: Option<String>,
-    #[serde(default)]
-    start_address: u16,
-    #[serde(default)]
-    register_count: usize,
-    #[serde(default)]
-    registers: Vec<Value>,
-}
-
-fn default_page_name() -> String {
-    "entry".to_string()
-}
-
-fn default_port_state_name() -> String {
-    "Free".to_string()
-}
-
 /// Synchronize the JSON mock state into the live TUI status tree so that
 /// screen-capture rendering reflects the expected UI content.
 pub fn sync_mock_state_to_tui_status() -> Result<()> {
@@ -114,32 +71,172 @@ pub fn sync_mock_state_to_tui_status() -> Result<()> {
         state.clone()
     };
 
-    let parsed: MockStateData = serde_json::from_value(snapshot)
-        .context("Failed to deserialize mock state for TUI synchronization")?;
+    apply_mock_state_to_tui_status(&snapshot)
+}
 
-    let mut port_order = if parsed.port_order.is_empty() {
-        let mut keys: Vec<String> = parsed.ports.keys().cloned().collect();
-        keys.sort();
-        keys
-    } else {
-        parsed.port_order.clone()
-    };
-
-    // Ensure the order only contains ports present in the map
-    port_order.retain(|name| parsed.ports.contains_key(name));
-
+fn apply_mock_state_to_tui_status(snapshot: &Value) -> Result<()> {
     status::write_status(|status| {
+        let root = snapshot
+            .as_object()
+            .ok_or_else(|| anyhow!("Mock state root must be an object"))?;
+
+        let ports_value = root
+            .get("ports")
+            .and_then(|value| value.as_object())
+            .ok_or_else(|| anyhow!("Mock state missing \"ports\" map"))?;
+
+        let mut port_order: Vec<String> = root
+            .get("port_order")
+            .and_then(|value| value.as_array())
+            .map(|array| {
+                array
+                    .iter()
+                    .filter_map(|value| value.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if port_order.is_empty() {
+            port_order = ports_value.keys().cloned().collect();
+            port_order.sort();
+        } else {
+            port_order.retain(|name| ports_value.contains_key(name));
+        }
+
         status.ports.order = port_order.clone();
         status.ports.map.clear();
 
-        for name in &status.ports.order {
-            if let Some(port) = parsed.ports.get(name) {
-                let data = convert_port(name, port)?;
-                status.ports.map.insert(name.clone(), data);
+        for port_name in &status.ports.order {
+            let port_object = ports_value
+                .get(port_name)
+                .and_then(|value| value.as_object())
+                .ok_or_else(|| anyhow!("Port '{}' is not an object", port_name))?;
+
+            let mut data = PortData::default();
+            data.port_name = port_object
+                .get("name")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.is_empty())
+                .unwrap_or(port_name)
+                .to_string();
+
+            data.state = parse_port_state(
+                port_object
+                    .get("state")
+                    .and_then(Value::as_str)
+                    .unwrap_or("Free"),
+            )?;
+
+            if port_object
+                .get("enabled")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+                && !matches!(data.state, PortState::OccupiedByThis)
+            {
+                data.state = PortState::OccupiedByThis;
             }
+
+            data.status_indicator = match data.state {
+                PortState::OccupiedByThis => PortStatusIndicator::Running,
+                _ => PortStatusIndicator::NotStarted,
+            };
+
+            let masters: &[Value] = port_object
+                .get("modbus_masters")
+                .and_then(Value::as_array)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+
+            let slaves: &[Value] = port_object
+                .get("modbus_slaves")
+                .and_then(Value::as_array)
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+
+            let (mode, station_nodes) = if !slaves.is_empty() && masters.is_empty() {
+                (ModbusConnectionMode::default_slave(), slaves)
+            } else {
+                (ModbusConnectionMode::default_master(), masters)
+            };
+
+            let mut stations = Vec::new();
+            for station in station_nodes {
+                let station_object = station
+                    .as_object()
+                    .ok_or_else(|| anyhow!("Station entry must be an object"))?;
+
+                let register_mode = parse_register_mode(
+                    station_object.get("register_type").and_then(Value::as_str),
+                )?;
+
+                let register_length =
+                    parse_u16(station_object.get("register_count").unwrap_or(&Value::Null))?;
+
+                let mut last_values = vec![0u16; register_length as usize];
+                if let Some(registers) = station_object.get("registers").and_then(Value::as_array) {
+                    for (index, raw) in registers.iter().enumerate() {
+                        if index >= last_values.len() {
+                            break;
+                        }
+                        last_values[index] = parse_value_to_u16(raw).with_context(|| {
+                            format!(
+                                "Failed to parse register value '{}' for station '{}'",
+                                index, port_name
+                            )
+                        })?;
+                    }
+                }
+
+                stations.push(ModbusRegisterItem {
+                    station_id: parse_u8(station_object.get("station_id").unwrap_or(&Value::Null))?,
+                    register_mode,
+                    register_address: parse_u16(
+                        station_object.get("start_address").unwrap_or(&Value::Null),
+                    )?,
+                    register_length,
+                    last_values,
+                    req_success: 0,
+                    req_total: 0,
+                    next_poll_at: Instant::now(),
+                    last_request_time: None,
+                    last_response_time: None,
+                    pending_requests: Vec::new(),
+                });
+            }
+
+            data.config = PortConfig::Modbus { mode, stations };
+
+            status.ports.map.insert(port_name.clone(), data);
         }
 
-        status.page = convert_page(&parsed.page);
+        status.page = match root
+            .get("page")
+            .and_then(Value::as_str)
+            .unwrap_or("entry")
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "config_panel" | "configpanel" => TuiPage::ConfigPanel {
+                selected_port: 0,
+                view_offset: 0,
+                cursor: ConfigPanelCursor::EnablePort,
+            },
+            "modbus_dashboard" | "modbusdashboard" => TuiPage::ModbusDashboard {
+                selected_port: 0,
+                view_offset: 0,
+                cursor: ModbusDashboardCursor::AddLine,
+            },
+            "log_panel" | "logpanel" => TuiPage::LogPanel {
+                selected_port: 0,
+                input_mode: InputMode::Ascii,
+                selected_item: None,
+            },
+            "about" => TuiPage::About { view_offset: 0 },
+            _ => TuiPage::Entry {
+                cursor: None,
+                view_offset: 0,
+            },
+        };
 
         Ok(())
     })?;
@@ -147,179 +244,41 @@ pub fn sync_mock_state_to_tui_status() -> Result<()> {
     Ok(())
 }
 
-fn convert_port(name: &str, port: &MockPort) -> Result<PortData> {
-    let mut data = PortData::default();
-    data.port_name = port
-        .name
-        .clone()
-        .filter(|n| !n.is_empty())
-        .unwrap_or_else(|| name.to_string());
-
-    data.state = parse_port_state(&port.state)?;
-
-    if port.enabled && !matches!(data.state, PortState::OccupiedByThis) {
-        data.state = PortState::OccupiedByThis;
-    }
-
-    data.status_indicator = match data.state {
-        PortState::OccupiedByThis => PortStatusIndicator::Running,
-        _ => PortStatusIndicator::NotStarted,
-    };
-
-    let (mode, stations_source) =
-        if !port.modbus_slaves.is_empty() && port.modbus_masters.is_empty() {
-            (ModbusConnectionMode::default_slave(), &port.modbus_slaves)
-        } else {
-            (ModbusConnectionMode::default_master(), &port.modbus_masters)
-        };
-
-    let mut stations = Vec::new();
-    for station in stations_source {
-        stations.push(convert_station(station)?);
-    }
-
-    data.config = PortConfig::Modbus { mode, stations };
-
-    Ok(data)
-}
-
-fn parse_port_state(state: &str) -> Result<PortState> {
-    match state {
-        "Free" => Ok(PortState::Free),
-        "OccupiedByThis" => Ok(PortState::OccupiedByThis),
-        "OccupiedByOther" => Ok(PortState::OccupiedByOther),
-        other => {
-            log::warn!("Unknown port state '{}', defaulting to Free", other);
-            Ok(PortState::Free)
-        }
-    }
-}
-
-fn convert_station(station: &MockModbusStation) -> Result<ModbusRegisterItem> {
-    let register_mode = parse_register_mode(station.register_type.as_deref())?;
-    let register_length =
-        u16::try_from(station.register_count).context("register_count exceeds u16 range")?;
-
-    let last_values = convert_register_values(station, register_length)?;
-
-    Ok(ModbusRegisterItem {
-        station_id: station.station_id,
-        register_mode,
-        register_address: station.start_address,
-        register_length,
-        last_values,
-        req_success: 0,
-        req_total: 0,
-        next_poll_at: Instant::now(),
-        last_request_time: None,
-        last_response_time: None,
-        pending_requests: Vec::new(),
-    })
-}
-
-fn parse_register_mode(value: Option<&str>) -> Result<RegisterMode> {
-    match value {
-        Some(name) => RegisterMode::try_from(name)
-            .or_else(|_| RegisterMode::try_from(name.to_ascii_lowercase().as_str()))
-            .or_else(|_| RegisterMode::try_from(name.to_ascii_uppercase().as_str()))
-            .or_else(|_| match name {
-                "coils" => Ok(RegisterMode::Coils),
-                "discrete_inputs" => Ok(RegisterMode::DiscreteInputs),
-                "holding" => Ok(RegisterMode::Holding),
-                "input" => Ok(RegisterMode::Input),
-                _ => Err(()),
-            })
-            .map_err(|_| anyhow::anyhow!("Unsupported register type: {}", name)),
-        None => Ok(RegisterMode::Coils),
-    }
-}
-
-fn convert_register_values(station: &MockModbusStation, register_length: u16) -> Result<Vec<u16>> {
-    let mut values = vec![0u16; register_length as usize];
-
-    for (idx, raw) in station.registers.iter().enumerate() {
-        if idx >= values.len() {
-            break;
-        }
-        values[idx] = parse_u16_value(raw)
-            .with_context(|| format!("Failed to parse register value at index {}", idx))?;
-    }
-
-    Ok(values)
-}
-
-fn parse_u16_value(value: &Value) -> Result<u16> {
-    match value {
-        Value::Number(num) => num
-            .as_u64()
-            .and_then(|n| u16::try_from(n).ok())
-            .ok_or_else(|| anyhow::anyhow!("Number out of u16 range")),
-        Value::String(s) => {
-            if let Some(stripped) = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")) {
-                u16::from_str_radix(stripped, 16)
-                    .map_err(|_| anyhow::anyhow!("Invalid hex value: {}", s))
-            } else {
-                u16::from_str_radix(s, 10)
-                    .map_err(|_| anyhow::anyhow!("Invalid decimal value: {}", s))
-            }
-        }
-        Value::Bool(b) => Ok(if *b { 1 } else { 0 }),
-        Value::Null => Ok(0),
-        other => Err(anyhow::anyhow!("Unsupported value type: {:?}", other)),
-    }
-}
-
-fn convert_page(page: &str) -> TuiPage {
-    match page.to_ascii_lowercase().as_str() {
-        "config_panel" | "configpanel" => TuiPage::ConfigPanel {
-            selected_port: 0,
-            view_offset: 0,
-            cursor: ConfigPanelCursor::EnablePort,
-        },
-        "modbus_dashboard" | "modbusdashboard" => TuiPage::ModbusDashboard {
-            selected_port: 0,
-            view_offset: 0,
-            cursor: ModbusDashboardCursor::AddLine,
-        },
-        "log_panel" | "logpanel" => TuiPage::LogPanel {
-            selected_port: 0,
-            input_mode: InputMode::Ascii,
-            selected_item: None,
-        },
-        "about" => TuiPage::About { view_offset: 0 },
-        _ => TuiPage::Entry {
-            cursor: None,
-            view_offset: 0,
-        },
-    }
-}
-
-/// Set a value in mock state using path notation
+/// Set a value in mock state using JSONPath-style notation.
 /// Examples:
 /// - "ports['/tmp/vcom1'].enabled" = true
 /// - "ports['/tmp/vcom1'].modbus_masters[0].registers[5]" = 42
 pub fn set_mock_state(path: &str, value: Value) -> Result<()> {
+    let json_path = normalize_json_path(path);
     let mut state = MOCK_STATE.lock().unwrap();
 
-    // Parse the path and navigate to the target
-    set_value_at_path(&mut state, path, value)
-        .context(format!("Failed to set mock state at path: {}", path))?;
+    ensure_path_exists(&mut state, &json_path)
+        .with_context(|| format!("Failed to ensure path '{}' exists", path))?;
 
-    log::debug!(
-        "🔧 Mock state updated: {} = {:?}",
-        path,
-        get_value_at_path(&state, path).ok()
-    );
+    apply_value_at_path(&mut state, &json_path, value.clone())
+        .with_context(|| format!("Failed to apply value at path '{}'", path))?;
+
+    log::debug!("🔧 Mock state updated: {} = {:?}", path, value);
     Ok(())
 }
 
-/// Get a value from mock state using path notation
+/// Get a value from mock state using JSONPath-style notation.
 pub fn get_mock_state(path: &str) -> Result<Value> {
+    let json_path = normalize_json_path(path);
     let state = MOCK_STATE.lock().unwrap();
-    get_value_at_path(&state, path).context(format!("Failed to get mock state at path: {}", path))
+
+    let parsed = JsonPath::parse(&json_path)
+        .with_context(|| format!("Invalid JSONPath expression: {}", json_path))?;
+
+    let node = parsed
+        .query(&*state)
+        .exactly_one()
+        .map_err(|err| anyhow!("Path '{}' must resolve to exactly one node: {err}", path))?;
+
+    Ok(node.clone())
 }
 
-/// Verify a value in mock state matches expected
+/// Verify a value in mock state matches expected value.
 pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
     let actual = get_mock_state(path)?;
 
@@ -336,13 +295,13 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
     Ok(())
 }
 
-/// Get the entire mock state for debugging
+/// Get the entire mock state for debugging.
 pub fn get_full_mock_state() -> Value {
     let state = MOCK_STATE.lock().unwrap();
     state.clone()
 }
 
-/// Save mock state to file (for debugging)
+/// Save mock state to file (for debugging).
 pub fn save_mock_state_to_file(path: &str) -> Result<()> {
     let state = get_full_mock_state();
     std::fs::write(path, serde_json::to_string_pretty(&state)?)?;
@@ -350,101 +309,110 @@ pub fn save_mock_state_to_file(path: &str) -> Result<()> {
     Ok(())
 }
 
-// Helper functions for path navigation
+fn apply_value_at_path(root: &mut Value, json_path: &str, value: Value) -> Result<()> {
+    let pointer = {
+        let parsed = JsonPath::parse(json_path)?;
+        let located = parsed
+            .query_located(&*root)
+            .exactly_one()
+            .map_err(|err| anyhow!("Path '{}' must match exactly one node: {err}", json_path))?;
+        located.location().to_json_pointer()
+    };
 
-fn set_value_at_path(root: &mut Value, path: &str, value: Value) -> Result<Value> {
-    let parts = parse_path(path)?;
-    let mut current = root;
-
-    // Navigate to the parent of the target
-    for (i, part) in parts.iter().enumerate() {
-        let next_part = parts.get(i + 1);
-        if i == parts.len() - 1 {
-            // Last part - set the value
-            match part {
-                PathPart::Key(key) => {
-                    if let Value::Object(map) = current {
-                        map.insert(key.clone(), value.clone());
-                    } else {
-                        anyhow::bail!("Cannot set key '{}' on non-object", key);
-                    }
-                }
-                PathPart::Index(idx) => {
-                    if let Value::Array(arr) = current {
-                        if *idx >= arr.len() {
-                            // Extend array if needed
-                            arr.resize(*idx + 1, Value::Null);
-                        }
-                        arr[*idx] = value.clone();
-                    } else {
-                        anyhow::bail!("Cannot set index {} on non-array", idx);
-                    }
-                }
-            }
-            return Ok(value);
-        }
-
-        // Navigate deeper
-        current = match part {
-            PathPart::Key(key) => {
-                if let Value::Object(map) = current {
-                    map.entry(key.clone())
-                        .or_insert_with(|| default_value_for_next(next_part))
-                } else {
-                    anyhow::bail!("Cannot navigate key '{}' on non-object", key);
-                }
-            }
-            PathPart::Index(idx) => {
-                if let Value::Array(arr) = current {
-                    if *idx >= arr.len() {
-                        arr.resize_with(*idx + 1, || default_value_for_next(next_part));
-                    }
-                    if arr[*idx].is_null() {
-                        arr[*idx] = default_value_for_next(next_part);
-                    }
-                    &mut arr[*idx]
-                } else {
-                    anyhow::bail!("Cannot navigate index {} on non-array", idx);
-                }
-            }
-        };
+    if let Some(target) = root.pointer_mut(&pointer) {
+        *target = value;
+        Ok(())
+    } else {
+        Err(anyhow!(
+            "Unable to resolve pointer '{}' derived from path '{}'",
+            pointer,
+            json_path
+        ))
     }
-
-    Ok(value)
 }
 
-fn get_value_at_path(root: &Value, path: &str) -> Result<Value> {
-    let parts = parse_path(path)?;
-    let mut current = root;
-
-    for part in &parts {
-        current = match part {
-            PathPart::Key(key) => {
-                if let Value::Object(map) = current {
-                    map.get(key)
-                        .ok_or_else(|| anyhow::anyhow!("Key '{}' not found", key))?
-                } else {
-                    anyhow::bail!("Cannot access key '{}' on non-object", key);
-                }
-            }
-            PathPart::Index(idx) => {
-                if let Value::Array(arr) = current {
-                    arr.get(*idx)
-                        .ok_or_else(|| anyhow::anyhow!("Index {} out of bounds", idx))?
-                } else {
-                    anyhow::bail!("Cannot access index {} on non-array", idx);
-                }
-            }
-        };
+fn ensure_path_exists(root: &mut Value, json_path: &str) -> Result<()> {
+    let parts = parse_path(json_path)?;
+    if parts.is_empty() {
+        return Ok(());
     }
 
-    Ok(current.clone())
+    let mut current = root;
+
+    for (index, part) in parts.iter().enumerate() {
+        let next_part = parts.get(index + 1);
+        let is_last = index == parts.len() - 1;
+
+        match part {
+            PathPart::Key(key) => {
+                if !current.is_object() {
+                    *current = Value::Object(Map::new());
+                }
+
+                let map = current.as_object_mut().expect("Value ensured as object");
+
+                if !map.contains_key(key) {
+                    let default = if is_last {
+                        Value::Null
+                    } else {
+                        default_value_for_next(next_part)
+                    };
+                    map.insert(key.clone(), default);
+                } else if !is_last {
+                    let entry = map.get_mut(key).expect("Entry exists after contains check");
+                    if entry.is_null() {
+                        *entry = default_value_for_next(next_part);
+                    }
+                }
+
+                current = map.get_mut(key).expect("Entry exists after insertion");
+            }
+            PathPart::Index(idx) => {
+                if !current.is_array() {
+                    *current = Value::Array(Vec::new());
+                }
+
+                let array = current.as_array_mut().expect("Value ensured as array");
+
+                let fill_value = default_value_for_next(next_part);
+                if array.len() <= *idx {
+                    array.resize_with(*idx + 1, || fill_value.clone());
+                }
+
+                if array[*idx].is_null() && !is_last {
+                    array[*idx] = default_value_for_next(next_part);
+                }
+
+                current = array
+                    .get_mut(*idx)
+                    .expect("Array index populated during ensure path");
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn normalize_json_path(path: &str) -> String {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return "$".to_string();
+    }
+
+    if trimmed.starts_with('$') {
+        trimmed.to_string()
+    } else if trimmed.starts_with('[') {
+        format!("${}", trimmed)
+    } else {
+        format!("$.{}", trimmed)
+    }
 }
 
 fn default_value_for_next(next_part: Option<&PathPart>) -> Value {
     match next_part {
         Some(PathPart::Index(_)) => Value::Array(Vec::new()),
-        _ => Value::Object(Map::new()),
+        Some(PathPart::Key(_)) => Value::Object(Map::new()),
+        None => Value::Null,
     }
 }
 
@@ -455,14 +423,24 @@ enum PathPart {
 }
 
 fn parse_path(path: &str) -> Result<Vec<PathPart>> {
+    let mut trimmed = path.trim();
+    if let Some(stripped) = trimmed.strip_prefix('$') {
+        trimmed = stripped;
+    }
+    if let Some(stripped) = trimmed.strip_prefix('.') {
+        trimmed = stripped;
+    }
+
     let mut parts = Vec::new();
     let mut current = String::new();
-    let mut in_brackets = false;
     let mut bracket_content = String::new();
+    let mut in_brackets = false;
+    let mut in_quotes = false;
+    let mut quote_char = '\0';
 
-    for ch in path.chars() {
+    for ch in trimmed.chars() {
         match ch {
-            '[' => {
+            '[' if !in_brackets => {
                 if !current.is_empty() {
                     parts.push(PathPart::Key(current.clone()));
                     current.clear();
@@ -470,27 +448,35 @@ fn parse_path(path: &str) -> Result<Vec<PathPart>> {
                 in_brackets = true;
                 bracket_content.clear();
             }
-            ']' => {
-                if in_brackets {
-                    // Try to parse as index first
-                    if let Ok(idx) = bracket_content.parse::<usize>() {
-                        parts.push(PathPart::Index(idx));
-                    } else {
-                        // Otherwise treat as string key (remove quotes if present)
-                        let key = bracket_content.trim_matches(|c| c == '\'' || c == '"');
-                        parts.push(PathPart::Key(key.to_string()));
-                    }
-                    in_brackets = false;
-                    bracket_content.clear();
+            ']' if in_brackets && !in_quotes => {
+                if bracket_content.is_empty() {
+                    anyhow::bail!("Empty bracket expression in path {}", path);
                 }
+
+                if let Ok(index) = bracket_content.parse::<usize>() {
+                    parts.push(PathPart::Index(index));
+                } else {
+                    let key = bracket_content.trim_matches(|c| c == '\'' || c == '"');
+                    parts.push(PathPart::Key(key.to_string()));
+                }
+
+                in_brackets = false;
+                bracket_content.clear();
             }
-            '.' => {
-                if !in_brackets && !current.is_empty() {
+            '.' if !in_brackets => {
+                if !current.is_empty() {
                     parts.push(PathPart::Key(current.clone()));
                     current.clear();
-                } else if in_brackets {
-                    bracket_content.push(ch);
                 }
+            }
+            '\'' | '"' if in_brackets => {
+                if !in_quotes {
+                    in_quotes = true;
+                    quote_char = ch;
+                } else if quote_char == ch {
+                    in_quotes = false;
+                }
+                bracket_content.push(ch);
             }
             _ => {
                 if in_brackets {
@@ -509,6 +495,88 @@ fn parse_path(path: &str) -> Result<Vec<PathPart>> {
     Ok(parts)
 }
 
+fn parse_port_state(state: &str) -> Result<PortState> {
+    match state {
+        "Free" => Ok(PortState::Free),
+        "OccupiedByThis" => Ok(PortState::OccupiedByThis),
+        "OccupiedByOther" => Ok(PortState::OccupiedByOther),
+        other => {
+            log::warn!("Unknown port state '{}' , defaulting to Free", other);
+            Ok(PortState::Free)
+        }
+    }
+}
+
+fn parse_register_mode(value: Option<&str>) -> Result<RegisterMode> {
+    match value {
+        Some(name) => RegisterMode::try_from(name)
+            .or_else(|_| RegisterMode::try_from(name.to_ascii_lowercase().as_str()))
+            .or_else(|_| RegisterMode::try_from(name.to_ascii_uppercase().as_str()))
+            .or_else(|_| match name {
+                "coils" => Ok(RegisterMode::Coils),
+                "discrete_inputs" => Ok(RegisterMode::DiscreteInputs),
+                "holding" => Ok(RegisterMode::Holding),
+                "input" => Ok(RegisterMode::Input),
+                _ => Err(()),
+            })
+            .map_err(|_| anyhow!("Unsupported register type: {}", name)),
+        None => Ok(RegisterMode::Coils),
+    }
+}
+
+fn parse_value_to_u16(value: &Value) -> Result<u16> {
+    match value {
+        Value::Number(num) => num
+            .as_u64()
+            .and_then(|number| u16::try_from(number).ok())
+            .ok_or_else(|| anyhow!("Number out of u16 range")),
+        Value::String(string) => {
+            if let Some(stripped) = string
+                .strip_prefix("0x")
+                .or_else(|| string.strip_prefix("0X"))
+            {
+                u16::from_str_radix(stripped, 16)
+                    .map_err(|_| anyhow!("Invalid hex value: {}", string))
+            } else {
+                string
+                    .parse::<u16>()
+                    .map_err(|_| anyhow!("Invalid decimal value: {}", string))
+            }
+        }
+        Value::Bool(flag) => Ok(if *flag { 1 } else { 0 }),
+        Value::Null => Ok(0),
+        other => Err(anyhow!("Unsupported value type: {:?}", other)),
+    }
+}
+
+fn parse_u16(value: &Value) -> Result<u16> {
+    match value {
+        Value::Number(num) => num
+            .as_u64()
+            .and_then(|number| u16::try_from(number).ok())
+            .ok_or_else(|| anyhow!("Value {:?} is not a valid u16", value)),
+        Value::String(string) => string
+            .parse::<u16>()
+            .map_err(|_| anyhow!("Value '{}' is not a valid u16", string)),
+        Value::Null => Ok(0),
+        other => Err(anyhow!("Value {:?} cannot be interpreted as u16", other)),
+    }
+}
+
+fn parse_u8(value: &Value) -> Result<u8> {
+    match value {
+        Value::Number(num) => num
+            .as_u64()
+            .and_then(|number| u8::try_from(number).ok())
+            .ok_or_else(|| anyhow!("Value {:?} is not a valid u8", value)),
+        Value::String(string) => string
+            .parse::<u8>()
+            .map_err(|_| anyhow!("Value '{}' is not a valid u8", string)),
+        Value::Null => Ok(0),
+        other => Err(anyhow!("Value {:?} cannot be interpreted as u8", other)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -516,10 +584,13 @@ mod tests {
     #[test]
     fn test_parse_path() {
         let parts = parse_path("ports['/tmp/vcom1'].enabled").unwrap();
-        assert_eq!(parts.len(), 2);
+        assert_eq!(parts.len(), 3);
 
         let parts = parse_path("ports['/tmp/vcom1'].modbus_masters[0].registers[5]").unwrap();
-        assert_eq!(parts.len(), 5);
+        assert_eq!(parts.len(), 6);
+
+        let parts = parse_path("$.ports['/tmp/vcom1'].enabled").unwrap();
+        assert_eq!(parts.len(), 3);
     }
 
     #[test]
