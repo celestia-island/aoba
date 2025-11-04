@@ -37,7 +37,7 @@ pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
     Ok(())
 }
 
-fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
+pub fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
     match event {
         crossterm::event::Event::Key(key) => {
             // Early catch for Ctrl + C at the top-level so the app can exit immediately.
