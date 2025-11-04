@@ -1456,8 +1456,7 @@ fn start_with_ipc(_matches: &clap::ArgMatches) -> Result<()> {
 fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
     
-    let (code, modifiers) = if key.starts_with("Ctrl+") {
-        let rest = &key[5..];
+    let (code, modifiers) = if let Some(rest) = key.strip_prefix("Ctrl+") {
         match rest {
             "c" => (KeyCode::Char('c'), KeyModifiers::CONTROL),
             "s" => (KeyCode::Char('s'), KeyModifiers::CONTROL),
