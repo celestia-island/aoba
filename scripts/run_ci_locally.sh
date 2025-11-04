@@ -44,6 +44,24 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+MODULE_TIMEOUT_SECS="${MODULE_TIMEOUT_SECS:-60}"
+USE_TIMEOUT=0
+
+if [[ -z "$MODULE_TIMEOUT_SECS" ]]; then
+    MODULE_TIMEOUT_SECS=0
+elif [[ "$MODULE_TIMEOUT_SECS" =~ ^[0-9]+$ ]]; then
+    if (( MODULE_TIMEOUT_SECS > 0 )); then
+        if ! command -v timeout >/dev/null 2>&1; then
+            echo -e "${RED}Error: timeout command not found but MODULE_TIMEOUT_SECS=${MODULE_TIMEOUT_SECS}${NC}"
+            exit 1
+        fi
+        USE_TIMEOUT=1
+    fi
+else
+    echo -e "${RED}Error: MODULE_TIMEOUT_SECS must be a non-negative integer (current: ${MODULE_TIMEOUT_SECS})${NC}"
+    exit 1
+fi
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -91,6 +109,11 @@ echo -e "  Workflow:      ${GREEN}${WORKFLOW}${NC}"
 echo -e "  Module:        ${GREEN}${MODULE:-all}${NC}"
 echo -e "  Output Dir:    ${GREEN}${OUTPUT_DIR}${NC}"
 echo -e "  Repo Root:     ${GREEN}${REPO_ROOT}${NC}"
+if [[ $USE_TIMEOUT -eq 1 ]]; then
+    echo -e "  Module Timeout:${GREEN}${MODULE_TIMEOUT_SECS}s${NC}"
+else
+    echo -e "  Module Timeout:${GREEN}disabled${NC}"
+fi
 echo ""
 
 # Define test modules
@@ -134,6 +157,11 @@ run_and_log_cmd() {
     local ps=(${PIPESTATUS[@]})
     local exit_code=${ps[0]:-1}
     set -e
+    if [[ $exit_code -eq 124 && $USE_TIMEOUT -eq 1 ]]; then
+        echo "Command timed out after ${MODULE_TIMEOUT_SECS}s and was terminated." | tee -a "$result_file"
+    elif [[ $exit_code -eq 137 && $USE_TIMEOUT -eq 1 ]]; then
+        echo "Command exceeded the timeout and was killed (exit ${exit_code})." | tee -a "$result_file"
+    fi
     return $exit_code
 }
 
@@ -185,6 +213,10 @@ run_workflow_tests() {
             local timestamp=$(date +%Y%m%d_%H%M%S)
             local result_file="${OUTPUT_DIR}/${workflow_type}_${module}_${timestamp}.log"
             local status_file="${OUTPUT_DIR}/${workflow_type}_${module}_${timestamp}.status"
+            local module_runner=""
+            if [[ $USE_TIMEOUT -eq 1 ]]; then
+                module_runner="timeout --foreground ${MODULE_TIMEOUT_SECS}s"
+            fi
 
             echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo -e "${YELLOW}Running (local):${NC} ${workflow_type} / ${module}"
@@ -202,15 +234,15 @@ run_workflow_tests() {
             local exit_code=0
             case "$workflow_type" in
                 tui-rendering)
-                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ./target/debug/tui_e2e --module \"$module\" --screen-capture-only"
+                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only"
                     exit_code=$?
                     ;;
                 tui-drilldown)
-                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ./target/debug/tui_e2e --module \"$module\""
+                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\""
                     exit_code=$?
                     ;;
                 cli)
-                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ./target/debug/cli_e2e --module \"$module\""
+                    run_and_log_cmd "$result_file" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\""
                     exit_code=$?
                     ;;
                 *)
