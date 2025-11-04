@@ -6,7 +6,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use crate::ipc::{IpcChannelId, IpcSender};
 use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
 };
@@ -16,6 +15,7 @@ use crate::placeholder::{
 use crate::renderer::render_tui_to_string;
 use crate::workflow::{Workflow, WorkflowStep};
 use aoba_ci_utils::E2EToTuiMessage;
+use aoba_ci_utils::{IpcChannelId, IpcSender};
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +24,7 @@ pub enum ExecutionMode {
     /// Uses TestBackend directly without TUI process
     ScreenCaptureOnly,
     /// Drill down - test real TUI with keyboard input via IPC
-    /// 
+    ///
     /// This mode spawns a real TUI process with `--debug-ci` flag and communicates
     /// via IPC channel, sending keyboard events and receiving rendered frames.
     DrillDown,
@@ -139,7 +139,10 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Re
         .spawn()
         .map_err(|e| anyhow::anyhow!("Failed to spawn TUI process: {}", e))?;
 
-    log::info!("✅ TUI process spawned with PID {}", child.id().unwrap_or(0));
+    log::info!(
+        "✅ TUI process spawned with PID {}",
+        child.id().unwrap_or(0)
+    );
 
     // Give TUI time to start and create IPC sockets
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -298,7 +301,7 @@ async fn execute_single_step(
                 screen_content
             );
         }
-        
+
         log::debug!("✅ Screen verified: '{}'", expected_text);
     }
 
@@ -346,4 +349,3 @@ async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()>
 
     Ok(())
 }
-
