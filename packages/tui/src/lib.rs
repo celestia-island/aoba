@@ -51,7 +51,7 @@ pub fn init_common() {
     i18n::init_i18n();
 }
 
-pub fn start_tui(matches: &ArgMatches) -> Result<()> {
-    tui::start(matches)?;
+pub async fn start_tui(matches: &ArgMatches) -> Result<()> {
+    tui::start(matches).await?;
     Ok(())
 }
