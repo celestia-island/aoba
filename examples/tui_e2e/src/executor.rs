@@ -98,7 +98,12 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
     if ctx.mode == ExecutionMode::DrillDown {
         if let Some(sender) = &mut ctx.ipc_sender {
             log::info!("🛑 Shutting down TUI process");
-            let _ = sender.send(crate::ipc::E2EToTuiMessage::Shutdown);
+            if let Err(err) = sender
+                .send(crate::ipc::E2EToTuiMessage::Shutdown)
+                .await
+            {
+                log::warn!("Failed to deliver shutdown message over IPC: {err}");
+            }
         }
     }
 
@@ -114,7 +119,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Re
     log::debug!("Generated IPC channel ID: {}", channel_id.0);
     
     // Create IPC sender
-    let sender = IpcSender::new(channel_id.clone())?;
+    let sender = IpcSender::new(channel_id.clone()).await?;
     ctx.ipc_sender = Some(sender);
     
     // TODO: Spawn TUI process with --debug-ci flag
