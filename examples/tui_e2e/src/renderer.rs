@@ -6,7 +6,7 @@
 use anyhow::Result;
 use ratatui::{backend::TestBackend, Terminal};
 
-use aoba_ci_utils::{E2EToTuiMessage, TuiToE2EMessage};
+use aoba_ci_utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};
 
 /// Render the TUI via IPC by requesting screen content from the TUI process
 ///
@@ -18,9 +18,7 @@ use aoba_ci_utils::{E2EToTuiMessage, TuiToE2EMessage};
 ///
 /// # Returns
 /// A tuple containing the screen content string, width, and height
-pub async fn render_tui_via_ipc(
-    sender: &mut crate::ipc::IpcSender,
-) -> Result<(String, u16, u16)> {
+pub async fn render_tui_via_ipc(sender: &mut IpcSender) -> Result<(String, u16, u16)> {
     // Request screen content from TUI
     sender.send(E2EToTuiMessage::RequestScreen).await?;
 
@@ -64,12 +62,12 @@ pub fn render_tui_to_string(width: u16, height: u16) -> Result<String> {
 
     // TODO: Implement mock state synchronization
     // For now, we render whatever is in the TUI global status
-    // 
+    //
     // To support workflows that require specific state:
     // 1. Parse mock_state JSON to TuiStatus structure
     // 2. Convert TuiStatus to internal Status representation
     // 3. Apply to global status via write_status()
-    // 
+    //
     // GitHub Issue: Track this as a separate enhancement if workflows require it
 
     // Create TestBackend

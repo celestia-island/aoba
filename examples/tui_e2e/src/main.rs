@@ -42,7 +42,6 @@
 //! See `workflow/single_station/master/coils.toml` for a complete example.
 
 mod executor;
-mod ipc;
 mod mock_state;
 mod parser;
 mod placeholder;
@@ -50,7 +49,9 @@ mod renderer;
 mod workflow;
 
 pub use executor::*;
-pub use ipc::*;
+// IPC types are imported directly from `aoba_ci_utils`; `ipc` module was removed.
+// If you need IPC types, use `use aoba_ci_utils::...` where required.
+// public use ipc::*;
 pub use mock_state::*;
 pub use parser::*;
 pub use placeholder::*;
