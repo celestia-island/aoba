@@ -45,6 +45,7 @@
 //! See `workflow/single_station/master/coils.toml` for a complete example.
 
 mod executor;
+mod ipc;
 mod mock_state;
 mod parser;
 mod placeholder;
@@ -52,6 +53,7 @@ mod renderer;
 mod workflow;
 
 pub use executor::*;
+pub use ipc::*;
 pub use mock_state::*;
 pub use parser::*;
 pub use placeholder::*;
@@ -174,14 +176,15 @@ async fn main() -> Result<()> {
     log::info!("📝 Description: {}", workflow.manifest.description);
 
     // Execute the workflow
-    let context = ExecutionContext {
+    let mut context = ExecutionContext {
         mode: exec_mode,
         port1: args.port1.clone(),
         port2: args.port2.clone(),
         debug: args.debug,
+        ipc_sender: None, // Will be initialized in DrillDown mode
     };
 
-    execute_workflow(&context, workflow).await?;
+    execute_workflow(&mut context, workflow).await?;
 
     log::info!("✅ Module '{}' completed successfully!", module);
     Ok(())

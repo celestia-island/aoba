@@ -2,6 +2,7 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
+use crate::ipc::{IpcChannelId, IpcSender};
 use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
 };
@@ -13,18 +14,19 @@ use crate::workflow::{Workflow, WorkflowStep};
 use anyhow::Result;
 use std::time::Duration;
 
-/// Path to snapshots directory relative to executor
+/// Path to snapshots directory relative to executor (for legacy insta support)
 const SNAPSHOT_PATH: &str = "../snapshots";
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionMode {
     /// Screen capture only - test rendering with mocked state
+    /// Uses TestBackend directly without TUI process
     ScreenCaptureOnly,
-    /// Drill down - test real TUI with keyboard input via TestBackend
+    /// Drill down - test real TUI with keyboard input via IPC
     /// 
-    /// This mode simulates keyboard input and renders using ratatui's TestBackend,
-    /// allowing for testing of interactive workflows without spawning real processes.
+    /// This mode spawns a real TUI process with `--debug-ci` flag and communicates
+    /// via IPC channel, sending keyboard events and receiving rendered frames.
     DrillDown,
 }
 
@@ -34,25 +36,30 @@ pub struct ExecutionContext {
     pub port1: String,
     pub port2: String,
     pub debug: bool,
+    pub ipc_sender: Option<IpcSender>,
 }
 
 /// Execute a complete workflow
-pub async fn execute_workflow(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
+pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -> Result<()> {
     log::info!("🚀 Starting workflow execution: {}", workflow.manifest.id);
     log::info!("   Mode: {:?}", ctx.mode);
 
     // Clear placeholders from previous runs
     clear_placeholders();
 
-    // Initialize mock state if in screen-capture mode
-    if ctx.mode == ExecutionMode::ScreenCaptureOnly {
-        init_mock_state();
-        log::info!("🔧 Initialized mock state for screen-capture testing");
+    // Initialize based on mode
+    match ctx.mode {
+        ExecutionMode::ScreenCaptureOnly => {
+            // Screen capture mode: use mock state and TestBackend directly
+            init_mock_state();
+            log::info!("🔧 Initialized mock state for screen-capture testing");
+        }
+        ExecutionMode::DrillDown => {
+            // DrillDown mode: spawn TUI process with IPC
+            log::info!("🚀 Starting TUI process with IPC communication");
+            spawn_tui_with_ipc(ctx, &workflow.manifest.id).await?;
+        }
     }
-
-    // Note: Both modes now use TestBackend for rendering
-    // DrillDown mode simulates keyboard input to test interactive workflows
-    // ScreenCaptureOnly mode manipulates state directly without keyboard simulation
 
     // Execute init_order steps
     log::info!("📋 Executing init_order steps...");
@@ -87,13 +94,40 @@ pub async fn execute_workflow(ctx: &ExecutionContext, workflow: &Workflow) -> Re
         save_mock_state_to_file("/tmp/tui_e2e_new_mock_state.json")?;
     }
 
+    // Cleanup: shutdown TUI process if in DrillDown mode
+    if ctx.mode == ExecutionMode::DrillDown {
+        if let Some(sender) = &mut ctx.ipc_sender {
+            log::info!("🛑 Shutting down TUI process");
+            let _ = sender.send(crate::ipc::E2EToTuiMessage::Shutdown);
+        }
+    }
+
     log::info!("✅ Workflow execution completed successfully");
+    Ok(())
+}
+
+/// Spawn TUI process with IPC communication
+async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Result<()> {
+    // Generate unique IPC channel ID
+    let channel_id = IpcChannelId(format!("{}_{}", workflow_id, std::process::id()));
+    
+    log::debug!("Generated IPC channel ID: {}", channel_id.0);
+    
+    // Create IPC sender
+    let sender = IpcSender::new(channel_id.clone())?;
+    ctx.ipc_sender = Some(sender);
+    
+    // TODO: Spawn TUI process with --debug-ci flag
+    // For now, this is a placeholder
+    log::info!("📝 TODO: Spawn TUI process with --debug-ci {}", channel_id.0);
+    log::info!("    Command would be: cargo run --package aoba -- --tui --debug-ci {}", channel_id.0);
+    
     Ok(())
 }
 
 /// Execute a sequence of workflow steps
 async fn execute_step_sequence(
-    ctx: &ExecutionContext,
+    ctx: &mut ExecutionContext,
     workflow_id: &str,
     steps: &[WorkflowStep],
 ) -> Result<()> {
