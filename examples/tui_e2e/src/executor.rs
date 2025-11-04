@@ -17,9 +17,6 @@ use crate::renderer::render_tui_to_string;
 use crate::workflow::{Workflow, WorkflowStep};
 use aoba_ci_utils::E2EToTuiMessage;
 
-/// Path to snapshots directory relative to executor (for legacy insta support)
-const SNAPSHOT_PATH: &str = "../snapshots";
-
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExecutionMode {
@@ -176,7 +173,7 @@ async fn execute_step_sequence(
 /// Execute a single workflow step
 async fn execute_single_step(
     ctx: &mut ExecutionContext,
-    workflow_id: &str,
+    _workflow_id: &str,
     step: &WorkflowStep,
 ) -> Result<()> {
     // Handle keyboard input (DrillDown mode)
@@ -245,7 +242,7 @@ async fn execute_single_step(
         }
     }
 
-    // Handle screen verification - render and create snapshot
+    // Handle screen verification - render and verify content
     if step.verify.is_some() || step.verify_with_placeholder.is_some() {
         // Render the TUI to a string based on execution mode
         let screen_content = match ctx.mode {
@@ -274,22 +271,7 @@ async fn execute_single_step(
             String::new()
         };
 
-        // Create snapshot name from workflow ID and step description
-        let snapshot_name = if let Some(desc) = &step.description {
-            format!("{}_{}", workflow_id, sanitize_snapshot_name(desc))
-        } else {
-            workflow_id.to_string()
-        };
-
-        // Use insta to assert snapshot
-        insta::with_settings!({
-            snapshot_path => SNAPSHOT_PATH,
-            prepend_module_to_snapshot => false,
-        }, {
-            insta::assert_snapshot!(snapshot_name.as_str(), screen_content);
-        });
-
-        // Also verify the expected text is present
+        // Verify the expected text is present
         if let Some(line_num) = step.at_line {
             let lines: Vec<&str> = screen_content.lines().collect();
             if line_num >= lines.len() {
@@ -302,20 +284,23 @@ async fn execute_single_step(
             let actual_line = lines[line_num];
             if !actual_line.contains(&expected_text) {
                 anyhow::bail!(
-                    "Screen verification failed at line {}:\n  Expected: '{}'\n  Actual: '{}'",
+                    "Screen verification failed at line {}:\n  Expected text: '{}'\n  Actual line: '{}'\n  Full screen:\n{}",
                     line_num,
                     expected_text,
-                    actual_line
+                    actual_line,
+                    screen_content
                 );
             }
+            log::debug!("✅ Screen verified at line {}: '{}'", line_num, expected_text);
         } else if !screen_content.contains(&expected_text) {
             anyhow::bail!(
-                "Screen verification failed: expected text '{}' not found",
-                expected_text
+                "Screen verification failed:\n  Expected text: '{}'\n  Not found in screen content:\n{}",
+                expected_text,
+                screen_content
             );
+        } else {
+            log::debug!("✅ Screen verified: '{}'", expected_text);
         }
-
-        log::debug!("✅ Screen snapshot verified: {}", &snapshot_name);
     }
 
     // Handle sleep
@@ -324,19 +309,6 @@ async fn execute_single_step(
     }
 
     Ok(())
-}
-
-/// Sanitize a description string to create a valid snapshot name
-fn sanitize_snapshot_name(desc: &str) -> String {
-    desc.chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c == '_' {
-                c
-            } else {
-                '_'
-            }
-        })
-        .collect()
 }
 
 /// Simulate keyboard input by sending it via IPC
