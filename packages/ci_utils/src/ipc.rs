@@ -48,14 +48,11 @@ impl IpcSender {
         log::debug!("IPC [{}] Send: {:?}", self.channel_id.0, message);
         let payload = serde_json::to_vec(&message)?;
 
-        timeout(
-            IO_TIMEOUT,
-            async {
-                self.to_tui_writer.write_all(&payload).await?;
-                self.to_tui_writer.write_all(b"\n").await?;
-                self.to_tui_writer.flush().await
-            },
-        )
+        timeout(IO_TIMEOUT, async {
+            self.to_tui_writer.write_all(&payload).await?;
+            self.to_tui_writer.write_all(b"\n").await?;
+            self.to_tui_writer.flush().await
+        })
         .await
         .map_err(|_| anyhow!("Timed out sending IPC message"))??;
 
@@ -79,9 +76,8 @@ impl IpcSender {
         }
 
         let trimmed = line.trim_end();
-        serde_json::from_str(trimmed).with_context(|| {
-            format!("Failed to deserialize IPC message from TUI: {}", trimmed)
-        })
+        serde_json::from_str(trimmed)
+            .with_context(|| format!("Failed to deserialize IPC message from TUI: {}", trimmed))
     }
 
     /// Send key press and wait for screen update
@@ -116,14 +112,18 @@ impl IpcReceiver {
         let from_tui_listener = UnixListener::bind(&from_tui_path)
             .with_context(|| format!("Failed to bind IPC socket: {}", from_tui_path.display()))?;
 
-        let (to_tui_stream, _) = to_tui_listener
-            .accept()
-            .await
-            .with_context(|| format!("Failed to accept IPC connection on {}", to_tui_path.display()))?;
-        let (from_tui_stream, _) = from_tui_listener
-            .accept()
-            .await
-            .with_context(|| format!("Failed to accept IPC connection on {}", from_tui_path.display()))?;
+        let (to_tui_stream, _) = to_tui_listener.accept().await.with_context(|| {
+            format!(
+                "Failed to accept IPC connection on {}",
+                to_tui_path.display()
+            )
+        })?;
+        let (from_tui_stream, _) = from_tui_listener.accept().await.with_context(|| {
+            format!(
+                "Failed to accept IPC connection on {}",
+                from_tui_path.display()
+            )
+        })?;
 
         let (to_tui_reader, _) = to_tui_stream.into_split();
         let (_, from_tui_writer) = from_tui_stream.into_split();
@@ -153,7 +153,10 @@ impl IpcReceiver {
 
         let trimmed = line.trim_end();
         serde_json::from_str(trimmed).with_context(|| {
-            format!("Failed to deserialize IPC message from E2E test: {}", trimmed)
+            format!(
+                "Failed to deserialize IPC message from E2E test: {}",
+                trimmed
+            )
         })
     }
 
@@ -162,14 +165,11 @@ impl IpcReceiver {
         log::debug!("IPC [{}] Send: {:?}", self.channel_id.0, message);
         let payload = serde_json::to_vec(&message)?;
 
-        timeout(
-            IO_TIMEOUT,
-            async {
-                self.from_tui_writer.write_all(&payload).await?;
-                self.from_tui_writer.write_all(b"\n").await?;
-                self.from_tui_writer.flush().await
-            },
-        )
+        timeout(IO_TIMEOUT, async {
+            self.from_tui_writer.write_all(&payload).await?;
+            self.from_tui_writer.write_all(b"\n").await?;
+            self.from_tui_writer.flush().await
+        })
         .await
         .map_err(|_| anyhow!("Timed out sending IPC message"))??;
 

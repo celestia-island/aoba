@@ -42,12 +42,12 @@ async fn main() -> Result<()> {
 
     // If TUI requested, run in this process so it inherits the terminal.
     if matches.get_flag("tui") {
-        start_tui(&matches)?;
+        start_tui(&matches).await?;
         return Ok(());
     }
 
     // Default: always start TUI mode
-    start_tui(&matches)?;
+    start_tui(&matches).await?;
 
     Ok(())
 }

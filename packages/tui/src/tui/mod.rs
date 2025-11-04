@@ -532,7 +532,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
     Ok(())
 }
 
-pub fn start(matches: &clap::ArgMatches) -> Result<()> {
+pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
 
     // Check if config cache should be disabled (--no-config-cache flag)
@@ -548,8 +548,11 @@ pub fn start(matches: &clap::ArgMatches) -> Result<()> {
 
     // Check if debug-ci mode is enabled
     if let Some(channel_id) = matches.get_one::<String>("debug-ci") {
-        log::info!("🔧 Debug CI mode enabled - starting with IPC: {}", channel_id);
-        return start_with_ipc(matches, channel_id);
+        log::info!(
+            "🔧 Debug CI mode enabled - starting with IPC: {}",
+            channel_id
+        );
+        return start_with_ipc(matches, channel_id).await;
     }
 
     // Terminal is initialized inside the rendering thread to avoid sharing
@@ -1271,15 +1274,18 @@ pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
 }
 
 /// Start TUI in IPC mode for E2E testing
-/// 
+///
 /// In this mode:
 /// - TUI receives keyboard events via IPC from E2E tests
 /// - TUI renders to TestBackend and sends screen content via IPC
 /// - No real terminal is used
-fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
+async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
     use ratatui::backend::TestBackend;
 
-    log::info!("🔧 Starting TUI in IPC mode with channel ID: {}", channel_id);
+    log::info!(
+        "🔧 Starting TUI in IPC mode with channel ID: {}",
+        channel_id
+    );
 
     // Initialize global status
     let app = Arc::new(RwLock::new(Status::default()));
@@ -1303,109 +1309,90 @@ fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
 
     // Create IPC receiver using ci_utils
     let ipc_channel_id = aoba_ci_utils::IpcChannelId(channel_id.to_string());
+    log::info!("🔌 Creating IPC receiver...");
+    let mut receiver = match aoba_ci_utils::IpcReceiver::new(ipc_channel_id.clone()).await {
+        Ok(r) => {
+            log::info!("✅ IPC receiver created successfully");
+            r
+        }
+        Err(e) => {
+            log::error!("❌ Failed to create IPC receiver: {}", e);
+            return Err(e);
+        }
+    };
 
-    // Run IPC loop in tokio runtime (blocking on current thread)
-    let runtime = tokio::runtime::Runtime::new()?;
-    runtime.block_on(async {
-        log::info!("🔌 Creating IPC receiver...");
-        let mut receiver = match aoba_ci_utils::IpcReceiver::new(ipc_channel_id.clone()).await {
-            Ok(r) => {
-                log::info!("✅ IPC receiver created successfully");
-                r
-            }
-            Err(e) => {
-                log::error!("❌ Failed to create IPC receiver: {}", e);
-                return Err(e);
-            }
-        };
-
-        // Send Ready message to E2E test
-        log::info!("📤 Sending Ready message to E2E test");
-        receiver
-            .send(aoba_ci_utils::TuiToE2EMessage::Ready)
-            .await?;
-
-        // Main IPC loop - receive messages from E2E test
-        log::info!("🔄 Starting IPC message loop");
-        loop {
-            match receiver.receive().await {
-                Ok(aoba_ci_utils::E2EToTuiMessage::KeyPress { key }) => {
-                    log::info!("⌨️  Processing key press: {}", key);
-                    // Convert to crossterm KeyEvent and process
-                    if let Ok(event) = parse_key_string(&key) {
-                        // Route to input handler
-                        let bus = Bus::new(core_rx.clone(), ui_tx.clone());
-                        if let Err(err) = crate::tui::input::handle_event(event, &bus) {
-                            log::warn!("Failed to handle key event: {}", err);
-                        }
-                    }
-                }
-                Ok(aoba_ci_utils::E2EToTuiMessage::CharInput { ch }) => {
-                    log::info!("📝 Processing char input: {}", ch);
-                    let event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
-                        crossterm::event::KeyCode::Char(ch),
-                        crossterm::event::KeyModifiers::NONE,
-                    ));
+    // Main IPC loop - receive messages from E2E test
+    log::info!("🔄 Starting IPC message loop");
+    loop {
+        match receiver.receive().await {
+            Ok(aoba_ci_utils::E2EToTuiMessage::KeyPress { key }) => {
+                log::info!("⌨️  Processing key press: {}", key);
+                if let Ok(event) = parse_key_string(&key) {
                     let bus = Bus::new(core_rx.clone(), ui_tx.clone());
                     if let Err(err) = crate::tui::input::handle_event(event, &bus) {
-                        log::warn!("Failed to handle char input: {}", err);
+                        log::warn!("Failed to handle key event: {}", err);
                     }
-                }
-                Ok(aoba_ci_utils::E2EToTuiMessage::RequestScreen) => {
-                    log::info!("🖼️  Rendering screen to TestBackend");
-                    // Render to TestBackend
-                    terminal
-                        .draw(|frame| {
-                            if let Err(err) = render_ui(frame) {
-                                log::error!("Render error: {}", err);
-                            }
-                        })
-                        .map_err(|e| anyhow::anyhow!("Failed to draw: {}", e))?;
-
-                    // Get rendered content
-                    let buffer = terminal.backend().buffer();
-                    let area = buffer.area();
-                    let width = area.width;
-                    let height = area.height;
-
-                    // Convert buffer to string
-                    let mut content = String::new();
-                    for y in 0..height {
-                        for x in 0..width {
-                            let cell = &buffer[(x, y)];
-                            content.push_str(cell.symbol());
-                        }
-                        if y < height - 1 {
-                            content.push('\n');
-                        }
-                    }
-
-                    // Send response
-                    let response = aoba_ci_utils::TuiToE2EMessage::ScreenContent {
-                        content,
-                        width,
-                        height,
-                    };
-
-                    if let Err(err) = receiver.send(response).await {
-                        log::error!("Failed to send screen content: {}", err);
-                    } else {
-                        log::info!("📤 Sent screen content");
-                    }
-                }
-                Ok(aoba_ci_utils::E2EToTuiMessage::Shutdown) => {
-                    log::info!("🛑 Received shutdown message");
-                    break;
-                }
-                Err(err) => {
-                    log::error!("IPC receive error: {}", err);
-                    break;
                 }
             }
-        }
+            Ok(aoba_ci_utils::E2EToTuiMessage::CharInput { ch }) => {
+                log::info!("📝 Processing char input: {}", ch);
+                let event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
+                    crossterm::event::KeyCode::Char(ch),
+                    crossterm::event::KeyModifiers::NONE,
+                ));
+                let bus = Bus::new(core_rx.clone(), ui_tx.clone());
+                if let Err(err) = crate::tui::input::handle_event(event, &bus) {
+                    log::warn!("Failed to handle char input: {}", err);
+                }
+            }
+            Ok(aoba_ci_utils::E2EToTuiMessage::RequestScreen) => {
+                log::info!("🖼️  Rendering screen to TestBackend");
+                terminal
+                    .draw(|frame| {
+                        if let Err(err) = render_ui(frame) {
+                            log::error!("Render error: {}", err);
+                        }
+                    })
+                    .map_err(|e| anyhow::anyhow!("Failed to draw: {}", e))?;
 
-        Ok::<(), anyhow::Error>(())
-    })?;
+                let buffer = terminal.backend().buffer();
+                let area = buffer.area();
+                let width = area.width;
+                let height = area.height;
+
+                let mut content = String::new();
+                for y in 0..height {
+                    for x in 0..width {
+                        let cell = &buffer[(x, y)];
+                        content.push_str(cell.symbol());
+                    }
+                    if y < height - 1 {
+                        content.push('\n');
+                    }
+                }
+
+                let response = aoba_ci_utils::TuiToE2EMessage::ScreenContent {
+                    content,
+                    width,
+                    height,
+                };
+
+                if let Err(err) = receiver.send(response).await {
+                    log::error!("Failed to send screen content: {}", err);
+                } else {
+                    log::info!("📤 Sent screen content");
+                }
+            }
+            Ok(aoba_ci_utils::E2EToTuiMessage::Shutdown) => {
+                log::info!("🛑 Received shutdown message");
+                break;
+            }
+            Err(err) => {
+                log::error!("IPC receive error: {}", err);
+                break;
+            }
+        }
+    }
 
     // Cleanup
     log::info!("🧹 Cleaning up IPC mode");
@@ -1421,7 +1408,7 @@ fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
 /// Supports format like "Enter", "Esc", "Up", "Down", "Left", "Right", "Char(a)", etc.
 fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
     use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
-    
+
     let (code, modifiers) = if let Some(rest) = key.strip_prefix("Ctrl+") {
         match rest {
             "c" => (KeyCode::Char('c'), KeyModifiers::CONTROL),
@@ -1447,7 +1434,9 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
             "Home" => (KeyCode::Home, KeyModifiers::NONE),
             "End" => (KeyCode::End, KeyModifiers::NONE),
             _ if key.starts_with("Char(") && key.ends_with(")") => {
-                let ch = key[5..key.len()-1].chars().next()
+                let ch = key[5..key.len() - 1]
+                    .chars()
+                    .next()
                     .ok_or_else(|| anyhow!("Empty Char() specification"))?;
                 (KeyCode::Char(ch), KeyModifiers::NONE)
             }
@@ -1458,7 +1447,7 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
             _ => return Err(anyhow!("Unsupported key string: {}", key)),
         }
     };
-    
+
     Ok(Event::Key(KeyEvent::new(code, modifiers)))
 }
 
