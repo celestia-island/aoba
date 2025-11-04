@@ -60,15 +60,9 @@ pub fn render_tui_to_string(width: u16, height: u16) -> Result<String> {
     // Note: If already initialized, this is a no-op due to init_status implementation
     ensure_status_initialized()?;
 
-    // TODO: Implement mock state synchronization
-    // For now, we render whatever is in the TUI global status
-    //
-    // To support workflows that require specific state:
-    // 1. Parse mock_state JSON to TuiStatus structure
-    // 2. Convert TuiStatus to internal Status representation
-    // 3. Apply to global status via write_status()
-    //
-    // GitHub Issue: Track this as a separate enhancement if workflows require it
+    // Synchronize mock JSON state into the live status tree so rendering reflects
+    // the workflow-driven expectations in screen-capture mode.
+    crate::mock_state::sync_mock_state_to_tui_status()?;
 
     // Create TestBackend
     let backend = TestBackend::new(width, height);
