@@ -1,9 +1,8 @@
-use anyhow::{anyhow, Result};
-
-use aoba_ci_utils::{
+use crate::utils::{
     run_binary_sync, should_run_vcom_tests_with_ports, vcom_matchers_with_ports, DEFAULT_PORT1,
     DEFAULT_PORT2,
 };
+use anyhow::{anyhow, Result};
 
 pub async fn test_cli_list_ports() -> Result<()> {
     let output = run_binary_sync(&["--list-ports"])?;

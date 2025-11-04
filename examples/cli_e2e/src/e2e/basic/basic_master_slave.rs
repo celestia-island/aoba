@@ -1,12 +1,12 @@
+use crate::utils::{
+    build_debug_bin, create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1,
+    DEFAULT_PORT2,
+};
 use anyhow::{anyhow, Result};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
     process::Stdio,
-};
-
-use aoba_ci_utils::{
-    create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 
 /// Test basic master-slave communication with virtual serial ports
@@ -77,7 +77,7 @@ pub async fn test_basic_master_slave_communication() -> Result<()> {
         ports.port2_name
     );
 
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = build_debug_bin("aoba")?;
     let client_output = std::process::Command::new(&binary)
         .args([
             "--slave-poll",

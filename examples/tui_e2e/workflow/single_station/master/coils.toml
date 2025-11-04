@@ -1,0 +1,612 @@
+# Single Station - Master Mode - Coils (01) Register Type
+# Test ID: tui_master_coils
+# Station: ID=1, Type=Coils, Address=0x0000, Length=10
+
+[manifest]
+id = "single_station_master_coils"
+description = "Single station Master mode with Coils registers"
+station_id = 1
+register_type = "Coils"
+start_address = 0x0000
+register_count = 10
+is_master = true
+
+# Execution order for initial setup
+init_order = [
+  "navigate_to_entry",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "create_station",
+  "configure_station_fields",
+  "edit_registers",
+  "save_configuration",
+  "verify_port_enabled"
+]
+
+# Execution order for repeated verification cycles
+recycle_order = [
+  "edit_registers",
+  "save_configuration",
+  "verify_mock_data"
+]
+
+# Step 1: Navigate to Entry page
+[[workflow.navigate_to_entry]]
+description = "Initial navigation to entry page"
+verify = "/tmp/vcom1"
+at_line = 2
+
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom2"
+at_line = 3
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected port to enter config panel"
+key = "enter"
+
+[[workflow.enter_config_panel]]
+verify = "Enable Port"
+at_line = 2
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "down"
+
+[[workflow.navigate_to_business_config]]
+verify = "Enter Business Configuration"
+at_line = 2
+
+[[workflow.navigate_to_business_config]]
+cursor_at_line = 2
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "enter"
+
+[[workflow.enter_modbus_panel]]
+verify = "ModBus Master/Slave Set"
+at_line = 0
+
+# Step 5: Create station
+[[workflow.create_station]]
+description = "Press Enter on 'Create Station' to create new station"
+key = "enter"
+
+[[workflow.create_station]]
+verify = "#1 - ID: 1"
+at_line = 0
+
+[[workflow.create_station]]
+verify = "Station ID"
+at_line = 2
+
+# Step 6, Row 1: Configure Station ID field
+[[workflow.configure_station_fields]]
+description = "Row 1 - Navigate to Station ID field"
+key = "down"
+times = 1
+
+[[workflow.configure_station_fields]]
+description = "Row 1 - Enter edit mode for Station ID"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 1 - Clear existing value"
+key = "ctrl-a"
+
+[[workflow.configure_station_fields]]
+description = "Row 1 - Delete cleared content"
+key = "backspace"
+
+[[workflow.configure_station_fields]]
+description = "Row 1 - Type station ID"
+input = "decimal"
+value = 1
+
+[[workflow.configure_station_fields]]
+description = "Row 1 - Confirm Station ID"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 1 - Wait for field to update"
+sleep_ms = 200
+
+# Step 6, Row 2: Configure Register Type field  
+[[workflow.configure_station_fields]]
+description = "Row 2 - Navigate to Register Type field"
+key = "down"
+times = 1
+
+[[workflow.configure_station_fields]]
+description = "Row 2 - Enter edit mode for Register Type"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 2 - Select Coils (already default, just confirm)"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 2 - Wait for field to update"
+sleep_ms = 200
+
+# Step 6, Row 3: Configure Start Address field
+[[workflow.configure_station_fields]]
+description = "Row 3 - Navigate to Start Address field"
+key = "down"
+times = 1
+
+[[workflow.configure_station_fields]]
+description = "Row 3 - Enter edit mode for Start Address"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 3 - Clear existing value"
+key = "ctrl-a"
+
+[[workflow.configure_station_fields]]
+description = "Row 3 - Delete cleared content"
+key = "backspace"
+
+[[workflow.configure_station_fields]]
+description = "Row 3 - Type start address"
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station_fields]]
+description = "Row 3 - Confirm Start Address"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 3 - Wait for field to update"
+sleep_ms = 200
+
+# Step 6, Row 4: Configure Register Count field
+[[workflow.configure_station_fields]]
+description = "Row 4 - Navigate to Register Count field"
+key = "down"
+times = 1
+
+[[workflow.configure_station_fields]]
+description = "Row 4 - Enter edit mode for Register Count"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 4 - Clear existing value"
+key = "ctrl-a"
+
+[[workflow.configure_station_fields]]
+description = "Row 4 - Delete cleared content"
+key = "backspace"
+
+[[workflow.configure_station_fields]]
+description = "Row 4 - Type register count"
+input = "decimal"
+value = 10
+
+[[workflow.configure_station_fields]]
+description = "Row 4 - Confirm Register Count"
+key = "enter"
+
+[[workflow.configure_station_fields]]
+description = "Row 4 - Wait for register grid to appear"
+sleep_ms = 1000
+
+# Step 7, Register 0: Edit first register (index 0)
+[[workflow.edit_registers]]
+description = "Register 0 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 0 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 10
+
+[[workflow.edit_registers]]
+description = "Register 0 - Store input value in placeholder"
+input = "decimal"
+index = 0
+
+[[workflow.edit_registers]]
+description = "Register 0 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#0}} <"
+at_line = 10
+
+[[workflow.edit_registers]]
+description = "Register 0 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 0 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value_with_placeholder = "{{#0}}"
+
+[[workflow.edit_registers]]
+description = "Register 0 - Verify display format"
+verify_with_placeholder = "{{0x#0}} ({{#0}})"
+at_line = 10
+
+[[workflow.edit_registers]]
+description = "Register 0 - Move to next register"
+key = "right"
+
+# Step 7, Register 1: Edit second register (index 1)
+[[workflow.edit_registers]]
+description = "Register 1 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 1 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 10
+
+[[workflow.edit_registers]]
+description = "Register 1 - Store input value in placeholder"
+input = "decimal"
+index = 1
+
+[[workflow.edit_registers]]
+description = "Register 1 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#1}} <"
+at_line = 10
+
+[[workflow.edit_registers]]
+description = "Register 1 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 1 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value_with_placeholder = "{{#1}}"
+
+[[workflow.edit_registers]]
+description = "Register 1 - Verify display format"
+verify_with_placeholder = "{{0x#1}} ({{#1}})"
+at_line = 10
+
+[[workflow.edit_registers]]
+description = "Register 1 - Move to next register"
+key = "right"
+
+# Step 7, Register 2: Edit third register (index 2)
+[[workflow.edit_registers]]
+description = "Register 2 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 2 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 2 - Store input value in placeholder"
+input = "decimal"
+index = 2
+
+[[workflow.edit_registers]]
+description = "Register 2 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#2}} <"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 2 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 2 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value_with_placeholder = "{{#2}}"
+
+[[workflow.edit_registers]]
+description = "Register 2 - Verify display format"
+verify_with_placeholder = "{{0x#2}} ({{#2}})"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 2 - Move to next register"
+key = "right"
+
+# Step 7, Register 3: Edit fourth register (index 3)
+[[workflow.edit_registers]]
+description = "Register 3 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 3 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 3 - Store input value in placeholder"
+input = "decimal"
+index = 3
+
+[[workflow.edit_registers]]
+description = "Register 3 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#3}} <"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 3 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 3 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value_with_placeholder = "{{#3}}"
+
+[[workflow.edit_registers]]
+description = "Register 3 - Verify display format"
+verify_with_placeholder = "{{0x#3}} ({{#3}})"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 3 - Move to next register"
+key = "right"
+
+# Step 7, Register 4: Edit fifth register (index 4)
+[[workflow.edit_registers]]
+description = "Register 4 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 4 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 4 - Store input value in placeholder"
+input = "decimal"
+index = 4
+
+[[workflow.edit_registers]]
+description = "Register 4 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#4}} <"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 4 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 4 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value_with_placeholder = "{{#4}}"
+
+[[workflow.edit_registers]]
+description = "Register 4 - Verify display format"
+verify_with_placeholder = "{{0x#4}} ({{#4}})"
+at_line = 11
+
+[[workflow.edit_registers]]
+description = "Register 4 - Move to next register"
+key = "right"
+
+# Step 7, Register 5: Edit sixth register (index 5)
+[[workflow.edit_registers]]
+description = "Register 5 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 5 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 5 - Store input value in placeholder"
+input = "decimal"
+index = 5
+
+[[workflow.edit_registers]]
+description = "Register 5 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#5}} <"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 5 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 5 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value_with_placeholder = "{{#5}}"
+
+[[workflow.edit_registers]]
+description = "Register 5 - Verify display format"
+verify_with_placeholder = "{{0x#5}} ({{#5}})"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 5 - Move to next register"
+key = "right"
+
+# Step 7, Register 6: Edit seventh register (index 6)
+[[workflow.edit_registers]]
+description = "Register 6 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 6 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 6 - Store input value in placeholder"
+input = "decimal"
+index = 6
+
+[[workflow.edit_registers]]
+description = "Register 6 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#6}} <"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 6 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 6 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value_with_placeholder = "{{#6}}"
+
+[[workflow.edit_registers]]
+description = "Register 6 - Verify display format"
+verify_with_placeholder = "{{0x#6}} ({{#6}})"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 6 - Move to next register"
+key = "right"
+
+# Step 7, Register 7: Edit eighth register (index 7)
+[[workflow.edit_registers]]
+description = "Register 7 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 7 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 7 - Store input value in placeholder"
+input = "decimal"
+index = 7
+
+[[workflow.edit_registers]]
+description = "Register 7 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#7}} <"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 7 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 7 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value_with_placeholder = "{{#7}}"
+
+[[workflow.edit_registers]]
+description = "Register 7 - Verify display format"
+verify_with_placeholder = "{{0x#7}} ({{#7}})"
+at_line = 12
+
+[[workflow.edit_registers]]
+description = "Register 7 - Move to next register"
+key = "right"
+
+# Step 7, Register 8: Edit ninth register (index 8)
+[[workflow.edit_registers]]
+description = "Register 8 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 8 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 13
+
+[[workflow.edit_registers]]
+description = "Register 8 - Store input value in placeholder"
+input = "decimal"
+index = 8
+
+[[workflow.edit_registers]]
+description = "Register 8 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#8}} <"
+at_line = 13
+
+[[workflow.edit_registers]]
+description = "Register 8 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 8 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value_with_placeholder = "{{#8}}"
+
+[[workflow.edit_registers]]
+description = "Register 8 - Verify display format"
+verify_with_placeholder = "{{0x#8}} ({{#8}})"
+at_line = 13
+
+[[workflow.edit_registers]]
+description = "Register 8 - Move to next register"
+key = "right"
+
+# Step 7, Register 9: Edit tenth register (index 9)
+[[workflow.edit_registers]]
+description = "Register 9 - Enter edit mode"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 9 - Verify edit cursor appears"
+verify = "> _ <"
+at_line = 13
+
+[[workflow.edit_registers]]
+description = "Register 9 - Store input value in placeholder"
+input = "decimal"
+index = 9
+
+[[workflow.edit_registers]]
+description = "Register 9 - Verify placeholder value appears"
+verify_with_placeholder = "> {{#9}} <"
+at_line = 13
+
+[[workflow.edit_registers]]
+description = "Register 9 - Confirm edit"
+key = "enter"
+
+[[workflow.edit_registers]]
+description = "Register 9 - Update mock state"
+mock_path = "ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value_with_placeholder = "{{#9}}"
+
+[[workflow.edit_registers]]
+description = "Register 9 - Verify display format"
+verify_with_placeholder = "{{0x#9}} ({{#9}})"
+at_line = 13
+
+[[workflow.edit_registers]]
+description = "Register 9 - Return to top of panel"
+key = "ctrl-pgup"
+
+# Step 8: Save configuration
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "ctrl-s"
+
+[[workflow.save_configuration]]
+description = "Wait for port to enable and stabilize"
+sleep_ms = 5000
+
+[[workflow.save_configuration]]
+description = "Verify Running status indicator"
+verify = "Running ●"
+at_line = 0
+
+# Step 9: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check port is enabled in status"
+mock_verify_path = "ports['/tmp/vcom1'].enabled"
+mock_verify_value = true
+
+[[workflow.verify_port_enabled]]
+description = "Check port state is Running"
+mock_verify_path = "ports['/tmp/vcom1'].state"
+mock_verify_value = "OccupiedByThis"
+
+# Step 10: Verify mock data (used in recycle)
+[[workflow.verify_mock_data]]
+description = "Verify all register values in mock state"
+mock_verify_path = "ports['/tmp/vcom1'].modbus_masters[0].register_count"
+mock_verify_value = 10
+
+[[workflow.verify_mock_data]]
+description = "Verify station configuration"
+mock_verify_path = "ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_verify_value = 1

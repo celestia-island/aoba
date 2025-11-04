@@ -4,7 +4,9 @@ use aoba::cli::config::{
     CommunicationMethod, CommunicationMode, CommunicationParams, Config, ModbusRegister,
     PersistenceMode, RegisterType,
 };
-use aoba_ci_utils::terminal::run_binary_sync;
+use crate::utils::{run_binary_sync};
+
+
 
 /// Test configuration mode with multiple scenarios
 pub async fn test_config_mode() -> Result<()> {

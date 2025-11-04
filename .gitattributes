@@ -42,6 +42,9 @@ res/** linguist-vendored
 res/about_cache.toml linguist-generated
 examples/tui_e2e/screenshots/** linguist-generated
 
+# Mark TUI E2E workflow files as vendored (test data)
+examples/tui_e2e_new/workflow/** linguist-vendored
+
 # Mark CI/CD and tooling files as vendored
 .github/** linguist-vendored
 .cargo/** linguist-vendored
