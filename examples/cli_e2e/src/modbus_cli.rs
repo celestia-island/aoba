@@ -1,3 +1,4 @@
+use crate::utils::{build_debug_bin, sleep_1s};
 use anyhow::{anyhow, Result};
 use std::{
     fs::File,
@@ -5,14 +6,12 @@ use std::{
     process::{Command, Stdio},
 };
 
-use aoba_ci_utils::sleep_1s;
-
 /// Test slave listen temporary mode (single response)
 pub async fn test_slave_listen_temp() -> Result<()> {
     log::info!("🧪 Testing slave listen temporary mode...");
 
     // Get the binary path
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = build_debug_bin("aoba")?;
 
     // This test requires actual serial port hardware or virtual serial ports
     // For now, we'll just verify the command line interface works
@@ -54,7 +53,7 @@ pub async fn test_slave_listen_temp() -> Result<()> {
 pub async fn test_slave_listen_persist() -> Result<()> {
     log::info!("🧪 Testing slave listen persistent mode...");
 
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = build_debug_bin("aoba")?;
 
     let output = Command::new(&binary)
         .args([
@@ -95,7 +94,7 @@ pub async fn test_slave_listen_persist() -> Result<()> {
 pub async fn test_master_provide_temp() -> Result<()> {
     log::info!("🧪 Testing master provide temporary mode...");
 
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = build_debug_bin("aoba")?;
 
     // Create a temporary file with test data
     let temp_dir = std::env::temp_dir();
@@ -148,7 +147,7 @@ pub async fn test_master_provide_temp() -> Result<()> {
 pub async fn test_master_provide_persist() -> Result<()> {
     log::info!("🧪 Testing master provide persistent mode...");
 
-    let binary = aoba_ci_utils::build_debug_bin("aoba")?;
+    let binary = build_debug_bin("aoba")?;
 
     // Create a temporary file with multiple lines of test data
     let temp_dir = std::env::temp_dir();

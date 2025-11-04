@@ -17,8 +17,8 @@ chrono = { workspace = true, features = ["serde", "alloc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 expectrl.workspace = true
 
-[dependencies.aoba_ci_utils]
-path = "../../packages/ci_utils"
+[target.'cfg(windows)'.dependencies]
+serialport.workspace = true
 
 [dependencies.aoba]
 path = "../../packages/tui"
