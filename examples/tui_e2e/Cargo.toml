@@ -19,7 +19,6 @@ chrono.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "io-util", "process"] }
 ratatui.workspace = true
 parking_lot.workspace = true
-insta = { version = "^1.40", features = ["yaml", "redactions"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "^0.28", default-features = false, features = ["fs"] }

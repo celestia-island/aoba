@@ -19,7 +19,3 @@ aoba_tui_config.json
 
 # CI local test results
 ci-results/
-
-# insta snapshot review files
-*.snap.new
-.insta.pending-snapshots.json

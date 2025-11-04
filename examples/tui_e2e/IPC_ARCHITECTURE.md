@@ -201,12 +201,14 @@ TODO:
 
 TODO:
 - [ ] Add `render_tui_via_ipc` function for DrillDown mode
-- [ ] Keep `render_tui_to_string` for ScreenCapture mode
+- [x] Keep `render_tui_to_string` for ScreenCapture mode
 
 ### 📦 Dependencies
 
+Completed:
+- ✅ Removed `insta` dependency (moved to TOML verification)
+
 TODO:
-- [ ] Remove `insta` dependency (move to TOML verification)
 - [ ] Confirm `tokio` features sufficient
 - [ ] May need `tokio-util` for framing
 
@@ -253,9 +255,10 @@ TODO:
    - Test workflows
 
 5. **Phase 5**: Cleanup
-   - Remove `insta` dependency
-   - Remove `expectrl` completely
-   - Update documentation
+   - ✅ Remove `insta` dependency
+   - ✅ Remove snapshot-based verification
+   - ✅ Update documentation
+   - [ ] Remove `expectrl` completely (if not used elsewhere)
 
 ## Benefits
 
