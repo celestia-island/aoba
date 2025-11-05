@@ -7,7 +7,7 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::{UnixListener, UnixStream};
@@ -72,7 +72,7 @@ impl IpcSender {
             .map_err(|_| anyhow!("Timed out waiting for IPC message"))??;
 
         if bytes_read == 0 {
-            anyhow::bail!("IPC connection closed by TUI");
+            bail!("IPC connection closed by TUI");
         }
 
         let trimmed = line.trim_end();
@@ -87,7 +87,7 @@ impl IpcSender {
 
         match self.receive().await? {
             TuiToE2EMessage::ScreenContent { content, .. } => Ok(content),
-            msg => anyhow::bail!("Unexpected message: {:?}", msg),
+            msg => bail!("Unexpected message: {:?}", msg),
         }
     }
 }
@@ -148,7 +148,7 @@ impl IpcReceiver {
             .map_err(|_| anyhow!("Timed out waiting for IPC message"))??;
 
         if bytes_read == 0 {
-            anyhow::bail!("IPC connection closed by E2E test");
+            bail!("IPC connection closed by E2E test");
         }
 
         let trimmed = line.trim_end();

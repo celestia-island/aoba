@@ -3,7 +3,7 @@
 //! This module provides utilities to render the TUI application to a `TestBackend`
 //! for snapshot testing, without needing to spawn a real process.
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ratatui::{backend::TestBackend, Terminal};
 
 use aoba_ci_utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};
@@ -30,9 +30,9 @@ pub async fn render_tui_via_ipc(sender: &mut IpcSender) -> Result<(String, u16, 
             height,
         } => Ok((content, width, height)),
         TuiToE2EMessage::Error { message } => {
-            anyhow::bail!("TUI returned error: {}", message)
+            bail!("TUI returned error: {}", message)
         }
-        other => anyhow::bail!("Unexpected response from TUI: {:?}", other),
+        other => bail!("Unexpected response from TUI: {:?}", other),
     }
 }
 
