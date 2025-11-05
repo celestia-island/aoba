@@ -1,17 +1,17 @@
-# Single Station - Slave Mode - Coils (01) Register Type
-# Test ID: tui_slave_coils
-# Station: ID=1, Type=Coils, Address=0x0000, Length=10
+# Single Station - Slave Mode - Discrete Inputs (02) Register Type
+# Test ID: tui_slave_discrete_inputs
+# Station: ID=1, Type=DiscreteInputs, Address=0x0000, Length=10
 #
-# Test Data (3 Rounds for Boolean Coils):
+# Test Data (3 Rounds for Boolean Discrete Inputs):
 # Round 1 - All ON: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
 # Round 2 - Alternating ON/OFF: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
 # Round 3 - Two ON, One OFF: [1, 1, 0, 1, 1, 0, 1, 1, 0, 1]
 
 [manifest]
-id = "single_station_slave_coils"
-description = "Single station Slave mode with Coils registers"
+id = "single_station_slave_discrete_inputs"
+description = "Single station Slave mode with Discrete Inputs registers"
 station_id = 1
-register_type = "Coils"
+register_type = "DiscreteInputs"
 start_address = 0x0000
 register_count = 10
 is_master = false
@@ -105,19 +105,6 @@ at_line = 4
 description = "Press Enter to enter Modbus dashboard"
 key = "Enter"
 
-[[workflow.enter_modbus_panel]]
-description = "Switch mock state to Modbus dashboard"
-mock_path = "$.page"
-mock_set_value = { type = "modbus_dashboard" }
-
-[[workflow.enter_modbus_panel]]
-description = "Reset Modbus cursor to AddLine"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "AddLine" }
-
-[[workflow.enter_modbus_panel]]
-verify = "ModBus Master/Slave Set"
-at_line = 0
 
 # Step 4.5: Switch to Slave Mode
 [[workflow.switch_to_slave_mode]]
@@ -141,17 +128,99 @@ key = "Enter"
 description = "Update connection mode in mock state"
 mock_path = "$.page_state.modbus_dashboard.connection_mode"
 mock_set_value = "slave"
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
 
+
+# Step 4.5: Switch to Slave Mode
+[[workflow.switch_to_slave_mode]]
+description = "Navigate to Connection Mode field"
+key = "Down"
+times = 1
+
+[[workflow.switch_to_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Switch from Master to Slave"
+key = "Left"
+
+[[workflow.switch_to_slave_mode]]
+description = "Confirm Slave mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Update connection mode in mock state"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "slave"
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+
+# Step 4.5: Switch to Slave Mode
+[[workflow.switch_to_slave_mode]]
+description = "Navigate to Connection Mode field"
+key = "Down"
+times = 1
+
+[[workflow.switch_to_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Switch from Master to Slave"
+key = "Left"
+
+[[workflow.switch_to_slave_mode]]
+description = "Confirm Slave mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Update connection mode in mock state"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "slave"
+[[workflow.enter_modbus_panel]]
+verify = "ModBus Master/Slave Set"
+at_line = 0
+
+
+# Step 4.5: Switch to Slave Mode
+[[workflow.switch_to_slave_mode]]
+description = "Navigate to Connection Mode field"
+key = "Down"
+times = 1
+
+[[workflow.switch_to_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Switch from Master to Slave"
+key = "Left"
+
+[[workflow.switch_to_slave_mode]]
+description = "Confirm Slave mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Update connection mode in mock state"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "slave"
 # Step 5: Create station
 [[workflow.create_station]]
 description = "Press Enter on 'Create Station' to create new station"
 key = "Enter"
 
 [[workflow.create_station]]
-description = "Initialize slave station structure"
+description = "Initialize master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "DiscreteInputs", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
 [[workflow.create_station]]
@@ -164,9 +233,13 @@ verify = "#1 - ID: 1"
 at_line = 5
 
 # Step 6: Configure Station Fields
-# After creating station, cursor is on StationId automatically
 [[workflow.configure_station_fields]]
-description = "Highlight Station ID field (already there after creation)"
+description = "Navigate to Station ID field"
+key = "Down"
+times = 1
+
+[[workflow.configure_station_fields]]
+description = "Highlight Station ID field"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "StationId", station_index = 0 }
 
@@ -196,31 +269,19 @@ description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
 mock_set_value = 1
 
-# Navigate to Register Type using absolute positioning
 [[workflow.configure_station_fields]]
-description = "Return to top with Ctrl+PageUp"
-key = "Ctrl+PageUp"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Move to Register Type field (StationId -> RegisterType)"
+description = "Navigate to Register Type field"
 key = "Down"
+times = 1
 
 [[workflow.configure_station_fields]]
 description = "Enter edit mode for Register Type"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Cycle to Coils register type (Holding->DiscreteInputs->Coils)"
+description = "Cycle to DiscreteInputs register type"
 key = "Char(h)"
-times = 2
+times = 1
 
 [[workflow.configure_station_fields]]
 description = "Confirm Register Type"
@@ -229,28 +290,12 @@ key = "Enter"
 [[workflow.configure_station_fields]]
 description = "Update Register Type in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_type"
-mock_set_value = "Coils"
-
-# Navigate to Start Address using absolute positioning
-[[workflow.configure_station_fields]]
-description = "Return to top with Ctrl+PageUp"
-key = "Ctrl+PageUp"
+mock_set_value = "DiscreteInputs"
 
 [[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Move to Register Type field"
+description = "Navigate to Start Address field"
 key = "Down"
-
-[[workflow.configure_station_fields]]
-description = "Move to Start Address field"
-key = "Down"
+times = 1
 
 [[workflow.configure_station_fields]]
 description = "Enter edit mode for Start Address"
@@ -278,30 +323,10 @@ description = "Update Start Address in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].start_address"
 mock_set_value = 0
 
-# Navigate to Register Count using absolute positioning
 [[workflow.configure_station_fields]]
-description = "Return to top with Ctrl+PageUp"
-key = "Ctrl+PageUp"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Move to Register Type field"
+description = "Navigate to Register Count field"
 key = "Down"
-
-[[workflow.configure_station_fields]]
-description = "Move to Start Address field"
-key = "Down"
-
-[[workflow.configure_station_fields]]
-description = "Move to Register Count field"
-key = "Down"
+times = 1
 
 [[workflow.configure_station_fields]]
 description = "Enter edit mode for Register Count"
@@ -517,6 +542,29 @@ mock_verify_value = true
 description = "Check port state is Running"
 mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
+
+# Step 4.5: Switch to Slave Mode
+[[workflow.switch_to_slave_mode]]
+description = "Navigate to Connection Mode field"
+key = "Down"
+times = 1
+
+[[workflow.switch_to_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Switch from Master to Slave"
+key = "Left"
+
+[[workflow.switch_to_slave_mode]]
+description = "Confirm Slave mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Update connection mode in mock state"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "slave"
 
 # Step 10: Edit Registers - Round 2 (Alternating ON/OFF: 1,0,1,0,1,0,1,0,1,0)
 [[workflow.edit_registers_round2]]
