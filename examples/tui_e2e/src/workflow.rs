@@ -5,8 +5,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::placeholder::RegisterPoolKind;
-
 /// Complete workflow definition from TOML file
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Workflow {
@@ -79,14 +77,6 @@ pub struct WorkflowStep {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<serde_json::Value>,
 
-    /// Input derived from a generated register pool entry
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_register: Option<InputRegisterSpec>,
-
-    /// Placeholder index for storing input values
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub index: Option<usize>,
-
     /// Screen verification - exact text match
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verify: Option<String>,
@@ -107,10 +97,6 @@ pub struct WorkflowStep {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sleep_ms: Option<u64>,
 
-    /// Conditional execution guard
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub press_if: Option<PressIfSpec>,
-
     /// Mock state path (e.g., "ports['/tmp/vcom1'].enabled")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mock_path: Option<String>,
@@ -130,40 +116,4 @@ pub struct WorkflowStep {
     /// Expected mock state value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mock_verify_value: Option<serde_json::Value>,
-
-    /// Synchronize a register value into mock state
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub mock_sync_value: Option<MockSyncValueSpec>,
-}
-
-/// Specification for pulling a register value and optionally typing it
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct InputRegisterSpec {
-    pub pool: RegisterPoolKind,
-    pub index: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<String>,
-    #[serde(default = "default_true")]
-    pub type_to_tui: bool,
-}
-
-fn default_true() -> bool {
-    true
-}
-
-/// Conditional guard that determines whether a step should be executed
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct PressIfSpec {
-    pub pool: RegisterPoolKind,
-    pub index: usize,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub equals: Option<serde_json::Value>,
-}
-
-/// Synchronize a register value into the mock state tree
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MockSyncValueSpec {
-    pub path: String,
-    pub pool: RegisterPoolKind,
-    pub index: usize,
 }
