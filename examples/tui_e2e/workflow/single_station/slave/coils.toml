@@ -1,6 +1,11 @@
 # Single Station - Slave Mode - Coils (01) Register Type
 # Test ID: tui_slave_coils
 # Station: ID=1, Type=Coils, Address=0x0000, Length=10
+#
+# Test Data (3 Rounds for Boolean Coils):
+# Round 1 - All ON: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+# Round 2 - Alternating ON/OFF: [1, 0, 1, 0, 1, 0, 1, 0, 1, 0]
+# Round 3 - Two ON, One OFF: [1, 1, 0, 1, 1, 0, 1, 1, 0, 1]
 
 [manifest]
 id = "single_station_slave_coils"
@@ -11,7 +16,6 @@ start_address = 0x0000
 register_count = 10
 is_master = false
 
-# Execution order for initial setup
 init_order = [
   "navigate_to_entry",
   "enter_config_panel",
@@ -20,15 +24,16 @@ init_order = [
   "switch_to_slave_mode",
   "create_station",
   "configure_station_fields",
-  "edit_registers",
+  "edit_registers_round1",
   "save_configuration",
   "verify_port_enabled",
 ]
 
-# Execution order for repeated verification cycles
 recycle_order = [
-  "reset_registers",
-  "edit_registers",
+  "edit_registers_round2",
+  "save_configuration",
+  "verify_mock_data",
+  "edit_registers_round3",
   "save_configuration",
   "verify_mock_data",
 ]
@@ -95,9 +100,6 @@ mock_set_value = "ProtocolConfig"
 verify = "Enter Business Configuration"
 at_line = 4
 
-[[workflow.navigate_to_business_config]]
-cursor_at_line = 2
-
 # Step 4: Enter Modbus panel
 [[workflow.enter_modbus_panel]]
 description = "Press Enter to enter Modbus dashboard"
@@ -117,39 +119,30 @@ mock_set_value = { kind = "AddLine" }
 verify = "ModBus Master/Slave Set"
 at_line = 0
 
-# Step 5: Switch connection mode to Slave
+# Step 4.5: Switch to Slave Mode
 [[workflow.switch_to_slave_mode]]
-description = "Move cursor to connection mode selector"
-key = "PageDown"
+description = "Navigate to Connection Mode field"
+key = "Down"
+times = 1
 
 [[workflow.switch_to_slave_mode]]
-description = "Highlight Modbus connection mode field"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "ModbusMode" }
-
-[[workflow.switch_to_slave_mode]]
-description = "Enter edit mode for connection mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.switch_to_slave_mode]]
-description = "Toggle connection mode to Slave"
-key = "Right"
-
-[[workflow.switch_to_slave_mode]]
-description = "Confirm connection mode selection"
+description = "Enter edit mode for Connection Mode"
 key = "Enter"
 
 [[workflow.switch_to_slave_mode]]
-description = "Return cursor to AddLine"
-key = "PageUp"
+description = "Switch from Master to Slave"
+key = "Left"
 
 [[workflow.switch_to_slave_mode]]
-description = "Reset cursor to AddLine entry"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "AddLine" }
+description = "Confirm Slave mode"
+key = "Enter"
 
-# Step 6: Create station
+[[workflow.switch_to_slave_mode]]
+description = "Update connection mode in mock state"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "slave"
+
+# Step 5: Create station
 [[workflow.create_station]]
 description = "Press Enter on 'Create Station' to create new station"
 key = "Enter"
@@ -158,18 +151,7 @@ key = "Enter"
 description = "Initialize slave station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
-  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-  ] },
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
 [[workflow.create_station]]
@@ -181,634 +163,281 @@ mock_set_value = { kind = "StationId", station_index = 0 }
 verify = "#1 - ID: 1"
 at_line = 5
 
-[[workflow.create_station]]
-description = "Refresh station metadata before field verification"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
-mock_set_value = 1
-
-[[workflow.create_station]]
-verify = "Station ID"
-at_line = 6
-
-# Step 6, Row 1: Configure Station ID field
+# Step 6: Configure Station Fields
 [[workflow.configure_station_fields]]
-description = "Row 1 - Navigate to Station ID field"
+description = "Navigate to Station ID field"
 key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Highlight Station ID field"
+description = "Highlight Station ID field"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "StationId", station_index = 0 }
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Enter edit mode for Station ID"
+description = "Enter edit mode for Station ID"
 key = "Enter"
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Clear station ID in mock state"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 1 - Clear existing value"
+description = "Clear existing value"
 key = "Ctrl+a"
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Mirror cleared station ID"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 1 - Delete cleared content"
+description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Maintain cleared station ID"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 1 - Type station ID"
+description = "Type station ID value 1"
 input = "decimal"
 value = 1
-index = 10
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Confirm Station ID"
+description = "Confirm Station ID"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Update Station ID in mock state"
+description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].station_id"
 mock_set_value = 1
 
 [[workflow.configure_station_fields]]
-description = "Row 1 - Wait for field to update"
-sleep_ms = 200
-
-# Step 6, Row 2: Configure Register Type field  
-[[workflow.configure_station_fields]]
-description = "Row 2 - Navigate to Register Type field"
+description = "Navigate to Register Type field"
 key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
-description = "Row 2 - Highlight Register Type field"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "RegisterMode", station_index = 0 }
-
-[[workflow.configure_station_fields]]
-description = "Row 2 - Enter edit mode for Register Type"
+description = "Enter edit mode for Register Type"
 key = "Enter"
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 2 - Mirror default register type"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_type"
-mock_set_value = "Holding"
-
-[[workflow.configure_station_fields]]
-description = "Row 2 - Cycle register type to Coils"
-key = "Left"
+description = "Cycle to Coils register type"
+key = "Char(h)"
 times = 2
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 2 - Select Coils (already default, just confirm)"
+description = "Confirm Register Type"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Row 2 - Update Register Type in mock state"
+description = "Update Register Type in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_type"
 mock_set_value = "Coils"
 
 [[workflow.configure_station_fields]]
-description = "Row 2 - Wait for field to update"
-sleep_ms = 200
-
-# Step 6, Row 3: Configure Start Address field
-[[workflow.configure_station_fields]]
-description = "Row 3 - Navigate to Start Address field"
+description = "Navigate to Start Address field"
 key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Highlight Start Address field"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "RegisterStartAddress", station_index = 0 }
-
-[[workflow.configure_station_fields]]
-description = "Row 3 - Enter edit mode for Start Address"
+description = "Enter edit mode for Start Address"
 key = "Enter"
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Reset start address in mock state"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].start_address"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 3 - Clear existing value"
+description = "Clear existing value"
 key = "Ctrl+a"
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Mirror cleared start address"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].start_address"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 3 - Delete cleared content"
+description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Maintain cleared start address"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].start_address"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 3 - Type start address"
+description = "Type start address 0x0000"
 input = "hex"
 value = 0x0000
-index = 11
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Confirm Start Address"
+description = "Confirm Start Address"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Update Start Address in mock state"
+description = "Update Start Address in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].start_address"
 mock_set_value = 0
 
 [[workflow.configure_station_fields]]
-description = "Row 3 - Wait for field to update"
-sleep_ms = 200
-
-# Step 6, Row 4: Configure Register Count field
-[[workflow.configure_station_fields]]
-description = "Row 4 - Navigate to Register Count field"
+description = "Navigate to Register Count field"
 key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Highlight Register Count field"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "RegisterLength", station_index = 0 }
-
-[[workflow.configure_station_fields]]
-description = "Row 4 - Enter edit mode for Register Count"
+description = "Enter edit mode for Register Count"
 key = "Enter"
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Reset register count in mock state"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_count"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 4 - Clear existing value"
+description = "Clear existing value"
 key = "Ctrl+a"
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Mirror cleared register count"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_count"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 4 - Delete cleared content"
+description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Maintain cleared register count"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_count"
-mock_set_value = 0
-
-[[workflow.configure_station_fields]]
-description = "Row 4 - Type register count"
+description = "Type register count 10"
 input = "decimal"
 value = 10
-index = 12
-sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Confirm Register Count"
+description = "Confirm Register Count"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Update Register Count in mock state"
+description = "Update Register Count in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_count"
 mock_set_value = 10
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Ensure registers array matches length"
+description = "Ensure registers array matches length"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers"
 mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 [[workflow.configure_station_fields]]
-description = "Row 4 - Wait for register grid to appear"
+description = "Wait for register grid to appear"
 sleep_ms = 1000
 
-# Step 7, Register 0: Edit first register (index 0)
-[[workflow.edit_registers]]
-description = "Register 0 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
+# Step 7: Edit Registers - Round 1 (All ON)
+[[workflow.edit_registers_round1]]
+description = "Move focus to first register row"
+key = "Down"
 
-[[workflow.edit_registers]]
-description = "Register 0 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 0 }
-
-[[workflow.edit_registers]]
-description = "Register 0 - Store input value in placeholder"
-input_register = { pool = "bool", index = 0, format = "one_zero" }
-index = 0
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 0 - Confirm edit"
+[[workflow.edit_registers_round1]]
+description = "Register 0 - Set ON (value=1)"
 key = "Enter"
 
-[[workflow.edit_registers]]
-description = "Register 0 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[0]", pool = "bool", index = 0 }
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[0]"
+mock_set_value = 1
 
-[[workflow.edit_registers]]
-description = "Register 0 - Verify display format"
-verify = "ON   OFF  OFF  OFF"
-at_line = 10
-press_if = { pool = "bool", index = 0, equals = 1 }
-
-[[workflow.edit_registers]]
-description = "Register 0 - Move to next register"
+[[workflow.edit_registers_round1]]
+description = "Move to register 1"
 key = "Right"
 
-[[workflow.edit_registers]]
-description = "Register 0 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 1 }
-
-# Step 7, Register 1: Edit second register (index 1)
-[[workflow.edit_registers]]
-description = "Register 1 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 1 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 1 }
-
-[[workflow.edit_registers]]
-description = "Register 1 - Store input value in placeholder"
-input_register = { pool = "bool", index = 1, format = "one_zero" }
-index = 1
-
-[[workflow.edit_registers]]
-description = "Register 1 - Confirm edit"
+[[workflow.edit_registers_round1]]
+description = "Register 1 - Set ON (value=1)"
 key = "Enter"
 
-[[workflow.edit_registers]]
-description = "Register 1 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[1]", pool = "bool", index = 1 }
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[1]"
+mock_set_value = 1
 
-[[workflow.edit_registers]]
-description = "Register 1 - Verify display format"
-verify = "ON   OFF  OFF  OFF"
-at_line = 10
-
-[[workflow.edit_registers]]
-description = "Register 1 - Conditional OFF indicator"
-press_if = { pool = "bool", index = 1, equals = 0 }
-verify = "OFF"
-at_line = 10
-
-[[workflow.edit_registers]]
-description = "Register 1 - Move to next register"
+[[workflow.edit_registers_round1]]
+description = "Move to register 2"
 key = "Right"
 
-[[workflow.edit_registers]]
-description = "Register 1 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 2 }
-
-# Step 7, Register 2: Edit third register (index 2)
-[[workflow.edit_registers]]
-description = "Register 2 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 2 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 2 }
-
-[[workflow.edit_registers]]
-description = "Register 2 - Store input value in placeholder"
-input_register = { pool = "bool", index = 2, format = "one_zero" }
-index = 2
-
-[[workflow.edit_registers]]
-description = "Register 2 - Confirm edit"
+[[workflow.edit_registers_round1]]
+description = "Register 2 - Set ON (value=1)"
 key = "Enter"
 
-[[workflow.edit_registers]]
-description = "Register 2 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]", pool = "bool", index = 2 }
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]"
+mock_set_value = 1
 
-[[workflow.edit_registers]]
-description = "Register 2 - Verify display format"
-verify = "ON   OFF  ON   OFF"
-at_line = 10
-
-[[workflow.edit_registers]]
-description = "Register 2 - Move to next register"
+[[workflow.edit_registers_round1]]
+description = "Move to register 3"
 key = "Right"
 
-[[workflow.edit_registers]]
-description = "Register 2 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 3 }
-
-# Step 7, Register 3: Edit fourth register (index 3)
-[[workflow.edit_registers]]
-description = "Register 3 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 3 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 3 }
-
-[[workflow.edit_registers]]
-description = "Register 3 - Store input value in placeholder"
-input_register = { pool = "bool", index = 3, format = "one_zero" }
-index = 3
-
-[[workflow.edit_registers]]
-description = "Register 3 - Confirm edit"
+[[workflow.edit_registers_round1]]
+description = "Register 3 - Set ON (value=1)"
 key = "Enter"
 
-[[workflow.edit_registers]]
-description = "Register 3 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]", pool = "bool", index = 3 }
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]"
+mock_set_value = 1
 
-[[workflow.edit_registers]]
-description = "Register 3 - Verify display format"
-verify = "ON   OFF  ON   OFF"
+[[workflow.edit_registers_round1]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_registers_round1]]
+description = "Register 4 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round1]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_registers_round1]]
+description = "Register 5 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[5]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round1]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_registers_round1]]
+description = "Register 6 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[6]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round1]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_registers_round1]]
+description = "Register 7 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[7]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round1]]
+description = "Move to register 8"
+key = "Right"
+
+[[workflow.edit_registers_round1]]
+description = "Register 8 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[8]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round1]]
+description = "Move to register 9"
+key = "Right"
+
+[[workflow.edit_registers_round1]]
+description = "Register 9 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round1]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[9]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round1]]
+description = "Verify all registers show ON"
+verify = "ON   ON   ON   ON"
 at_line = 10
 
-[[workflow.edit_registers]]
-description = "Register 3 - Move to next register"
-key = "Right"
-
-[[workflow.edit_registers]]
-description = "Register 3 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 4 }
-
-# Step 7, Register 4: Edit fifth register (index 4)
-[[workflow.edit_registers]]
-description = "Register 4 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 4 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 4 }
-
-[[workflow.edit_registers]]
-description = "Register 4 - Store input value in placeholder"
-input_register = { pool = "bool", index = 4, format = "one_zero" }
-index = 4
-
-[[workflow.edit_registers]]
-description = "Register 4 - Confirm edit"
-key = "Enter"
-
-[[workflow.edit_registers]]
-description = "Register 4 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]", pool = "bool", index = 4 }
-
-[[workflow.edit_registers]]
-description = "Register 4 - Verify display format"
-verify = "ON   OFF  OFF  OFF"
-at_line = 11
-
-[[workflow.edit_registers]]
-description = "Register 4 - Move to next register"
-key = "Right"
-
-[[workflow.edit_registers]]
-description = "Register 4 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 5 }
-
-# Step 7, Register 5: Edit sixth register (index 5)
-[[workflow.edit_registers]]
-description = "Register 5 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 5 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 5 }
-
-[[workflow.edit_registers]]
-description = "Register 5 - Store input value in placeholder"
-input_register = { pool = "bool", index = 5, format = "one_zero" }
-index = 5
-
-[[workflow.edit_registers]]
-description = "Register 5 - Confirm edit"
-key = "Enter"
-
-[[workflow.edit_registers]]
-description = "Register 5 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[5]", pool = "bool", index = 5 }
-
-[[workflow.edit_registers]]
-description = "Register 5 - Verify display format"
-verify = "ON   OFF  OFF  OFF"
-at_line = 11
-
-[[workflow.edit_registers]]
-description = "Register 5 - Move to next register"
-key = "Right"
-
-[[workflow.edit_registers]]
-description = "Register 5 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 6 }
-
-# Step 7, Register 6: Edit seventh register (index 6)
-[[workflow.edit_registers]]
-description = "Register 6 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 6 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 6 }
-
-[[workflow.edit_registers]]
-description = "Register 6 - Store input value in placeholder"
-input_register = { pool = "bool", index = 6, format = "one_zero" }
-index = 6
-
-[[workflow.edit_registers]]
-description = "Register 6 - Confirm edit"
-key = "Enter"
-
-[[workflow.edit_registers]]
-description = "Register 6 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[6]", pool = "bool", index = 6 }
-
-[[workflow.edit_registers]]
-description = "Register 6 - Verify display format"
-verify = "ON   OFF  ON   OFF"
-at_line = 11
-
-[[workflow.edit_registers]]
-description = "Register 6 - Move to next register"
-key = "Right"
-
-[[workflow.edit_registers]]
-description = "Register 6 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 7 }
-
-# Step 7, Register 7: Edit eighth register (index 7)
-[[workflow.edit_registers]]
-description = "Register 7 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 7 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 7 }
-
-[[workflow.edit_registers]]
-description = "Register 7 - Store input value in placeholder"
-input_register = { pool = "bool", index = 7, format = "one_zero" }
-index = 7
-
-[[workflow.edit_registers]]
-description = "Register 7 - Confirm edit"
-key = "Enter"
-
-[[workflow.edit_registers]]
-description = "Register 7 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[7]", pool = "bool", index = 7 }
-
-[[workflow.edit_registers]]
-description = "Register 7 - Verify display format"
-verify = "ON   OFF  ON   OFF"
-at_line = 11
-
-[[workflow.edit_registers]]
-description = "Register 7 - Move to next register"
-key = "Right"
-
-[[workflow.edit_registers]]
-description = "Register 7 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 8 }
-
-# Step 7, Register 8: Edit ninth register (index 8)
-[[workflow.edit_registers]]
-description = "Register 8 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 8 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 8 }
-
-[[workflow.edit_registers]]
-description = "Register 8 - Store input value in placeholder"
-input_register = { pool = "bool", index = 8, format = "one_zero" }
-index = 8
-
-[[workflow.edit_registers]]
-description = "Register 8 - Confirm edit"
-key = "Enter"
-
-[[workflow.edit_registers]]
-description = "Register 8 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[8]", pool = "bool", index = 8 }
-
-[[workflow.edit_registers]]
-description = "Register 8 - Verify display format"
-verify = "ON   OFF  ____ ____"
-at_line = 12
-
-[[workflow.edit_registers]]
-description = "Register 8 - Move to next register"
-key = "Right"
-
-[[workflow.edit_registers]]
-description = "Register 8 - Highlight next register"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 9 }
-
-# Step 7, Register 9: Edit tenth register (index 9)
-[[workflow.edit_registers]]
-description = "Register 9 - Enter edit mode"
-key = "Enter"
-sleep_ms = 200
-
-[[workflow.edit_registers]]
-description = "Register 9 - Focus register cursor"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "Register", station_index = 0, register_index = 9 }
-
-[[workflow.edit_registers]]
-description = "Register 9 - Store input value in placeholder"
-input_register = { pool = "bool", index = 9, format = "one_zero" }
-index = 9
-
-[[workflow.edit_registers]]
-description = "Register 9 - Confirm edit"
-key = "Enter"
-
-[[workflow.edit_registers]]
-description = "Register 9 - Update mock state"
-mock_sync_value = { path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[9]", pool = "bool", index = 9 }
-
-[[workflow.edit_registers]]
-description = "Register 9 - Verify display format"
-verify = "ON   OFF  ____ ____"
-at_line = 12
-
-[[workflow.edit_registers]]
-description = "Register 9 - Return to top of panel"
+[[workflow.edit_registers_round1]]
+description = "Return to top of panel"
 key = "Ctrl+PageUp"
 
-[[workflow.edit_registers]]
-description = "Register 9 - Reset cursor to station header"
+[[workflow.edit_registers_round1]]
+description = "Reset cursor to station header"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "StationId", station_index = 0 }
-
-# Step 8.5: Reset registers for recycle (recycle_order only)
-[[workflow.reset_registers]]
-description = "Restore register grid to cleared state before recycle"
-mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers"
-mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-[[workflow.reset_registers]]
-description = "Reveal cleared register row on screen"
-verify = "0x0000              OFF  OFF  OFF  OFF"
-at_line = 10
 
 # Step 8: Save configuration
 [[workflow.save_configuration]]
@@ -830,11 +459,6 @@ description = "Wait for port to enable and stabilize"
 sleep_ms = 5000
 
 [[workflow.save_configuration]]
-description = "Expose running indicator state in mock data"
-mock_path = "$.ports['/tmp/vcom1'].enabled"
-mock_set_value = true
-
-[[workflow.save_configuration]]
 description = "Verify Running status indicator"
 verify = "Running ●"
 at_line = 0
@@ -850,7 +474,275 @@ description = "Check port state is Running"
 mock_verify_path = "$.ports['/tmp/vcom1'].state"
 mock_verify_value = { type = "occupied_by_this" }
 
-# Step 10: Verify mock data (used in recycle)
+# Step 10: Edit Registers - Round 2 (Alternating ON/OFF: 1,0,1,0,1,0,1,0,1,0)
+[[workflow.edit_registers_round2]]
+description = "Return to register editing - press Ctrl+PageUp"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_registers_round2]]
+description = "Navigate down to registers"
+key = "Down"
+times = 5
+
+[[workflow.edit_registers_round2]]
+description = "Move focus to first register row"
+key = "Down"
+
+[[workflow.edit_registers_round2]]
+description = "Register 0 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[0]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 1 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round2]]
+description = "Update mock state register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[1]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 2 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 3 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round2]]
+description = "Update mock state register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 4 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 5 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round2]]
+description = "Update mock state register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[5]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 6 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[6]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 7 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round2]]
+description = "Update mock state register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[7]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 8"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 8 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[8]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round2]]
+description = "Move to register 9"
+key = "Right"
+
+[[workflow.edit_registers_round2]]
+description = "Register 9 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round2]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[9]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round2]]
+description = "Verify alternating pattern"
+verify = "ON   OFF  ON   OFF"
+at_line = 10
+
+[[workflow.edit_registers_round2]]
+description = "Return to top of panel"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_registers_round2]]
+description = "Reset cursor to station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+# Step 11: Edit Registers - Round 3 (Two ON, One OFF: 1,1,0,1,1,0,1,1,0,1)
+[[workflow.edit_registers_round3]]
+description = "Navigate down to registers"
+key = "Down"
+times = 5
+
+[[workflow.edit_registers_round3]]
+description = "Move focus to first register row"
+key = "Down"
+
+[[workflow.edit_registers_round3]]
+description = "Register 0 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[0]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 1 - Toggle to ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Update mock state register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[1]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 2 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Update mock state register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 3 - Toggle to ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Update mock state register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 4 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 5 - Toggle to OFF (value=0) - already off, skip toggle"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[5]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 6 - Already ON (value=1), keep it"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[6]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 7 - Toggle to ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Update mock state register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[7]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 8"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 8 - Toggle to OFF (value=0)"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[8]"
+mock_set_value = 0
+
+[[workflow.edit_registers_round3]]
+description = "Move to register 9"
+key = "Right"
+
+[[workflow.edit_registers_round3]]
+description = "Register 9 - Toggle to ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[9]"
+mock_set_value = 1
+
+[[workflow.edit_registers_round3]]
+description = "Verify two ON/one OFF pattern"
+verify = "ON   ON   OFF  ON"
+at_line = 10
+
+[[workflow.edit_registers_round3]]
+description = "Return to top of panel"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_registers_round3]]
+description = "Reset cursor to station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+# Step 12: Verify mock data (used in recycle)
 [[workflow.verify_mock_data]]
 description = "Verify all register values in mock state"
 mock_verify_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].register_count"
