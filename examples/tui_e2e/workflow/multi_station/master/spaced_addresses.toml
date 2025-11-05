@@ -1,8 +1,464 @@
-[manifest]
-id = "placeholder"
-description = "Placeholder workflow"
-is_master = true
-init_order = []
-recycle_order = []
+# Multi-Station - Master Mode - Spaced Addresses
+# Test ID: tui_multi_master_spaced_addresses
+# Stations:
+#   - Station A: ID=1, Type=Holding, Address=0x0000, Length=8
+#   - Station B: ID=5, Type=Holding, Address=0x00A0, Length=8
+#
+# Test Data (3 Rounds across both stations):
+# Round 1 - Station A: [0x1000, 0x1001, 0x1002, 0x1003, 0x1004, 0x1005, 0x1006, 0x1007]
+#           Station B: [0x2000, 0x2002, 0x2004, 0x2006, 0x2008, 0x200A, 0x200C, 0x200E]
+# Round 2 - Station A: [0x1007, 0x1006, 0x1005, 0x1004, 0x1003, 0x1002, 0x1001, 0x1000]
+#           Station B: [0x200E, 0x200C, 0x200A, 0x2008, 0x2006, 0x2004, 0x2002, 0x2000]
+# Round 3 - Station A: [0x0A0A, 0x1B1B, 0x2C2C, 0x3D3D, 0x4E4E, 0x5F5F, 0x6A6A, 0x7B7B]
+#           Station B: [0x9001, 0x9003, 0x9005, 0x9007, 0x9009, 0x900B, 0x900D, 0x900F]
 
-[workflow]
+[manifest]
+id = "multi_station_master_spaced_addresses"
+description = "Two master stations with separated holding register blocks"
+is_master = true
+stations = [
+  { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 8 },
+  { station_id = 5, register_type = "Holding", start_address = 0x00A0, register_count = 8 },
+]
+
+init_order = [
+  "navigate_to_entry",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "create_stations",
+  "edit_station1_round1",
+  "edit_station2_round1",
+  "save_configuration",
+  "verify_port_enabled",
+]
+
+recycle_order = [
+  "edit_station1_round2",
+  "edit_station2_round2",
+  "save_configuration",
+  "verify_mock_data",
+  "edit_station1_round3",
+  "edit_station2_round3",
+  "save_configuration",
+  "verify_mock_data",
+]
+
+# Step 1: Navigate to Entry page
+[[workflow.navigate_to_entry]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.navigate_to_entry]]
+description = "Ensure entry page port order"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.navigate_to_entry]]
+description = "Wait for entry screen to populate ports"
+sleep_ms = 1500
+
+[[workflow.navigate_to_entry]]
+description = "Initial navigation to entry page"
+verify = "/tmp/vcom1"
+at_line = 2
+
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom2"
+at_line = 3
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected port to enter config panel"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Set config panel cursor to EnablePort"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+description = "Wait for config panel to render"
+sleep_ms = 1500
+
+[[workflow.enter_config_panel]]
+description = "Verify Enable Port label is visible"
+verify = "Enable Port"
+at_line = 2
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Highlight Business Configuration entry"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+description = "Verify Business Configuration menu entry"
+verify = "Enter Business Configuration"
+at_line = 4
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Ensure connection mode is Master"
+mock_path = "$.page_state.modbus_dashboard.connection_mode"
+mock_set_value = "master"
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+description = "Verify Modbus panel header"
+verify = "ModBus Master/Slave Set"
+at_line = 0
+
+# Step 5: Create two stations with spaced addresses
+[[workflow.create_stations]]
+description = "Populate stations with spaced holding ranges"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 8, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+  { station_id = 5, register_type = "Holding", start_address = 160, register_count = 8, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+]
+
+[[workflow.create_stations]]
+description = "Focus first station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_stations]]
+description = "Verify station 1 header"
+verify = "#1 - ID: 1"
+at_line = 5
+
+[[workflow.create_stations]]
+description = "Verify station 2 header"
+verify = "#2 - ID: 5"
+at_line = 6
+
+# Step 6: Station 1 registers - Round 1
+[[workflow.edit_station1_round1]]
+description = "Station 1 Round 1 sequential values"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [
+  0x1000,
+  0x1001,
+  0x1002,
+  0x1003,
+  0x1004,
+  0x1005,
+  0x1006,
+  0x1007,
+]
+
+[[workflow.edit_station1_round1]]
+description = "Verify station 1 mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [
+  0x1000,
+  0x1001,
+  0x1002,
+  0x1003,
+  0x1004,
+  0x1005,
+  0x1006,
+  0x1007,
+]
+
+[[workflow.edit_station1_round1]]
+description = "Verify station 1 first row"
+verify = "0x1000 0x1001 0x1002 0x1003"
+at_line = 10
+
+[[workflow.edit_station1_round1]]
+description = "Verify station 1 second row"
+verify = "0x1004 0x1005 0x1006 0x1007"
+at_line = 11
+
+# Step 7: Station 2 registers - Round 1
+[[workflow.edit_station2_round1]]
+description = "Station 2 Round 1 even offsets"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_set_value = [
+  0x2000,
+  0x2002,
+  0x2004,
+  0x2006,
+  0x2008,
+  0x200A,
+  0x200C,
+  0x200E,
+]
+
+[[workflow.edit_station2_round1]]
+description = "Verify station 2 mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_verify_value = [
+  0x2000,
+  0x2002,
+  0x2004,
+  0x2006,
+  0x2008,
+  0x200A,
+  0x200C,
+  0x200E,
+]
+
+[[workflow.edit_station2_round1]]
+description = "Verify station 2 first row"
+verify = "0x2000 0x2002 0x2004 0x2006"
+at_line = 17
+
+[[workflow.edit_station2_round1]]
+description = "Verify station 2 second row"
+verify = "0x2008 0x200A 0x200C 0x200E"
+at_line = 18
+
+# Step 8: Save configuration and enable port
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "Ctrl+s"
+
+[[workflow.save_configuration]]
+description = "Enable port in mock state"
+mock_path = "$.ports['/tmp/vcom1'].enabled"
+mock_set_value = true
+
+[[workflow.save_configuration]]
+description = "Set port state to OccupiedByThis"
+mock_path = "$.ports['/tmp/vcom1'].state"
+mock_set_value = { type = "occupied_by_this" }
+
+[[workflow.save_configuration]]
+description = "Wait for port to enable and stabilize"
+sleep_ms = 5000
+
+[[workflow.save_configuration]]
+description = "Verify Running status indicator"
+verify = "Running ●"
+at_line = 0
+
+# Step 9: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check port is enabled in status"
+mock_verify_path = "$.ports['/tmp/vcom1'].enabled"
+mock_verify_value = true
+
+[[workflow.verify_port_enabled]]
+description = "Check port state is Running"
+mock_verify_path = "$.ports['/tmp/vcom1'].state"
+mock_verify_value = { type = "occupied_by_this" }
+
+# Round 2 updates
+[[workflow.edit_station1_round2]]
+description = "Station 1 Round 2 descending"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [
+  0x1007,
+  0x1006,
+  0x1005,
+  0x1004,
+  0x1003,
+  0x1002,
+  0x1001,
+  0x1000,
+]
+
+[[workflow.edit_station1_round2]]
+description = "Verify station 1 Round 2 state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [
+  0x1007,
+  0x1006,
+  0x1005,
+  0x1004,
+  0x1003,
+  0x1002,
+  0x1001,
+  0x1000,
+]
+
+[[workflow.edit_station1_round2]]
+description = "Verify station 1 Round 2 first row"
+verify = "0x1007 0x1006 0x1005 0x1004"
+at_line = 10
+
+[[workflow.edit_station1_round2]]
+description = "Verify station 1 Round 2 second row"
+verify = "0x1003 0x1002 0x1001 0x1000"
+at_line = 11
+
+[[workflow.edit_station2_round2]]
+description = "Station 2 Round 2 descending"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_set_value = [
+  0x200E,
+  0x200C,
+  0x200A,
+  0x2008,
+  0x2006,
+  0x2004,
+  0x2002,
+  0x2000,
+]
+
+[[workflow.edit_station2_round2]]
+description = "Verify station 2 Round 2 state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_verify_value = [
+  0x200E,
+  0x200C,
+  0x200A,
+  0x2008,
+  0x2006,
+  0x2004,
+  0x2002,
+  0x2000,
+]
+
+[[workflow.edit_station2_round2]]
+description = "Verify station 2 Round 2 first row"
+verify = "0x200E 0x200C 0x200A 0x2008"
+at_line = 17
+
+[[workflow.edit_station2_round2]]
+description = "Verify station 2 Round 2 second row"
+verify = "0x2006 0x2004 0x2002 0x2000"
+at_line = 18
+
+# Verify configuration persists between rounds
+[[workflow.verify_mock_data]]
+description = "Verify station 1 configuration persists"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_verify_value = 1
+
+[[workflow.verify_mock_data]]
+description = "Verify station 1 register count"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
+mock_verify_value = 8
+
+[[workflow.verify_mock_data]]
+description = "Verify station 2 configuration persists"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].station_id"
+mock_verify_value = 5
+
+[[workflow.verify_mock_data]]
+description = "Verify station 2 register count"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].register_count"
+mock_verify_value = 8
+
+# Round 3 updates
+[[workflow.edit_station1_round3]]
+description = "Station 1 Round 3 patterned values"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [
+  0x0A0A,
+  0x1B1B,
+  0x2C2C,
+  0x3D3D,
+  0x4E4E,
+  0x5F5F,
+  0x6A6A,
+  0x7B7B,
+]
+
+[[workflow.edit_station1_round3]]
+description = "Verify station 1 Round 3 state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [
+  0x0A0A,
+  0x1B1B,
+  0x2C2C,
+  0x3D3D,
+  0x4E4E,
+  0x5F5F,
+  0x6A6A,
+  0x7B7B,
+]
+
+[[workflow.edit_station1_round3]]
+description = "Verify station 1 Round 3 first row"
+verify = "0x0A0A 0x1B1B 0x2C2C 0x3D3D"
+at_line = 10
+
+[[workflow.edit_station1_round3]]
+description = "Verify station 1 Round 3 second row"
+verify = "0x4E4E 0x5F5F 0x6A6A 0x7B7B"
+at_line = 11
+
+[[workflow.edit_station2_round3]]
+description = "Station 2 Round 3 staggered values"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_set_value = [
+  0x9001,
+  0x9003,
+  0x9005,
+  0x9007,
+  0x9009,
+  0x900B,
+  0x900D,
+  0x900F,
+]
+
+[[workflow.edit_station2_round3]]
+description = "Verify station 2 Round 3 state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_verify_value = [
+  0x9001,
+  0x9003,
+  0x9005,
+  0x9007,
+  0x9009,
+  0x900B,
+  0x900D,
+  0x900F,
+]
+
+[[workflow.edit_station2_round3]]
+description = "Verify station 2 Round 3 first row"
+verify = "0x9001 0x9003 0x9005 0x9007"
+at_line = 17
+
+[[workflow.edit_station2_round3]]
+description = "Verify station 2 Round 3 second row"
+verify = "0x9009 0x900B 0x900D 0x900F"
+at_line = 18
