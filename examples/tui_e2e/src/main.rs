@@ -204,12 +204,6 @@ fn load_all_workflows() -> Result<std::collections::HashMap<String, Workflow>> {
         parse_workflow(include_str!("../workflow/single_station/master/coils.toml"))?,
     );
     workflows.insert(
-        "single_station_master_coils_simple".to_string(),
-        parse_workflow(include_str!(
-            "../workflow/single_station/master/coils_simple.toml"
-        ))?,
-    );
-    workflows.insert(
         "single_station_master_discrete_inputs".to_string(),
         parse_workflow(include_str!(
             "../workflow/single_station/master/discrete_inputs.toml"
