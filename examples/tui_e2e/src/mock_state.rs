@@ -114,7 +114,7 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
     let actual = get_mock_state(path)?;
 
     if &actual != expected {
-    bail!(
+        bail!(
             "Mock state verification failed at path '{}'\n  Expected: {:?}\n  Actual: {:?}",
             path,
             expected,

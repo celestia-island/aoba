@@ -97,6 +97,11 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
+    // Standardize locale so downstream screen checks see consistent text.
+    std::env::set_var("LANGUAGE", "en_US");
+    std::env::set_var("LC_ALL", "en_US.UTF-8");
+    std::env::set_var("LANG", "en_US.UTF-8");
+
     env_logger::builder()
         .filter_level(if args.debug {
             log::LevelFilter::Debug
