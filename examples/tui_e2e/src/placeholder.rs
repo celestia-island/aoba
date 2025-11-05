@@ -2,13 +2,128 @@
 //!
 //! Handles {{#N}} placeholders for storing and retrieving test data values.
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
+use serde_json::{Number, Value};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 /// Global placeholder storage
 static PLACEHOLDERS: Lazy<Mutex<HashMap<usize, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Register pool storage separated by data type so workflows can reuse
+/// deterministic random values across multiple steps.
+#[derive(Default)]
+struct RegisterPools {
+    bools: Vec<bool>,
+    ints: Vec<u16>,
+}
+
+static REGISTER_POOLS: Lazy<Mutex<RegisterPools>> =
+    Lazy::new(|| Mutex::new(RegisterPools::default()));
+
+/// Available register pool categories.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RegisterPoolKind {
+    Bool,
+    Int,
+}
+
+/// Unified representation returned from the register pools.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegisterValue {
+    Bool(bool),
+    Int(u16),
+}
+
+impl RegisterValue {
+    /// Return the value as JSON using natural Modbus semantics (bool/number).
+    pub fn to_json(self) -> Value {
+        match self {
+            RegisterValue::Bool(b) => Number::from(if b { 1 } else { 0 }).into(),
+            RegisterValue::Int(v) => Number::from(v as u64).into(),
+        }
+    }
+}
+
+/// Initialize the register pools with randomized contents sized by workflow manifest metadata.
+pub fn init_register_pools(bool_count: usize, int_count: usize) {
+    let mut pools = REGISTER_POOLS.lock().unwrap();
+
+    pools.bools = (0..bool_count).map(|index| index % 2 == 0).collect();
+    pools.ints = (0..int_count)
+        .map(|index| ((index as u32 * 0x1357 + 0x24) & 0xFFFF) as u16)
+        .collect();
+
+    log::debug!(
+        "🎲 Initialized register pools (bools={}, ints={})",
+        pools.bools.len(),
+        pools.ints.len()
+    );
+}
+
+/// Fetch a register value from the requested pool.
+pub fn get_register_value(kind: RegisterPoolKind, index: usize) -> Result<RegisterValue> {
+    let pools = REGISTER_POOLS.lock().unwrap();
+
+    match kind {
+        RegisterPoolKind::Bool => pools
+            .bools
+            .get(index)
+            .copied()
+            .map(RegisterValue::Bool)
+            .ok_or_else(|| anyhow!("Boolean register index {} out of range", index)),
+        RegisterPoolKind::Int => pools
+            .ints
+            .get(index)
+            .copied()
+            .map(RegisterValue::Int)
+            .ok_or_else(|| anyhow!("Integer register index {} out of range", index)),
+    }
+}
+
+/// Return whether the specified register evaluates to a truthy value.
+pub fn register_truthy(kind: RegisterPoolKind, index: usize) -> Result<bool> {
+    match get_register_value(kind, index)? {
+        RegisterValue::Bool(value) => Ok(value),
+        RegisterValue::Int(value) => Ok(value != 0),
+    }
+}
+
+/// Format a register value as a string for typing or placeholder substitution.
+pub fn register_value_as_string(value: RegisterValue, format: Option<&str>) -> String {
+    match value {
+        RegisterValue::Bool(b) => match format.unwrap_or("bool") {
+            "bool" => b.to_string(),
+            "one_zero" => if b { "1" } else { "0" }.to_string(),
+            "yes_no" => if b { "yes" } else { "no" }.to_string(),
+            other => {
+                log::warn!(
+                    "Unknown bool format '{}', defaulting to 'true/false'",
+                    other
+                );
+                b.to_string()
+            }
+        },
+        RegisterValue::Int(v) => match format.unwrap_or("decimal") {
+            "decimal" => v.to_string(),
+            "hex" => format!("{:04X}", v),
+            "hex_lower" => format!("{:04x}", v),
+            "binary" => format!("{:016b}", v),
+            other => {
+                log::warn!("Unknown integer format '{}', defaulting to decimal", other);
+                v.to_string()
+            }
+        },
+    }
+}
+
+/// Convert a register value into JSON using the natural representation for the pool.
+pub fn register_value_to_json(value: RegisterValue) -> Value {
+    value.to_json()
+}
 
 /// Store a value in a placeholder slot
 pub fn set_placeholder(index: usize, value: String) {
@@ -37,6 +152,30 @@ pub fn get_placeholder(index: usize) -> Result<String> {
 /// - {{0b#N}} - binary value
 pub fn replace_placeholders(text: &str) -> Result<String> {
     let mut result = text.to_string();
+
+    // Replace register references first so stored placeholder replacements can reuse them later.
+    let re_bool_reg = regex::Regex::new(r"\{\{bool\[(\d+)\]\}\}").unwrap();
+    for cap in re_bool_reg.captures_iter(&result.clone()) {
+        let index: usize = cap[1].parse()?;
+        let value = get_register_value(RegisterPoolKind::Bool, index)?;
+        let text_value = register_value_as_string(value, Some("bool"));
+        result = result.replace(&cap[0], &text_value);
+    }
+
+    let re_int_reg = regex::Regex::new(r"\{\{(0x|0b)?int\[(\d+)\]\}\}").unwrap();
+    for cap in re_int_reg.captures_iter(&result.clone()) {
+        let format_prefix = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+        let index: usize = cap[2].parse()?;
+        let value = get_register_value(RegisterPoolKind::Int, index)?;
+
+        let formatted = match format_prefix {
+            "0x" => register_value_as_string(value, Some("hex")),
+            "0b" => register_value_as_string(value, Some("binary")),
+            _ => register_value_as_string(value, Some("decimal")),
+        };
+
+        result = result.replace(&cap[0], &formatted);
+    }
 
     // Find all placeholder patterns
     let re_hex = regex::Regex::new(r"\{\{0x#(\d+)\}\}").unwrap();
@@ -142,5 +281,17 @@ mod tests {
         let hex = generate_value("hex", None);
         assert_eq!(hex.len(), 4);
         assert!(u32::from_str_radix(&hex, 16).is_ok());
+    }
+
+    #[test]
+    fn test_register_pools_and_placeholders() {
+        init_register_pools(2, 2);
+
+        // Ensure deterministic placeholder replacement does not panic
+        let replaced = replace_placeholders("Bool={{bool[1]}}, Int={{int[0]}}, Hex={{0xint[1]}}")
+            .expect("placeholder replacement should succeed");
+        assert!(replaced.contains("Bool="));
+        assert!(replaced.contains("Int="));
+        assert!(replaced.contains("Hex="));
     }
 }
