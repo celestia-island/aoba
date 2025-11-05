@@ -1,8 +1,1815 @@
-[manifest]
-id = "placeholder"
-description = "Placeholder workflow"
-is_master = true
-init_order = []
-recycle_order = []
+# Multi-Station - Master Mode - Mixed IDs
+# Test ID: tui_multi_master_mixed_ids
+# Stations:
+#   - Station A: ID=2, Type=Holding, Address=0x0000, Length=8
+#   - Station B: ID=6, Type=Holding, Address=0x0000, Length=8
+#
+# Test Data (3 Rounds across both stations):
+# Round 1 - Ascending pairs:
+#   Station A: [0x0001, 0x0003, 0x0005, 0x0007, 0x0009, 0x000B, 0x000D, 0x000F]
+#   Station B: [0x0010, 0x0012, 0x0014, 0x0016, 0x0018, 0x001A, 0x001C, 0x001E]
+# Round 2 - Descending mirrors:
+#   Station A: [0x000F, 0x000D, 0x000B, 0x0009, 0x0007, 0x0005, 0x0003, 0x0001]
+#   Station B: [0x001E, 0x001C, 0x001A, 0x0018, 0x0016, 0x0014, 0x0012, 0x0010]
+# Round 3 - Patterned increments:
+#   Station A: [0x0101, 0x0202, 0x0303, 0x0404, 0x0505, 0x0606, 0x0707, 0x0808]
+#   Station B: [0x0A0A, 0x0B0B, 0x0C0C, 0x0D0D, 0x0E0E, 0x0F0F, 0x1010, 0x1111]
 
-[workflow]
+[manifest]
+id = "multi_station_master_mixed_ids"
+description = "Two master stations with mixed station IDs on identical address ranges"
+is_master = true
+stations = [
+  { station_id = 2, register_type = "Holding", start_address = 0x0000, register_count = 8 },
+  { station_id = 6, register_type = "Holding", start_address = 0x0000, register_count = 8 },
+]
+
+init_order = [
+  "navigate_to_entry",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "create_stations",
+  "configure_station1_fields",
+  "edit_station1_round1",
+  "configure_station2_fields",
+  "edit_station2_round1",
+  "save_configuration",
+  "verify_port_enabled",
+]
+
+recycle_order = [
+  "edit_station1_round2",
+  "edit_station2_round2",
+  "save_configuration",
+  "verify_mock_data",
+  "edit_station1_round3",
+  "edit_station2_round3",
+  "save_configuration",
+  "verify_mock_data",
+]
+
+# Step 1: Navigate to Entry page
+[[workflow.navigate_to_entry]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.navigate_to_entry]]
+description = "Ensure entry page port order"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.navigate_to_entry]]
+description = "Wait for entry screen to populate ports"
+sleep_ms = 1500
+
+[[workflow.navigate_to_entry]]
+description = "Initial navigation to entry page"
+verify = "/tmp/vcom1"
+at_line = 2
+
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom2"
+at_line = 3
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected port to enter config panel"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Set config panel cursor to EnablePort"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+description = "Wait for config panel to render"
+sleep_ms = 1500
+
+[[workflow.enter_config_panel]]
+verify = "Enable Port"
+at_line = 2
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Highlight Business Configuration entry"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+verify = "Enter Business Configuration"
+at_line = 4
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+verify = "ModBus Master/Slave Set"
+at_line = 0
+
+# Step 5: Create two stations placeholders
+[[workflow.create_stations]]
+description = "Create first station entry"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Initialize station list with first entry"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 8, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+]
+
+[[workflow.create_stations]]
+description = "Focus first station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_stations]]
+verify = "#1 - ID: 1"
+at_line = 5
+
+[[workflow.create_stations]]
+description = "Return to AddLine for second station"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+description = "Reset cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.create_stations]]
+description = "Create second station entry"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Populate station list with second entry"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 8, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+  { station_id = 2, register_type = "Holding", start_address = 0, register_count = 8, registers = [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+  ] },
+]
+
+[[workflow.create_stations]]
+description = "Focus second station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+[[workflow.create_stations]]
+verify = "#2 - ID: 2"
+at_line = 6
+
+# Step 6: Configure Station 1 fields
+[[workflow.configure_station1_fields]]
+description = "Jump to top and reach station 1"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station1_fields]]
+key = "PageDown"
+
+[[workflow.configure_station1_fields]]
+description = "Highlight station 1 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.configure_station1_fields]]
+description = "Move to Station ID field"
+key = "Down"
+
+[[workflow.configure_station1_fields]]
+description = "Enter edit mode for Station 1 ID"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Select existing Station ID"
+key = "Ctrl+a"
+
+[[workflow.configure_station1_fields]]
+description = "Clear Station ID"
+key = "Backspace"
+
+[[workflow.configure_station1_fields]]
+description = "Input Station ID 2"
+input = "decimal"
+value = 2
+
+[[workflow.configure_station1_fields]]
+description = "Confirm Station ID"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Persist Station 1 ID"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_set_value = 2
+
+[[workflow.configure_station1_fields]]
+description = "Move to Register Type"
+key = "Down"
+
+[[workflow.configure_station1_fields]]
+description = "Open Register Type selector"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Confirm Holding register type"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Persist Register Type"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"
+mock_set_value = "Holding"
+
+[[workflow.configure_station1_fields]]
+description = "Move to Start Address"
+key = "Down"
+
+[[workflow.configure_station1_fields]]
+description = "Enter edit mode for Start Address"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Select existing Start Address"
+key = "Ctrl+a"
+
+[[workflow.configure_station1_fields]]
+description = "Clear Start Address"
+key = "Backspace"
+
+[[workflow.configure_station1_fields]]
+description = "Input Start Address 0x0000"
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station1_fields]]
+description = "Confirm Start Address"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Persist Start Address"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].start_address"
+mock_set_value = 0
+
+[[workflow.configure_station1_fields]]
+description = "Move to Register Count"
+key = "Down"
+
+[[workflow.configure_station1_fields]]
+description = "Enter edit mode for Register Count"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Select existing Register Count"
+key = "Ctrl+a"
+
+[[workflow.configure_station1_fields]]
+description = "Clear Register Count"
+key = "Backspace"
+
+[[workflow.configure_station1_fields]]
+description = "Input Register Count 8"
+input = "decimal"
+value = 8
+
+[[workflow.configure_station1_fields]]
+description = "Confirm Register Count"
+key = "Enter"
+
+[[workflow.configure_station1_fields]]
+description = "Persist Register Count"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
+mock_set_value = 8
+
+[[workflow.configure_station1_fields]]
+description = "Ensure register grid length"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0]
+
+[[workflow.configure_station1_fields]]
+description = "Wait for register grid to appear"
+sleep_ms = 1000
+
+# Step 7: Edit Station 1 Registers - Round 1
+[[workflow.edit_station1_round1]]
+description = "Return to station 1 header and reach registers"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station1_round1]]
+key = "PageDown"
+
+[[workflow.edit_station1_round1]]
+description = "Highlight station 1 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.edit_station1_round1]]
+description = "Move to register grid"
+key = "Down"
+times = 5
+
+[[workflow.edit_station1_round1]]
+description = "Focus first register cell"
+key = "Down"
+
+[[workflow.edit_station1_round1]]
+description = "Register 0 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 0 - Input 0x0001"
+input = "hex"
+value = 0x0001
+
+[[workflow.edit_station1_round1]]
+description = "Register 0 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 0x0001
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 1 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 1 - Input 0x0003"
+input = "hex"
+value = 0x0003
+
+[[workflow.edit_station1_round1]]
+description = "Register 1 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value = 0x0003
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 2 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 2 - Input 0x0005"
+input = "hex"
+value = 0x0005
+
+[[workflow.edit_station1_round1]]
+description = "Register 2 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value = 0x0005
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 3 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 3 - Input 0x0007"
+input = "hex"
+value = 0x0007
+
+[[workflow.edit_station1_round1]]
+description = "Register 3 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value = 0x0007
+
+[[workflow.edit_station1_round1]]
+description = "Verify first row for station 1"
+verify = "0x0001 0x0003 0x0005 0x0007"
+at_line = 16
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 4 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 4 - Input 0x0009"
+input = "hex"
+value = 0x0009
+
+[[workflow.edit_station1_round1]]
+description = "Register 4 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value = 0x0009
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 5 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 5 - Input 0x000B"
+input = "hex"
+value = 0x000B
+
+[[workflow.edit_station1_round1]]
+description = "Register 5 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value = 0x000B
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 6 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 6 - Input 0x000D"
+input = "hex"
+value = 0x000D
+
+[[workflow.edit_station1_round1]]
+description = "Register 6 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value = 0x000D
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 7 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Register 7 - Input 0x000F"
+input = "hex"
+value = 0x000F
+
+[[workflow.edit_station1_round1]]
+description = "Register 7 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Persist register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value = 0x000F
+
+[[workflow.edit_station1_round1]]
+description = "Verify second row for station 1"
+verify = "0x0009 0x000B 0x000D 0x000F"
+at_line = 17
+
+[[workflow.edit_station1_round1]]
+description = "Return cursor to station 1 header"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station1_round1]]
+description = "Persist station 1 header focus"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+# Step 8: Configure Station 2 fields
+[[workflow.configure_station2_fields]]
+description = "Jump to top and reach station 2"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station2_fields]]
+key = "PageDown"
+times = 2
+
+[[workflow.configure_station2_fields]]
+description = "Highlight station 2 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+[[workflow.configure_station2_fields]]
+description = "Move to Station ID field"
+key = "Down"
+
+[[workflow.configure_station2_fields]]
+description = "Enter edit mode for Station 2 ID"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Select existing Start Address"
+key = "Ctrl+a"
+
+[[workflow.configure_station2_fields]]
+description = "Clear Station ID"
+key = "Backspace"
+
+[[workflow.configure_station2_fields]]
+description = "Input Station ID 6"
+input = "decimal"
+value = 6
+
+[[workflow.configure_station2_fields]]
+description = "Confirm Station ID"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Persist Station 2 ID"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].station_id"
+mock_set_value = 6
+
+[[workflow.configure_station2_fields]]
+description = "Move to Register Type"
+key = "Down"
+
+[[workflow.configure_station2_fields]]
+description = "Open Register Type selector"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Confirm Holding register type"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Persist Register Type"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].register_type"
+mock_set_value = "Holding"
+
+[[workflow.configure_station2_fields]]
+description = "Move to Start Address"
+key = "Down"
+
+[[workflow.configure_station2_fields]]
+description = "Enter edit mode for Start Address"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Select existing Start Address"
+key = "Ctrl+a"
+
+[[workflow.configure_station2_fields]]
+description = "Clear Start Address"
+key = "Backspace"
+
+[[workflow.configure_station2_fields]]
+description = "Input Start Address 0x0000"
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station2_fields]]
+description = "Confirm Start Address"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Persist Start Address"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].start_address"
+mock_set_value = 0
+
+[[workflow.configure_station2_fields]]
+description = "Move to Register Count"
+key = "Down"
+
+[[workflow.configure_station2_fields]]
+description = "Enter edit mode for Register Count"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Select existing Register Count"
+key = "Ctrl+a"
+
+[[workflow.configure_station2_fields]]
+description = "Clear Register Count"
+key = "Backspace"
+
+[[workflow.configure_station2_fields]]
+description = "Input Register Count 8"
+input = "decimal"
+value = 8
+
+[[workflow.configure_station2_fields]]
+description = "Confirm Register Count"
+key = "Enter"
+
+[[workflow.configure_station2_fields]]
+description = "Persist Register Count"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].register_count"
+mock_set_value = 8
+
+[[workflow.configure_station2_fields]]
+description = "Ensure register grid length"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0]
+
+[[workflow.configure_station2_fields]]
+description = "Wait for register grid to appear"
+sleep_ms = 1000
+
+# Step 9: Edit Station 2 Registers - Round 1
+[[workflow.edit_station2_round1]]
+description = "Return to station 2 header and reach registers"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station2_round1]]
+key = "PageDown"
+times = 2
+
+[[workflow.edit_station2_round1]]
+description = "Highlight station 2 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+[[workflow.edit_station2_round1]]
+description = "Move to register grid"
+key = "Down"
+times = 5
+
+[[workflow.edit_station2_round1]]
+description = "Focus first register cell"
+key = "Down"
+
+[[workflow.edit_station2_round1]]
+description = "Register 0 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 0 - Input 0x0010"
+input = "hex"
+value = 0x0010
+
+[[workflow.edit_station2_round1]]
+description = "Register 0 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[0]"
+mock_set_value = 0x0010
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 1 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 1 - Input 0x0012"
+input = "hex"
+value = 0x0012
+
+[[workflow.edit_station2_round1]]
+description = "Register 1 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[1]"
+mock_set_value = 0x0012
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 2 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 2 - Input 0x0014"
+input = "hex"
+value = 0x0014
+
+[[workflow.edit_station2_round1]]
+description = "Register 2 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[2]"
+mock_set_value = 0x0014
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 3 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 3 - Input 0x0016"
+input = "hex"
+value = 0x0016
+
+[[workflow.edit_station2_round1]]
+description = "Register 3 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[3]"
+mock_set_value = 0x0016
+
+[[workflow.edit_station2_round1]]
+description = "Verify first row for station 2"
+verify = "0x0010 0x0012 0x0014 0x0016"
+at_line = 17
+
+[[workflow.edit_station2_round1]]
+description = "Verify second row for station 2"
+verify = "0x0018 0x001A 0x001C 0x001E"
+at_line = 18
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 4 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 4 - Input 0x0018"
+input = "hex"
+value = 0x0018
+
+[[workflow.edit_station2_round1]]
+description = "Register 4 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[4]"
+mock_set_value = 0x0018
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 5 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 5 - Input 0x001A"
+input = "hex"
+value = 0x001A
+
+[[workflow.edit_station2_round1]]
+description = "Register 5 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[5]"
+mock_set_value = 0x001A
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 6 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 6 - Input 0x001C"
+input = "hex"
+value = 0x001C
+
+[[workflow.edit_station2_round1]]
+description = "Register 6 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[6]"
+mock_set_value = 0x001C
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 7 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Register 7 - Input 0x001E"
+input = "hex"
+value = 0x001E
+
+[[workflow.edit_station2_round1]]
+description = "Register 7 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Persist register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[7]"
+mock_set_value = 0x001E
+
+[[workflow.edit_station2_round1]]
+description = "Verify second row for station 2"
+verify = "0x0018 0x001A 0x001C 0x001E"
+at_line = 18
+
+[[workflow.edit_station2_round1]]
+description = "Return cursor to station 2 header"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station2_round1]]
+description = "Persist station 2 header focus"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+# Step 10: Save configuration and enable port
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "Ctrl+s"
+
+[[workflow.save_configuration]]
+description = "Enable port in mock state"
+mock_path = "$.ports['/tmp/vcom1'].enabled"
+mock_set_value = true
+
+[[workflow.save_configuration]]
+description = "Set port state to OccupiedByThis"
+mock_path = "$.ports['/tmp/vcom1'].state"
+mock_set_value = { type = "occupied_by_this" }
+
+[[workflow.save_configuration]]
+description = "Wait for port to enable and stabilize"
+sleep_ms = 5000
+
+[[workflow.save_configuration]]
+description = "Verify Running status indicator"
+verify = "Running ●"
+at_line = 0
+
+# Step 11: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check port is enabled in status"
+mock_verify_path = "$.ports['/tmp/vcom1'].enabled"
+mock_verify_value = true
+
+[[workflow.verify_port_enabled]]
+description = "Check port state is Running"
+mock_verify_path = "$.ports['/tmp/vcom1'].state"
+mock_verify_value = { type = "occupied_by_this" }
+
+# Step 12: Edit Station 1 Registers - Round 2
+[[workflow.edit_station1_round2]]
+description = "Return to station 1 registers"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station1_round2]]
+key = "PageDown"
+
+[[workflow.edit_station1_round2]]
+description = "Highlight station 1 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.edit_station1_round2]]
+description = "Move to register grid"
+key = "Down"
+times = 5
+
+[[workflow.edit_station1_round2]]
+description = "Focus first register cell"
+key = "Down"
+
+[[workflow.edit_station1_round2]]
+description = "Register 0 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 0 - Input 0x000F"
+input = "hex"
+value = 0x000F
+
+[[workflow.edit_station1_round2]]
+description = "Register 0 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 0x000F
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 1 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 1 - Input 0x000D"
+input = "hex"
+value = 0x000D
+
+[[workflow.edit_station1_round2]]
+description = "Register 1 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value = 0x000D
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 2 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 2 - Input 0x000B"
+input = "hex"
+value = 0x000B
+
+[[workflow.edit_station1_round2]]
+description = "Register 2 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value = 0x000B
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 3 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 3 - Input 0x0009"
+input = "hex"
+value = 0x0009
+
+[[workflow.edit_station1_round2]]
+description = "Register 3 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value = 0x0009
+
+[[workflow.edit_station1_round2]]
+description = "Verify first row for station 1"
+verify = "0x000F 0x000D 0x000B 0x0009"
+at_line = 16
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 4 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 4 - Input 0x0007"
+input = "hex"
+value = 0x0007
+
+[[workflow.edit_station1_round2]]
+description = "Register 4 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value = 0x0007
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 5 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 5 - Input 0x0005"
+input = "hex"
+value = 0x0005
+
+[[workflow.edit_station1_round2]]
+description = "Register 5 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value = 0x0005
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 6 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 6 - Input 0x0003"
+input = "hex"
+value = 0x0003
+
+[[workflow.edit_station1_round2]]
+description = "Register 6 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value = 0x0003
+
+[[workflow.edit_station1_round2]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 7 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Register 7 - Input 0x0001"
+input = "hex"
+value = 0x0001
+
+[[workflow.edit_station1_round2]]
+description = "Register 7 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Persist register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value = 0x0001
+
+[[workflow.edit_station1_round2]]
+description = "Verify second row for station 1"
+verify = "0x0007 0x0005 0x0003 0x0001"
+at_line = 17
+
+[[workflow.edit_station1_round2]]
+description = "Return cursor to station 1 header"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station1_round2]]
+description = "Persist station 1 header focus"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+# Step 13: Edit Station 2 Registers - Round 2
+[[workflow.edit_station2_round2]]
+description = "Return to station 2 registers"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station2_round2]]
+key = "PageDown"
+times = 2
+
+[[workflow.edit_station2_round2]]
+description = "Highlight station 2 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+[[workflow.edit_station2_round2]]
+description = "Move to register grid"
+key = "Down"
+times = 5
+
+[[workflow.edit_station2_round2]]
+description = "Focus first register cell"
+key = "Down"
+
+[[workflow.edit_station2_round2]]
+description = "Register 0 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 0 - Input 0x001E"
+input = "hex"
+value = 0x001E
+
+[[workflow.edit_station2_round2]]
+description = "Register 0 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[0]"
+mock_set_value = 0x001E
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 1 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 1 - Input 0x001C"
+input = "hex"
+value = 0x001C
+
+[[workflow.edit_station2_round2]]
+description = "Register 1 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[1]"
+mock_set_value = 0x001C
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 2 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 2 - Input 0x001A"
+input = "hex"
+value = 0x001A
+
+[[workflow.edit_station2_round2]]
+description = "Register 2 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[2]"
+mock_set_value = 0x001A
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 3 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 3 - Input 0x0018"
+input = "hex"
+value = 0x0018
+
+[[workflow.edit_station2_round2]]
+description = "Register 3 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[3]"
+mock_set_value = 0x0018
+
+[[workflow.edit_station2_round2]]
+description = "Verify first row for station 2"
+verify = "0x001E 0x001C 0x001A 0x0018"
+at_line = 17
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 4 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 4 - Input 0x0016"
+input = "hex"
+value = 0x0016
+
+[[workflow.edit_station2_round2]]
+description = "Register 4 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[4]"
+mock_set_value = 0x0016
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 5 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 5 - Input 0x0014"
+input = "hex"
+value = 0x0014
+
+[[workflow.edit_station2_round2]]
+description = "Register 5 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[5]"
+mock_set_value = 0x0014
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 6 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 6 - Input 0x0012"
+input = "hex"
+value = 0x0012
+
+[[workflow.edit_station2_round2]]
+description = "Register 6 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[6]"
+mock_set_value = 0x0012
+
+[[workflow.edit_station2_round2]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 7 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Register 7 - Input 0x0010"
+input = "hex"
+value = 0x0010
+
+[[workflow.edit_station2_round2]]
+description = "Register 7 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round2]]
+description = "Persist register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[7]"
+mock_set_value = 0x0010
+
+[[workflow.edit_station2_round2]]
+description = "Verify first row for station 2"
+verify = "0x001E 0x001C 0x001A 0x0018"
+at_line = 17
+
+[[workflow.edit_station2_round2]]
+description = "Verify second row for station 2"
+verify = "0x0016 0x0014 0x0012 0x0010"
+at_line = 18
+
+[[workflow.edit_station2_round2]]
+description = "Return cursor to station 2 header"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station2_round2]]
+description = "Persist station 2 header focus"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+# Step 14: Verify mock data after Round 2 save
+[[workflow.verify_mock_data]]
+description = "Verify station 1 configuration persists"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_verify_value = 2
+
+[[workflow.verify_mock_data]]
+description = "Verify station 1 register count"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
+mock_verify_value = 8
+
+[[workflow.verify_mock_data]]
+description = "Verify station 2 configuration persists"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].station_id"
+mock_verify_value = 6
+
+[[workflow.verify_mock_data]]
+description = "Verify station 2 register count"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[1].register_count"
+mock_verify_value = 8
+
+# Step 15: Edit Station 1 Registers - Round 3
+[[workflow.edit_station1_round3]]
+description = "Return to station 1 registers"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station1_round3]]
+key = "PageDown"
+
+[[workflow.edit_station1_round3]]
+description = "Highlight station 1 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.edit_station1_round3]]
+description = "Move to register grid"
+key = "Down"
+times = 5
+
+[[workflow.edit_station1_round3]]
+description = "Focus first register cell"
+key = "Down"
+
+[[workflow.edit_station1_round3]]
+description = "Register 0 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 0 - Input 0x0101"
+input = "hex"
+value = 0x0101
+
+[[workflow.edit_station1_round3]]
+description = "Register 0 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 0x0101
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 1 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 1 - Input 0x0202"
+input = "hex"
+value = 0x0202
+
+[[workflow.edit_station1_round3]]
+description = "Register 1 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
+mock_set_value = 0x0202
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 2 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 2 - Input 0x0303"
+input = "hex"
+value = 0x0303
+
+[[workflow.edit_station1_round3]]
+description = "Register 2 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
+mock_set_value = 0x0303
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 3 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 3 - Input 0x0404"
+input = "hex"
+value = 0x0404
+
+[[workflow.edit_station1_round3]]
+description = "Register 3 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
+mock_set_value = 0x0404
+
+[[workflow.edit_station1_round3]]
+description = "Verify first row for station 1"
+verify = "0x0101 0x0202 0x0303 0x0404"
+at_line = 16
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 4 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 4 - Input 0x0505"
+input = "hex"
+value = 0x0505
+
+[[workflow.edit_station1_round3]]
+description = "Register 4 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
+mock_set_value = 0x0505
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 5 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 5 - Input 0x0606"
+input = "hex"
+value = 0x0606
+
+[[workflow.edit_station1_round3]]
+description = "Register 5 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
+mock_set_value = 0x0606
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 6 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 6 - Input 0x0707"
+input = "hex"
+value = 0x0707
+
+[[workflow.edit_station1_round3]]
+description = "Register 6 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
+mock_set_value = 0x0707
+
+[[workflow.edit_station1_round3]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 7 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Register 7 - Input 0x0808"
+input = "hex"
+value = 0x0808
+
+[[workflow.edit_station1_round3]]
+description = "Register 7 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Persist register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
+mock_set_value = 0x0808
+
+[[workflow.edit_station1_round3]]
+description = "Verify second row for station 1"
+verify = "0x0505 0x0606 0x0707 0x0808"
+at_line = 17
+
+[[workflow.edit_station1_round3]]
+description = "Return cursor to station 1 header"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station1_round3]]
+description = "Persist station 1 header focus"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+# Step 16: Edit Station 2 Registers - Round 3
+[[workflow.edit_station2_round3]]
+description = "Return to station 2 registers"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station2_round3]]
+key = "PageDown"
+times = 2
+
+[[workflow.edit_station2_round3]]
+description = "Highlight station 2 header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
+
+[[workflow.edit_station2_round3]]
+description = "Move to register grid"
+key = "Down"
+times = 5
+
+[[workflow.edit_station2_round3]]
+description = "Focus first register cell"
+key = "Down"
+
+[[workflow.edit_station2_round3]]
+description = "Register 0 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 0 - Input 0x0A0A"
+input = "hex"
+value = 0x0A0A
+
+[[workflow.edit_station2_round3]]
+description = "Register 0 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 0"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[0]"
+mock_set_value = 0x0A0A
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 1"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 1 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 1 - Input 0x0B0B"
+input = "hex"
+value = 0x0B0B
+
+[[workflow.edit_station2_round3]]
+description = "Register 1 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 1"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[1]"
+mock_set_value = 0x0B0B
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 2"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 2 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 2 - Input 0x0C0C"
+input = "hex"
+value = 0x0C0C
+
+[[workflow.edit_station2_round3]]
+description = "Register 2 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 2"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[2]"
+mock_set_value = 0x0C0C
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 3"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 3 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 3 - Input 0x0D0D"
+input = "hex"
+value = 0x0D0D
+
+[[workflow.edit_station2_round3]]
+description = "Register 3 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 3"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[3]"
+mock_set_value = 0x0D0D
+
+[[workflow.edit_station2_round3]]
+description = "Verify first row for station 2"
+verify = "0x0A0A 0x0B0B 0x0C0C 0x0D0D"
+at_line = 17
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 4"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 4 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 4 - Input 0x0E0E"
+input = "hex"
+value = 0x0E0E
+
+[[workflow.edit_station2_round3]]
+description = "Register 4 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 4"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[4]"
+mock_set_value = 0x0E0E
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 5"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 5 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 5 - Input 0x0F0F"
+input = "hex"
+value = 0x0F0F
+
+[[workflow.edit_station2_round3]]
+description = "Register 5 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 5"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[5]"
+mock_set_value = 0x0F0F
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 6"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 6 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 6 - Input 0x1010"
+input = "hex"
+value = 0x1010
+
+[[workflow.edit_station2_round3]]
+description = "Register 6 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 6"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[6]"
+mock_set_value = 0x1010
+
+[[workflow.edit_station2_round3]]
+description = "Move to register 7"
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 7 - Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Register 7 - Input 0x1111"
+input = "hex"
+value = 0x1111
+
+[[workflow.edit_station2_round3]]
+description = "Register 7 - Confirm value"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Persist register 7"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[7]"
+mock_set_value = 0x1111
+
+[[workflow.edit_station2_round3]]
+description = "Verify second row for station 2"
+verify = "0x0E0E 0x0F0F 0x1010 0x1111"
+at_line = 18
+
+[[workflow.edit_station2_round3]]
+description = "Return cursor to station 2 header"
+key = "Ctrl+PageUp"
+
+[[workflow.edit_station2_round3]]
+description = "Persist station 2 header focus"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 1 }
