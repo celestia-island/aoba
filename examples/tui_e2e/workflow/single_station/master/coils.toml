@@ -44,6 +44,10 @@ mock_path = "$.port_order"
 mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
 
 [[workflow.navigate_to_entry]]
+description = "Wait for entry screen to populate ports"
+sleep_ms = 1500
+
+[[workflow.navigate_to_entry]]
 description = "Initial navigation to entry page"
 verify = "/tmp/vcom1"
 at_line = 2
@@ -55,7 +59,7 @@ at_line = 3
 # Step 2: Enter configuration panel
 [[workflow.enter_config_panel]]
 description = "Press Enter on selected port to enter config panel"
-key = "enter"
+key = "Enter"
 
 [[workflow.enter_config_panel]]
 description = "Switch mock state to config panel"
@@ -68,13 +72,18 @@ mock_path = "$.page_state.config_panel.cursor"
 mock_set_value = "EnablePort"
 
 [[workflow.enter_config_panel]]
+description = "Wait for config panel to render"
+sleep_ms = 1500
+
+[[workflow.enter_config_panel]]
 verify = "Enable Port"
 at_line = 2
 
 # Step 3: Navigate to business configuration
 [[workflow.navigate_to_business_config]]
 description = "Navigate down to Business Configuration menu item"
-key = "down"
+key = "Down"
+times = 2
 
 [[workflow.navigate_to_business_config]]
 description = "Highlight Business Configuration entry"
@@ -91,7 +100,7 @@ cursor_at_line = 2
 # Step 4: Enter Modbus panel
 [[workflow.enter_modbus_panel]]
 description = "Press Enter to enter Modbus dashboard"
-key = "enter"
+key = "Enter"
 
 [[workflow.enter_modbus_panel]]
 description = "Switch mock state to Modbus dashboard"
@@ -110,7 +119,7 @@ at_line = 0
 # Step 5: Create station
 [[workflow.create_station]]
 description = "Press Enter on 'Create Station' to create new station"
-key = "enter"
+key = "Enter"
 
 [[workflow.create_station]]
 description = "Initialize master station structure"
@@ -151,7 +160,7 @@ at_line = 6
 # Step 6, Row 1: Configure Station ID field
 [[workflow.configure_station_fields]]
 description = "Row 1 - Navigate to Station ID field"
-key = "down"
+key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
@@ -161,7 +170,8 @@ mock_set_value = { kind = "StationId", station_index = 0 }
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Enter edit mode for Station ID"
-key = "enter"
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Clear station ID in mock state"
@@ -170,7 +180,7 @@ mock_set_value = 0
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Clear existing value"
-key = "ctrl-a"
+key = "Ctrl+a"
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Mirror cleared station ID"
@@ -179,7 +189,7 @@ mock_set_value = 0
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Delete cleared content"
-key = "backspace"
+key = "Backspace"
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Maintain cleared station ID"
@@ -190,10 +200,11 @@ mock_set_value = 0
 description = "Row 1 - Type station ID"
 input = "decimal"
 value = 1
+index = 10
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Confirm Station ID"
-key = "enter"
+key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Row 1 - Update Station ID in mock state"
@@ -206,27 +217,34 @@ sleep_ms = 200
 
 # Step 6, Row 2: Configure Register Type field  
 [[workflow.configure_station_fields]]
-description = "Row 2 - Navigate to Register Type field"
-key = "down"
-times = 1
-
-[[workflow.configure_station_fields]]
 description = "Row 2 - Highlight Register Type field"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "RegisterMode", station_index = 0 }
 
 [[workflow.configure_station_fields]]
 description = "Row 2 - Enter edit mode for Register Type"
-key = "enter"
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
-description = "Row 2 - Mirror register type selection"
+description = "Row 2 - Confirm selector editing state"
+verify = "< Holding Registers(03)"
+at_line = 7
+
+[[workflow.configure_station_fields]]
+description = "Row 2 - Mirror default register type"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"
-mock_set_value = "Coils"
+mock_set_value = "Holding"
+
+[[workflow.configure_station_fields]]
+description = "Row 2 - Cycle register type to Coils"
+key = "Char(h)"
+times = 2
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
 description = "Row 2 - Select Coils (already default, just confirm)"
-key = "enter"
+key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Row 2 - Update Register Type in mock state"
@@ -237,10 +255,15 @@ mock_set_value = "Coils"
 description = "Row 2 - Wait for field to update"
 sleep_ms = 200
 
+[[workflow.configure_station_fields]]
+description = "Row 2 - Verify register type updated to Coils"
+verify = "Coils(01)"
+at_line = 7
+
 # Step 6, Row 3: Configure Start Address field
 [[workflow.configure_station_fields]]
 description = "Row 3 - Navigate to Start Address field"
-key = "down"
+key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
@@ -250,7 +273,8 @@ mock_set_value = { kind = "RegisterStartAddress", station_index = 0 }
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Enter edit mode for Start Address"
-key = "enter"
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Reset start address in mock state"
@@ -259,7 +283,7 @@ mock_set_value = 0
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Clear existing value"
-key = "ctrl-a"
+key = "Ctrl+a"
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Mirror cleared start address"
@@ -268,7 +292,7 @@ mock_set_value = 0
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Delete cleared content"
-key = "backspace"
+key = "Backspace"
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Maintain cleared start address"
@@ -279,10 +303,12 @@ mock_set_value = 0
 description = "Row 3 - Type start address"
 input = "hex"
 value = 0x0000
+index = 11
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Confirm Start Address"
-key = "enter"
+key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Row 3 - Update Start Address in mock state"
@@ -296,7 +322,7 @@ sleep_ms = 200
 # Step 6, Row 4: Configure Register Count field
 [[workflow.configure_station_fields]]
 description = "Row 4 - Navigate to Register Count field"
-key = "down"
+key = "Down"
 times = 1
 
 [[workflow.configure_station_fields]]
@@ -306,7 +332,8 @@ mock_set_value = { kind = "RegisterLength", station_index = 0 }
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Enter edit mode for Register Count"
-key = "enter"
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Reset register count in mock state"
@@ -315,7 +342,7 @@ mock_set_value = 0
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Clear existing value"
-key = "ctrl-a"
+key = "Ctrl+a"
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Mirror cleared register count"
@@ -324,7 +351,7 @@ mock_set_value = 0
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Delete cleared content"
-key = "backspace"
+key = "Backspace"
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Maintain cleared register count"
@@ -335,10 +362,12 @@ mock_set_value = 0
 description = "Row 4 - Type register count"
 input = "decimal"
 value = 10
+index = 12
+sleep_ms = 200
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Confirm Register Count"
-key = "enter"
+key = "Enter"
 
 [[workflow.configure_station_fields]]
 description = "Row 4 - Update Register Count in mock state"
@@ -354,11 +383,12 @@ mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 description = "Row 4 - Wait for register grid to appear"
 sleep_ms = 1000
 
-# Step 7, Register 0: Edit first register (index 0)
 [[workflow.edit_registers]]
-description = "Register 0 - Enter edit mode"
-key = "enter"
+description = "Move focus to first register row"
+key = "Down"
+sleep_ms = 200
 
+# Step 7, Register 0: Edit first register (index 0)
 [[workflow.edit_registers]]
 description = "Register 0 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
@@ -366,12 +396,15 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 0 }
 
 [[workflow.edit_registers]]
 description = "Register 0 - Store input value in placeholder"
-input_register = { pool = "bool", index = 0, format = "one_zero" }
+input_register = { pool = "bool", index = 0, format = "one_zero", type_to_tui = false }
 index = 0
+sleep_ms = 200
 
 [[workflow.edit_registers]]
-description = "Register 0 - Confirm edit"
-key = "enter"
+description = "Register 0 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 0, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 0 - Update mock state"
@@ -385,7 +418,7 @@ press_if = { pool = "bool", index = 0, equals = 1 }
 
 [[workflow.edit_registers]]
 description = "Register 0 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 0 - Highlight next register"
@@ -394,22 +427,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 1 }
 
 # Step 7, Register 1: Edit second register (index 1)
 [[workflow.edit_registers]]
-description = "Register 1 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 1 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 1 }
 
 [[workflow.edit_registers]]
 description = "Register 1 - Store input value in placeholder"
-input_register = { pool = "bool", index = 1, format = "one_zero" }
+input_register = { pool = "bool", index = 1, format = "one_zero", type_to_tui = false }
 index = 1
 
 [[workflow.edit_registers]]
-description = "Register 1 - Confirm edit"
-key = "enter"
+description = "Register 1 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 1, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 1 - Update mock state"
@@ -428,7 +459,7 @@ at_line = 10
 
 [[workflow.edit_registers]]
 description = "Register 1 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 1 - Highlight next register"
@@ -437,22 +468,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 2 }
 
 # Step 7, Register 2: Edit third register (index 2)
 [[workflow.edit_registers]]
-description = "Register 2 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 2 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 2 }
 
 [[workflow.edit_registers]]
 description = "Register 2 - Store input value in placeholder"
-input_register = { pool = "bool", index = 2, format = "one_zero" }
+input_register = { pool = "bool", index = 2, format = "one_zero", type_to_tui = false }
 index = 2
 
 [[workflow.edit_registers]]
-description = "Register 2 - Confirm edit"
-key = "enter"
+description = "Register 2 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 2, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 2 - Update mock state"
@@ -465,7 +494,7 @@ at_line = 10
 
 [[workflow.edit_registers]]
 description = "Register 2 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 2 - Highlight next register"
@@ -474,22 +503,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 3 }
 
 # Step 7, Register 3: Edit fourth register (index 3)
 [[workflow.edit_registers]]
-description = "Register 3 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 3 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 3 }
 
 [[workflow.edit_registers]]
 description = "Register 3 - Store input value in placeholder"
-input_register = { pool = "bool", index = 3, format = "one_zero" }
+input_register = { pool = "bool", index = 3, format = "one_zero", type_to_tui = false }
 index = 3
 
 [[workflow.edit_registers]]
-description = "Register 3 - Confirm edit"
-key = "enter"
+description = "Register 3 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 3, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 3 - Update mock state"
@@ -502,7 +529,7 @@ at_line = 10
 
 [[workflow.edit_registers]]
 description = "Register 3 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 3 - Highlight next register"
@@ -511,22 +538,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 4 }
 
 # Step 7, Register 4: Edit fifth register (index 4)
 [[workflow.edit_registers]]
-description = "Register 4 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 4 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 4 }
 
 [[workflow.edit_registers]]
 description = "Register 4 - Store input value in placeholder"
-input_register = { pool = "bool", index = 4, format = "one_zero" }
+input_register = { pool = "bool", index = 4, format = "one_zero", type_to_tui = false }
 index = 4
 
 [[workflow.edit_registers]]
-description = "Register 4 - Confirm edit"
-key = "enter"
+description = "Register 4 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 4, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 4 - Update mock state"
@@ -539,7 +564,7 @@ at_line = 11
 
 [[workflow.edit_registers]]
 description = "Register 4 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 4 - Highlight next register"
@@ -548,22 +573,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 5 }
 
 # Step 7, Register 5: Edit sixth register (index 5)
 [[workflow.edit_registers]]
-description = "Register 5 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 5 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 5 }
 
 [[workflow.edit_registers]]
 description = "Register 5 - Store input value in placeholder"
-input_register = { pool = "bool", index = 5, format = "one_zero" }
+input_register = { pool = "bool", index = 5, format = "one_zero", type_to_tui = false }
 index = 5
 
 [[workflow.edit_registers]]
-description = "Register 5 - Confirm edit"
-key = "enter"
+description = "Register 5 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 5, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 5 - Update mock state"
@@ -576,7 +599,7 @@ at_line = 11
 
 [[workflow.edit_registers]]
 description = "Register 5 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 5 - Highlight next register"
@@ -585,22 +608,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 6 }
 
 # Step 7, Register 6: Edit seventh register (index 6)
 [[workflow.edit_registers]]
-description = "Register 6 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 6 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 6 }
 
 [[workflow.edit_registers]]
 description = "Register 6 - Store input value in placeholder"
-input_register = { pool = "bool", index = 6, format = "one_zero" }
+input_register = { pool = "bool", index = 6, format = "one_zero", type_to_tui = false }
 index = 6
 
 [[workflow.edit_registers]]
-description = "Register 6 - Confirm edit"
-key = "enter"
+description = "Register 6 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 6, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 6 - Update mock state"
@@ -613,7 +634,7 @@ at_line = 11
 
 [[workflow.edit_registers]]
 description = "Register 6 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 6 - Highlight next register"
@@ -622,22 +643,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 7 }
 
 # Step 7, Register 7: Edit eighth register (index 7)
 [[workflow.edit_registers]]
-description = "Register 7 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 7 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 7 }
 
 [[workflow.edit_registers]]
 description = "Register 7 - Store input value in placeholder"
-input_register = { pool = "bool", index = 7, format = "one_zero" }
+input_register = { pool = "bool", index = 7, format = "one_zero", type_to_tui = false }
 index = 7
 
 [[workflow.edit_registers]]
-description = "Register 7 - Confirm edit"
-key = "enter"
+description = "Register 7 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 7, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 7 - Update mock state"
@@ -650,7 +669,7 @@ at_line = 11
 
 [[workflow.edit_registers]]
 description = "Register 7 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 7 - Highlight next register"
@@ -659,22 +678,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 8 }
 
 # Step 7, Register 8: Edit ninth register (index 8)
 [[workflow.edit_registers]]
-description = "Register 8 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 8 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 8 }
 
 [[workflow.edit_registers]]
 description = "Register 8 - Store input value in placeholder"
-input_register = { pool = "bool", index = 8, format = "one_zero" }
+input_register = { pool = "bool", index = 8, format = "one_zero", type_to_tui = false }
 index = 8
 
 [[workflow.edit_registers]]
-description = "Register 8 - Confirm edit"
-key = "enter"
+description = "Register 8 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 8, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 8 - Update mock state"
@@ -687,7 +704,7 @@ at_line = 12
 
 [[workflow.edit_registers]]
 description = "Register 8 - Move to next register"
-key = "right"
+key = "Right"
 
 [[workflow.edit_registers]]
 description = "Register 8 - Highlight next register"
@@ -696,22 +713,20 @@ mock_set_value = { kind = "Register", station_index = 0, register_index = 9 }
 
 # Step 7, Register 9: Edit tenth register (index 9)
 [[workflow.edit_registers]]
-description = "Register 9 - Enter edit mode"
-key = "enter"
-
-[[workflow.edit_registers]]
 description = "Register 9 - Focus register cursor"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "Register", station_index = 0, register_index = 9 }
 
 [[workflow.edit_registers]]
 description = "Register 9 - Store input value in placeholder"
-input_register = { pool = "bool", index = 9, format = "one_zero" }
+input_register = { pool = "bool", index = 9, format = "one_zero", type_to_tui = false }
 index = 9
 
 [[workflow.edit_registers]]
-description = "Register 9 - Confirm edit"
-key = "enter"
+description = "Register 9 - Toggle coil if enabled"
+press_if = { pool = "bool", index = 9, equals = 1 }
+key = "Enter"
+sleep_ms = 200
 
 [[workflow.edit_registers]]
 description = "Register 9 - Update mock state"
@@ -724,7 +739,7 @@ at_line = 12
 
 [[workflow.edit_registers]]
 description = "Register 9 - Return to top of panel"
-key = "ctrl-pgup"
+key = "Ctrl+PageUp"
 
 [[workflow.edit_registers]]
 description = "Register 9 - Reset cursor to station header"
@@ -745,7 +760,7 @@ at_line = 10
 # Step 8: Save configuration
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
-key = "ctrl-s"
+key = "Ctrl+s"
 
 [[workflow.save_configuration]]
 description = "Enable port in mock state"
@@ -759,7 +774,7 @@ mock_set_value = { type = "occupied_by_this" }
 
 [[workflow.save_configuration]]
 description = "Wait for port to enable and stabilize"
-sleep_ms = 5000
+sleep_ms = 12000
 
 [[workflow.save_configuration]]
 description = "Expose running indicator state in mock data"

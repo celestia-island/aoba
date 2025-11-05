@@ -132,6 +132,11 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Re
         &channel_id.0,
     ]);
 
+    // Force English locale so string-based assertions remain deterministic across hosts.
+    cmd.env("LANGUAGE", "en_US");
+    cmd.env("LC_ALL", "en_US.UTF-8");
+    cmd.env("LANG", "en_US.UTF-8");
+
     log::info!(
         "🚀 Spawning TUI process: cargo run --package aoba -- --tui --debug-ci {}",
         channel_id.0
