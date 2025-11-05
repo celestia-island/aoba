@@ -10,10 +10,12 @@ use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
 };
 use crate::placeholder::{
-    clear_placeholders, generate_value, replace_placeholders, set_placeholder,
+    clear_placeholders, generate_value, get_register_value, init_register_pools, register_truthy,
+    register_value_as_string, register_value_to_json, replace_placeholders, set_placeholder,
+    RegisterPoolKind, RegisterValue,
 };
 use crate::renderer::render_tui_to_string;
-use crate::workflow::{Workflow, WorkflowStep};
+use crate::workflow::{Manifest, MockSyncValueSpec, PressIfSpec, Workflow, WorkflowStep};
 use aoba_ci_utils::E2EToTuiMessage;
 use aoba_ci_utils::{IpcChannelId, IpcSender};
 
@@ -46,6 +48,9 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
 
     // Clear placeholders from previous runs
     clear_placeholders();
+
+    // Initialize register pools so workflows can draw from deterministic random data
+    initialize_register_pools_for_workflow(&workflow.manifest);
 
     // Initialize based on mode
     match ctx.mode {
@@ -179,6 +184,14 @@ async fn execute_single_step(
     _workflow_id: &str,
     step: &WorkflowStep,
 ) -> Result<()> {
+    // Skip the entire step if the press_if guard evaluates to false
+    if let Some(condition) = &step.press_if {
+        if !evaluate_press_if(condition)? {
+            log::debug!("    ⏭️  press_if condition evaluated to false, skipping step");
+            return Ok(());
+        }
+    }
+
     // Handle keyboard input (DrillDown mode)
     if let Some(key) = &step.key {
         if ctx.mode == ExecutionMode::DrillDown {
@@ -193,28 +206,50 @@ async fn execute_single_step(
     }
 
     // Handle input generation and storage
-    if let Some(input_type) = &step.input {
+    let mut handled_input = false;
+
+    if let Some(input_spec) = &step.input_register {
+        handled_input = true;
+
+        let register_value = get_register_value(input_spec.pool, input_spec.index)?;
+        let formatted = register_value_as_string(register_value, input_spec.format.as_deref());
+
         if let Some(index) = step.index {
-            // Generate value based on input type
-            let value = if let Some(val) = &step.value {
-                // Use provided value
-                match val {
-                    serde_json::Value::Number(n) => n.to_string(),
-                    serde_json::Value::String(s) => s.clone(),
-                    _ => val.to_string(),
-                }
-            } else {
-                // Generate random value
-                generate_value(input_type, None)
-            };
+            set_placeholder(index, formatted.clone());
+        }
 
-            set_placeholder(index, value.clone());
+        if ctx.mode == ExecutionMode::DrillDown && input_spec.type_to_tui {
+            for ch in formatted.chars() {
+                simulate_char_input(ctx, ch).await?;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
+    }
 
-            // In DrillDown mode, simulate typing the value
-            if ctx.mode == ExecutionMode::DrillDown {
-                for ch in value.chars() {
-                    simulate_char_input(ctx, ch).await?;
-                    tokio::time::sleep(Duration::from_millis(20)).await;
+    if !handled_input {
+        if let Some(input_type) = &step.input {
+            if let Some(index) = step.index {
+                // Generate value based on input type
+                let value = if let Some(val) = &step.value {
+                    // Use provided value
+                    match val {
+                        serde_json::Value::Number(n) => n.to_string(),
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => val.to_string(),
+                    }
+                } else {
+                    // Generate random value
+                    generate_value(input_type, None)
+                };
+
+                set_placeholder(index, value.clone());
+
+                // In DrillDown mode, simulate typing the value
+                if ctx.mode == ExecutionMode::DrillDown {
+                    for ch in value.chars() {
+                        simulate_char_input(ctx, ch).await?;
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
                 }
             }
         }
@@ -242,6 +277,11 @@ async fn execute_single_step(
                 anyhow::anyhow!("mock_verify_path specified but no expected value")
             })?;
             verify_mock_state(path, expected)?;
+        }
+
+        // Synchronize register value into mock state when requested
+        if let Some(spec) = &step.mock_sync_value {
+            sync_register_into_mock_state(spec)?;
         }
     }
 
@@ -311,6 +351,104 @@ async fn execute_single_step(
     }
 
     Ok(())
+}
+
+fn initialize_register_pools_for_workflow(manifest: &Manifest) {
+    let (bool_count, int_count) = determine_register_pool_sizes(manifest);
+    init_register_pools(bool_count, int_count);
+}
+
+fn determine_register_pool_sizes(manifest: &Manifest) -> (usize, usize) {
+    let mut bool_total = 0usize;
+    let mut int_total = 0usize;
+
+    if let Some(stations) = &manifest.stations {
+        for station in stations {
+            match classify_register_type(&station.register_type) {
+                RegisterPoolKind::Bool => bool_total += station.register_count as usize,
+                RegisterPoolKind::Int => int_total += station.register_count as usize,
+            }
+        }
+    } else if let (Some(register_type), Some(count)) =
+        (manifest.register_type.as_deref(), manifest.register_count)
+    {
+        match classify_register_type(register_type) {
+            RegisterPoolKind::Bool => bool_total = bool_total.max(count as usize),
+            RegisterPoolKind::Int => int_total = int_total.max(count as usize),
+        }
+    }
+
+    // Provide a baseline pool so workflows referencing generic indices always succeed.
+    let minimum_pool = 16usize;
+    bool_total = bool_total.max(minimum_pool);
+    int_total = int_total.max(minimum_pool);
+
+    (bool_total, int_total)
+}
+
+fn classify_register_type(register_type: &str) -> RegisterPoolKind {
+    match register_type.to_ascii_lowercase().as_str() {
+        "coils" | "discrete_inputs" | "discreteinputs" => RegisterPoolKind::Bool,
+        _ => RegisterPoolKind::Int,
+    }
+}
+
+fn evaluate_press_if(condition: &PressIfSpec) -> Result<bool> {
+    if let Some(expected) = &condition.equals {
+        let value = get_register_value(condition.pool, condition.index)?;
+        match value {
+            RegisterValue::Bool(actual) => {
+                if let Some(expected_bool) = expected.as_bool() {
+                    Ok(actual == expected_bool)
+                } else if let Some(expected_number) = expected.as_i64() {
+                    Ok(actual == (expected_number != 0))
+                } else if expected.is_null() {
+                    Ok(!actual)
+                } else if let Some(expected_str) = expected.as_str() {
+                    match expected_str.to_ascii_lowercase().as_str() {
+                        "true" | "1" => Ok(actual),
+                        "false" | "0" => Ok(!actual),
+                        other => Ok(actual.to_string() == other),
+                    }
+                } else {
+                    anyhow::bail!("Unsupported equals comparison for boolean press_if")
+                }
+            }
+            RegisterValue::Int(actual) => {
+                if let Some(expected_number) = expected.as_u64() {
+                    Ok(actual as u64 == expected_number)
+                } else if let Some(expected_number) = expected.as_i64() {
+                    if expected_number < 0 {
+                        Ok(false)
+                    } else {
+                        Ok(actual as u64 == expected_number as u64)
+                    }
+                } else if let Some(expected_str) = expected.as_str() {
+                    let normalized = expected_str.trim();
+                    if let Some(hex) = normalized.strip_prefix("0x") {
+                        let expected_value = u16::from_str_radix(hex, 16)?;
+                        Ok(actual == expected_value)
+                    } else if let Some(bin) = normalized.strip_prefix("0b") {
+                        let expected_value = u16::from_str_radix(bin, 2)?;
+                        Ok(actual == expected_value)
+                    } else {
+                        let parsed = normalized.parse::<u16>()?;
+                        Ok(actual == parsed)
+                    }
+                } else {
+                    anyhow::bail!("Unsupported equals comparison for integer press_if")
+                }
+            }
+        }
+    } else {
+        register_truthy(condition.pool, condition.index)
+    }
+}
+
+fn sync_register_into_mock_state(spec: &MockSyncValueSpec) -> Result<()> {
+    let value = get_register_value(spec.pool, spec.index)?;
+    let json_value = register_value_to_json(value);
+    set_mock_state(&spec.path, json_value)
 }
 
 /// Simulate keyboard input by sending it via IPC

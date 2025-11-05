@@ -25,7 +25,7 @@ fn default_port(name: &str) -> Value {
     json!({
         "name": name,
         "enabled": false,
-        "state": "Free",
+        "state": {"type": "free"},
         "modbus_masters": [],
         "modbus_slaves": [],
         "log_count": 0
@@ -45,7 +45,7 @@ pub fn init_mock_state() {
         "port_order".to_string(),
         json!(["/tmp/vcom1", "/tmp/vcom2"]),
     );
-    root.insert("page".to_string(), json!("entry"));
+    root.insert("page".to_string(), json!({"type": "entry"}));
     root.insert(
         "timestamp".to_string(),
         json!(chrono::Utc::now().to_rfc3339()),
