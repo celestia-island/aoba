@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
@@ -265,7 +265,7 @@ async fn execute_single_step(
             } else if let Some(value) = &step.mock_set_value {
                 value.clone()
             } else {
-                anyhow::bail!("mock_path specified but no value provided");
+                bail!("mock_path specified but no value provided");
             };
 
             set_mock_state(path, value)?;
@@ -300,7 +300,7 @@ async fn execute_single_step(
                         crate::renderer::render_tui_via_ipc(sender).await?;
                     content
                 } else {
-                    anyhow::bail!("DrillDown mode requires IPC sender");
+                    bail!("DrillDown mode requires IPC sender");
                 }
             }
         };
@@ -318,7 +318,7 @@ async fn execute_single_step(
         if let Some(line_num) = step.at_line {
             let lines: Vec<&str> = screen_content.lines().collect();
             if line_num >= lines.len() {
-                anyhow::bail!(
+                bail!(
                     "Line {} out of bounds (screen has {} lines)",
                     line_num,
                     lines.len()
@@ -326,7 +326,7 @@ async fn execute_single_step(
             }
             let actual_line = lines[line_num];
             if !actual_line.contains(&expected_text) {
-                anyhow::bail!(
+                bail!(
                     "Screen verification failed at line {}:\n  Expected text: '{}'\n  Actual line: '{}'\n  Full screen:\n{}",
                     line_num,
                     expected_text,
@@ -335,7 +335,7 @@ async fn execute_single_step(
                 );
             }
         } else if !screen_content.contains(&expected_text) {
-            anyhow::bail!(
+            bail!(
                 "Screen verification failed:\n  Expected text: '{}'\n  Not found in screen content:\n{}",
                 expected_text,
                 screen_content
@@ -411,7 +411,7 @@ fn evaluate_press_if(condition: &PressIfSpec) -> Result<bool> {
                         other => Ok(actual.to_string() == other),
                     }
                 } else {
-                    anyhow::bail!("Unsupported equals comparison for boolean press_if")
+                    bail!("Unsupported equals comparison for boolean press_if")
                 }
             }
             RegisterValue::Int(actual) => {
@@ -436,7 +436,7 @@ fn evaluate_press_if(condition: &PressIfSpec) -> Result<bool> {
                         Ok(actual == parsed)
                     }
                 } else {
-                    anyhow::bail!("Unsupported equals comparison for integer press_if")
+                    bail!("Unsupported equals comparison for integer press_if")
                 }
             }
         }
