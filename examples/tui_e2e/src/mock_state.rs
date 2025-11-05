@@ -3,7 +3,7 @@
 //! This module manages a mock TUI global state that can be manipulated
 //! and verified during screen-capture-only testing.
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use once_cell::sync::Lazy;
 use serde_json::{json, Map, Value};
 use serde_json_path::JsonPath;
@@ -114,7 +114,7 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
     let actual = get_mock_state(path)?;
 
     if &actual != expected {
-        anyhow::bail!(
+    bail!(
             "Mock state verification failed at path '{}'\n  Expected: {:?}\n  Actual: {:?}",
             path,
             expected,
@@ -281,7 +281,7 @@ fn parse_path(path: &str) -> Result<Vec<PathPart>> {
             }
             ']' if in_brackets && !in_quotes => {
                 if bracket_content.is_empty() {
-                    anyhow::bail!("Empty bracket expression in path {}", path);
+                    bail!("Empty bracket expression in path {}", path);
                 }
 
                 if let Ok(index) = bracket_content.parse::<usize>() {
