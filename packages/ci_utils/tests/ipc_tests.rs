@@ -35,16 +35,16 @@ async fn test_ipc_send_receive_roundtrip() -> anyhow::Result<()> {
         .await?;
 
     match receiver.receive().await? {
-    E2EToTuiMessage::KeyPress { key } => assert_eq!(key, "enter"),
-    msg => bail!("Unexpected message: {:?}", msg),
+        E2EToTuiMessage::KeyPress { key } => assert_eq!(key, "enter"),
+        msg => bail!("Unexpected message: {:?}", msg),
     }
 
     // Test response from TUI
     receiver.send(TuiToE2EMessage::KeyProcessed).await?;
 
     match sender.receive().await? {
-    TuiToE2EMessage::KeyProcessed => {}
-    msg => bail!("Unexpected message: {:?}", msg),
+        TuiToE2EMessage::KeyProcessed => {}
+        msg => bail!("Unexpected message: {:?}", msg),
     }
 
     Ok(())
@@ -65,8 +65,8 @@ async fn test_ipc_char_input() -> anyhow::Result<()> {
     sender.send(E2EToTuiMessage::CharInput { ch: 'x' }).await?;
 
     match receiver.receive().await? {
-    E2EToTuiMessage::CharInput { ch } => assert_eq!(ch, 'x'),
-    msg => bail!("Unexpected message: {:?}", msg),
+        E2EToTuiMessage::CharInput { ch } => assert_eq!(ch, 'x'),
+        msg => bail!("Unexpected message: {:?}", msg),
     }
 
     Ok(())
@@ -111,7 +111,7 @@ async fn test_ipc_screen_content() -> anyhow::Result<()> {
             assert_eq!(width, 80);
             assert_eq!(height, 24);
         }
-    msg => bail!("Unexpected message: {:?}", msg),
+        msg => bail!("Unexpected message: {:?}", msg),
     }
 
     Ok(())

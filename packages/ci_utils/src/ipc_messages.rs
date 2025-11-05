@@ -56,4 +56,4 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// Interval between connection retry attempts
 pub const CONNECT_RETRY_INTERVAL: Duration = Duration::from_millis(100);
 /// Timeout for a single read/write operation
-pub const IO_TIMEOUT: Duration = Duration::from_secs(5);
+pub const IO_TIMEOUT: Duration = Duration::from_secs(30);

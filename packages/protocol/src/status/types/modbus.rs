@@ -140,6 +140,7 @@ impl TryFrom<&str> for RegisterMode {
         } else if value.eq_ignore_ascii_case("discrete")
             || value.eq_ignore_ascii_case("discrete_input")
             || value.eq_ignore_ascii_case("discrete_inputs")
+            || value.eq_ignore_ascii_case("discreteinputs")
         {
             Ok(Self::DiscreteInputs)
         } else {
