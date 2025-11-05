@@ -1321,6 +1321,9 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
         }
     };
 
+    // Create a single shared Bus instance for all key events
+    let bus = Bus::new(core_rx.clone(), ui_tx.clone());
+
     // Main IPC loop - receive messages from E2E test
     log::info!("🔄 Starting IPC message loop");
     loop {
@@ -1328,10 +1331,11 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
             Ok(aoba_ci_utils::E2EToTuiMessage::KeyPress { key }) => {
                 log::info!("⌨️  Processing key press: {}", key);
                 if let Ok(event) = parse_key_string(&key) {
-                    let bus = Bus::new(core_rx.clone(), ui_tx.clone());
                     if let Err(err) = crate::tui::input::handle_event(event, &bus) {
                         log::warn!("Failed to handle key event: {}", err);
                     }
+                    // Give core thread time to process the event
+                    tokio::time::sleep(Duration::from_millis(50)).await;
                 }
             }
             Ok(aoba_ci_utils::E2EToTuiMessage::CharInput { ch }) => {
@@ -1340,13 +1344,20 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
                     crossterm::event::KeyCode::Char(ch),
                     crossterm::event::KeyModifiers::NONE,
                 ));
-                let bus = Bus::new(core_rx.clone(), ui_tx.clone());
                 if let Err(err) = crate::tui::input::handle_event(event, &bus) {
                     log::warn!("Failed to handle char input: {}", err);
                 }
+                // Give core thread time to process the event
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
             Ok(aoba_ci_utils::E2EToTuiMessage::RequestScreen) => {
                 log::info!("🖼️  Rendering screen to TestBackend");
+                
+                // Drain any pending core messages before rendering to ensure state is synchronized
+                while let Ok(_msg) = bus.core_rx.try_recv() {
+                    // Just consume the messages
+                }
+                
                 terminal
                     .draw(|frame| {
                         if let Err(err) = render_ui(frame) {
