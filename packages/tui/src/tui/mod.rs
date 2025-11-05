@@ -1334,8 +1334,8 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
                     if let Err(err) = crate::tui::input::handle_event(event, &bus) {
                         log::warn!("Failed to handle key event: {}", err);
                     }
-                    // Give core thread time to process the event
-                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    // Small delay to allow core thread to process any messages
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
             Ok(aoba_ci_utils::E2EToTuiMessage::CharInput { ch }) => {
@@ -1347,13 +1347,13 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
                 if let Err(err) = crate::tui::input::handle_event(event, &bus) {
                     log::warn!("Failed to handle char input: {}", err);
                 }
-                // Give core thread time to process the event
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                // Small delay to allow core thread to process any messages
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
             Ok(aoba_ci_utils::E2EToTuiMessage::RequestScreen) => {
                 log::info!("🖼️  Rendering screen to TestBackend");
                 
-                // Drain any pending core messages before rendering to ensure state is synchronized
+                // Drain any remaining core messages before rendering
                 while let Ok(_msg) = bus.core_rx.try_recv() {
                     // Just consume the messages
                 }
