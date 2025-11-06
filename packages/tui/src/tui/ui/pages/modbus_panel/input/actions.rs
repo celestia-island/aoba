@@ -1,9 +1,7 @@
 use anyhow::{anyhow, Result};
 
-use crate::tui::status::types::{
-    self,
-    port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-};
+use crate::tui::status as types;
+use crate::tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode};
 use crate::tui::status::{read_status, write_status};
 use crate::tui::utils::bus::{Bus, UiToCore};
 

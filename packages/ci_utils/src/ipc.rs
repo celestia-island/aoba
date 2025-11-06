@@ -18,7 +18,7 @@ use super::{
     IO_TIMEOUT,
 };
 
-/// IPC sender (E2E test side)
+/// IPC sender (E2E test side - now the SERVER)
 pub struct IpcSender {
     channel_id: IpcChannelId,
     to_tui_writer: OwnedWriteHalf,
@@ -26,12 +26,37 @@ pub struct IpcSender {
 }
 
 impl IpcSender {
-    /// Create a new IPC sender
+    /// Create a new IPC sender (as server - binds sockets and waits for TUI to connect)
     pub async fn new(channel_id: IpcChannelId) -> Result<Self> {
         let (to_tui_path, from_tui_path) = channel_id.paths();
 
-        let to_tui_stream = connect_with_retry(&to_tui_path).await?;
-        let from_tui_stream = connect_with_retry(&from_tui_path).await?;
+        // Clean up any existing sockets
+        cleanup_socket(&to_tui_path);
+        cleanup_socket(&from_tui_path);
+
+        // Bind server sockets
+        let to_tui_listener = UnixListener::bind(&to_tui_path)
+            .with_context(|| format!("Failed to bind IPC socket: {}", to_tui_path.display()))?;
+        let from_tui_listener = UnixListener::bind(&from_tui_path)
+            .with_context(|| format!("Failed to bind IPC socket: {}", from_tui_path.display()))?;
+
+        log::info!("IPC [{}] Server sockets created, waiting for TUI to connect...", channel_id.0);
+
+        // Accept connections from TUI
+        let (to_tui_stream, _) = to_tui_listener.accept().await.with_context(|| {
+            format!(
+                "Failed to accept IPC connection on {}",
+                to_tui_path.display()
+            )
+        })?;
+        let (from_tui_stream, _) = from_tui_listener.accept().await.with_context(|| {
+            format!(
+                "Failed to accept IPC connection on {}",
+                from_tui_path.display()
+            )
+        })?;
+
+        log::info!("IPC [{}] TUI connected successfully", channel_id.0);
 
         let (_, to_tui_writer) = to_tui_stream.into_split();
         let (from_tui_reader, _) = from_tui_stream.into_split();
@@ -92,7 +117,7 @@ impl IpcSender {
     }
 }
 
-/// IPC receiver (TUI side)
+/// IPC receiver (TUI side - now the CLIENT)
 pub struct IpcReceiver {
     channel_id: IpcChannelId,
     to_tui_reader: BufReader<OwnedReadHalf>,
@@ -100,30 +125,17 @@ pub struct IpcReceiver {
 }
 
 impl IpcReceiver {
-    /// Create a new IPC receiver
+    /// Create a new IPC receiver (as client - connects to existing server sockets)
     pub async fn new(channel_id: IpcChannelId) -> Result<Self> {
         let (to_tui_path, from_tui_path) = channel_id.paths();
 
-        cleanup_socket(&to_tui_path);
-        cleanup_socket(&from_tui_path);
+        log::info!("IPC [{}] Connecting to E2E test server...", channel_id.0);
 
-        let to_tui_listener = UnixListener::bind(&to_tui_path)
-            .with_context(|| format!("Failed to bind IPC socket: {}", to_tui_path.display()))?;
-        let from_tui_listener = UnixListener::bind(&from_tui_path)
-            .with_context(|| format!("Failed to bind IPC socket: {}", from_tui_path.display()))?;
+        // Connect to E2E test's server sockets
+        let to_tui_stream = connect_with_retry(&to_tui_path).await?;
+        let from_tui_stream = connect_with_retry(&from_tui_path).await?;
 
-        let (to_tui_stream, _) = to_tui_listener.accept().await.with_context(|| {
-            format!(
-                "Failed to accept IPC connection on {}",
-                to_tui_path.display()
-            )
-        })?;
-        let (from_tui_stream, _) = from_tui_listener.accept().await.with_context(|| {
-            format!(
-                "Failed to accept IPC connection on {}",
-                from_tui_path.display()
-            )
-        })?;
+        log::info!("IPC [{}] Connected to E2E test successfully", channel_id.0);
 
         let (to_tui_reader, _) = to_tui_stream.into_split();
         let (_, from_tui_writer) = from_tui_stream.into_split();
@@ -177,7 +189,7 @@ impl IpcReceiver {
     }
 }
 
-impl Drop for IpcReceiver {
+impl Drop for IpcSender {
     fn drop(&mut self) {
         let (to_tui_path, from_tui_path) = self.channel_id.paths();
         cleanup_socket(&to_tui_path);

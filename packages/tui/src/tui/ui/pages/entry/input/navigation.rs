@@ -2,7 +2,10 @@ use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::tui::status::types::{self, cursor, cursor::Cursor};
+use crate::tui::status as types;
+use crate::tui::status::cursor;
+// trait for cursor helper methods (view_offset, prev, next)
+use crate::tui::status::cursor::Cursor;
 use crate::tui::status::{read_status, write_status, Page};
 use crate::tui::ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT};
 use crate::tui::utils::bus::Bus;

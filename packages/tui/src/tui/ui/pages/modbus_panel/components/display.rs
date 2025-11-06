@@ -4,11 +4,9 @@ use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;
 use crate::i18n::lang;
+use crate::tui::status as types;
+use crate::tui::status::modbus::{ModbusConnectionMode, RegisterMode};
 use crate::tui::status::read_status;
-use crate::tui::status::types::{
-    self,
-    modbus::{ModbusConnectionMode, RegisterMode},
-};
 use crate::tui::ui::components::{
     kv_line::render_kv_line,
     styled_label::{input_spans, selector_spans, TextState},
