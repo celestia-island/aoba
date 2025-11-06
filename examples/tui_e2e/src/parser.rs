@@ -1,7 +1,8 @@
 //! TOML workflow parser
 
-use crate::workflow::Workflow;
 use anyhow::{Context, Result};
+
+use crate::workflow::Workflow;
 
 /// Parse a workflow from TOML string
 pub fn parse_workflow(toml_content: &str) -> Result<Workflow> {

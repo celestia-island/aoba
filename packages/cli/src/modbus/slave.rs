@@ -110,22 +110,20 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         let dump_path =
             std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
 
-        Some(
-            crate::protocol::status::debug_dump::start_status_dump_thread(
-                dump_path,
-                None,
-                move || {
-                    crate::protocol::status::types::cli::CliStatus::new_slave_listen(
-                        port_name.clone(),
-                        station_id_copy,
-                        reg_mode_copy,
-                        register_address_copy,
-                        register_length_copy,
-                    )
-                    .to_json()
-                },
-            ),
-        )
+        Some(aoba_protocol::status::debug_dump::start_status_dump_thread(
+            dump_path,
+            None,
+            move || {
+                aoba_protocol::status::types::cli::CliStatus::new_slave_listen(
+                    port_name.clone(),
+                    station_id_copy,
+                    reg_mode_copy,
+                    register_address_copy,
+                    register_length_copy,
+                )
+                .to_json()
+            },
+        ))
     } else {
         None
     };
@@ -141,7 +139,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             if let Some(ref mut ipc_conns) = ipc {
                 let _ = ipc_conns
                     .status
-                    .send(&crate::protocol::ipc::IpcMessage::PortError {
+                    .send(&aoba_protocol::ipc::IpcMessage::PortError {
                         port_name: port.to_string(),
                         error: format!("Failed to open port: {err}"),
                         timestamp: None,
@@ -156,7 +154,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     if let Some(ref mut ipc_conns) = ipc {
         let _ = ipc_conns
             .status
-            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+            .send(&aoba_protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
             });
@@ -227,7 +225,7 @@ fn listen_for_one_request(
     station_id: u8,
     register_address: u16,
     register_length: u16,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    reg_mode: aoba_protocol::status::types::modbus::RegisterMode,
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
 ) -> Result<ModbusResponse> {
     use rmodbus::{server::ModbusFrame, ModbusProto};
@@ -252,26 +250,26 @@ fn listen_for_one_request(
 
     // Generate response based on register mode
     let response_bytes = match reg_mode {
-        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-            crate::protocol::modbus::build_slave_holdings_response(
+        aoba_protocol::status::types::modbus::RegisterMode::Holding => {
+            aoba_protocol::modbus::build_slave_holdings_response(
                 &mut frame,
                 &mut storage.lock().unwrap(),
             )?
         }
-        crate::protocol::status::types::modbus::RegisterMode::Input => {
-            crate::protocol::modbus::build_slave_inputs_response(
+        aoba_protocol::status::types::modbus::RegisterMode::Input => {
+            aoba_protocol::modbus::build_slave_inputs_response(
                 &mut frame,
                 &mut storage.lock().unwrap(),
             )?
         }
-        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-            crate::protocol::modbus::build_slave_coils_response(
+        aoba_protocol::status::types::modbus::RegisterMode::Coils => {
+            aoba_protocol::modbus::build_slave_coils_response(
                 &mut frame,
                 &mut storage.lock().unwrap(),
             )?
         }
-        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-            crate::protocol::modbus::build_slave_discrete_inputs_response(
+        aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            aoba_protocol::modbus::build_slave_discrete_inputs_response(
                 &mut frame,
                 &mut storage.lock().unwrap(),
             )?
@@ -349,7 +347,7 @@ fn send_request_and_wait(
     station_id: u8,
     register_address: u16,
     register_length: u16,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    reg_mode: aoba_protocol::status::types::modbus::RegisterMode,
 ) -> Result<ModbusResponse> {
     log::debug!(
         "send_request_and_wait: Preparing request for station={station_id}, addr=0x{register_address:04X}, len={register_length}, mode={reg_mode:?}"
@@ -357,29 +355,29 @@ fn send_request_and_wait(
 
     // Generate request based on register mode
     let request_bytes = match reg_mode {
-        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-            crate::protocol::modbus::generate_pull_get_holdings_request(
+        aoba_protocol::status::types::modbus::RegisterMode::Holding => {
+            aoba_protocol::modbus::generate_pull_get_holdings_request(
                 station_id,
                 register_address,
                 register_length,
             )?
         }
-        crate::protocol::status::types::modbus::RegisterMode::Input => {
-            crate::protocol::modbus::generate_pull_get_inputs_request(
+        aoba_protocol::status::types::modbus::RegisterMode::Input => {
+            aoba_protocol::modbus::generate_pull_get_inputs_request(
                 station_id,
                 register_address,
                 register_length,
             )?
         }
-        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-            crate::protocol::modbus::generate_pull_get_coils_request(
+        aoba_protocol::status::types::modbus::RegisterMode::Coils => {
+            aoba_protocol::modbus::generate_pull_get_coils_request(
                 station_id,
                 register_address,
                 register_length,
             )?
         }
-        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-            crate::protocol::modbus::generate_pull_get_discrete_inputs_request(
+        aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            aoba_protocol::modbus::generate_pull_get_discrete_inputs_request(
                 station_id,
                 register_address,
                 register_length,
@@ -416,8 +414,8 @@ fn send_request_and_wait(
 
     // Parse response
     let values = match reg_mode {
-        crate::protocol::status::types::modbus::RegisterMode::Holding
-        | crate::protocol::status::types::modbus::RegisterMode::Input => {
+        aoba_protocol::status::types::modbus::RegisterMode::Holding
+        | aoba_protocol::status::types::modbus::RegisterMode::Input => {
             // Response format for read holdings/inputs:
             // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
             if bytes_read < 5 {
@@ -449,8 +447,8 @@ fn send_request_and_wait(
             );
             values
         }
-        crate::protocol::status::types::modbus::RegisterMode::Coils
-        | crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+        aoba_protocol::status::types::modbus::RegisterMode::Coils
+        | aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
             // Response format for read coils/discrete inputs:
             // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
             if bytes_read < 5 {
@@ -553,22 +551,20 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
         let dump_path =
             std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
 
-        Some(
-            crate::protocol::status::debug_dump::start_status_dump_thread(
-                dump_path,
-                None,
-                move || {
-                    crate::protocol::status::types::cli::CliStatus::new_slave_poll(
-                        port_name.clone(),
-                        station_id_copy,
-                        reg_mode_copy,
-                        register_address_copy,
-                        register_length_copy,
-                    )
-                    .to_json()
-                },
-            ),
-        )
+        Some(aoba_protocol::status::debug_dump::start_status_dump_thread(
+            dump_path,
+            None,
+            move || {
+                aoba_protocol::status::types::cli::CliStatus::new_slave_poll(
+                    port_name.clone(),
+                    station_id_copy,
+                    reg_mode_copy,
+                    register_address_copy,
+                    register_length_copy,
+                )
+                .to_json()
+            },
+        ))
     } else {
         None
     };
@@ -584,7 +580,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             if let Some(ref mut ipc_conns) = ipc {
                 let _ = ipc_conns
                     .status
-                    .send(&crate::protocol::ipc::IpcMessage::PortError {
+                    .send(&aoba_protocol::ipc::IpcMessage::PortError {
                         port_name: port.to_string(),
                         error: format!("Failed to open port: {err}"),
                         timestamp: None,
@@ -600,7 +596,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     if let Some(ref mut ipc_conns) = ipc {
         let _ = ipc_conns
             .status
-            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+            .send(&aoba_protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
             });

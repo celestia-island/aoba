@@ -1,8 +1,6 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
-use std::path::PathBuf;
-use std::process::Command;
-use std::time::Duration;
+use std::{path::PathBuf, process::Command, time::Duration};
 
 /// Platform-specific default port names as constants
 #[cfg(windows)]

@@ -1,5 +1,4 @@
-use crate::status::types::modbus::StationConfig;
-use crate::status::types::port::PortData;
+use crate::{status::types::modbus::StationConfig, status::types::port::PortData};
 
 // Note: with_port_read and with_port_write have been removed since PortData
 // is now stored directly in the TUI status tree without Arc<RwLock<>>.
