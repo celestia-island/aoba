@@ -338,6 +338,14 @@ async fn execute_single_step(
         log::debug!("✅ Screen verified: '{}'", expected_text);
     }
 
+    // Handle triggers - custom actions
+    if let Some(trigger_name) = &step.trigger {
+        if ctx.mode == ExecutionMode::DrillDown {
+            log::info!("🔔 Executing trigger: {}", trigger_name);
+            execute_trigger(ctx, trigger_name, &step.trigger_params).await?;
+        }
+    }
+
     // Handle sleep - use explicit sleep_ms if provided, otherwise no extra sleep
     if let Some(sleep_ms) = step.sleep_ms {
         tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
@@ -381,4 +389,211 @@ async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()>
     }
 
     Ok(())
+}
+
+/// Execute a custom trigger action
+///
+/// Triggers are special actions that can be invoked from workflow steps.
+/// Currently supported triggers:
+/// - "match_master_registers": Spawn a CLI slave process to read from TUI master and verify registers
+async fn execute_trigger(
+    ctx: &mut ExecutionContext,
+    trigger_name: &str,
+    params: &Option<serde_json::Value>,
+) -> Result<()> {
+    match trigger_name {
+        "match_master_registers" => {
+            execute_match_master_registers_trigger(ctx, params).await?;
+        }
+        _ => {
+            bail!("Unknown trigger: {}", trigger_name);
+        }
+    }
+    Ok(())
+}
+
+/// Trigger: match_master_registers
+///
+/// Creates a temporary CLI slave process on /tmp/vcom2 to read registers from the TUI master
+/// on /tmp/vcom1, then compares the read values with expected values from trigger parameters.
+///
+/// Expected params format:
+/// {
+///   "station_id": 1,
+///   "register_type": "Coils" | "DiscreteInputs" | "Holding" | "Input",
+///   "start_address": 0,
+///   "expected_values": [1, 0, 1, 0, ...]
+/// }
+async fn execute_match_master_registers_trigger(
+    ctx: &mut ExecutionContext,
+    params: &Option<serde_json::Value>,
+) -> Result<()> {
+    let params = params
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("match_master_registers requires parameters"))?;
+
+    // Parse parameters
+    let station_id = params["station_id"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("station_id parameter required"))? as u8;
+    
+    let register_type = params["register_type"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("register_type parameter required"))?;
+    
+    let start_address = params["start_address"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("start_address parameter required"))? as u16;
+    
+    let expected_values = params["expected_values"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("expected_values parameter required"))?;
+
+    let register_count = expected_values.len() as u16;
+
+    log::info!(
+        "🔍 Verifying master registers: station_id={}, type={}, addr=0x{:04X}, count={}",
+        station_id,
+        register_type,
+        start_address,
+        register_count
+    );
+
+    // Determine the appropriate CLI command based on register type
+    let register_mode_arg = match register_type {
+        "Coils" => "01",
+        "DiscreteInputs" => "02",
+        "Holding" => "03",
+        "Input" => "04",
+        _ => bail!("Unsupported register type: {}", register_type),
+    };
+
+    // Build CLI command to act as slave and read from master
+    let cli_binary = if std::path::Path::new("target/debug/aoba").exists() {
+        "target/debug/aoba"
+    } else if std::path::Path::new("target/release/aoba").exists() {
+        "target/release/aoba"
+    } else {
+        bail!("aoba binary not found in target/debug or target/release");
+    };
+
+    // Give TUI time to be ready for Modbus communication
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Spawn CLI process as master to read from TUI master (which will respond as if it's a slave)
+    // Actually, we need to spawn as master-provide mode to read from the TUI master
+    let output = tokio::process::Command::new(cli_binary)
+        .args([
+            "--master-provide",
+            &ctx.port2,  // Use port2 (/tmp/vcom2) which is connected to port1 (/tmp/vcom1)
+            "--station-id",
+            &station_id.to_string(),
+            "--register-mode",
+            register_mode_arg,
+            "--register-address",
+            &start_address.to_string(),
+            "--register-length",
+            &register_count.to_string(),
+            "--once",  // Read once and exit
+        ])
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI process: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::error!("CLI process failed: {}", stderr);
+        bail!("CLI slave process failed: {}", stderr);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    log::debug!("CLI output: {}", stdout);
+
+    // Parse the CLI output to extract register values
+    // Expected format varies by register type, but generally includes register values in hex or decimal
+    let actual_values = parse_cli_register_output(&stdout, register_type, register_count)?;
+
+    // Compare actual vs expected
+    if actual_values.len() != expected_values.len() {
+        bail!(
+            "Register count mismatch: expected {}, got {}",
+            expected_values.len(),
+            actual_values.len()
+        );
+    }
+
+    for (i, (actual, expected)) in actual_values.iter().zip(expected_values.iter()).enumerate() {
+        let expected_u16 = expected
+            .as_u64()
+            .ok_or_else(|| anyhow::anyhow!("Expected value at index {} is not a number", i))?
+            as u16;
+        
+        if *actual != expected_u16 {
+            bail!(
+                "Register value mismatch at index {}: expected 0x{:04X}, got 0x{:04X}",
+                i,
+                expected_u16,
+                actual
+            );
+        }
+    }
+
+    log::info!("✅ Master register verification passed: {} registers matched", register_count);
+    Ok(())
+}
+
+/// Parse CLI register output to extract register values
+fn parse_cli_register_output(
+    output: &str,
+    register_type: &str,
+    expected_count: u16,
+) -> Result<Vec<u16>> {
+    let mut values = Vec::new();
+
+    // For coils/discrete inputs, look for ON/OFF or 0/1 patterns
+    // For holding/input registers, look for hex values
+    
+    match register_type {
+        "Coils" | "DiscreteInputs" => {
+            // Look for patterns like "0x0000: ON" or "Register 0: 1"
+            for line in output.lines() {
+                if line.contains("ON") || line.contains("1") {
+                    values.push(1);
+                } else if line.contains("OFF") || line.contains("0") {
+                    values.push(0);
+                }
+                
+                if values.len() >= expected_count as usize {
+                    break;
+                }
+            }
+        }
+        "Holding" | "Input" => {
+            // Look for patterns like "0x0000: 0x1234" or similar hex values
+            for line in output.lines() {
+                if let Some(pos) = line.find("0x") {
+                    let hex_str = &line[pos..].split_whitespace().next().unwrap_or("");
+                    if let Ok(val) = u16::from_str_radix(hex_str.trim_start_matches("0x"), 16) {
+                        values.push(val);
+                    }
+                }
+                
+                if values.len() >= expected_count as usize {
+                    break;
+                }
+            }
+        }
+        _ => bail!("Unsupported register type for parsing: {}", register_type),
+    }
+
+    if values.len() < expected_count as usize {
+        bail!(
+            "Could not parse enough register values from CLI output. Expected {}, got {}. Output: {}",
+            expected_count,
+            values.len(),
+            output
+        );
+    }
+
+    Ok(values)
 }
