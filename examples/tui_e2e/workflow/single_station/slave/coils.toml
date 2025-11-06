@@ -137,6 +137,11 @@ key = "Left"
 description = "Confirm Slave mode"
 key = "Enter"
 
+
+[[workflow.switch_to_slave_mode]]
+description = "Navigate back to Create Station"
+key = "Up"
+
 [[workflow.switch_to_slave_mode]]
 description = "Update connection mode in mock state"
 mock_path = "$.page_state.modbus_dashboard.connection_mode"

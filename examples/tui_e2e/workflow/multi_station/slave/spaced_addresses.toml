@@ -131,6 +131,26 @@ at_line = 0
 
 # Step 4.5: Switch to Slave Mode
 [[workflow.switch_to_slave_mode]]
+description = "Navigate to Connection Mode field"
+key = "Down"
+
+[[workflow.switch_to_slave_mode]]
+description = "Enter edit mode for Connection Mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Switch from Master to Slave"
+key = "Left"
+
+[[workflow.switch_to_slave_mode]]
+description = "Confirm Slave mode"
+key = "Enter"
+
+[[workflow.switch_to_slave_mode]]
+description = "Navigate back to Create Station"
+key = "Up"
+
+[[workflow.switch_to_slave_mode]]
 description = "Ensure connection mode is Slave"
 mock_path = "$.page_state.modbus_dashboard.connection_mode"
 mock_set_value = "slave"

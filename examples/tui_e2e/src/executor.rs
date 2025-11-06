@@ -247,8 +247,11 @@ async fn execute_single_step(
         if ctx.mode == ExecutionMode::DrillDown {
             for ch in value.chars() {
                 simulate_char_input(ctx, ch).await?;
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                tokio::time::sleep(Duration::from_millis(50)).await;
             }
+            // Add delay after typing to ensure all characters are processed by TUI
+            // TUI has 100ms delay after each char, so we need to wait for that plus render time
+            tokio::time::sleep(Duration::from_millis(300)).await;
         }
     }
 
