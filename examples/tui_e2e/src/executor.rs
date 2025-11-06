@@ -10,6 +10,7 @@ use crate::mock_state::{
     init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
 };
 use crate::renderer::render_tui_to_string;
+use crate::retry_state_machine::{group_steps, is_in_retryable_group, StepGroup};
 use crate::workflow::{Workflow, WorkflowStep};
 use aoba_ci_utils::E2EToTuiMessage;
 use aoba_ci_utils::{IpcChannelId, IpcSender};
@@ -189,14 +190,143 @@ async fn execute_step_sequence(
     workflow_id: &str,
     steps: &[WorkflowStep],
 ) -> Result<()> {
-    for (i, step) in steps.iter().enumerate() {
-        if let Some(desc) = &step.description {
-            log::debug!("    [{}] {}", i, desc);
-        }
+    // Group steps into retryable units
+    let groups = group_steps(steps);
 
-        execute_single_step(ctx, workflow_id, step).await?;
+    if !groups.is_empty() {
+        log::debug!("📦 Identified {} retryable step groups", groups.len());
+    }
+
+    let mut current_group_idx = 0;
+    let mut i = 0;
+
+    while i < steps.len() {
+        let step = &steps[i];
+
+        // Check if this step is part of a retryable group
+        if current_group_idx < groups.len() && i == groups[current_group_idx].step_indices[0] {
+            // Execute this group with retry logic
+            let group = &groups[current_group_idx];
+            execute_step_group_with_retry(ctx, workflow_id, steps, group).await?;
+
+            // Skip to next step after group
+            i = group.step_indices.last().unwrap() + 1;
+            current_group_idx += 1;
+        } else {
+            // Execute single step normally (not part of any group)
+            if let Some(desc) = &step.description {
+                log::debug!("    [{}] {}", i, desc);
+            }
+            execute_single_step(ctx, workflow_id, step).await?;
+            i += 1;
+        }
     }
     Ok(())
+}
+
+/// Execute a step group with retry logic
+async fn execute_step_group_with_retry(
+    ctx: &mut ExecutionContext,
+    workflow_id: &str,
+    all_steps: &[WorkflowStep],
+    group: &StepGroup,
+) -> Result<()> {
+    let mut retry_count = 0;
+    let max_retries = group.max_retries;
+    let mut first_failure_screenshot: Option<String> = None;
+    let mut last_error: Option<anyhow::Error> = None;
+
+    loop {
+        if retry_count > 0 {
+            log::info!(
+                "🔁 Retrying step group (attempt {}/{})",
+                retry_count + 1,
+                max_retries + 1
+            );
+            // Wait 1 second before retry
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        // Execute all steps in the group
+        let mut verification_failed = false;
+        for &step_idx in &group.step_indices {
+            let step = &all_steps[step_idx];
+
+            if let Some(desc) = &step.description {
+                if retry_count == 0 {
+                    log::debug!("    [{}] {}", step_idx, desc);
+                }
+            }
+
+            // Try to execute the step
+            match execute_single_step(ctx, workflow_id, step).await {
+                Ok(()) => {}
+                Err(err) => {
+                    // Check if this is a verification error
+                    let err_msg = err.to_string();
+                    if err_msg.contains("Screen verification failed")
+                        || err_msg.contains("mock_verify")
+                    {
+                        verification_failed = true;
+                        last_error = Some(err);
+
+                        // Cache screenshot on first failure
+                        if first_failure_screenshot.is_none() {
+                            if let Ok(screenshot) = capture_screenshot(ctx).await {
+                                first_failure_screenshot = Some(screenshot);
+                            }
+                        }
+                        break;
+                    } else {
+                        // Non-verification error - fail immediately
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
+        // If group succeeded, we're done
+        if !verification_failed {
+            if retry_count > 0 {
+                log::info!("✅ Step group succeeded after {} retries", retry_count);
+            }
+            return Ok(());
+        }
+
+        // Check if we can retry
+        retry_count += 1;
+        if retry_count > max_retries {
+            // Max retries exceeded - fail with first screenshot
+            log::error!(
+                "❌ Step group failed after {} attempts",
+                max_retries + 1
+            );
+
+            if let Some(screenshot) = first_failure_screenshot {
+                log::error!("📸 Screenshot from first failure:\n{}", screenshot);
+            }
+
+            return Err(last_error.unwrap_or_else(|| {
+                anyhow::anyhow!("Step group failed after {} retries", max_retries)
+            }));
+        }
+    }
+}
+
+/// Capture screenshot from current TUI state
+async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
+    match ctx.mode {
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(120, 40),
+        ExecutionMode::DrillDown => {
+            if let Some(sender) = ctx.ipc_sender.as_mut() {
+                let (content, _width, _height) =
+                    crate::renderer::render_tui_via_ipc(sender).await?;
+                Ok(content)
+            } else {
+                bail!("DrillDown mode requires IPC sender");
+            }
+        }
+    }
 }
 
 /// Execute a single workflow step

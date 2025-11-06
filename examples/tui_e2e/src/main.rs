@@ -45,6 +45,7 @@ mod executor;
 mod mock_state;
 mod parser;
 mod renderer;
+mod retry_state_machine;
 mod workflow;
 
 pub use executor::*;
