@@ -49,10 +49,6 @@ mock_path = "$.port_order"
 mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
 
 [[workflow.navigate_to_entry]]
-description = "Wait for entry screen to populate ports"
-sleep_ms = 1500
-
-[[workflow.navigate_to_entry]]
 description = "Initial navigation to entry page"
 verify = "/tmp/vcom1"
 
@@ -73,10 +69,6 @@ mock_set_value = { type = "config_panel" }
 description = "Set config panel cursor to EnablePort"
 mock_path = "$.page_state.config_panel.cursor"
 mock_set_value = "EnablePort"
-
-[[workflow.enter_config_panel]]
-description = "Wait for config panel to render"
-sleep_ms = 1500
 
 [[workflow.enter_config_panel]]
 verify = "Enable Port"
@@ -157,10 +149,6 @@ description = "Confirm Station ID"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Wait for Station ID to settle"
-sleep_ms = 500
-
-[[workflow.configure_station_fields]]
 description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
 mock_set_value = 1
@@ -194,10 +182,6 @@ times = 4
 [[workflow.configure_station_fields]]
 description = "Confirm Register Type"
 key = "Enter"
-
-[[workflow.configure_station_fields]]
-description = "Wait for Register Type to settle"
-sleep_ms = 500
 
 [[workflow.configure_station_fields]]
 description = "Verify Register Type is correctly set"
@@ -249,10 +233,6 @@ value = 0x0000
 [[workflow.configure_station_fields]]
 description = "Confirm Start Address"
 key = "Enter"
-
-[[workflow.configure_station_fields]]
-description = "Wait for Start Address to settle"
-sleep_ms = 500
 
 [[workflow.configure_station_fields]]
 description = "Verify Start Address is correctly set to 0x0000"
@@ -310,10 +290,6 @@ description = "Confirm Register Count"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
-description = "Wait for Register Count to settle"
-sleep_ms = 500
-
-[[workflow.configure_station_fields]]
 description = "Verify Register Length is correctly set to 1"
 verify = "Register Length       0x0001 (1)"
 
@@ -327,13 +303,6 @@ description = "Ensure registers array matches length"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [0]
 
-[[workflow.configure_station_fields]]
-description = "Wait for register grid to appear"
-sleep_ms = 1000
-
-# Step 7: Edit Registers - Round 1 (Value: 3)
-# For integer registers, we need to enter edit mode, type the hex value, and confirm
-# Step 7: Edit Registers - Round 1 (Value: 3)
 [[workflow.edit_registers_round1]]
 description = "Navigate to register row"
 key = "Down"
