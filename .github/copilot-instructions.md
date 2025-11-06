@@ -11,10 +11,8 @@ All four crates remain in the top-level workspace. Shared dependencies must be d
 
 ## Test Suite Segmentation
 
-- `TUI UI E2E` (deprecated, being merged): Simulates user input and consumes a mocked TUI global state layer. Validates key-to-state transitions without touching IPC. Being merged into `TUI E2E`.
 - `TUI E2E`: Exercises TUI global state against mocked TUI→CLI IPC endpoints, asserting command emission and inbound register diffs. Implemented in `examples/tui_e2e`.
-- `CLI E2E` (new): Covers bidirectional IPC between the virtualized TUI transport and the live CLI runtime, plus legacy stdio scenarios moved from the original CLI suite. Implemented in `examples/cli_e2e`.
-- `CLI Tests` (renamed from legacy CLI E2E): Pure CLI logic checks that do not rely on IPC or persistent stdio loops.
+- `CLI E2E`: Covers bidirectional IPC between the virtualized TUI transport and the live CLI runtime, plus legacy stdio scenarios moved from the original CLI suite. Implemented in `examples/cli_e2e`.
 
 Current CI workflows mirror this split: `e2e-tests-cli.yml` executes the CLI matrices, `e2e-tests-tui.yml` drives the TUI E2E test suites. Each workflow builds its associated example crate alongside the primary package before executing modules.
 
@@ -80,6 +78,7 @@ The TUI E2E testing framework uses a modern IPC-based architecture that provides
 - Uses `ratatui::TestBackend` for rendering
 
 **Usage:**
+
 ```bash
 cargo run --package tui_e2e -- --screen-capture-only --module single_station_master_coils
 ```
@@ -93,18 +92,19 @@ cargo run --package tui_e2e -- --screen-capture-only --module single_station_mas
 - Tests complete user workflows
 
 **Usage:**
+
 ```bash
 cargo run --package tui_e2e -- --module single_station_master_coils
 ```
 
 ### IPC Communication Flow
 
-```
+```raw
 ┌─────────────┐                    ┌──────────────┐
 │   TUI E2E   │                    │  TUI Process │
 │   Test      │                    │  (--debug-ci)│
 │             │                    │              │
-│  IpcSender  │ ◄──── IPC ─────► │ IpcReceiver  │
+│  IpcSender  │ ◄──── IPC ─────►   │  IpcReceiver │
 │             │   Unix Socket      │              │
 └─────────────┘                    └──────────────┘
       │                                   │
@@ -124,6 +124,7 @@ cargo run --package tui_e2e -- --module single_station_master_coils
 - **True Integration**: DrillDown mode tests real TUI process, not mocks
 
 For detailed documentation, see:
+
 - [TUI E2E Testing README](../examples/tui_e2e/README.md)
 - [IPC Architecture Details](../examples/tui_e2e/IPC_ARCHITECTURE.md)
 

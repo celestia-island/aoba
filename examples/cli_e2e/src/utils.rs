@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use regex::Regex;
 use std::{path::PathBuf, process::Command, time::Duration};
 
 /// Platform-specific default port names as constants
@@ -15,30 +14,16 @@ pub const DEFAULT_PORT2: &str = "/tmp/vcom2";
 
 /// Helper struct describing the regexes and display names used to detect
 /// the two expected virtual serial ports in TUI output.
-#[allow(dead_code)]
 pub struct VcomMatchers {
-    pub port1_rx: Regex,
-    pub port2_rx: Regex,
-    pub cursor_rx: Regex,
     pub port1_name: String,
     pub port2_name: String,
-    pub port1_aliases: Vec<String>,
-    pub port2_aliases: Vec<String>,
 }
 
 /// Build platform-appropriate Regex matchers for the two virtual ports.
 pub fn vcom_matchers_with_ports(port1: &str, port2: &str) -> VcomMatchers {
-    let port1_pattern = regex::escape(port1);
-    let port2_pattern = regex::escape(port2);
-
     VcomMatchers {
-        port1_rx: Regex::new(&port1_pattern).unwrap(),
-        port2_rx: Regex::new(&port2_pattern).unwrap(),
-        cursor_rx: Regex::new(r">").unwrap(),
         port1_name: port1.to_string(),
         port2_name: port2.to_string(),
-        port1_aliases: vec![port1.to_string()],
-        port2_aliases: vec![port2.to_string()],
     }
 }
 
@@ -111,8 +96,8 @@ pub async fn sleep_1s() {
     tokio::time::sleep(Duration::from_millis(1000)).await;
 }
 
-/// Check if a serial port exists
-#[allow(dead_code)]
+/// Check if a serial port exists (Windows-only helper)
+#[cfg(windows)]
 pub fn port_exists(port_name: &str) -> bool {
     #[cfg(windows)]
     {
@@ -184,7 +169,6 @@ pub fn should_run_vcom_tests_with_ports(port1: &str, port2: &str) -> bool {
 ///
 /// # Returns
 /// A Command that can be further configured and executed
-#[allow(dead_code)]
 pub fn create_modbus_command(
     is_slave: bool,
     port: &str,

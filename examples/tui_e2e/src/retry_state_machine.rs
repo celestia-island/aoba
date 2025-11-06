@@ -3,26 +3,7 @@
 //! Groups consecutive keyboard + verification steps into retryable units.
 //! On verification failure, retries the entire group up to 3 times.
 
-use anyhow::Result;
-
 use crate::workflow::WorkflowStep;
-
-/// State machine states for retry logic
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RetryState {
-    /// Scanning steps to identify groups
-    Scanning,
-    /// Executing action steps in current group
-    Executing,
-    /// Verifying results of action steps
-    Verifying,
-    /// Retrying after verification failure
-    Retrying,
-    /// Group execution succeeded
-    Success,
-    /// Group execution failed after max retries
-    Failed,
-}
 
 /// A group of steps that can be retried as a unit
 #[derive(Debug, Clone)]
@@ -31,35 +12,17 @@ pub struct StepGroup {
     pub step_indices: Vec<usize>,
     /// Indices of action-oriented steps inside this group
     pub action_indices: Vec<usize>,
-    /// Indices of verification-oriented steps inside this group
-    pub verification_indices: Vec<usize>,
-    /// Current retry attempt (0 = first attempt)
-    pub retry_count: u32,
     /// Maximum retry attempts
     pub max_retries: u32,
 }
 
 impl StepGroup {
-    pub fn new(
-        step_indices: Vec<usize>,
-        action_indices: Vec<usize>,
-        verification_indices: Vec<usize>,
-    ) -> Self {
+    pub fn new(step_indices: Vec<usize>, action_indices: Vec<usize>) -> Self {
         Self {
             step_indices,
             action_indices,
-            verification_indices,
-            retry_count: 0,
             max_retries: 3,
         }
-    }
-
-    pub fn can_retry(&self) -> bool {
-        self.retry_count < self.max_retries
-    }
-
-    pub fn increment_retry(&mut self) {
-        self.retry_count += 1;
     }
 }
 
@@ -109,11 +72,7 @@ impl GroupBuilder {
 
     fn finish(self) -> Option<StepGroup> {
         if self.has_actions() && self.has_verifications() {
-            Some(StepGroup::new(
-                self.step_indices,
-                self.action_indices,
-                self.verification_indices,
-            ))
+            Some(StepGroup::new(self.step_indices, self.action_indices))
         } else {
             None
         }
@@ -238,10 +197,7 @@ pub fn group_steps(steps: &[WorkflowStep]) -> Vec<StepGroup> {
     groups
 }
 
-/// Check if a step index is part of any retryable group
-pub fn is_in_retryable_group(step_index: usize, groups: &[StepGroup]) -> bool {
-    groups.iter().any(|g| g.step_indices.contains(&step_index))
-}
+// Note: helper `is_in_retryable_group` was removed because it was not used elsewhere.
 
 #[cfg(test)]
 mod tests {
@@ -264,7 +220,6 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].step_indices, vec![0, 1]);
         assert_eq!(groups[0].action_indices, vec![0]);
-        assert_eq!(groups[0].verification_indices, vec![1]);
     }
 
     #[test]
@@ -289,7 +244,6 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].step_indices, vec![0, 1, 2]);
         assert_eq!(groups[0].action_indices, vec![0]);
-        assert_eq!(groups[0].verification_indices, vec![2]);
     }
 
     #[test]
@@ -321,10 +275,8 @@ mod tests {
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].step_indices, vec![0, 1]);
         assert_eq!(groups[0].action_indices, vec![0]);
-        assert_eq!(groups[0].verification_indices, vec![1]);
         assert_eq!(groups[1].step_indices, vec![3, 4]);
         assert_eq!(groups[1].action_indices, vec![3]);
-        assert_eq!(groups[1].verification_indices, vec![4]);
     }
 
     #[test]
@@ -356,7 +308,6 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].step_indices, vec![0, 1, 2, 3, 4]);
         assert_eq!(groups[0].action_indices, vec![0, 1]);
-        assert_eq!(groups[0].verification_indices, vec![3, 4]);
     }
 }
 
