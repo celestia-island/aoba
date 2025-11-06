@@ -103,11 +103,12 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
 }
 
 /// Spawn TUI process with IPC communication
-async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Result<()> {
-    // Generate unique IPC channel ID
-    let channel_id = IpcChannelId(format!("{}_{}", workflow_id, std::process::id()));
+async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> Result<()> {
+    // Use a fixed IPC channel ID - no need to make it unique per test
+    // The TUI process doesn't care which test is running
+    let channel_id = IpcChannelId("tui_e2e".to_string());
 
-    log::debug!("Generated IPC channel ID: {}", channel_id.0);
+    log::debug!("Using IPC channel ID: {}", channel_id.0);
 
     // Start TUI process with --debug-ci flag
     // Try to use pre-built release binary first, fall back to cargo run
