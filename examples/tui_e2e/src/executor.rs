@@ -110,26 +110,39 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Re
     log::debug!("Generated IPC channel ID: {}", channel_id.0);
 
     // Start TUI process with --debug-ci flag
-    let mut cmd = tokio::process::Command::new("cargo");
-    cmd.args([
-        "run",
-        "--package",
-        "aoba",
-        "--",
-        "--tui",
-        "--debug-ci",
-        &channel_id.0,
-    ]);
+    // Try to use pre-built release binary first, fall back to cargo run
+    let aoba_bin = std::path::Path::new("target/release/aoba");
+    let mut cmd = if aoba_bin.exists() {
+        let mut c = tokio::process::Command::new(aoba_bin);
+        c.args(["--tui", "--debug-ci", &channel_id.0]);
+        log::info!(
+            "🚀 Spawning TUI process (release binary): target/release/aoba --tui --debug-ci {}",
+            channel_id.0
+        );
+        c
+    } else {
+        let mut c = tokio::process::Command::new("cargo");
+        c.args([
+            "run",
+            "--package",
+            "aoba",
+            "--release",
+            "--",
+            "--tui",
+            "--debug-ci",
+            &channel_id.0,
+        ]);
+        log::info!(
+            "🚀 Spawning TUI process (cargo): cargo run --package aoba --release -- --tui --debug-ci {}",
+            channel_id.0
+        );
+        c
+    };
 
     // Force English locale so string-based assertions remain deterministic across hosts.
     cmd.env("LANGUAGE", "en_US");
     cmd.env("LC_ALL", "en_US.UTF-8");
     cmd.env("LANG", "en_US.UTF-8");
-
-    log::info!(
-        "🚀 Spawning TUI process: cargo run --package aoba -- --tui --debug-ci {}",
-        channel_id.0
-    );
 
     let child = cmd
         .stdin(std::process::Stdio::null())
