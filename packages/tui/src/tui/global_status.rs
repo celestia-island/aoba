@@ -5,10 +5,10 @@
 use chrono::{DateTime, Local};
 use std::collections::HashMap;
 
-use yuuka::derive_struct;
 use ui::InputMode;
+use yuuka::derive_struct;
 
-use crate::tui::status::types::{cursor, port, ui};
+use crate::tui::status::{cursor, port, ui};
 
 derive_struct! {
     pub Status {

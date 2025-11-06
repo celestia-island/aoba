@@ -20,8 +20,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::tui::status::types::modbus::ModbusRegisterItem;
-use crate::tui::status::types::port::PortConfig;
+use crate::tui::status::modbus::ModbusRegisterItem;
+use crate::tui::status::port::PortConfig;
 
 /// Global flag to disable config cache (set via --no-config-cache)
 static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);
@@ -185,7 +185,7 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     for p in persisted {
         let config = match p.config {
             SerializablePortConfig::Modbus { mode, stations } => {
-                use crate::tui::status::types::modbus::{ModbusConnectionMode, RegisterMode};
+                use crate::tui::status::modbus::{ModbusConnectionMode, RegisterMode};
 
                 let mode_enum = if mode == "Master" {
                     ModbusConnectionMode::default_master()

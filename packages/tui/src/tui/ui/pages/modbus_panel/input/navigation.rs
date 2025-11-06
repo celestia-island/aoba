@@ -4,7 +4,8 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use super::actions::{handle_enter_action, handle_leave_page};
 use crate::i18n::lang;
-use crate::tui::status::types::{self, cursor::Cursor};
+use crate::tui::status as types;
+use crate::tui::status::cursor::Cursor;
 use crate::tui::status::{read_status, write_status};
 use crate::tui::utils::bus::{Bus, UiToCore};
 
@@ -432,9 +433,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
         if let Some(port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             // Check if port has any stations configured
             let has_stations = match &port.config {
-                crate::tui::status::types::port::PortConfig::Modbus { stations, .. } => {
-                    !stations.is_empty()
-                }
+                types::port::PortConfig::Modbus { stations, .. } => !stations.is_empty(),
             };
 
             if !has_stations {
@@ -461,18 +460,14 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                     .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                 port.config_modified = false;
                 // Set status to AppliedSuccess for 3 seconds
-                port.status_indicator =
-                    crate::tui::status::types::port::PortStatusIndicator::AppliedSuccess {
-                        timestamp: Local::now(),
-                    };
+                port.status_indicator = types::port::PortStatusIndicator::AppliedSuccess {
+                    timestamp: Local::now(),
+                };
                 Ok(())
             })?;
 
             // Check if port is already enabled
-            let is_enabled = matches!(
-                port.state,
-                crate::tui::status::types::port::PortState::OccupiedByThis
-            );
+            let is_enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
 
             if !is_enabled {
                 // Enable the port if not already enabled

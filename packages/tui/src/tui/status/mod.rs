@@ -2,7 +2,12 @@
 ///
 /// This module provides the TUI-specific status tree and read/write helpers,
 /// along with the serializable snapshot structures used by E2E tooling.
-pub mod types;
+pub mod cursor;
+pub mod ui;
+
+// Re-export the protocol status types at the `status` level so callers can use
+// `crate::tui::status::modbus`, `crate::tui::status::port`, `crate::tui::status::cli`.
+pub use aoba_protocol::status::types::{cli, modbus, port};
 
 use anyhow::Result;
 use once_cell::sync::OnceCell;
@@ -11,8 +16,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use yuuka::derive_struct;
-
-use crate::tui::status::types::port;
 
 /// Serializable snapshot helpers for E2E tooling.
 pub mod serializable {
@@ -31,7 +34,7 @@ pub mod serializable {
         time::Instant,
     };
 
-    use crate::tui::status::types::{
+    use crate::tui::status::{
         cursor::{ConfigPanelCursor, Cursor, ModbusDashboardCursor},
         modbus::{ModbusConnectionMode, ModbusRegisterItem, RegisterMode},
         port::{PortConfig, PortData, PortState, PortStatusIndicator},
@@ -281,40 +284,59 @@ pub mod serializable {
     }
 
     fn convert_port(port: &TuiPort) -> Result<PortData> {
-        let mut data = PortData::default();
-        data.port_name = port.name.clone();
-        data.state = port.state.clone();
-
-        if port.enabled && !matches!(data.state, PortState::OccupiedByThis) {
-            data.state = PortState::OccupiedByThis;
+        // Determine port state: if enabled but not marked as occupied, mark as OccupiedByThis
+        let mut state = port.state.clone();
+        if port.enabled && !matches!(state, PortState::OccupiedByThis) {
+            state = PortState::OccupiedByThis;
         }
 
-        data.status_indicator = match data.state {
-            PortState::OccupiedByThis => PortStatusIndicator::Running,
-            _ => PortStatusIndicator::NotStarted,
-        };
-
+        // Build station list
         let mut stations = Vec::new();
-
         if !port.modbus_slaves.is_empty() && port.modbus_masters.is_empty() {
             for station in &port.modbus_slaves {
                 stations.push(convert_station(station)?);
             }
-            data.config = PortConfig::Modbus {
+            let config = PortConfig::Modbus {
                 mode: ModbusConnectionMode::default_slave(),
                 stations,
             };
+            let status_indicator = match &state {
+                PortState::OccupiedByThis => PortStatusIndicator::Running,
+                _ => PortStatusIndicator::NotStarted,
+            };
+
+            let data = PortData {
+                port_name: port.name.clone(),
+                state,
+                status_indicator,
+                config,
+                ..PortData::default()
+            };
+
+            Ok(data)
         } else {
             for station in &port.modbus_masters {
                 stations.push(convert_station(station)?);
             }
-            data.config = PortConfig::Modbus {
+            let config = PortConfig::Modbus {
                 mode: ModbusConnectionMode::default_master(),
                 stations,
             };
-        }
+            let status_indicator = match &state {
+                PortState::OccupiedByThis => PortStatusIndicator::Running,
+                _ => PortStatusIndicator::NotStarted,
+            };
 
-        Ok(data)
+            let data = PortData {
+                port_name: port.name.clone(),
+                state,
+                status_indicator,
+                config,
+                ..PortData::default()
+            };
+
+            Ok(data)
+        }
     }
 
     fn convert_station(station: &TuiModbusStation) -> Result<ModbusRegisterItem> {
@@ -377,7 +399,7 @@ pub mod serializable {
             }
             TuiPage::LogPanel => super::Page::LogPanel {
                 selected_port: 0,
-                input_mode: crate::tui::status::types::ui::InputMode::Ascii,
+                input_mode: crate::tui::status::ui::InputMode::Ascii,
                 selected_item: None,
             },
             TuiPage::About => super::Page::About { view_offset: 0 },
@@ -555,22 +577,22 @@ derive_struct! {
 
         page: enum Page {
             Entry {
-                cursor?: crate::tui::status::types::cursor::EntryCursor,
+                cursor?: crate::tui::status::cursor::EntryCursor,
                 view_offset: usize = 0,
             },
             ConfigPanel {
                 selected_port: usize,
                 view_offset: usize = 0,
-                cursor: crate::tui::status::types::cursor::ConfigPanelCursor = crate::tui::status::types::cursor::ConfigPanelCursor::EnablePort,
+                cursor: crate::tui::status::cursor::ConfigPanelCursor = crate::tui::status::cursor::ConfigPanelCursor::EnablePort,
             },
             ModbusDashboard {
                 selected_port: usize,
                 view_offset: usize = 0,
-                cursor: crate::tui::status::types::cursor::ModbusDashboardCursor = crate::tui::status::types::cursor::ModbusDashboardCursor::AddLine,
+                cursor: crate::tui::status::cursor::ModbusDashboardCursor = crate::tui::status::cursor::ModbusDashboardCursor::AddLine,
             },
             LogPanel {
                 selected_port: usize,
-                input_mode: crate::tui::status::types::ui::InputMode = crate::tui::status::types::ui::InputMode::Ascii,
+                input_mode: crate::tui::status::ui::InputMode = crate::tui::status::ui::InputMode::Ascii,
                 selected_item: Option<usize> = None,
             },
             About {
@@ -580,7 +602,7 @@ derive_struct! {
 
         temporarily: {
             // Short-lived UI state. Only place truly transient values here.
-            input_raw_buffer: crate::tui::status::types::ui::InputRawBuffer = crate::tui::status::types::ui::InputRawBuffer::None,
+            input_raw_buffer: crate::tui::status::ui::InputRawBuffer = crate::tui::status::ui::InputRawBuffer::None,
 
             // Scan results (transient)
             scan: {
@@ -603,7 +625,7 @@ derive_struct! {
             modals: {
                 mode_selector: {
                     active: bool = false,
-                    selector: crate::tui::status::types::ui::AppMode = crate::tui::status::types::ui::AppMode::Modbus,
+                    selector: crate::tui::status::ui::AppMode = crate::tui::status::ui::AppMode::Modbus,
                 },
             },
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::tui::status::types;
+use crate::tui::status;
 
 /// For the config panel we have groups of options separated by blank lines.
 /// Define the sizes of each group so view_offset can account for the
@@ -350,8 +350,8 @@ impl Cursor for ModbusDashboardCursor {
 }
 
 /// Helper to build the per-port items vector in a single consistent place.
-fn build_modbus_items_vec() -> Vec<types::modbus::ModbusRegisterItem> {
-    let mut items_vec: Vec<types::modbus::ModbusRegisterItem> = Vec::new();
+fn build_modbus_items_vec() -> Vec<status::modbus::ModbusRegisterItem> {
+    let mut items_vec: Vec<status::modbus::ModbusRegisterItem> = Vec::new();
 
     let items_opt = crate::tui::status::read_status(|status| {
         if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
@@ -368,7 +368,7 @@ fn build_modbus_items_vec() -> Vec<types::modbus::ModbusRegisterItem> {
         if let Ok(Some(port_data)) =
             crate::tui::status::read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
-            let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
+            let status::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
             for it in stations.iter() {
                 // Just add the item as-is since the global mode is now stored separately
                 items_vec.push(it.clone());
@@ -396,37 +396,5 @@ impl LogPanelCursor {
     /// Convert to index for compatibility with existing code
     pub fn to_index(self) -> usize {
         Self::all().iter().position(|&c| c == self).unwrap_or(0)
-    }
-
-    /// Convert from index for compatibility with existing code
-    pub fn from_index(index: usize) -> Self {
-        Self::all()
-            .get(index)
-            .copied()
-            .unwrap_or(LogPanelCursor::FirstItem)
-    }
-}
-
-impl Cursor for LogPanelCursor {
-    fn prev(self) -> Self {
-        let all = Self::all();
-        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_index > 0 {
-            all[current_index - 1]
-        } else {
-            all[all.len() - 1]
-        }
-    }
-    fn next(self) -> Self {
-        let all = Self::all();
-        let current_index = all.iter().position(|&c| c == self).unwrap_or(0);
-        if current_index < all.len() - 1 {
-            all[current_index + 1]
-        } else {
-            all[0]
-        }
-    }
-    fn view_offset(&self) -> usize {
-        Self::all().iter().position(|&c| c == *self).unwrap_or(0)
     }
 }

@@ -7,15 +7,13 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
+use crate::tui::status as types;
 use crate::{
     i18n::lang,
     tui::{
         status::{
+            port::{PortData, PortState},
             read_status,
-            types::{
-                self,
-                port::{PortData, PortState},
-            },
         },
         ui::{
             components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
@@ -87,7 +85,7 @@ pub fn render_ports_list(frame: &mut Frame, area: Rect, selection: usize) -> Res
             let mut prefix_style = Style::default();
             if i == selection {
                 if let Ok(buf) = input_buffer {
-                    use crate::tui::status::types::ui::InputRawBuffer;
+                    use crate::tui::status::ui::InputRawBuffer;
                     if !matches!(buf, InputRawBuffer::None) {
                         prefix_style = Style::default().fg(Color::Yellow);
                     } else {

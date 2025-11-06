@@ -2,11 +2,9 @@ use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::tui::status::types::{
-    self,
-    modbus::{ModbusConnectionMode, RegisterMode},
-    port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-};
+use crate::tui::status as types;
+use crate::tui::status::modbus::{ModbusConnectionMode, RegisterMode};
+use crate::tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode};
 use crate::tui::status::{read_status, write_status};
 use crate::tui::ui::components::input_span_handler::handle_input_span;
 use crate::tui::utils::bus::{Bus, UiToCore};
@@ -288,11 +286,9 @@ fn commit_selector_edit(
                         // Mark as modified after using mode
                         port.config_modified = true;
                         // Update status indicator if port is running
-                        if matches!(
-                            port.state,
-                            crate::tui::status::types::port::PortState::OccupiedByThis
-                        ) {
-                            port.status_indicator = crate::tui::status::types::port::PortStatusIndicator::RunningWithChanges;
+                        if matches!(port.state, types::port::PortState::OccupiedByThis) {
+                            port.status_indicator =
+                                types::port::PortStatusIndicator::RunningWithChanges;
                         }
                         Ok(())
                     })?;
@@ -318,11 +314,9 @@ fn commit_selector_edit(
                             item.register_mode = new_mode;
                             port.config_modified = true; // Mark as modified
                                                          // Update status indicator if port is running
-                            if matches!(
-                                port.state,
-                                crate::tui::status::types::port::PortState::OccupiedByThis
-                            ) {
-                                port.status_indicator = crate::tui::status::types::port::PortStatusIndicator::RunningWithChanges;
+                            if matches!(port.state, types::port::PortState::OccupiedByThis) {
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::RunningWithChanges;
                             }
                             log::info!("Updated register mode for index {index} to {new_mode:?}");
                         }
@@ -369,11 +363,9 @@ fn commit_text_edit(
                                 item.station_id = station_id;
                                 port.config_modified = true; // Mark as modified
                                                              // Update status indicator if port is running
-                                if matches!(
-                                    port.state,
-                                    crate::tui::status::types::port::PortState::OccupiedByThis
-                                ) {
-                                    port.status_indicator = crate::tui::status::types::port::PortStatusIndicator::RunningWithChanges;
+                                if matches!(port.state, types::port::PortState::OccupiedByThis) {
+                                    port.status_indicator =
+                                        types::port::PortStatusIndicator::RunningWithChanges;
                                 }
                                 log::info!("Updated station ID for index {index} to {station_id}");
                             }
@@ -396,11 +388,9 @@ fn commit_text_edit(
                                 item.register_address = start_address;
                                 port.config_modified = true; // Mark as modified
                                                              // Update status indicator if port is running
-                                if matches!(
-                                    port.state,
-                                    crate::tui::status::types::port::PortState::OccupiedByThis
-                                ) {
-                                    port.status_indicator = crate::tui::status::types::port::PortStatusIndicator::RunningWithChanges;
+                                if matches!(port.state, types::port::PortState::OccupiedByThis) {
+                                    port.status_indicator =
+                                        types::port::PortStatusIndicator::RunningWithChanges;
                                 }
                                 log::info!("Updated register start address for index {index} to {start_address}");
                             }
@@ -424,11 +414,9 @@ fn commit_text_edit(
                                 item.last_values.resize(length as usize, 0);
                                 port.config_modified = true; // Mark as modified
                                                              // Update status indicator if port is running
-                                if matches!(
-                                    port.state,
-                                    crate::tui::status::types::port::PortState::OccupiedByThis
-                                ) {
-                                    port.status_indicator = crate::tui::status::types::port::PortStatusIndicator::RunningWithChanges;
+                                if matches!(port.state, types::port::PortState::OccupiedByThis) {
+                                    port.status_indicator =
+                                        types::port::PortStatusIndicator::RunningWithChanges;
                                 }
                                 log::info!("Updated register length for index {index} to {length}");
                             }

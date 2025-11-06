@@ -1,5 +1,5 @@
 //! Shared helper functions for form editing to eliminate repeated code.
-use crate::tui::status::types::ui::{EditingField, RegisterField};
+use crate::tui::status::ui::{EditingField, RegisterField};
 
 /// Select the field being edited based on the current `cursor` position.
 ///

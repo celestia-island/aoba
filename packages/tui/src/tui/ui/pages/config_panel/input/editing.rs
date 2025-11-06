@@ -5,12 +5,10 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use super::navigation::sanitize_configpanel_cursor;
 use crate::i18n::lang;
-use crate::tui::status::types::{
-    self,
-    cursor::{Cursor, ModbusDashboardCursor},
-    // removed unused import: port::PortData
-};
+use crate::tui::status as types;
 use crate::tui::status::{read_status, write_status};
+// Bring cursor trait into scope so `.prev()/.next()/.view_offset()` resolve
+use crate::tui::status::cursor::Cursor;
 use crate::tui::utils::bus::{Bus, UiToCore};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -308,7 +306,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                     status.page = crate::tui::status::Page::ModbusDashboard {
                         selected_port: *selected_port,
                         view_offset: 0,
-                        cursor: ModbusDashboardCursor::AddLine,
+                        cursor: types::cursor::ModbusDashboardCursor::AddLine,
                     };
                 }
                 Ok(())

@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::protocol::ipc::{IpcClient, IpcConnection, IpcMessage};
-pub use crate::tui::status::types::cli::CliMode;
+pub use crate::tui::status::cli::CliMode;
 
 /// Configuration for a CLI subprocess
 #[derive(Debug, Clone)]
