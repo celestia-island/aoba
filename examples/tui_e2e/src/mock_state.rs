@@ -102,7 +102,7 @@ pub fn get_mock_state(path: &str) -> Result<Value> {
         .with_context(|| format!("Invalid JSONPath expression: {}", json_path))?;
 
     let node = parsed
-        .query(&*state)
+        .query(&state)
         .exactly_one()
         .map_err(|err| anyhow!("Path '{}' must resolve to exactly one node: {err}", path))?;
 

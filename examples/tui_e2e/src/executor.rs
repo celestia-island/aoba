@@ -103,33 +103,63 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
 }
 
 /// Spawn TUI process with IPC communication
-async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Result<()> {
-    // Generate unique IPC channel ID
-    let channel_id = IpcChannelId(format!("{}_{}", workflow_id, std::process::id()));
+async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> Result<()> {
+    // Use a fixed IPC channel ID - no need to make it unique per test
+    // The TUI process doesn't care which test is running
+    let channel_id = IpcChannelId("tui_e2e".to_string());
 
-    log::debug!("Generated IPC channel ID: {}", channel_id.0);
+    log::debug!("Using IPC channel ID: {}", channel_id.0);
+
+    // Create IPC server sockets FIRST (before spawning TUI)
+    // This eliminates timing issues - sockets are ready before TUI even starts
+    log::info!("🔌 Creating IPC server sockets...");
+    let ipc_sender_future = IpcSender::new(channel_id.clone());
 
     // Start TUI process with --debug-ci flag
-    let mut cmd = tokio::process::Command::new("cargo");
-    cmd.args(&[
-        "run",
-        "--package",
-        "aoba",
-        "--",
-        "--tui",
-        "--debug-ci",
-        &channel_id.0,
-    ]);
+    // Try to use pre-built binaries first (release preferred, debug fallback), then cargo run
+    let release_bin = std::path::Path::new("target/release/aoba");
+    let debug_bin = std::path::Path::new("target/debug/aoba");
+    
+    let mut cmd = if release_bin.exists() {
+        let mut c = tokio::process::Command::new(release_bin);
+        c.args(["--tui", "--debug-ci", &channel_id.0]);
+        log::info!(
+            "🚀 Spawning TUI process (release binary): target/release/aoba --tui --debug-ci {}",
+            channel_id.0
+        );
+        c
+    } else if debug_bin.exists() {
+        let mut c = tokio::process::Command::new(debug_bin);
+        c.args(["--tui", "--debug-ci", &channel_id.0]);
+        log::info!(
+            "🚀 Spawning TUI process (debug binary): target/debug/aoba --tui --debug-ci {}",
+            channel_id.0
+        );
+        c
+    } else {
+        // No pre-built binary - fall back to cargo run (debug is much faster than release)
+        let mut c = tokio::process::Command::new("cargo");
+        c.args([
+            "run",
+            "--package",
+            "aoba",
+            "--",
+            "--tui",
+            "--debug-ci",
+            &channel_id.0,
+        ]);
+        log::info!(
+            "🚀 Spawning TUI process (cargo debug): cargo run --package aoba -- --tui --debug-ci {}",
+            channel_id.0
+        );
+        log::warn!("⚠️  No pre-built binary found. Using cargo run (slow). Run 'cargo build --package aoba' first for faster testing.");
+        c
+    };
 
     // Force English locale so string-based assertions remain deterministic across hosts.
     cmd.env("LANGUAGE", "en_US");
     cmd.env("LC_ALL", "en_US.UTF-8");
     cmd.env("LANG", "en_US.UTF-8");
-
-    log::info!(
-        "🚀 Spawning TUI process: cargo run --package aoba -- --tui --debug-ci {}",
-        channel_id.0
-    );
 
     let child = cmd
         .stdin(std::process::Stdio::null())
@@ -143,12 +173,9 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Re
         child.id().unwrap_or(0)
     );
 
-    // Give TUI time to start and create IPC sockets
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-    // Create IPC sender
-    log::debug!("Connecting to IPC channel...");
-    let sender = IpcSender::new(channel_id.clone()).await?;
+    // Wait for TUI to connect to our IPC server
+    // This will complete when TUI starts and connects (no timeout issues!)
+    let sender = ipc_sender_future.await?;
     log::info!("✅ IPC connection established");
 
     ctx.ipc_sender = Some(sender);

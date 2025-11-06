@@ -3,8 +3,9 @@ use anyhow::Result;
 use ratatui::{prelude::*, text::Line};
 use unicode_width::UnicodeWidthStr;
 
+use crate::tui::status as types;
+use crate::tui::status::modbus::RegisterMode;
 use crate::tui::status::read_status;
-use crate::tui::status::types::{self, modbus::RegisterMode};
 use crate::tui::ui::components::{
     kv_line::render_kv_line,
     styled_label::{input_spans, switch_spans, TextState},
@@ -35,7 +36,7 @@ pub fn render_register_row_line(
     label: &str,
     slave_index: usize,
     row_base: u16,
-    item: &crate::tui::status::types::modbus::ModbusRegisterItem,
+    item: &crate::tui::status::modbus::ModbusRegisterItem,
     current_selection: types::cursor::ModbusDashboardCursor,
     registers_per_row: usize,
 ) -> Result<Line<'static>> {

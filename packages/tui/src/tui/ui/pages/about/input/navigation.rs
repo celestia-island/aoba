@@ -3,7 +3,7 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use super::scroll::{handle_scroll_down, handle_scroll_up};
-use crate::tui::status::types;
+use crate::tui::status as types;
 use crate::tui::status::{read_status, write_status};
 use crate::tui::ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT};
 use crate::tui::utils::bus::Bus;

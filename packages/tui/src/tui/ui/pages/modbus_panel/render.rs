@@ -3,7 +3,8 @@ use anyhow::Result;
 use ratatui::prelude::*;
 
 use crate::i18n::lang;
-use crate::tui::status::{read_status, types};
+use crate::tui::status as types;
+use crate::tui::status::read_status;
 use crate::tui::ui::components::boxed_paragraph::render_boxed_paragraph;
 use crate::tui::ui::pages::modbus_panel::components::render_modbus_status_lines;
 

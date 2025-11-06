@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::tui::status::types;
+use crate::tui::status;
 
 /// A small enum used to represent temporary input buffers across the UI.
 /// - `None` means there's no active temporary buffer
@@ -299,5 +299,5 @@ pub struct AboutStatus {
 
 #[derive(Debug, Clone)]
 pub struct EntryStatus {
-    pub cursor: Option<types::cursor::EntryCursor>,
+    pub cursor: Option<status::cursor::EntryCursor>,
 }

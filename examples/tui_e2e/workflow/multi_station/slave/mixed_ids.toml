@@ -175,7 +175,7 @@ at_line = 5
 [[workflow.create_stations]]
 description = "Verify station 2 header"
 verify = "#2 - ID: 6"
-at_line = 6
+at_line = 13
 
 # Step 6: Station 1 registers - Round 1
 [[workflow.edit_station1_round1]]
@@ -248,12 +248,12 @@ mock_verify_value = [
 [[workflow.edit_station2_round1]]
 description = "Verify station 2 first row"
 verify = "0x0010 0x0012 0x0014 0x0016"
-at_line = 17
+at_line = 18
 
 [[workflow.edit_station2_round1]]
 description = "Verify station 2 second row"
 verify = "0x0018 0x001A 0x001C 0x001E"
-at_line = 18
+at_line = 19
 
 # Step 8: Save configuration and enable port
 [[workflow.save_configuration]]
@@ -360,12 +360,12 @@ mock_verify_value = [
 [[workflow.edit_station2_round2]]
 description = "Verify station 2 Round 2 first row"
 verify = "0x001E 0x001C 0x001A 0x0018"
-at_line = 17
+at_line = 18
 
 [[workflow.edit_station2_round2]]
 description = "Verify station 2 Round 2 second row"
 verify = "0x0016 0x0014 0x0012 0x0010"
-at_line = 18
+at_line = 19
 
 # Verify configuration persists between rounds
 [[workflow.verify_mock_data]]
@@ -458,9 +458,9 @@ mock_verify_value = [
 [[workflow.edit_station2_round3]]
 description = "Verify station 2 Round 3 first row"
 verify = "0x0A0A 0x0B0B 0x0C0C 0x0D0D"
-at_line = 17
+at_line = 18
 
 [[workflow.edit_station2_round3]]
 description = "Verify station 2 Round 3 second row"
 verify = "0x0E0E 0x0F0F 0x1010 0x1111"
-at_line = 18
+at_line = 19
