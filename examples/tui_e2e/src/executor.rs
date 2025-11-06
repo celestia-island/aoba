@@ -110,6 +110,11 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
 
     log::debug!("Using IPC channel ID: {}", channel_id.0);
 
+    // Create IPC server sockets FIRST (before spawning TUI)
+    // This eliminates timing issues - sockets are ready before TUI even starts
+    log::info!("🔌 Creating IPC server sockets...");
+    let ipc_sender_future = IpcSender::new(channel_id.clone());
+
     // Start TUI process with --debug-ci flag
     // Try to use pre-built binaries first (release preferred, debug fallback), then cargo run
     let release_bin = std::path::Path::new("target/release/aoba");
@@ -168,13 +173,9 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
         child.id().unwrap_or(0)
     );
 
-    // Give TUI time to start and create IPC sockets
-    // If using cargo run, compilation can take several seconds
-    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-
-    // Create IPC sender
-    log::debug!("Connecting to IPC channel...");
-    let sender = IpcSender::new(channel_id.clone()).await?;
+    // Wait for TUI to connect to our IPC server
+    // This will complete when TUI starts and connects (no timeout issues!)
+    let sender = ipc_sender_future.await?;
     log::info!("✅ IPC connection established");
 
     ctx.ipc_sender = Some(sender);
