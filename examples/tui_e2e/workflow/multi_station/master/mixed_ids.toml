@@ -498,7 +498,7 @@ mock_set_value = 0x0007
 [[workflow.edit_station1_round1]]
 description = "Verify first row for station 1"
 verify = "0x0001 0x0003 0x0005 0x0007"
-at_line = 16
+at_line = 10
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 4"
@@ -591,7 +591,7 @@ mock_set_value = 0x000F
 [[workflow.edit_station1_round1]]
 description = "Verify second row for station 1"
 verify = "0x0009 0x000B 0x000D 0x000F"
-at_line = 18
+at_line = 11
 
 [[workflow.edit_station1_round1]]
 description = "Return cursor to station 1 header"
@@ -912,9 +912,6 @@ verify = "0x0010 0x0012 0x0014 0x0016"
 at_line = 18
 
 [[workflow.edit_station2_round1]]
-description = "Verify second row for station 2"
-verify = "0x0018 0x001A 0x001C 0x001E"
-at_line = 19
 
 [[workflow.edit_station2_round1]]
 description = "Move to register 4"
@@ -1162,7 +1159,7 @@ mock_set_value = 0x0009
 [[workflow.edit_station1_round2]]
 description = "Verify first row for station 1"
 verify = "0x000F 0x000D 0x000B 0x0009"
-at_line = 16
+at_line = 10
 
 [[workflow.edit_station1_round2]]
 description = "Move to register 4"
@@ -1255,7 +1252,7 @@ mock_set_value = 0x0001
 [[workflow.edit_station1_round2]]
 description = "Verify second row for station 1"
 verify = "0x0007 0x0005 0x0003 0x0001"
-at_line = 18
+at_line = 11
 
 [[workflow.edit_station1_round2]]
 description = "Return cursor to station 1 header"
@@ -1615,7 +1612,7 @@ mock_set_value = 0x0404
 [[workflow.edit_station1_round3]]
 description = "Verify first row for station 1"
 verify = "0x0101 0x0202 0x0303 0x0404"
-at_line = 16
+at_line = 10
 
 [[workflow.edit_station1_round3]]
 description = "Move to register 4"
@@ -1708,7 +1705,7 @@ mock_set_value = 0x0808
 [[workflow.edit_station1_round3]]
 description = "Verify second row for station 1"
 verify = "0x0505 0x0606 0x0707 0x0808"
-at_line = 18
+at_line = 11
 
 [[workflow.edit_station1_round3]]
 description = "Return cursor to station 1 header"

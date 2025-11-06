@@ -191,12 +191,12 @@ mock_verify_value = [1, 1, 0, 0, 1, 1, 0, 0]
 [[workflow.edit_station1_round1]]
 description = "Verify coil row one grouping"
 verify = "ON   ON   OFF  OFF"
-at_line = 16
+at_line = 10
 
 [[workflow.edit_station1_round1]]
 description = "Verify coil row two grouping"
 verify = "ON   ON   OFF  OFF"
-at_line = 18
+at_line = 11
 
 # Step 7: Station 2 (Holding) - Round 1
 [[workflow.edit_station2_round1]]
@@ -286,12 +286,12 @@ mock_verify_value = [0, 1, 0, 1, 0, 1, 0, 1]
 [[workflow.edit_station1_round2]]
 description = "Verify coil row one alternating"
 verify = "OFF  ON   OFF  ON"
-at_line = 16
+at_line = 10
 
 [[workflow.edit_station1_round2]]
 description = "Verify coil row two alternating"
 verify = "OFF  ON   OFF  ON"
-at_line = 18
+at_line = 11
 
 [[workflow.edit_station2_round2]]
 description = "Station 2 Round 2 register pattern"
@@ -366,12 +366,12 @@ mock_verify_value = [1, 0, 0, 1, 1, 0, 0, 1]
 [[workflow.edit_station1_round3]]
 description = "Verify coil row one pattern"
 verify = "ON   OFF  OFF  ON"
-at_line = 16
+at_line = 10
 
 [[workflow.edit_station1_round3]]
 description = "Verify coil row two pattern"
 verify = "ON   OFF  OFF  ON"
-at_line = 18
+at_line = 11
 
 [[workflow.edit_station2_round3]]
 description = "Station 2 Round 3 register pattern"
