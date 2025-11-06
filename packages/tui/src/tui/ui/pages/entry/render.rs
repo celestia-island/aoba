@@ -2,7 +2,13 @@ use anyhow::Result;
 
 use ratatui::prelude::*;
 
-use crate::{i18n::lang, tui::status::read_status, tui::ui::pages::entry::components::{ derive_selection_from_page, render_details_panel, render_ports_list, }};
+use crate::{
+    i18n::lang,
+    tui::status::read_status,
+    tui::ui::pages::entry::components::{
+        derive_selection_from_page, render_details_panel, render_ports_list,
+    },
+};
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     Ok(vec![

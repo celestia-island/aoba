@@ -3,7 +3,16 @@ use anyhow::Result;
 use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;
-use crate::{i18n::lang, tui::status as types, tui::status::modbus::{ModbusConnectionMode, RegisterMode}, tui::status::read_status, tui::ui::components::{ kv_line::render_kv_line, styled_label::{input_spans, selector_spans, TextState}, }};
+use crate::{
+    i18n::lang,
+    tui::status as types,
+    tui::status::modbus::{ModbusConnectionMode, RegisterMode},
+    tui::status::read_status,
+    tui::ui::components::{
+        kv_line::render_kv_line,
+        styled_label::{input_spans, selector_spans, TextState},
+    },
+};
 
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {

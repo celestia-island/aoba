@@ -4,7 +4,10 @@ pub mod input_span_handler;
 pub mod kv_line;
 pub mod styled_label;
 
-use ratatui::{style::{Color, Modifier, Style}, text::{Line, Span}};
+use ratatui::{
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+};
 use unicode_width::UnicodeWidthStr;
 
 /// Produce a title span (bold) for a label. When `selected` is true the title is green; when

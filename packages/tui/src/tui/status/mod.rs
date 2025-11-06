@@ -6,6 +6,7 @@ pub mod cursor;
 pub mod ui;
 
 use aoba_protocol::status::{init_status_generic, read_status_generic, write_status_generic};
+
 // Re-export the protocol status types at the `status` level so callers can use
 // `crate::tui::status::modbus`, `crate::tui::status::port`, `crate::tui::status::cli`.
 pub use aoba_protocol::status::types::{cli, modbus, port};

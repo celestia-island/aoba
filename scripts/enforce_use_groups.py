@@ -345,9 +345,30 @@ def normalize_remainder_items(remainder: str) -> List[str]:
     - Otherwise, keep the remainder as a single item.
     """
     remainder = remainder.strip()
+    # If the remainder is a braced group, split on top-level commas only.
+    # We must respect nested braces to avoid splitting inside nested `{ ... }`.
     if remainder.startswith("{") and remainder.endswith("}"):
         inner = remainder[1:-1]
-        parts = [p.strip() for p in inner.split(",") if p.strip()]
+        parts: List[str] = []
+        cur: List[str] = []
+        depth = 0
+        for ch in inner:
+            if ch == '{':
+                depth += 1
+                cur.append(ch)
+            elif ch == '}':
+                depth -= 1
+                cur.append(ch)
+            elif ch == ',' and depth == 0:
+                part = ''.join(cur).strip()
+                if part:
+                    parts.append(part)
+                cur = []
+            else:
+                cur.append(ch)
+        last = ''.join(cur).strip()
+        if last:
+            parts.append(last)
         return parts
     if remainder == "":
         return []

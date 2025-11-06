@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use aoba_protocol::modbus::generate_pull_set_holding_request;
 
 use crate::{
     tui::status as types,
@@ -7,6 +6,7 @@ use crate::{
     tui::status::{read_status, write_status},
     tui::utils::bus::{Bus, UiToCore},
 };
+use aoba_protocol::modbus::generate_pull_set_holding_request;
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");

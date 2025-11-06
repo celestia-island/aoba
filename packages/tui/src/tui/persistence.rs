@@ -15,7 +15,12 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, path::PathBuf, sync::atomic::{AtomicBool, Ordering}};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use crate::{tui::status::modbus::ModbusRegisterItem, tui::status::port::PortConfig};
 

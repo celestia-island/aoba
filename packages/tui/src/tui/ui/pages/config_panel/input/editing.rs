@@ -4,7 +4,11 @@ use strum::IntoEnumIterator;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::navigation::sanitize_configpanel_cursor;
-use crate::{i18n::lang, tui::status as types, tui::status::{read_status, write_status}};
+use crate::{
+    i18n::lang,
+    tui::status as types,
+    tui::status::{read_status, write_status},
+};
 
 // Bring cursor trait into scope so `.prev()/.next()/.view_offset()` resolve
 use crate::tui::status::cursor::Cursor;

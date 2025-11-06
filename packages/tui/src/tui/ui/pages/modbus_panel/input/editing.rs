@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 
-use aoba_protocol::modbus::generate_pull_set_holding_request;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
@@ -11,6 +10,7 @@ use crate::{
     tui::ui::components::input_span_handler::handle_input_span,
     tui::utils::bus::{Bus, UiToCore},
 };
+use aoba_protocol::modbus::generate_pull_set_holding_request;
 
 pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {

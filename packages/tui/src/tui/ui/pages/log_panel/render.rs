@@ -2,7 +2,13 @@ use anyhow::Result;
 
 use ratatui::prelude::*;
 
-use crate::{i18n::lang, tui::status::read_status, tui::ui::pages::log_panel::components::{ extract_log_data, render_log_display, render_log_input, }};
+use crate::{
+    i18n::lang,
+    tui::status::read_status,
+    tui::ui::pages::log_panel::components::{
+        extract_log_data, render_log_display, render_log_input,
+    },
+};
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {
     // Check if we're in free view mode to conditionally show the follow hint

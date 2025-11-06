@@ -1,6 +1,5 @@
 use anyhow::Result;
 
-use aoba_protocol::{i18n::lang, status::types::port::PortStatusIndicator};
 use ratatui::{
     prelude::*,
     text::{Line, Span},
@@ -8,6 +7,7 @@ use ratatui::{
 };
 
 use crate::tui::status::read_status;
+use aoba_protocol::{i18n::lang, status::types::port::PortStatusIndicator};
 
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {

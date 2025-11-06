@@ -1,7 +1,10 @@
 use anyhow::{anyhow, Result};
 use strum::IntoEnumIterator;
 
-use ratatui::{style::{Color, Modifier, Style}, text::Span};
+use ratatui::{
+    style::{Color, Modifier, Style},
+    text::Span,
+};
 
 use crate::{tui::status::read_status, tui::status::ui::InputRawBuffer};
 

@@ -10,6 +10,7 @@ use aoba_protocol::{
     ipc::IpcMessage,
     status::debug_dump::{enable_debug_dump, start_status_dump_thread},
 };
+
 // Re-export Page for convenience since it's used throughout TUI code
 pub use status::Page;
 
