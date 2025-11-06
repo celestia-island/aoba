@@ -111,32 +111,43 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     log::debug!("Using IPC channel ID: {}", channel_id.0);
 
     // Start TUI process with --debug-ci flag
-    // Try to use pre-built release binary first, fall back to cargo run
-    let aoba_bin = std::path::Path::new("target/release/aoba");
-    let mut cmd = if aoba_bin.exists() {
-        let mut c = tokio::process::Command::new(aoba_bin);
+    // Try to use pre-built binaries first (release preferred, debug fallback), then cargo run
+    let release_bin = std::path::Path::new("target/release/aoba");
+    let debug_bin = std::path::Path::new("target/debug/aoba");
+    
+    let mut cmd = if release_bin.exists() {
+        let mut c = tokio::process::Command::new(release_bin);
         c.args(["--tui", "--debug-ci", &channel_id.0]);
         log::info!(
             "🚀 Spawning TUI process (release binary): target/release/aoba --tui --debug-ci {}",
             channel_id.0
         );
         c
+    } else if debug_bin.exists() {
+        let mut c = tokio::process::Command::new(debug_bin);
+        c.args(["--tui", "--debug-ci", &channel_id.0]);
+        log::info!(
+            "🚀 Spawning TUI process (debug binary): target/debug/aoba --tui --debug-ci {}",
+            channel_id.0
+        );
+        c
     } else {
+        // No pre-built binary - fall back to cargo run (debug is much faster than release)
         let mut c = tokio::process::Command::new("cargo");
         c.args([
             "run",
             "--package",
             "aoba",
-            "--release",
             "--",
             "--tui",
             "--debug-ci",
             &channel_id.0,
         ]);
         log::info!(
-            "🚀 Spawning TUI process (cargo): cargo run --package aoba --release -- --tui --debug-ci {}",
+            "🚀 Spawning TUI process (cargo debug): cargo run --package aoba -- --tui --debug-ci {}",
             channel_id.0
         );
+        log::warn!("⚠️  No pre-built binary found. Using cargo run (slow). Run 'cargo build --package aoba' first for faster testing.");
         c
     };
 
@@ -158,7 +169,8 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     );
 
     // Give TUI time to start and create IPC sockets
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // If using cargo run, compilation can take several seconds
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
     // Create IPC sender
     log::debug!("Connecting to IPC channel...");
