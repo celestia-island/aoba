@@ -422,3 +422,40 @@ mock_set_value = 7
 description = "Return to top of panel"
 key = "Ctrl+PageUp"
 
+
+# Verify mock data for screen-capture mode
+[[workflow.verify_mock_data]]
+description = "Verify register count in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
+mock_verify_value = 1
+
+[[workflow.verify_mock_data]]
+description = "Verify station ID in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_verify_value = 1
+
+# Edit Registers - Round 3
+[[workflow.edit_registers_round3]]
+description = "Navigate to register row"
+key = "Down"
+times = 6
+
+[[workflow.edit_registers_round3]]
+description = "Enter edit mode"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+description = "Type value 0x1234"
+input = "hex"
+value = 0x1234
+
+[[workflow.edit_registers_round3]]
+description = "Confirm value"
+key = "Enter"
+
+[[workflow.edit_registers_round3]]
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
+mock_set_value = 0x1234
+
+[[workflow.edit_registers_round3]]
+key = "Ctrl+PageUp"

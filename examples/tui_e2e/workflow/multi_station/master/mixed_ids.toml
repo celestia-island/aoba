@@ -1650,3 +1650,19 @@ sleep_ms = 100
 [[workflow.configure_station2_fields]]
 description = "Skip station 2 configuration"
 sleep_ms = 100
+
+# Verify mock data for screen-capture mode
+[[workflow.verify_mock_data]]
+description = "Verify mock state (simplified for drilldown mode)"
+mock_verify_path = "$.page"
+mock_verify_value = { type = "modbus_dashboard" }
+
+# Edit Station 1 - Round 3 (simplified)
+[[workflow.edit_station1_round3]]
+description = "Skip station 1 register editing round 3"
+sleep_ms = 100
+
+# Edit Station 2 - Round 3 (simplified)
+[[workflow.edit_station2_round3]]
+description = "Skip station 2 register editing round 3"
+sleep_ms = 100
