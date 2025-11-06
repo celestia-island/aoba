@@ -3,7 +3,9 @@ use anyhow::{anyhow, Result};
 use crossterm::event::KeyEvent;
 
 use crate::tui::{
-    status::{read_status, types::ui::InputRawBuffer, write_status},
+    // Bring the UI Input buffer type into scope from the new location
+    status::ui::InputRawBuffer,
+    status::{read_status, write_status},
     utils::bus::Bus,
 };
 

@@ -8,7 +8,9 @@ use ratatui::{
 
 use crate::{
     i18n::lang,
-    tui::status::{read_status, types::port::PortStatusIndicator},
+    // Port status indicator moved up to status::port
+    tui::status::port::PortStatusIndicator,
+    tui::status::read_status,
 };
 
 fn get_port_name(selected_port: usize) -> Result<String> {

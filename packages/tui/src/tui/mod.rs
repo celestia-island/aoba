@@ -24,11 +24,9 @@ use std::{
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
 use crate::protocol::ipc::IpcMessage;
-use crate::tui::status::types::{
-    self,
-    modbus::RegisterMode,
-    port::{PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode},
-};
+use crate::tui::status as types;
+use crate::tui::status::modbus::RegisterMode;
+use crate::tui::status::port::{PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode};
 use crate::tui::status::Status;
 use crate::tui::{
     subprocess::{CliMode, CliSubprocessConfig, SubprocessManager},
@@ -1352,12 +1350,12 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
             }
             Ok(aoba_ci_utils::E2EToTuiMessage::RequestScreen) => {
                 log::info!("🖼️  Rendering screen to TestBackend");
-                
+
                 // Drain any remaining core messages before rendering
                 while let Ok(_msg) = bus.core_rx.try_recv() {
                     // Just consume the messages
                 }
-                
+
                 terminal
                     .draw(|frame| {
                         if let Err(err) = render_ui(frame) {
@@ -1548,7 +1546,7 @@ fn run_screen_capture_mode() -> Result<()> {
 /// This function is called after each Refreshed event to allow log-based
 /// verification of state transitions.
 pub fn log_state_snapshot() -> Result<()> {
-    use crate::tui::status::types::port::PortState;
+    use crate::tui::status::port::PortState;
     use serde_json::json;
 
     self::status::read_status(|status| {

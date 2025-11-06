@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 
 use crate::tui::{
-    status::types::port::{PortData, PortState},
+    status::port::{PortData, PortState},
     utils::bus::CoreToUi,
 };
 
@@ -65,7 +65,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
                 // 1. It's occupied (being used)
                 // 2. It has modbus configuration
                 // 3. It has logs
-                use crate::tui::status::types::port::PortConfig;
+                use crate::tui::status::port::PortConfig;
                 let has_config = match &old_port_data.config {
                     PortConfig::Modbus { stations, .. } => !stations.is_empty(),
                 };

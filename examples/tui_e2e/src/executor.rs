@@ -111,7 +111,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, workflow_id: &str) -> Re
 
     // Start TUI process with --debug-ci flag
     let mut cmd = tokio::process::Command::new("cargo");
-    cmd.args(&[
+    cmd.args([
         "run",
         "--package",
         "aoba",

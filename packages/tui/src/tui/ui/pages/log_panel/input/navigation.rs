@@ -87,11 +87,11 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // Set input mode to editing or toggle between modes
                 if let crate::tui::status::Page::LogPanel { input_mode, .. } = &mut status.page {
                     *input_mode = match input_mode {
-                        crate::tui::status::types::ui::InputMode::Ascii => {
-                            crate::tui::status::types::ui::InputMode::Hex
+                        crate::tui::status::ui::InputMode::Ascii => {
+                            crate::tui::status::ui::InputMode::Hex
                         }
-                        crate::tui::status::types::ui::InputMode::Hex => {
-                            crate::tui::status::types::ui::InputMode::Ascii
+                        crate::tui::status::ui::InputMode::Hex => {
+                            crate::tui::status::ui::InputMode::Ascii
                         }
                     };
                 }

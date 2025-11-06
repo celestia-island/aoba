@@ -1,6 +1,7 @@
 use anyhow::Result;
 
-use crate::tui::status::types::{self, cursor::Cursor};
+use crate::tui::status as types;
+use crate::tui::status::cursor::Cursor;
 use crate::tui::status::write_status;
 
 /// Ensure current cursor for ConfigPanel does not point to hidden items when
