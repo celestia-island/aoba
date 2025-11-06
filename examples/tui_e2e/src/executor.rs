@@ -243,15 +243,17 @@ async fn execute_single_step(
             bail!("input specified but no value provided");
         };
 
+        log::info!("🎹 Typing value: '{}' (type: {})", value, input_type);
+
         // In DrillDown mode, simulate typing the value
         if ctx.mode == ExecutionMode::DrillDown {
             for ch in value.chars() {
                 simulate_char_input(ctx, ch).await?;
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
             // Add delay after typing to ensure all characters are processed by TUI
             // TUI has 100ms delay after each char, so we need to wait for that plus render time
-            tokio::time::sleep(Duration::from_millis(500)).await;
+            tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     }
 

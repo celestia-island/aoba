@@ -163,12 +163,48 @@ description = "Confirm Station ID"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
+description = "Wait for Station ID to settle"
+sleep_ms = 500
+
+[[workflow.configure_station_fields]]
 description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
 mock_set_value = 1
 
-# Navigate to Register Type using absolute positioning  
-# (Skip editing - Holding is already the default)
+# Navigate to Register Type using absolute positioning
+[[workflow.configure_station_fields]]
+description = "Return to top with Ctrl+PageUp"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station_fields]]
+description = "Jump to station with PageDown (AddLine -> ModbusMode)"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Move to Register Type field (StationId -> RegisterType)"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Type"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Cycle to Holding register type (Holding->DiscreteInputs->Coils->Input->Holding)"
+key = "Char(h)"
+times = 4
+
+[[workflow.configure_station_fields]]
+description = "Confirm Register Type"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Wait for Register Type to settle"
+sleep_ms = 500
+
 [[workflow.configure_station_fields]]
 description = "Update Register Type in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"
@@ -215,6 +251,10 @@ value = 0x0000
 [[workflow.configure_station_fields]]
 description = "Confirm Start Address"
 key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Wait for Start Address to settle"
+sleep_ms = 500
 
 [[workflow.configure_station_fields]]
 description = "Update Start Address in mock state"
@@ -266,6 +306,10 @@ value = 10
 [[workflow.configure_station_fields]]
 description = "Confirm Register Count"
 key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Wait for Register Count to settle"
+sleep_ms = 500
 
 [[workflow.configure_station_fields]]
 description = "Update Register Count in mock state"
