@@ -214,8 +214,11 @@ async fn execute_single_step(
                 simulate_key_input(ctx, key).await?;
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            // Default 1-second delay after key press
-            sleep_1s().await;
+            // Short delay after key press to allow TUI to process
+            // Use explicit sleep_ms if specified, otherwise 200ms default
+            if step.sleep_ms.is_none() {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
         }
         // In ScreenCaptureOnly mode, keyboard actions are ignored
     }
@@ -273,6 +276,11 @@ async fn execute_single_step(
 
     // Handle screen verification - render and verify content
     if step.verify.is_some() {
+        // In DrillDown mode, give extra time for TUI to render before requesting screen
+        if ctx.mode == ExecutionMode::DrillDown {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+        
         // Render the TUI to a string based on execution mode
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
@@ -331,11 +339,6 @@ async fn execute_single_step(
     }
 
     Ok(())
-}
-
-/// Sleep for 1 second - helper function for default delays
-async fn sleep_1s() {
-    tokio::time::sleep(Duration::from_secs(1)).await;
 }
 
 /// Simulate keyboard input by sending it via IPC
