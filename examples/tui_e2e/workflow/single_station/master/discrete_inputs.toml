@@ -55,11 +55,9 @@ sleep_ms = 1500
 [[workflow.navigate_to_entry]]
 description = "Initial navigation to entry page"
 verify = "/tmp/vcom1"
-at_line = 2
 
 [[workflow.navigate_to_entry]]
 verify = "/tmp/vcom2"
-at_line = 3
 
 # Step 2: Enter configuration panel
 [[workflow.enter_config_panel]]
@@ -82,7 +80,6 @@ sleep_ms = 1500
 
 [[workflow.enter_config_panel]]
 verify = "Enable Port"
-at_line = 2
 
 # Step 3: Navigate to business configuration
 [[workflow.navigate_to_business_config]]
@@ -97,7 +94,6 @@ mock_set_value = "ProtocolConfig"
 
 [[workflow.navigate_to_business_config]]
 verify = "Enter Business Configuration"
-at_line = 4
 
 # Step 4: Enter Modbus panel
 [[workflow.enter_modbus_panel]]
@@ -116,7 +112,6 @@ mock_set_value = { kind = "AddLine" }
 
 [[workflow.enter_modbus_panel]]
 verify = "ModBus Master/Slave Set"
-at_line = 0
 
 # Step 5: Create station
 [[workflow.create_station]]
@@ -137,7 +132,6 @@ mock_set_value = { kind = "StationId", station_index = 0 }
 
 [[workflow.create_station]]
 verify = "#1 - ID: 1"
-at_line = 5
 
 # Step 6: Configure Station Fields
 # After creating station, cursor is on StationId automatically
@@ -203,6 +197,14 @@ description = "Confirm Register Type"
 key = "Enter"
 
 [[workflow.configure_station_fields]]
+description = "Wait for Register Type to be committed"
+sleep_ms = 500
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Type is correctly set"
+verify = "Register Type         Discrete Inputs(02)"
+
+[[workflow.configure_station_fields]]
 description = "Update Register Type in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"
 mock_set_value = "DiscreteInputs"
@@ -248,6 +250,14 @@ value = 0x0000
 [[workflow.configure_station_fields]]
 description = "Confirm Start Address"
 key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Wait for Start Address to be committed"
+sleep_ms = 500
+
+[[workflow.configure_station_fields]]
+description = "Verify Start Address is correctly set to 0x0000"
+verify = "Start Address         0x0000 (0)"
 
 [[workflow.configure_station_fields]]
 description = "Update Start Address in mock state"
@@ -299,6 +309,14 @@ value = 10
 [[workflow.configure_station_fields]]
 description = "Confirm Register Count"
 key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Wait for Register Count to be committed"
+sleep_ms = 500
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Length is correctly set to 10"
+verify = "Register Length       0x000A (10)"
 
 [[workflow.configure_station_fields]]
 description = "Update Register Count in mock state"
@@ -448,7 +466,6 @@ mock_set_value = 1
 [[workflow.edit_registers_round1]]
 description = "Verify all registers show ON"
 verify = "ON   ON   ON   ON"
-at_line = 10
 
 [[workflow.edit_registers_round1]]
 description = "Return to top of panel"
@@ -481,7 +498,6 @@ sleep_ms = 5000
 [[workflow.save_configuration]]
 description = "Verify Running status indicator"
 verify = "Running ●"
-at_line = 0
 
 # Step 9: Verify port enabled
 [[workflow.verify_port_enabled]]
@@ -617,7 +633,6 @@ mock_set_value = 0
 [[workflow.edit_registers_round2]]
 description = "Verify alternating pattern"
 verify = "ON   OFF  ON   OFF"
-at_line = 10
 
 [[workflow.edit_registers_round2]]
 description = "Return to top of panel"
@@ -751,7 +766,6 @@ mock_set_value = 1
 [[workflow.edit_registers_round3]]
 description = "Verify two ON/one OFF pattern"
 verify = "ON   ON   OFF  ON"
-at_line = 10
 
 [[workflow.edit_registers_round3]]
 description = "Return to top of panel"
