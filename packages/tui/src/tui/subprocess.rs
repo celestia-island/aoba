@@ -358,36 +358,8 @@ impl ManagedSubprocess {
         }
     }
 
-    // Legacy methods kept for compatibility but marked as deprecated
-    // They now convert to the new stations_update format
-
-    /// Send a configuration update to the subprocess via command channel
-    /// DEPRECATED: Use send_stations_update instead
-    pub fn send_config_update(
-        &mut self,
-        _station_id: u8,
-        _register_type: String,
-        _start_address: u16,
-        _register_length: u16,
-    ) -> Result<()> {
-        log::warn!("send_config_update is deprecated, use send_stations_update instead");
-        // TODO: Convert to stations_update or remove this method
-        Ok(())
-    }
-
-    /// Send register update to the subprocess via command channel
-    /// DEPRECATED: Use send_stations_update instead
-    pub fn send_register_update(
-        &mut self,
-        _station_id: u8,
-        _register_type: String,
-        _start_address: u16,
-        _values: Vec<u16>,
-    ) -> Result<()> {
-        log::warn!("send_register_update is deprecated, use send_stations_update instead");
-        // TODO: Convert to stations_update or remove this method
-        Ok(())
-    }
+    // Note: legacy per-register/per-config command helpers were removed in favor
+    // of `send_stations_update` which sends the full stations configuration.
 
     /// Kill the subprocess
     pub fn kill(&mut self) -> Result<()> {
@@ -584,23 +556,8 @@ impl SubprocessManager {
         }
     }
 
-    /// Send register update to CLI subprocess via IPC
-    /// DEPRECATED: Consider using send_stations_update_for_port for full synchronization
-    pub fn send_register_update(
-        &mut self,
-        port_name: &str,
-        station_id: u8,
-        register_type: String,
-        start_address: u16,
-        values: Vec<u16>,
-    ) -> Result<()> {
-        if let Some(subprocess) = self.processes.get_mut(port_name) {
-            subprocess.send_register_update(station_id, register_type, start_address, values)?;
-            Ok(())
-        } else {
-            Err(anyhow!("No subprocess found for port {port_name}"))
-        }
-    }
+    // Per-register forwarding removed. Use
+    // `send_stations_update_for_port` to synchronize full station state with CLI subprocesses.
 
     /// Shutdown all subprocesses
     pub fn shutdown_all(&mut self) {
