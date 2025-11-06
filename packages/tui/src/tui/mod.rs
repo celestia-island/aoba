@@ -951,6 +951,42 @@ fn run_core_thread(
                                                 ),
                                             );
                                             cli_started = true;
+
+                                            // Send initial stations configuration to CLI subprocess
+                                            // Retry with delays to wait for command channel to be ready
+                                            log::info!(
+                                                "📡 Sending initial stations configuration to CLI subprocess for {port_name}"
+                                            );
+                                            let mut stations_sent = false;
+                                            for attempt in 1..=10 {
+                                                match subprocess_manager
+                                                    .send_stations_update_for_port(&port_name)
+                                                {
+                                                    Ok(()) => {
+                                                        log::info!(
+                                                            "✅ Successfully sent initial stations configuration to {port_name} (attempt {attempt})"
+                                                        );
+                                                        stations_sent = true;
+                                                        break;
+                                                    }
+                                                    Err(err) if attempt < 10 => {
+                                                        log::debug!(
+                                                            "⏳ Attempt {attempt} to send stations update failed (command channel may not be ready yet): {err}"
+                                                        );
+                                                        thread::sleep(Duration::from_millis(200));
+                                                    }
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}"
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            if !stations_sent {
+                                                log::error!(
+                                                    "❌ Could not send initial stations configuration to {port_name} - CLI subprocess may not function correctly"
+                                                );
+                                            }
                                         } else {
                                             log::warn!(
                                                 "ToggleRuntime: subprocess snapshot missing for {port_name}"
@@ -1053,6 +1089,42 @@ fn run_core_thread(
                                                 ),
                                             );
                                             cli_started = true;
+
+                                            // Send initial stations configuration to CLI subprocess
+                                            // Retry with delays to wait for command channel to be ready
+                                            log::info!(
+                                                "📡 Sending initial stations configuration to CLI subprocess for {port_name}"
+                                            );
+                                            let mut stations_sent = false;
+                                            for attempt in 1..=10 {
+                                                match subprocess_manager
+                                                    .send_stations_update_for_port(&port_name)
+                                                {
+                                                    Ok(()) => {
+                                                        log::info!(
+                                                            "✅ Successfully sent initial stations configuration to {port_name} (attempt {attempt})"
+                                                        );
+                                                        stations_sent = true;
+                                                        break;
+                                                    }
+                                                    Err(err) if attempt < 10 => {
+                                                        log::debug!(
+                                                            "⏳ Attempt {attempt} to send stations update failed (command channel may not be ready yet): {err}"
+                                                        );
+                                                        thread::sleep(Duration::from_millis(200));
+                                                    }
+                                                    Err(err) => {
+                                                        log::warn!(
+                                                            "⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}"
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            if !stations_sent {
+                                                log::error!(
+                                                    "❌ Could not send initial stations configuration to {port_name} - CLI subprocess may not function correctly"
+                                                );
+                                            }
                                         } else {
                                             log::warn!(
                                                 "ToggleRuntime: subprocess snapshot missing for {port_name}"
