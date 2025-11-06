@@ -137,9 +137,7 @@ pub fn group_steps(steps: &[WorkflowStep]) -> Vec<StepGroup> {
 
 /// Check if a step index is part of any retryable group
 pub fn is_in_retryable_group(step_index: usize, groups: &[StepGroup]) -> bool {
-    groups
-        .iter()
-        .any(|g| g.step_indices.contains(&step_index))
+    groups.iter().any(|g| g.step_indices.contains(&step_index))
 }
 
 #[cfg(test)]

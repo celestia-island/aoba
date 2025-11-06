@@ -1,13 +1,7 @@
 use anyhow::Result;
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::{collections::HashMap, sync::{Arc, Mutex, OnceLock}};
 
-use ratatui::{
-    style::{Color, Style},
-    text::{Line, Span},
-};
+use ratatui::{style::{Color, Style}, text::{Line, Span}};
 use unicode_width::UnicodeWidthStr;
 
 use crate::{i18n::lang, tui::ui::components::kv_pairs_to_lines};

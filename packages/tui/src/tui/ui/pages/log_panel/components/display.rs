@@ -1,14 +1,8 @@
 use anyhow::Result;
 
-use ratatui::{
-    prelude::*,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
-};
+use ratatui::{prelude::*, style::{Color, Modifier, Style}, text::{Line, Span}, widgets::{Block, Borders, Paragraph}};
 
-use crate::tui::status as types;
-use crate::{i18n::lang, tui::status::read_status};
+use crate::{tui::status as types, i18n::lang, tui::status::read_status};
 
 /// Extract log data from current page state
 pub fn extract_log_data() -> Result<Option<(Vec<types::port::PortLogEntry>, Option<usize>)>> {

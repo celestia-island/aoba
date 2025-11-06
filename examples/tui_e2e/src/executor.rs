@@ -2,18 +2,16 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
+use anyhow::{bail, Result};
 use std::time::Duration;
 
-use anyhow::{bail, Result};
-
-use crate::mock_state::{
-    init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
+use crate::{
+    mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
+    renderer::render_tui_to_string,
+    retry_state_machine::{group_steps, is_in_retryable_group, StepGroup},
+    workflow::{Workflow, WorkflowStep},
 };
-use crate::renderer::render_tui_to_string;
-use crate::retry_state_machine::{group_steps, is_in_retryable_group, StepGroup};
-use crate::workflow::{Workflow, WorkflowStep};
-use aoba_ci_utils::E2EToTuiMessage;
-use aoba_ci_utils::{IpcChannelId, IpcSender};
+use aoba_ci_utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -120,7 +118,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     // Try to use pre-built binaries first (release preferred, debug fallback), then cargo run
     let release_bin = std::path::Path::new("target/release/aoba");
     let debug_bin = std::path::Path::new("target/debug/aoba");
-    
+
     let mut cmd = if release_bin.exists() {
         let mut c = tokio::process::Command::new(release_bin);
         c.args(["--tui", "--debug-ci", &channel_id.0]);
@@ -297,10 +295,7 @@ async fn execute_step_group_with_retry(
         retry_count += 1;
         if retry_count > max_retries {
             // Max retries exceeded - fail with first screenshot
-            log::error!(
-                "❌ Step group failed after {} attempts",
-                max_retries + 1
-            );
+            log::error!("❌ Step group failed after {} attempts", max_retries + 1);
 
             if let Some(screenshot) = first_failure_screenshot {
                 log::error!("📸 Screenshot from first failure:\n{}", screenshot);
@@ -415,7 +410,7 @@ async fn execute_single_step(
         if ctx.mode == ExecutionMode::DrillDown {
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
-        
+
         // Render the TUI to a string based on execution mode
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
@@ -565,16 +560,18 @@ async fn execute_match_master_registers_trigger(
     // Parse parameters
     let station_id = params["station_id"]
         .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("station_id parameter required"))? as u8;
-    
+        .ok_or_else(|| anyhow::anyhow!("station_id parameter required"))?
+        as u8;
+
     let register_type = params["register_type"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("register_type parameter required"))?;
-    
+
     let start_address = params["start_address"]
         .as_u64()
-        .ok_or_else(|| anyhow::anyhow!("start_address parameter required"))? as u16;
-    
+        .ok_or_else(|| anyhow::anyhow!("start_address parameter required"))?
+        as u16;
+
     let expected_values = params["expected_values"]
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("expected_values parameter required"))?;
@@ -615,7 +612,7 @@ async fn execute_match_master_registers_trigger(
     let output = tokio::process::Command::new(cli_binary)
         .args([
             "--master-provide",
-            &ctx.port2,  // Use port2 (/tmp/vcom2) which is connected to port1 (/tmp/vcom1)
+            &ctx.port2, // Use port2 (/tmp/vcom2) which is connected to port1 (/tmp/vcom1)
             "--station-id",
             &station_id.to_string(),
             "--register-mode",
@@ -624,7 +621,7 @@ async fn execute_match_master_registers_trigger(
             &start_address.to_string(),
             "--register-length",
             &register_count.to_string(),
-            "--once",  // Read once and exit
+            "--once", // Read once and exit
         ])
         .output()
         .await
@@ -657,7 +654,7 @@ async fn execute_match_master_registers_trigger(
             .as_u64()
             .ok_or_else(|| anyhow::anyhow!("Expected value at index {} is not a number", i))?
             as u16;
-        
+
         if *actual != expected_u16 {
             bail!(
                 "Register value mismatch at index {}: expected 0x{:04X}, got 0x{:04X}",
@@ -668,7 +665,10 @@ async fn execute_match_master_registers_trigger(
         }
     }
 
-    log::info!("✅ Master register verification passed: {} registers matched", register_count);
+    log::info!(
+        "✅ Master register verification passed: {} registers matched",
+        register_count
+    );
     Ok(())
 }
 
@@ -682,7 +682,7 @@ fn parse_cli_register_output(
 
     // For coils/discrete inputs, look for ON/OFF or 0/1 patterns
     // For holding/input registers, look for hex values
-    
+
     match register_type {
         "Coils" | "DiscreteInputs" => {
             // Look for patterns like "0x0000: ON" or "Register 0: 1"
@@ -692,7 +692,7 @@ fn parse_cli_register_output(
                 } else if line.contains("OFF") || line.contains("0") {
                     values.push(0);
                 }
-                
+
                 if values.len() >= expected_count as usize {
                     break;
                 }
@@ -707,7 +707,7 @@ fn parse_cli_register_output(
                         values.push(val);
                     }
                 }
-                
+
                 if values.len() >= expected_count as usize {
                     break;
                 }

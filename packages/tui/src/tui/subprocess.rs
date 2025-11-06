@@ -3,11 +3,7 @@
 /// This module manages CLI subprocesses that handle actual serial port communication.
 /// The TUI acts as a control shell, spawning and managing CLI processes via IPC.
 use anyhow::{anyhow, Result};
-use std::{
-    collections::HashMap,
-    io::{BufRead, BufReader},
-    process::{Child, Command, Stdio},
-};
+use std::{collections::HashMap, io::{BufRead, BufReader}, process::{Child, Command, Stdio}};
 
 use crate::protocol::ipc::{IpcClient, IpcConnection, IpcMessage};
 pub use crate::tui::status::cli::CliMode;

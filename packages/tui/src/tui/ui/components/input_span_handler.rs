@@ -2,12 +2,7 @@ use anyhow::{anyhow, Result};
 
 use crossterm::event::KeyEvent;
 
-use crate::tui::{
-    // Bring the UI Input buffer type into scope from the new location
-    status::ui::InputRawBuffer,
-    status::{read_status, write_status},
-    utils::bus::Bus,
-};
+use crate::tui::{ // Bring the UI Input buffer type into scope from the new location status::ui::InputRawBuffer, status::{read_status, write_status}, utils::bus::Bus, };
 
 /// Handle keys when we are in an input/span edit mode.
 ///

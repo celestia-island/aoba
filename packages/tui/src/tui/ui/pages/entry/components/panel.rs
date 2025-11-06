@@ -1,20 +1,9 @@
 use anyhow::Result;
 
-use ratatui::{
-    prelude::*,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-};
+use ratatui::{prelude::*, style::{Color, Modifier, Style}, text::{Line, Span}};
 use unicode_width::UnicodeWidthStr;
 
-use crate::i18n::lang;
-use crate::tui::status as types;
-use crate::tui::status::cursor::EntryCursor;
-use crate::tui::status::read_status;
-use crate::tui::ui::components::boxed_paragraph::render_boxed_paragraph;
-use crate::tui::ui::pages::about::components::{
-    init_about_cache, render_about_page_manifest_lines,
-};
+use crate::{i18n::lang, tui::status as types, tui::status::cursor::EntryCursor, tui::status::read_status, tui::ui::components::boxed_paragraph::render_boxed_paragraph, tui::ui::pages::about::components::{ init_about_cache, render_about_page_manifest_lines, }};
 
 /// Render the right details panel content
 pub fn render_details_panel(frame: &mut Frame, area: Rect) -> Result<()> {

@@ -1,7 +1,9 @@
-use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::os::unix::fs::FileTypeExt;
-use std::path::Path;
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    os::unix::fs::FileTypeExt,
+    path::Path,
+};
 
 use serialport::{SerialPortInfo, SerialPortType};
 

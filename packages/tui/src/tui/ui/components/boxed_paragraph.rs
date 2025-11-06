@@ -1,10 +1,4 @@
-use ratatui::{
-    prelude::*,
-    text::Line,
-    widgets::{
-        Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
-    },
-};
+use ratatui::{prelude::*, text::Line, widgets::{ Block, Borders, Padding, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, }};
 
 /// Render a boxed paragraph with comprehensive options.
 ///

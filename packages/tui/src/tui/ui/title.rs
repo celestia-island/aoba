@@ -1,17 +1,8 @@
 use anyhow::Result;
 
-use ratatui::{
-    prelude::*,
-    text::{Line, Span},
-    widgets::*,
-};
+use ratatui::{prelude::*, text::{Line, Span}, widgets::*};
 
-use crate::{
-    i18n::lang,
-    // Port status indicator moved up to status::port
-    tui::status::port::PortStatusIndicator,
-    tui::status::read_status,
-};
+use crate::{i18n::lang, // Port status indicator moved up to status::port tui::status::port::PortStatusIndicator, tui::status::read_status};
 
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {

@@ -1,25 +1,9 @@
 use anyhow::Result;
 
-use ratatui::{
-    prelude::*,
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
-};
+use ratatui::{prelude::*, style::{Color, Modifier, Style}, text::{Line, Span}};
 use unicode_width::UnicodeWidthStr;
 
-use crate::tui::status as types;
-use crate::{
-    i18n::lang,
-    tui::{
-        status::{
-            port::{PortData, PortState},
-            read_status,
-        },
-        ui::{
-            components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
-        },
-    },
-};
+use crate::{tui::status as types, i18n::lang, tui::{ status::{ port::{PortData, PortState}, read_status, }, ui::{ components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT};
 
 /// Helper function to derive selection from page state (entry page specific)
 pub fn derive_selection_from_page(

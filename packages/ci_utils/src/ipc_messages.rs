@@ -4,8 +4,7 @@
 //! TUI E2E tests and the TUI process during testing.
 
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 /// Message from E2E test to TUI
 #[derive(Debug, Clone, Serialize, Deserialize)]

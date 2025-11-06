@@ -13,11 +13,13 @@ use rmodbus::{server::context::ModbusContext, ModbusProto};
 use serialport::SerialPort;
 
 use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
-use crate::protocol::modbus::{
-    build_slave_coils_response, build_slave_discrete_inputs_response,
-    build_slave_holdings_response, build_slave_inputs_response,
+use crate::{
+    actions, cleanup,
+    protocol::modbus::{
+        build_slave_coils_response, build_slave_discrete_inputs_response,
+        build_slave_holdings_response, build_slave_inputs_response,
+    },
 };
-use crate::{actions, cleanup};
 
 const SERIAL_PORT_OPEN_RETRIES: usize = 10;
 const SERIAL_PORT_OPEN_RETRY_DELAY_MS: u64 = 200;

@@ -1,9 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use crate::tui::{
-    status::port::{PortData, PortState},
-    utils::bus::CoreToUi,
-};
+use crate::tui::{ status::port::{PortData, PortState}, utils::bus::CoreToUi, };
 
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
 /// because another scan was already in progress.

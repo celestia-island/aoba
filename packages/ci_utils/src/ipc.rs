@@ -3,15 +3,14 @@
 //! This module provides Unix socket-based IPC for communication between
 //! TUI E2E tests and the TUI process.
 
-use std::fs;
-use std::path::Path;
-use std::time::Instant;
-
 use anyhow::{anyhow, bail, Context, Result};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
-use tokio::net::{UnixListener, UnixStream};
-use tokio::time::{sleep, timeout};
+use std::{fs, path::Path, time::Instant};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::unix::{OwnedReadHalf, OwnedWriteHalf},
+    net::{UnixListener, UnixStream},
+    time::{sleep, timeout},
+};
 
 use super::{
     E2EToTuiMessage, IpcChannelId, TuiToE2EMessage, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
@@ -40,7 +39,10 @@ impl IpcSender {
         let from_tui_listener = UnixListener::bind(&from_tui_path)
             .with_context(|| format!("Failed to bind IPC socket: {}", from_tui_path.display()))?;
 
-        log::info!("IPC [{}] Server sockets created, waiting for TUI to connect...", channel_id.0);
+        log::info!(
+            "IPC [{}] Server sockets created, waiting for TUI to connect...",
+            channel_id.0
+        );
 
         // Accept connections from TUI
         let (to_tui_stream, _) = to_tui_listener.accept().await.with_context(|| {
