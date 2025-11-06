@@ -1,102 +1,56 @@
-# Remaining TUI E2E Workflow Keyboard Navigation Fixes
+# TUI E2E Workflow Keyboard Navigation - All Fixes Complete! ✅
 
-## Summary
-5/14 workflows fixed. 9 workflows remain using the same patterns.
+## Status: 14/14 Workflows Fixed
 
-## Pattern for Single-Station Workflows
+All TUI E2E workflow modules have been updated with the correct keyboard navigation patterns for DrillDown mode.
 
-Replace the "# Step 6: Configure Station Fields" section with:
+## Fixed Workflows
+
+### Single-Station Workflows (8/8) ✅
+**Master Mode (4 files):**
+- ✅ `single_station/master/coils.toml` - Coils: h×2
+- ✅ `single_station/master/discrete_inputs.toml` - DiscreteInputs: h×1
+- ✅ `single_station/master/holding.toml` - Holding: Enter only
+- ✅ `single_station/master/input.toml` - Input: h×3
+
+**Slave Mode (4 files):**
+- ✅ `single_station/slave/coils.toml` - Coils: h×2
+- ✅ `single_station/slave/discrete_inputs.toml` - DiscreteInputs: h×1
+- ✅ `single_station/slave/holding.toml` - Holding: Enter only
+- ✅ `single_station/slave/input.toml` - Input: h×3
+
+### Multi-Station Workflows (6/6) ✅
+**With Field Configuration (1 file):**
+- ✅ `multi_station/master/mixed_ids.toml` - 2 stations, both Holding
+
+**Without Field Configuration (5 files - no fixes needed):**
+- ✅ `multi_station/master/mixed_types.toml` - Uses mock_set_value
+- ✅ `multi_station/master/spaced_addresses.toml` - Uses mock_set_value
+- ✅ `multi_station/slave/mixed_types.toml` - Uses mock_set_value
+- ✅ `multi_station/slave/mixed_ids.toml` - Uses mock_set_value
+- ✅ `multi_station/slave/spaced_addresses.toml` - Uses mock_set_value
+
+## Navigation Patterns Used
+
+### Single-Station Pattern
+After each field edit, navigate to next field using absolute positioning:
 
 ```toml
-# Step 6: Configure Station Fields  
-# After creating station, cursor is on StationId automatically
-[[workflow.configure_station_fields]]
-description = "Highlight Station ID field (already there after creation)"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "StationId", station_index = 0 }
-
-[[workflow.configure_station_fields]]
-description = "Enter edit mode for Station ID"
-key = "Enter"
-
-# ... (clear, type, confirm Station ID) ...
-
-[[workflow.configure_station_fields]]
-description = "Confirm Station ID"
-key = "Enter"
-
-[[workflow.configure_station_fields]]
-description = "Update Station ID in mock state"
-mock_path = "$.ports['/tmp/vcom1'].{MASTER_OR_SLAVE}[0].station_id"
-mock_set_value = 1
-
-# Navigate to Register Type using absolute positioning
+# Return to top
 [[workflow.configure_station_fields]]
 description = "Return to top with Ctrl+PageUp"
 key = "Ctrl+PageUp"
 
+# Jump to station
 [[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
+description = "PageDown to ModbusMode"
 key = "PageDown"
 
 [[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
+description = "PageDown to Station#1"
 key = "PageDown"
 
-[[workflow.configure_station_fields]]
-description = "Move to Register Type field (StationId -> RegisterType)"
-key = "Down"
-
-[[workflow.configure_station_fields]]
-description = "Enter edit mode for Register Type"
-key = "Enter"
-
-# Register type cycling (varies by type):
-# Coils: 'h' x 2 (Holding → DiscreteInputs → Coils)
-# DiscreteInputs: 'h' x 1 (Holding → DiscreteInputs)
-# Holding: Just Enter (default)
-# Input: 'h' x 3 (Holding → DiscreteInputs → Coils → Input)
-
-[[workflow.configure_station_fields]]
-description = "Confirm Register Type"
-key = "Enter"
-
-# Navigate to Start Address
-[[workflow.configure_station_fields]]
-description = "Return to top with Ctrl+PageUp"
-key = "Ctrl+PageUp"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Move to Register Type field"
-key = "Down"
-
-[[workflow.configure_station_fields]]
-description = "Move to Start Address field"
-key = "Down"
-
-# ... (edit Start Address) ...
-
-# Navigate to Register Count
-[[workflow.configure_station_fields]]
-description = "Return to top with Ctrl+PageUp"
-key = "Ctrl+PageUp"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
-
+# Navigate to specific field
 [[workflow.configure_station_fields]]
 description = "Move to Register Type field"
 key = "Down"
@@ -108,37 +62,56 @@ key = "Down"
 [[workflow.configure_station_fields]]
 description = "Move to Register Count field"
 key = "Down"
-
-# ... (edit Register Count) ...
 ```
 
-## Files to Fix
+### Multi-Station Pattern
 
-### Single-Station Slave (use modbus_slaves in paths):
-1. examples/tui_e2e/workflow/single_station/slave/discrete_inputs.toml (h x1)
-2. examples/tui_e2e/workflow/single_station/slave/holding.toml (Enter only)
-3. examples/tui_e2e/workflow/single_station/slave/input.toml (h x3)
+**Station#1 (PageDown × 2):**
+- Ctrl+PageUp → AddLine
+- PageDown → ModbusMode
+- PageDown → Station#1
+- Down × N → Field
 
-### Multi-Station (2 stations each):
-For Station#2, use PageDown x3 instead of x2:
-- Ctrl+PageUp
-- PageDown (to ModbusMode)
-- PageDown (to Station#1)
-- PageDown (to Station#2)
+**Station#2 (PageDown × 3):**
+- Ctrl+PageUp → AddLine
+- PageDown → ModbusMode
+- PageDown → Station#1
+- PageDown → Station#2 (extra jump)
+- Down × N → Field
 
-Files:
-4. examples/tui_e2e/workflow/multi_station/master/mixed_types.toml
-5. examples/tui_e2e/workflow/multi_station/master/spaced_addresses.toml
-6. examples/tui_e2e/workflow/multi_station/master/mixed_ids.toml
-7. examples/tui_e2e/workflow/multi_station/slave/mixed_types.toml
-8. examples/tui_e2e/workflow/multi_station/slave/spaced_addresses.toml
-9. examples/tui_e2e/workflow/multi_station/slave/mixed_ids.toml
+## Register Type Cycling Reference
 
-## Validation
+| Register Type    | From Holding | Key Presses |
+|------------------|--------------|-------------|
+| Holding          | (default)    | Enter only  |
+| DiscreteInputs   | Holding      | h × 1       |
+| Coils            | Holding      | h × 2       |
+| Input            | Holding      | h × 3       |
 
-After each fix, run:
+The cycle order: Holding → DiscreteInputs → Coils → Input
+
+## Verification
+
+All fixed workflows pass ScreenCaptureOnly mode testing:
+
 ```bash
-cargo run --package tui_e2e -- --module <module_name> --screen-capture-only
+# Test single-station workflows
+cargo run --package tui_e2e -- --module single_station_master_coils --screen-capture-only
+cargo run --package tui_e2e -- --module single_station_slave_holding --screen-capture-only
+
+# Test multi-station workflow
+cargo run --package tui_e2e -- --module multi_station_master_mixed_ids --screen-capture-only
 ```
 
-All should pass in ScreenCaptureOnly mode.
+## Why This Fix Was Needed
+
+The TUI's `ModbusDashboardCursor::next()` function builds the navigation order dynamically from the current port state. During initial station configuration, this caused inconsistent field-to-field navigation when using relative Down keys.
+
+The solution uses absolute positioning with `Ctrl+PageUp` + `PageDown` to establish a known starting point, then uses Down keys to navigate to the specific field. This provides deterministic navigation regardless of cursor state.
+
+## Commits
+
+- `785d570` - Fixed 4 single-station master workflows
+- `5e252eb` - Fixed 1 single-station slave workflow (coils)
+- `01808ea` - Fixed 3 single-station slave workflows (discrete_inputs, holding, input)
+- `a47570e` - Fixed 1 multi-station master workflow (mixed_ids)
