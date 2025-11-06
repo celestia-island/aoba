@@ -135,6 +135,26 @@ at_line = 0
 
 # Step 5: Create two stations placeholders
 [[workflow.create_stations]]
+description = "Press Enter on 'Create Station' to create first station"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Wait for first station to be created"
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Press Ctrl+PageUp to return to top"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+description = "Press Enter on 'Create Station' to create second station"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Wait for second station to be created"
+sleep_ms = 500
+
+[[workflow.create_stations]]
 description = "Populate stations for mixed register types"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
