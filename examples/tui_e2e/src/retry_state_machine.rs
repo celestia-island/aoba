@@ -27,23 +27,30 @@ pub enum RetryState {
 /// A group of steps that can be retried as a unit
 #[derive(Debug, Clone)]
 pub struct StepGroup {
-    /// Indices of steps in this group
+    /// Indices of steps in this group (in execution order)
     pub step_indices: Vec<usize>,
+    /// Indices of action-oriented steps inside this group
+    pub action_indices: Vec<usize>,
+    /// Indices of verification-oriented steps inside this group
+    pub verification_indices: Vec<usize>,
     /// Current retry attempt (0 = first attempt)
     pub retry_count: u32,
     /// Maximum retry attempts
     pub max_retries: u32,
-    /// Cached screenshot from first failure
-    pub first_failure_screenshot: Option<String>,
 }
 
 impl StepGroup {
-    pub fn new(step_indices: Vec<usize>) -> Self {
+    pub fn new(
+        step_indices: Vec<usize>,
+        action_indices: Vec<usize>,
+        verification_indices: Vec<usize>,
+    ) -> Self {
         Self {
             step_indices,
+            action_indices,
+            verification_indices,
             retry_count: 0,
             max_retries: 3,
-            first_failure_screenshot: None,
         }
     }
 
@@ -56,6 +63,69 @@ impl StepGroup {
     }
 }
 
+#[derive(Debug, Clone)]
+struct GroupBuilder {
+    step_indices: Vec<usize>,
+    action_indices: Vec<usize>,
+    verification_indices: Vec<usize>,
+    stage: GroupStage,
+}
+
+impl GroupBuilder {
+    fn new() -> Self {
+        Self {
+            step_indices: Vec::new(),
+            action_indices: Vec::new(),
+            verification_indices: Vec::new(),
+            stage: GroupStage::Actions,
+        }
+    }
+
+    fn push_action(&mut self, index: usize) {
+        self.step_indices.push(index);
+        self.action_indices.push(index);
+    }
+
+    fn push_verification(&mut self, index: usize) {
+        self.step_indices.push(index);
+        self.verification_indices.push(index);
+    }
+
+    fn push_support(&mut self, index: usize) {
+        self.step_indices.push(index);
+    }
+
+    fn start_verifications(&mut self) {
+        self.stage = GroupStage::Verifications;
+    }
+
+    fn has_actions(&self) -> bool {
+        !self.action_indices.is_empty()
+    }
+
+    fn has_verifications(&self) -> bool {
+        !self.verification_indices.is_empty()
+    }
+
+    fn finish(self) -> Option<StepGroup> {
+        if self.has_actions() && self.has_verifications() {
+            Some(StepGroup::new(
+                self.step_indices,
+                self.action_indices,
+                self.verification_indices,
+            ))
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GroupStage {
+    Actions,
+    Verifications,
+}
+
 /// Identifies if a step is an action (keyboard/input) step
 pub fn is_action_step(step: &WorkflowStep) -> bool {
     step.key.is_some() || step.input.is_some()
@@ -63,12 +133,16 @@ pub fn is_action_step(step: &WorkflowStep) -> bool {
 
 /// Identifies if a step is a verification step
 pub fn is_verification_step(step: &WorkflowStep) -> bool {
-    step.verify.is_some() || step.mock_verify_path.is_some()
+    step.verify.is_some()
+        || step.verify_with_placeholder.is_some()
+        || step.cursor_at_line.is_some()
+        || step.mock_verify_path.is_some()
 }
 
 /// Identifies if a step is a mock modification step (doesn't break groups)
 pub fn is_mock_modification_step(step: &WorkflowStep) -> bool {
-    step.mock_path.is_some() && step.mock_set_value.is_some()
+    step.mock_path.is_some()
+        && (step.mock_set_value.is_some() || step.mock_set_value_with_placeholder.is_some())
 }
 
 /// Identifies if a step breaks the group (trigger, large sleep)
@@ -94,42 +168,71 @@ pub fn breaks_group(step: &WorkflowStep) -> bool {
 /// - Optionally mock modification steps (which don't break the group)
 pub fn group_steps(steps: &[WorkflowStep]) -> Vec<StepGroup> {
     let mut groups = Vec::new();
-    let mut current_indices = Vec::new();
-    let mut has_actions = false;
-    let mut has_verifications = false;
+    let mut builder: Option<GroupBuilder> = None;
 
-    for (i, step) in steps.iter().enumerate() {
-        // Check if this step breaks the group
+    for (index, step) in steps.iter().enumerate() {
         if breaks_group(step) {
-            // Finalize current group if it has both actions and verifications
-            if !current_indices.is_empty() && has_actions && has_verifications {
-                groups.push(StepGroup::new(current_indices.clone()));
+            if let Some(group) = builder.take().and_then(|b| b.finish()) {
+                groups.push(group);
             }
-            current_indices.clear();
-            has_actions = false;
-            has_verifications = false;
             continue;
         }
 
-        // Track step type
-        if is_action_step(step) {
-            has_actions = true;
-            current_indices.push(i);
-        } else if is_verification_step(step) {
-            has_verifications = true;
-            current_indices.push(i);
-        } else if is_mock_modification_step(step) || step.sleep_ms.is_some() {
-            // Mock modifications and small sleeps are part of the group
-            current_indices.push(i);
+        let is_action = is_action_step(step);
+        let is_verification = is_verification_step(step);
+        let is_support =
+            is_mock_modification_step(step) || matches!(step.sleep_ms, Some(ms) if ms <= 1000);
+
+        if builder.is_none() {
+            if is_action {
+                let mut new_builder = GroupBuilder::new();
+                new_builder.push_action(index);
+                builder = Some(new_builder);
+            }
+            continue;
+        }
+
+        let mut current = builder.take().unwrap();
+
+        if is_action {
+            if current.stage == GroupStage::Verifications && current.has_verifications() {
+                if let Some(group) = current.finish() {
+                    groups.push(group);
+                }
+                let mut new_builder = GroupBuilder::new();
+                new_builder.push_action(index);
+                builder = Some(new_builder);
+            } else {
+                current.push_action(index);
+                builder = Some(current);
+            }
+        } else if is_verification {
+            if !current.has_actions() {
+                // Ignore stray verification without actions
+                builder = Some(current);
+                continue;
+            }
+
+            if current.stage == GroupStage::Actions {
+                current.start_verifications();
+            }
+            current.push_verification(index);
+            builder = Some(current);
+        } else if is_support {
+            if current.has_actions() {
+                current.push_support(index);
+            }
+            builder = Some(current);
         } else {
-            // Other steps don't break groups but are included
-            current_indices.push(i);
+            if let Some(group) = current.finish() {
+                groups.push(group);
+            }
+            builder = None;
         }
     }
 
-    // Finalize last group if valid
-    if !current_indices.is_empty() && has_actions && has_verifications {
-        groups.push(StepGroup::new(current_indices));
+    if let Some(group) = builder.and_then(|b| b.finish()) {
+        groups.push(group);
     }
 
     groups
@@ -160,6 +263,8 @@ mod tests {
         let groups = group_steps(&steps);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].step_indices, vec![0, 1]);
+        assert_eq!(groups[0].action_indices, vec![0]);
+        assert_eq!(groups[0].verification_indices, vec![1]);
     }
 
     #[test]
@@ -183,6 +288,8 @@ mod tests {
         let groups = group_steps(&steps);
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].step_indices, vec![0, 1, 2]);
+        assert_eq!(groups[0].action_indices, vec![0]);
+        assert_eq!(groups[0].verification_indices, vec![2]);
     }
 
     #[test]
@@ -213,7 +320,43 @@ mod tests {
         let groups = group_steps(&steps);
         assert_eq!(groups.len(), 2);
         assert_eq!(groups[0].step_indices, vec![0, 1]);
+        assert_eq!(groups[0].action_indices, vec![0]);
+        assert_eq!(groups[0].verification_indices, vec![1]);
         assert_eq!(groups[1].step_indices, vec![3, 4]);
+        assert_eq!(groups[1].action_indices, vec![3]);
+        assert_eq!(groups[1].verification_indices, vec![4]);
+    }
+
+    #[test]
+    fn test_consecutive_actions_and_verifications() {
+        let steps = vec![
+            WorkflowStep {
+                key: Some("Enter".to_string()),
+                ..Default::default()
+            },
+            WorkflowStep {
+                key: Some("Down".to_string()),
+                ..Default::default()
+            },
+            WorkflowStep {
+                sleep_ms: Some(200),
+                ..Default::default()
+            },
+            WorkflowStep {
+                verify: Some("First".to_string()),
+                ..Default::default()
+            },
+            WorkflowStep {
+                verify: Some("Second".to_string()),
+                ..Default::default()
+            },
+        ];
+
+        let groups = group_steps(&steps);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].step_indices, vec![0, 1, 2, 3, 4]);
+        assert_eq!(groups[0].action_indices, vec![0, 1]);
+        assert_eq!(groups[0].verification_indices, vec![3, 4]);
     }
 }
 

@@ -3,12 +3,12 @@
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
 use anyhow::{bail, Result};
-use std::time::Duration;
+use std::{fmt, time::Duration};
 
 use crate::{
     mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
     renderer::render_tui_to_string,
-    retry_state_machine::{group_steps, is_in_retryable_group, StepGroup},
+    retry_state_machine::{group_steps, is_verification_step, StepGroup},
     workflow::{Workflow, WorkflowStep},
 };
 use aoba_ci_utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
@@ -236,65 +236,85 @@ async fn execute_step_group_with_retry(
 
     loop {
         if retry_count > 0 {
+            let attempt = retry_count + 1;
             log::info!(
                 "🔁 Retrying step group (attempt {}/{})",
-                retry_count + 1,
+                attempt,
                 max_retries + 1
             );
-            // Wait 1 second before retry
+
+            if !group.action_indices.is_empty() {
+                log::info!(
+                    "   ⏪ Replaying {} action step(s) before verification",
+                    group.action_indices.len()
+                );
+                for &action_idx in &group.action_indices {
+                    log::info!("     ↻ {}", step_summary(&all_steps[action_idx]));
+                }
+            }
+
+            // Wait 1 second before retrying the action steps
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
-        // Execute all steps in the group
         let mut verification_failed = false;
+
         for &step_idx in &group.step_indices {
             let step = &all_steps[step_idx];
 
             if let Some(desc) = &step.description {
-                if retry_count == 0 {
-                    log::debug!("    [{}] {}", step_idx, desc);
-                }
+                log::debug!("    [{}] {}", step_idx, desc);
             }
 
-            // Try to execute the step
             match execute_single_step(ctx, workflow_id, step).await {
                 Ok(()) => {}
                 Err(err) => {
-                    // Check if this is a verification error
-                    let err_msg = err.to_string();
-                    if err_msg.contains("Screen verification failed")
-                        || err_msg.contains("mock_verify")
-                    {
+                    if is_verification_step(step) {
                         verification_failed = true;
                         last_error = Some(err);
 
-                        // Cache screenshot on first failure
                         if first_failure_screenshot.is_none() {
-                            if let Ok(screenshot) = capture_screenshot(ctx).await {
-                                first_failure_screenshot = Some(screenshot);
+                            match capture_screenshot(ctx).await {
+                                Ok(captured) => {
+                                    log::debug!(
+                                        "📸 Captured first failure screenshot for later reporting"
+                                    );
+                                    first_failure_screenshot = Some(captured);
+                                }
+                                Err(capture_err) => {
+                                    log::warn!(
+                                        "⚠️  Failed to capture screenshot after verification error: {}",
+                                        capture_err
+                                    );
+                                }
                             }
+                        }
+
+                        if let Some(err_ref) = last_error.as_ref() {
+                            log::warn!("   Verification failed: {}", err_ref);
                         }
                         break;
                     } else {
-                        // Non-verification error - fail immediately
                         return Err(err);
                     }
                 }
             }
         }
 
-        // If group succeeded, we're done
         if !verification_failed {
             if retry_count > 0 {
-                log::info!("✅ Step group succeeded after {} retries", retry_count);
+                let suffix = if retry_count == 1 {
+                    " retry"
+                } else {
+                    " retries"
+                };
+                log::info!("✅ Step group succeeded after {}{}", retry_count, suffix);
             }
             return Ok(());
         }
 
-        // Check if we can retry
         retry_count += 1;
         if retry_count > max_retries {
-            // Max retries exceeded - fail with first screenshot
             log::error!("❌ Step group failed after {} attempts", max_retries + 1);
 
             if let Some(screenshot) = first_failure_screenshot {
@@ -322,6 +342,32 @@ async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
             }
         }
     }
+}
+
+fn step_summary(step: &WorkflowStep) -> String {
+    if let Some(description) = &step.description {
+        return description.clone();
+    }
+
+    if let Some(key) = &step.key {
+        if let Some(times) = step.times {
+            return format!("Key '{}' ×{}", key, times);
+        }
+        return format!("Key '{}'", key);
+    }
+
+    if let Some(input_kind) = &step.input {
+        if let Some(value) = &step.value {
+            return format!("Input {} = {}", input_kind, value);
+        }
+        return format!("Input {}", input_kind);
+    }
+
+    if let Some(expected) = &step.verify {
+        return format!("Verify '{}'", expected);
+    }
+
+    "Unnamed step".to_string()
 }
 
 /// Execute a single workflow step
@@ -432,33 +478,43 @@ async fn execute_single_step(
         // Get expected text
         let expected_text = step.verify.as_ref().unwrap().clone();
 
-        // Verify the expected text is present
-        if let Some(line_num) = step.at_line {
-            let lines: Vec<&str> = screen_content.lines().collect();
-            if line_num >= lines.len() {
-                bail!(
-                    "Line {} out of bounds (screen has {} lines)",
-                    line_num,
-                    lines.len()
-                );
-            }
-            let actual_line = lines[line_num];
-            if !actual_line.contains(&expected_text) {
-                bail!(
-                    "Screen verification failed at line {}:\n  Expected text: '{}'\n  Actual line: '{}'\n  Full screen:\n{}",
-                    line_num,
-                    expected_text,
-                    actual_line,
-                    screen_content
-                );
-            }
-        } else if !screen_content.contains(&expected_text) {
-            bail!(
-                "Screen verification failed:\n  Expected text: '{}'\n  Not found in screen content:\n{}",
-                expected_text,
-                screen_content
-            );
-        }
+        let verification_result: Result<(), VerificationFailure> =
+            if let Some(line_num) = step.at_line {
+                let lines: Vec<&str> = screen_content.lines().collect();
+                if line_num >= lines.len() {
+                    Err(VerificationFailure::new(
+                        expected_text.clone(),
+                        Some(format!(
+                            "line {} out of bounds (screen has {} lines)",
+                            line_num,
+                            lines.len()
+                        )),
+                    ))
+                } else {
+                    let actual_line = lines[line_num];
+                    if actual_line.contains(&expected_text) {
+                        Ok(())
+                    } else {
+                        Err(VerificationFailure::new(
+                            expected_text.clone(),
+                            Some(format!(
+                                "line {} mismatch: '{}'",
+                                line_num,
+                                actual_line.trim_end()
+                            )),
+                        ))
+                    }
+                }
+            } else if screen_content.contains(&expected_text) {
+                Ok(())
+            } else {
+                Err(VerificationFailure::new(
+                    expected_text.clone(),
+                    Some("expected text not present on screen".to_string()),
+                ))
+            };
+
+        verification_result.map_err(anyhow::Error::from)?;
 
         log::debug!("✅ Screen verified: '{}'", expected_text);
     }
@@ -727,3 +783,30 @@ fn parse_cli_register_output(
 
     Ok(values)
 }
+
+#[derive(Debug)]
+struct VerificationFailure {
+    expected: String,
+    context: Option<String>,
+}
+
+impl VerificationFailure {
+    fn new(expected: String, context: Option<String>) -> Self {
+        Self { expected, context }
+    }
+}
+
+impl fmt::Display for VerificationFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.context {
+            Some(context) => write!(
+                f,
+                "Screen verification failed for '{}': {}",
+                self.expected, context
+            ),
+            None => write!(f, "Screen verification failed for '{}'", self.expected),
+        }
+    }
+}
+
+impl std::error::Error for VerificationFailure {}

@@ -56,10 +56,6 @@ mock_path = "$.port_order"
 mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
 
 [[workflow.navigate_to_entry]]
-description = "Wait for entry screen to populate ports"
-sleep_ms = 1500
-
-[[workflow.navigate_to_entry]]
 description = "Initial navigation to entry page"
 verify = "/tmp/vcom1"
 at_line = 2
@@ -82,10 +78,6 @@ mock_set_value = { type = "config_panel" }
 description = "Set config panel cursor to EnablePort"
 mock_path = "$.page_state.config_panel.cursor"
 mock_set_value = "EnablePort"
-
-[[workflow.enter_config_panel]]
-description = "Wait for config panel to render"
-sleep_ms = 1500
 
 [[workflow.enter_config_panel]]
 description = "Verify Enable Port label is visible"
@@ -139,9 +131,6 @@ description = "Create first station"
 key = "Enter"
 
 [[workflow.create_stations]]
-sleep_ms = 500
-
-[[workflow.create_stations]]
 description = "Return to top"
 key = "Ctrl+PageUp"
 
@@ -150,54 +139,12 @@ description = "Create second station"
 key = "Enter"
 
 [[workflow.create_stations]]
-sleep_ms = 1000
-
-[[workflow.create_stations]]
 description = "Mock state placeholder"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = []
 
 
 # Skipped register editing for simplified test
-[[workflow.edit_station1_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round1]]
-description = "Skip register editing"
-sleep_ms = 100
-
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
 key = "Ctrl+s"
@@ -234,98 +181,9 @@ mock_verify_value = { type = "occupied_by_this" }
 
 # Round 2 updates
 # Skipped register editing for simplified test
-[[workflow.edit_station1_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round2]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station1_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-# Skipped register editing for simplified test
-[[workflow.edit_station2_round3]]
-description = "Skip register editing"
-sleep_ms = 100
-
-
-# Verify mock data for screen-capture mode
 [[workflow.verify_mock_data]]
 description = "Verify mock state (simplified for drilldown mode)"
 mock_verify_path = "$.page"
 mock_verify_value = { type = "modbus_dashboard" }
 
 # Edit Station 1 - Round 3 (simplified)
-[[workflow.edit_station1_round3]]
-description = "Skip station 1 register editing round 3"
-sleep_ms = 100
-
-# Edit Station 2 - Round 3 (simplified)
-[[workflow.edit_station2_round3]]
-description = "Skip station 2 register editing round 3"
-sleep_ms = 100
