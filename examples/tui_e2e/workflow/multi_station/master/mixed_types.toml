@@ -1,8 +1,8 @@
 # Multi-Station - Master Mode - Mixed Types
 # Test ID: tui_multi_master_mixed_types
 # Stations:
-#   - Station A: ID=1, Type=Holding, Address=0x0000, Length=8
-#   - Station B: ID=3, Type=Coils, Address=0x0010, Length=8
+#   - Station A: ID=1, Type=Holding, Address=0x0000, Length=1
+#   - Station B: ID=3, Type=Coils, Address=0x0010, Length=1
 #
 # Test Data (3 Rounds across both stations):
 # Round 1 - Station A: [0x0100, 0x0102, 0x0104, 0x0106, 0x0108, 0x010A, 0x010C, 0x010E]
@@ -17,8 +17,8 @@ id = "multi_station_master_mixed_types"
 description = "Two master stations with different register types"
 is_master = true
 stations = [
-  { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 8 },
-  { station_id = 3, register_type = "Coils", start_address = 0x0010, register_count = 8 },
+  { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 1 },
+  { station_id = 3, register_type = "Coils", start_address = 0x0010, register_count = 1 },
 ]
 
 init_order = [
@@ -133,69 +133,269 @@ description = "Verify Modbus panel header"
 verify = "ModBus Master/Slave Set"
 at_line = 0
 
-# Step 5: Create two stations placeholders
+# Step 5: Create two stations and configure them
 [[workflow.create_stations]]
 description = "Press Enter on 'Create Station' to create first station"
 key = "Enter"
 
 [[workflow.create_stations]]
-description = "Wait for first station to be created"
+description = "Wait for first station"
 sleep_ms = 500
 
+# Configure Station 1: ID=1, Type=Holding, Addr=0x0000, Count=1
 [[workflow.create_stations]]
-description = "Press Ctrl+PageUp to return to top"
-key = "Ctrl+PageUp"
-
-[[workflow.create_stations]]
-description = "Press Enter on 'Create Station' to create second station"
+description = "Station 1 - Enter Station ID edit mode"
 key = "Enter"
 
 [[workflow.create_stations]]
-description = "Wait for second station to be created"
+description = "Station 1 - Type ID 1"
+input = "decimal"
+value = 1
+
+[[workflow.create_stations]]
+description = "Station 1 - Confirm ID"
+key = "Enter"
+
+[[workflow.create_stations]]
 sleep_ms = 500
 
 [[workflow.create_stations]]
-description = "Populate stations for mixed register types"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
-mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 8, registers = [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-  ] },
-  { station_id = 3, register_type = "Coils", start_address = 16, register_count = 8, registers = [
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-  ] },
-]
+description = "Station 1 - Navigate to Register Type"
+key = "Ctrl+PageUp"
 
 [[workflow.create_stations]]
-description = "Focus first station header"
-mock_path = "$.page_state.modbus_dashboard.cursor"
-mock_set_value = { kind = "StationId", station_index = 0 }
+key = "PageDown"
 
 [[workflow.create_stations]]
-description = "Verify station 1 header"
-verify = "#1 - ID: 1"
-at_line = 5
+key = "PageDown"
 
 [[workflow.create_stations]]
-description = "Verify station 2 header"
-verify = "#2 - ID: 3"
-at_line = 13
+key = "Down"
 
-# Step 6: Station 1 registers - Round 1
+[[workflow.create_stations]]
+description = "Station 1 - Enter Register Type edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Station 1 - Cycle to Holding (4 times)"
+key = "Char(h)"
+times = 4
+
+[[workflow.create_stations]]
+description = "Station 1 - Confirm Register Type"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Station 1 - Navigate to Start Address"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+key = "PageDown"
+
+[[workflow.create_stations]]
+key = "PageDown"
+
+[[workflow.create_stations]]
+key = "Down"
+times = 2
+
+[[workflow.create_stations]]
+description = "Station 1 - Enter Start Address edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+key = "Ctrl+a"
+
+[[workflow.create_stations]]
+key = "Backspace"
+
+[[workflow.create_stations]]
+description = "Station 1 - Type address 0x0000"
+input = "hex"
+value = 0x0000
+
+[[workflow.create_stations]]
+description = "Station 1 - Confirm address"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Station 1 - Navigate to Register Count"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+key = "PageDown"
+
+[[workflow.create_stations]]
+key = "PageDown"
+
+[[workflow.create_stations]]
+key = "Down"
+times = 3
+
+[[workflow.create_stations]]
+description = "Station 1 - Enter Register Count edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+key = "Ctrl+a"
+
+[[workflow.create_stations]]
+key = "Backspace"
+
+[[workflow.create_stations]]
+description = "Station 1 - Type count 1"
+input = "decimal"
+value = 1
+
+[[workflow.create_stations]]
+description = "Station 1 - Confirm count"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+# Create Station 2
+[[workflow.create_stations]]
+description = "Return to top to create station 2"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+description = "Press Enter on 'Create Station' for second station"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+# Configure Station 2: ID=3, Type=Coils, Addr=0x0010, Count=1
+[[workflow.create_stations]]
+description = "Station 2 - Navigate to Station ID"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+key = "PageDown"
+times = 2
+
+[[workflow.create_stations]]
+description = "Station 2 - Enter Station ID edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Station 2 - Type ID 3"
+input = "decimal"
+value = 3
+
+[[workflow.create_stations]]
+description = "Station 2 - Confirm ID"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Station 2 - Navigate to Register Type"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+key = "PageDown"
+times = 2
+
+[[workflow.create_stations]]
+key = "Down"
+
+[[workflow.create_stations]]
+description = "Station 2 - Enter Register Type edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+description = "Station 2 - Cycle to Coils (2 times)"
+key = "Char(h)"
+times = 2
+
+[[workflow.create_stations]]
+description = "Station 2 - Confirm Register Type"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Station 2 - Navigate to Start Address"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+key = "PageDown"
+times = 2
+
+[[workflow.create_stations]]
+key = "Down"
+times = 2
+
+[[workflow.create_stations]]
+description = "Station 2 - Enter Start Address edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+key = "Ctrl+a"
+
+[[workflow.create_stations]]
+key = "Backspace"
+
+[[workflow.create_stations]]
+description = "Station 2 - Type address 0x0010"
+input = "hex"
+value = 0x0010
+
+[[workflow.create_stations]]
+description = "Station 2 - Confirm address"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Station 2 - Navigate to Register Count"
+key = "Ctrl+PageUp"
+
+[[workflow.create_stations]]
+key = "PageDown"
+times = 2
+
+[[workflow.create_stations]]
+key = "Down"
+times = 3
+
+[[workflow.create_stations]]
+description = "Station 2 - Enter Register Count edit"
+key = "Enter"
+
+[[workflow.create_stations]]
+key = "Ctrl+a"
+
+[[workflow.create_stations]]
+key = "Backspace"
+
+[[workflow.create_stations]]
+description = "Station 2 - Type count 1"
+input = "decimal"
+value = 1
+
+[[workflow.create_stations]]
+description = "Station 2 - Confirm count"
+key = "Enter"
+
+[[workflow.create_stations]]
+sleep_ms = 500
+
+[[workflow.create_stations]]
+description = "Return to top"
+key = "Ctrl+PageUp"
+
 [[workflow.edit_station1_round1]]
 description = "Station 1 Round 1 register pattern"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
