@@ -167,31 +167,8 @@ description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
 mock_set_value = 1
 
-# Navigate to Register Type using absolute positioning
-[[workflow.configure_station_fields]]
-description = "Return to top with Ctrl+PageUp"
-key = "Ctrl+PageUp"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (AddLine -> ModbusMode)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Jump to station with PageDown (ModbusMode -> Station#1 StationId)"
-key = "PageDown"
-
-[[workflow.configure_station_fields]]
-description = "Move to Register Type field (StationId -> RegisterType)"
-key = "Down"
-
-[[workflow.configure_station_fields]]
-description = "Enter edit mode for Register Type"
-key = "Enter"
-
-[[workflow.configure_station_fields]]
-description = "Holding is default - just confirm"
-key = "Enter"
-
+# Navigate to Register Type using absolute positioning  
+# (Skip editing - Holding is already the default)
 [[workflow.configure_station_fields]]
 description = "Update Register Type in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"

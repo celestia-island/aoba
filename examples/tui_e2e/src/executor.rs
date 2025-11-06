@@ -251,7 +251,7 @@ async fn execute_single_step(
             }
             // Add delay after typing to ensure all characters are processed by TUI
             // TUI has 100ms delay after each char, so we need to wait for that plus render time
-            tokio::time::sleep(Duration::from_millis(300)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     }
 
