@@ -5,17 +5,17 @@ use std::{
 };
 
 use crate::utils::build_debug_bin;
-use aoba::cli::config::{
-    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
-    StationConfig, StationMode,
+use aoba_cli::config::{
+    CommunicationMethod, CommunicationParams, ModbusBootConfig, PersistenceMode, RegisterMap,
+    RegisterRange, StationConfig, StationMode,
 };
 
 /// Test multiple slaves configuration
 pub async fn test_multi_slaves() -> Result<()> {
     log::info!("🧪 Testing multiple slaves configuration...");
 
-    // Create configuration using the type-safe Config struct
-    let config = Config {
+    // Create configuration using the type-safe ModbusBootConfig struct
+    let config = ModbusBootConfig {
         port_name: "/tmp/vcom2".to_string(),
         baud_rate: 9600,
         communication_params: CommunicationParams {

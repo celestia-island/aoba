@@ -5,6 +5,11 @@ pub mod subprocess;
 pub mod ui;
 pub mod utils;
 
+use aoba_cli::{config::StationConfig, status::CliMode};
+use aoba_protocol::{
+    ipc::IpcMessage,
+    status::debug_dump::{enable_debug_dump, start_status_dump_thread},
+};
 // Re-export Page for convenience since it's used throughout TUI code
 pub use status::Page;
 
@@ -23,13 +28,12 @@ use std::{
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
-use crate::protocol::ipc::IpcMessage;
-use crate::tui::status as types;
 use crate::tui::status::modbus::RegisterMode;
 use crate::tui::status::port::{PortLogEntry, PortState, PortSubprocessInfo, PortSubprocessMode};
 use crate::tui::status::Status;
+use crate::tui::status::{self as types, TuiStatus};
 use crate::tui::{
-    subprocess::{CliMode, CliSubprocessConfig, SubprocessManager},
+    subprocess::{CliSubprocessConfig, SubprocessManager},
     ui::components::error_msg::ui_error_set,
     utils::bus::{Bus, CoreToUi, UiToCore},
 };
@@ -478,9 +482,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             );
 
             // Deserialize and update the port's station configuration
-            if let Ok(stations) =
-                postcard::from_bytes::<Vec<crate::cli::config::StationConfig>>(&stations_data)
-            {
+            if let Ok(stations) = postcard::from_bytes::<Vec<StationConfig>>(&stations_data) {
                 log::info!("CLI[{port_name}]: Decoded {} stations", stations.len());
                 append_port_log(
                     port_name,
@@ -566,22 +568,18 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     let debug_ci_e2e_enabled = matches.get_flag("debug-ci-e2e-test");
     let debug_dump_shutdown = if debug_ci_e2e_enabled {
         log::info!("🔍 Debug CI E2E test mode enabled - starting status dump thread");
-        crate::protocol::status::debug_dump::enable_debug_dump();
+        enable_debug_dump();
 
         let shutdown_signal = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let dump_path = std::path::PathBuf::from("/tmp/ci_tui_status.json");
         let shutdown_signal_clone = shutdown_signal.clone();
 
-        crate::protocol::status::debug_dump::start_status_dump_thread(
-            dump_path,
-            Some(shutdown_signal_clone),
-            || {
-                crate::tui::status::TuiStatus::from_global_status().and_then(|status| {
-                    serde_json::to_string_pretty(&status)
-                        .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {e}"))
-                })
-            },
-        );
+        start_status_dump_thread(dump_path, Some(shutdown_signal_clone), || {
+            TuiStatus::from_global_status().and_then(|status| {
+                serde_json::to_string_pretty(&status)
+                    .map_err(|e| anyhow::anyhow!("Failed to serialize TUI status: {e}"))
+            })
+        });
 
         Some(shutdown_signal)
     } else {
@@ -1197,7 +1195,7 @@ fn run_core_thread(
         }
 
         for (port_name, message) in subprocess_manager.poll_ipc_messages() {
-            if let Err(err) = handle_cli_ipc_message(&port_name, message) {
+            if let Err(err) = handle_cli_ipc_message(port_name.as_str(), message) {
                 log::warn!("Failed to handle IPC message for {port_name}: {err}");
             }
         }

@@ -1,8 +1,16 @@
 use anyhow::{anyhow, Result};
 
+use aoba_protocol::modbus::generate_pull_set_holding_request;
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{tui::status as types, tui::status::modbus::{ModbusConnectionMode, RegisterMode}, tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode}, tui::status::{read_status, write_status}, tui::ui::components::input_span_handler::handle_input_span, tui::utils::bus::{Bus, UiToCore}};
+use crate::{
+    tui::status as types,
+    tui::status::modbus::{ModbusConnectionMode, RegisterMode},
+    tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode},
+    tui::status::{read_status, write_status},
+    tui::ui::components::input_span_handler::handle_input_span,
+    tui::utils::bus::{Bus, UiToCore},
+};
 
 pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
@@ -562,8 +570,6 @@ fn enqueue_slave_write(
     register_addr: u16,
     register_value: u16,
 ) {
-    use crate::protocol::modbus::generate_pull_set_holding_request;
-
     match item.register_mode {
         RegisterMode::Holding => {
             if let Ok((_request, raw_frame)) =

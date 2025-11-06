@@ -5,6 +5,7 @@
 pub mod cursor;
 pub mod ui;
 
+use aoba_protocol::status::{init_status_generic, read_status_generic, write_status_generic};
 // Re-export the protocol status types at the `status` level so callers can use
 // `crate::tui::status::modbus`, `crate::tui::status::port`, `crate::tui::status::cli`.
 pub use aoba_protocol::status::types::{cli, modbus, port};
@@ -668,7 +669,7 @@ impl Status {
 
 /// Initialize the TUI status instance. This should be called once at application startup.
 pub fn init_status(status: Arc<RwLock<Status>>) -> Result<()> {
-    crate::protocol::status::init_status_generic(&TUI_STATUS, status)
+    init_status_generic(&TUI_STATUS, status)
 }
 
 /// TUI-specific read-only accessor for `Status`.
@@ -679,7 +680,7 @@ where
     F: FnOnce(&Status) -> Result<R>,
     R: Clone,
 {
-    crate::protocol::status::read_status_generic(&TUI_STATUS, f)
+    read_status_generic(&TUI_STATUS, f)
 }
 
 /// TUI-specific write accessor for `Status`.
@@ -690,5 +691,5 @@ where
     F: FnMut(&mut Status) -> Result<R>,
     R: Clone,
 {
-    crate::protocol::status::write_status_generic(&TUI_STATUS, f)
+    write_status_generic(&TUI_STATUS, f)
 }
