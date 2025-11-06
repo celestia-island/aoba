@@ -173,7 +173,7 @@ at_line = 5
 [[workflow.create_stations]]
 description = "Verify station 2 header"
 verify = "#2 - ID: 3"
-at_line = 6
+at_line = 13
 
 # Step 6: Station 1 registers - Round 1
 [[workflow.edit_station1_round1]]
@@ -228,12 +228,12 @@ mock_verify_value = [1, 0, 1, 0, 1, 0, 1, 0]
 [[workflow.edit_station2_round1]]
 description = "Verify coil row one alternates"
 verify = "ON   OFF  ON   OFF"
-at_line = 17
+at_line = 18
 
 [[workflow.edit_station2_round1]]
 description = "Verify coil row two alternates"
 verify = "ON   OFF  ON   OFF"
-at_line = 18
+at_line = 19
 
 # Step 8: Save configuration and enable port
 [[workflow.save_configuration]]
@@ -322,12 +322,12 @@ mock_verify_value = [0, 0, 1, 1, 0, 0, 1, 1]
 [[workflow.edit_station2_round2]]
 description = "Verify coil row one grouping"
 verify = "OFF  OFF  ON   ON"
-at_line = 17
+at_line = 18
 
 [[workflow.edit_station2_round2]]
 description = "Verify coil row two grouping"
 verify = "OFF  OFF  ON   ON"
-at_line = 18
+at_line = 19
 
 # Verify configuration persists between rounds
 [[workflow.verify_mock_data]]
@@ -402,9 +402,9 @@ mock_verify_value = [1, 1, 1, 1, 0, 0, 0, 0]
 [[workflow.edit_station2_round3]]
 description = "Verify coil row one high"
 verify = "ON   ON   ON   ON"
-at_line = 17
+at_line = 18
 
 [[workflow.edit_station2_round3]]
 description = "Verify coil row two low"
 verify = "OFF  OFF  OFF  OFF"
-at_line = 18
+at_line = 19
