@@ -49,10 +49,6 @@ mock_path = "$.port_order"
 mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
 
 [[workflow.navigate_to_entry]]
-description = "Wait for entry screen to populate ports"
-sleep_ms = 1500
-
-[[workflow.navigate_to_entry]]
 description = "Initial navigation to entry page"
 verify = "/tmp/vcom1"
 
@@ -73,10 +69,6 @@ mock_set_value = { type = "config_panel" }
 description = "Set config panel cursor to EnablePort"
 mock_path = "$.page_state.config_panel.cursor"
 mock_set_value = "EnablePort"
-
-[[workflow.enter_config_panel]]
-description = "Wait for config panel to render"
-sleep_ms = 1500
 
 [[workflow.enter_config_panel]]
 verify = "Enable Port"
@@ -299,13 +291,6 @@ description = "Ensure registers array matches length"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [0]
 
-[[workflow.configure_station_fields]]
-description = "Wait for register grid to appear"
-sleep_ms = 1000
-
-# Step 7: Edit Registers - Round 1 (Sequential 0-9)
-# For integer registers, we need to enter edit mode, type the hex value, and confirm
-# Edit Registers - Round 1
 [[workflow.edit_registers_round1]]
 description = "Navigate to register row"
 key = "Down"
