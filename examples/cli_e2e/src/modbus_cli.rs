@@ -1,10 +1,11 @@
-use crate::utils::{build_debug_bin, sleep_1s};
 use anyhow::{anyhow, Result};
 use std::{
     fs::File,
     io::Write,
     process::{Command, Stdio},
 };
+
+use crate::utils::{build_debug_bin, sleep_1s};
 
 /// Test slave listen temporary mode (single response)
 pub async fn test_slave_listen_temp() -> Result<()> {

@@ -3,22 +3,22 @@ use serde::Serialize;
 
 /// IPC connections for CLI subprocess (bidirectional)
 pub struct IpcConnections {
-    pub status: crate::protocol::ipc::IpcServer,
-    pub command_listener: crate::protocol::ipc::IpcCommandListener,
+    pub status: aoba_protocol::ipc::IpcServer,
+    pub command_listener: aoba_protocol::ipc::IpcCommandListener,
 }
 
 /// Helper to establish IPC connections if requested (bidirectional)
 pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
     if let Some(channel_id) = matches.get_one::<String>("ipc-channel") {
         log::info!("IPC: Attempting to connect to status channel: {channel_id}");
-        match crate::protocol::ipc::IpcServer::connect(channel_id.clone()) {
+        match aoba_protocol::ipc::IpcServer::connect(channel_id.clone()) {
             Ok(status) => {
                 log::info!("IPC: Successfully connected to status channel");
 
                 // Create command listener on the reverse channel
-                let command_channel = crate::protocol::ipc::get_command_channel_name(channel_id);
+                let command_channel = aoba_protocol::ipc::get_command_channel_name(channel_id);
                 log::info!("IPC: Creating command listener on: {command_channel}");
-                match crate::protocol::ipc::IpcCommandListener::listen(command_channel) {
+                match aoba_protocol::ipc::IpcCommandListener::listen(command_channel) {
                     Ok(command_listener) => {
                         log::info!("IPC: Command listener created successfully");
                         Some(IpcConnections {
@@ -69,7 +69,7 @@ struct PortInfo<'a> {
 
 pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
     if matches.get_flag("list-ports") {
-        let ports_enriched = crate::protocol::tty::available_ports_enriched();
+        let ports_enriched = aoba_protocol::tty::available_ports_enriched();
 
         let want_json = matches.get_flag("json");
         if want_json {
@@ -206,7 +206,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
     // Handle configuration file
     if let Some(config_file) = matches.get_one::<String>("config") {
         println!("Loading configuration from file: {config_file}");
-        match super::config::Config::from_file(config_file) {
+        match super::config::ModbusBootConfig::from_file(config_file) {
             Ok(config) => {
                 println!(
                     "Configuration loaded successfully for port: {}",
@@ -230,7 +230,7 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
     // Handle JSON configuration string
     if let Some(json_config) = matches.get_one::<String>("config-json") {
         println!("Loading configuration from JSON string");
-        match super::config::Config::from_json(json_config) {
+        match super::config::ModbusBootConfig::from_json(json_config) {
             Ok(config) => {
                 println!(
                     "Configuration loaded successfully for port: {}",
@@ -255,7 +255,9 @@ pub fn handle_config_mode(matches: &ArgMatches) -> bool {
 }
 
 /// Start the ports defined in the configuration
-fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std::error::Error>> {
+fn start_configuration(
+    config: &super::config::ModbusBootConfig,
+) -> Result<(), Box<dyn std::error::Error>> {
     log::info!(
         "Starting port: {} with {} stations",
         config.port_name,
@@ -327,7 +329,7 @@ fn start_configuration(config: &super::config::Config) -> Result<(), Box<dyn std
 
 /// Run the configuration in an async runtime
 async fn run_config_runtime(
-    config: &super::config::Config,
+    config: &super::config::ModbusBootConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use rmodbus::server::context::ModbusContext;
     use std::io::Write;

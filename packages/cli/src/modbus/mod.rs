@@ -89,8 +89,8 @@ impl OutputSink {
 /// Parse register mode from string
 pub fn parse_register_mode(
     mode: &str,
-) -> Result<crate::protocol::status::types::modbus::RegisterMode> {
-    use crate::protocol::status::types::modbus::RegisterMode;
+) -> Result<aoba_protocol::status::types::modbus::RegisterMode> {
+    use aoba_protocol::status::types::modbus::RegisterMode;
     match mode.to_lowercase().as_str() {
         "holding" => Ok(RegisterMode::Holding),
         "input" => Ok(RegisterMode::Input),
@@ -130,7 +130,7 @@ pub fn extract_values_from_storage(
     storage: &std::sync::Arc<std::sync::Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     start_addr: u16,
     length: u16,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    reg_mode: aoba_protocol::status::types::modbus::RegisterMode,
 ) -> Result<Vec<u16>> {
     use rmodbus::server::context::ModbusContext;
 
@@ -140,20 +140,18 @@ pub fn extract_values_from_storage(
     for i in 0..length {
         let addr = start_addr + i;
         let value = match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
+            aoba_protocol::status::types::modbus::RegisterMode::Holding => {
                 storage.get_holding(addr)?
             }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                storage.get_input(addr)?
-            }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+            aoba_protocol::status::types::modbus::RegisterMode::Input => storage.get_input(addr)?,
+            aoba_protocol::status::types::modbus::RegisterMode::Coils => {
                 if storage.get_coil(addr)? {
                     1
                 } else {
                     0
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
                 if storage.get_discrete(addr)? {
                     1
                 } else {

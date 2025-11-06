@@ -1,12 +1,13 @@
-use crate::utils::{
-    build_debug_bin, create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1,
-    DEFAULT_PORT2,
-};
 use anyhow::{anyhow, Result};
 use std::{
     fs::File,
     io::{BufRead, BufReader, Write},
     process::Stdio,
+};
+
+use crate::utils::{
+    build_debug_bin, create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1,
+    DEFAULT_PORT2,
 };
 
 /// Test basic master-slave communication with virtual serial ports

@@ -2,17 +2,16 @@
 //!
 //! Executes TOML workflows in either screen-capture or drill-down mode.
 
+use anyhow::{bail, Result};
 use std::time::Duration;
 
-use anyhow::{bail, Result};
-
-use crate::mock_state::{
-    init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state,
+use crate::{
+    mock_state::{init_mock_state, save_mock_state_to_file, set_mock_state, verify_mock_state},
+    renderer::render_tui_to_string,
+    retry_state_machine::{group_steps, is_in_retryable_group, StepGroup},
+    workflow::{Workflow, WorkflowStep},
 };
-use crate::renderer::render_tui_to_string;
-use crate::workflow::{Workflow, WorkflowStep};
-use aoba_ci_utils::E2EToTuiMessage;
-use aoba_ci_utils::{IpcChannelId, IpcSender};
+use aoba_ci_utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,7 +118,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
     // Try to use pre-built binaries first (release preferred, debug fallback), then cargo run
     let release_bin = std::path::Path::new("target/release/aoba");
     let debug_bin = std::path::Path::new("target/debug/aoba");
-    
+
     let mut cmd = if release_bin.exists() {
         let mut c = tokio::process::Command::new(release_bin);
         c.args(["--tui", "--debug-ci", &channel_id.0]);
@@ -189,14 +188,140 @@ async fn execute_step_sequence(
     workflow_id: &str,
     steps: &[WorkflowStep],
 ) -> Result<()> {
-    for (i, step) in steps.iter().enumerate() {
-        if let Some(desc) = &step.description {
-            log::debug!("    [{}] {}", i, desc);
-        }
+    // Group steps into retryable units
+    let groups = group_steps(steps);
 
-        execute_single_step(ctx, workflow_id, step).await?;
+    if !groups.is_empty() {
+        log::debug!("📦 Identified {} retryable step groups", groups.len());
+    }
+
+    let mut current_group_idx = 0;
+    let mut i = 0;
+
+    while i < steps.len() {
+        let step = &steps[i];
+
+        // Check if this step is part of a retryable group
+        if current_group_idx < groups.len() && i == groups[current_group_idx].step_indices[0] {
+            // Execute this group with retry logic
+            let group = &groups[current_group_idx];
+            execute_step_group_with_retry(ctx, workflow_id, steps, group).await?;
+
+            // Skip to next step after group
+            i = group.step_indices.last().unwrap() + 1;
+            current_group_idx += 1;
+        } else {
+            // Execute single step normally (not part of any group)
+            if let Some(desc) = &step.description {
+                log::debug!("    [{}] {}", i, desc);
+            }
+            execute_single_step(ctx, workflow_id, step).await?;
+            i += 1;
+        }
     }
     Ok(())
+}
+
+/// Execute a step group with retry logic
+async fn execute_step_group_with_retry(
+    ctx: &mut ExecutionContext,
+    workflow_id: &str,
+    all_steps: &[WorkflowStep],
+    group: &StepGroup,
+) -> Result<()> {
+    let mut retry_count = 0;
+    let max_retries = group.max_retries;
+    let mut first_failure_screenshot: Option<String> = None;
+    let mut last_error: Option<anyhow::Error> = None;
+
+    loop {
+        if retry_count > 0 {
+            log::info!(
+                "🔁 Retrying step group (attempt {}/{})",
+                retry_count + 1,
+                max_retries + 1
+            );
+            // Wait 1 second before retry
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        // Execute all steps in the group
+        let mut verification_failed = false;
+        for &step_idx in &group.step_indices {
+            let step = &all_steps[step_idx];
+
+            if let Some(desc) = &step.description {
+                if retry_count == 0 {
+                    log::debug!("    [{}] {}", step_idx, desc);
+                }
+            }
+
+            // Try to execute the step
+            match execute_single_step(ctx, workflow_id, step).await {
+                Ok(()) => {}
+                Err(err) => {
+                    // Check if this is a verification error
+                    let err_msg = err.to_string();
+                    if err_msg.contains("Screen verification failed")
+                        || err_msg.contains("mock_verify")
+                    {
+                        verification_failed = true;
+                        last_error = Some(err);
+
+                        // Cache screenshot on first failure
+                        if first_failure_screenshot.is_none() {
+                            if let Ok(screenshot) = capture_screenshot(ctx).await {
+                                first_failure_screenshot = Some(screenshot);
+                            }
+                        }
+                        break;
+                    } else {
+                        // Non-verification error - fail immediately
+                        return Err(err);
+                    }
+                }
+            }
+        }
+
+        // If group succeeded, we're done
+        if !verification_failed {
+            if retry_count > 0 {
+                log::info!("✅ Step group succeeded after {} retries", retry_count);
+            }
+            return Ok(());
+        }
+
+        // Check if we can retry
+        retry_count += 1;
+        if retry_count > max_retries {
+            // Max retries exceeded - fail with first screenshot
+            log::error!("❌ Step group failed after {} attempts", max_retries + 1);
+
+            if let Some(screenshot) = first_failure_screenshot {
+                log::error!("📸 Screenshot from first failure:\n{}", screenshot);
+            }
+
+            return Err(last_error.unwrap_or_else(|| {
+                anyhow::anyhow!("Step group failed after {} retries", max_retries)
+            }));
+        }
+    }
+}
+
+/// Capture screenshot from current TUI state
+async fn capture_screenshot(ctx: &mut ExecutionContext) -> Result<String> {
+    match ctx.mode {
+        ExecutionMode::ScreenCaptureOnly => render_tui_to_string(120, 40),
+        ExecutionMode::DrillDown => {
+            if let Some(sender) = ctx.ipc_sender.as_mut() {
+                let (content, _width, _height) =
+                    crate::renderer::render_tui_via_ipc(sender).await?;
+                Ok(content)
+            } else {
+                bail!("DrillDown mode requires IPC sender");
+            }
+        }
+    }
 }
 
 /// Execute a single workflow step
@@ -214,8 +339,11 @@ async fn execute_single_step(
                 simulate_key_input(ctx, key).await?;
                 tokio::time::sleep(Duration::from_millis(50)).await;
             }
-            // Default 1-second delay after key press
-            sleep_1s().await;
+            // Short delay after key press to allow TUI to process
+            // Use explicit sleep_ms if specified, otherwise 200ms default
+            if step.sleep_ms.is_none() {
+                tokio::time::sleep(Duration::from_millis(200)).await;
+            }
         }
         // In ScreenCaptureOnly mode, keyboard actions are ignored
     }
@@ -240,12 +368,17 @@ async fn execute_single_step(
             bail!("input specified but no value provided");
         };
 
+        log::info!("🎹 Typing value: '{}' (type: {})", value, input_type);
+
         // In DrillDown mode, simulate typing the value
         if ctx.mode == ExecutionMode::DrillDown {
             for ch in value.chars() {
                 simulate_char_input(ctx, ch).await?;
-                tokio::time::sleep(Duration::from_millis(20)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
+            // Add delay after typing to ensure all characters are processed by TUI
+            // TUI has 100ms delay after each char, so we need to wait for that plus render time
+            tokio::time::sleep(Duration::from_millis(1000)).await;
         }
     }
 
@@ -273,6 +406,11 @@ async fn execute_single_step(
 
     // Handle screen verification - render and verify content
     if step.verify.is_some() {
+        // In DrillDown mode, give extra time for TUI to render before requesting screen
+        if ctx.mode == ExecutionMode::DrillDown {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+        }
+
         // Render the TUI to a string based on execution mode
         let screen_content = match ctx.mode {
             ExecutionMode::ScreenCaptureOnly => {
@@ -325,17 +463,20 @@ async fn execute_single_step(
         log::debug!("✅ Screen verified: '{}'", expected_text);
     }
 
+    // Handle triggers - custom actions
+    if let Some(trigger_name) = &step.trigger {
+        if ctx.mode == ExecutionMode::DrillDown {
+            log::info!("🔔 Executing trigger: {}", trigger_name);
+            execute_trigger(ctx, trigger_name, &step.trigger_params).await?;
+        }
+    }
+
     // Handle sleep - use explicit sleep_ms if provided, otherwise no extra sleep
     if let Some(sleep_ms) = step.sleep_ms {
         tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
     }
 
     Ok(())
-}
-
-/// Sleep for 1 second - helper function for default delays
-async fn sleep_1s() {
-    tokio::time::sleep(Duration::from_secs(1)).await;
 }
 
 /// Simulate keyboard input by sending it via IPC
@@ -373,4 +514,216 @@ async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()>
     }
 
     Ok(())
+}
+
+/// Execute a custom trigger action
+///
+/// Triggers are special actions that can be invoked from workflow steps.
+/// Currently supported triggers:
+/// - "match_master_registers": Spawn a CLI slave process to read from TUI master and verify registers
+async fn execute_trigger(
+    ctx: &mut ExecutionContext,
+    trigger_name: &str,
+    params: &Option<serde_json::Value>,
+) -> Result<()> {
+    match trigger_name {
+        "match_master_registers" => {
+            execute_match_master_registers_trigger(ctx, params).await?;
+        }
+        _ => {
+            bail!("Unknown trigger: {}", trigger_name);
+        }
+    }
+    Ok(())
+}
+
+/// Trigger: match_master_registers
+///
+/// Creates a temporary CLI slave process on /tmp/vcom2 to read registers from the TUI master
+/// on /tmp/vcom1, then compares the read values with expected values from trigger parameters.
+///
+/// Expected params format:
+/// {
+///   "station_id": 1,
+///   "register_type": "Coils" | "DiscreteInputs" | "Holding" | "Input",
+///   "start_address": 0,
+///   "expected_values": [1, 0, 1, 0, ...]
+/// }
+async fn execute_match_master_registers_trigger(
+    ctx: &mut ExecutionContext,
+    params: &Option<serde_json::Value>,
+) -> Result<()> {
+    let params = params
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("match_master_registers requires parameters"))?;
+
+    // Parse parameters
+    let station_id = params["station_id"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("station_id parameter required"))?
+        as u8;
+
+    let register_type = params["register_type"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("register_type parameter required"))?;
+
+    let start_address = params["start_address"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("start_address parameter required"))?
+        as u16;
+
+    let expected_values = params["expected_values"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("expected_values parameter required"))?;
+
+    let register_count = expected_values.len() as u16;
+
+    log::info!(
+        "🔍 Verifying master registers: station_id={}, type={}, addr=0x{:04X}, count={}",
+        station_id,
+        register_type,
+        start_address,
+        register_count
+    );
+
+    // Determine the appropriate CLI command based on register type
+    let register_mode_arg = match register_type {
+        "Coils" => "01",
+        "DiscreteInputs" => "02",
+        "Holding" => "03",
+        "Input" => "04",
+        _ => bail!("Unsupported register type: {}", register_type),
+    };
+
+    // Build CLI command to act as slave and read from master
+    let cli_binary = if std::path::Path::new("target/debug/aoba").exists() {
+        "target/debug/aoba"
+    } else if std::path::Path::new("target/release/aoba").exists() {
+        "target/release/aoba"
+    } else {
+        bail!("aoba binary not found in target/debug or target/release");
+    };
+
+    // Give TUI time to be ready for Modbus communication
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
+    // Spawn CLI process as master to read from TUI master (which will respond as if it's a slave)
+    // Actually, we need to spawn as master-provide mode to read from the TUI master
+    let output = tokio::process::Command::new(cli_binary)
+        .args([
+            "--master-provide",
+            &ctx.port2, // Use port2 (/tmp/vcom2) which is connected to port1 (/tmp/vcom1)
+            "--station-id",
+            &station_id.to_string(),
+            "--register-mode",
+            register_mode_arg,
+            "--register-address",
+            &start_address.to_string(),
+            "--register-length",
+            &register_count.to_string(),
+            "--once", // Read once and exit
+        ])
+        .output()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI process: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        log::error!("CLI process failed: {}", stderr);
+        bail!("CLI slave process failed: {}", stderr);
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    log::debug!("CLI output: {}", stdout);
+
+    // Parse the CLI output to extract register values
+    // Expected format varies by register type, but generally includes register values in hex or decimal
+    let actual_values = parse_cli_register_output(&stdout, register_type, register_count)?;
+
+    // Compare actual vs expected
+    if actual_values.len() != expected_values.len() {
+        bail!(
+            "Register count mismatch: expected {}, got {}",
+            expected_values.len(),
+            actual_values.len()
+        );
+    }
+
+    for (i, (actual, expected)) in actual_values.iter().zip(expected_values.iter()).enumerate() {
+        let expected_u16 = expected
+            .as_u64()
+            .ok_or_else(|| anyhow::anyhow!("Expected value at index {} is not a number", i))?
+            as u16;
+
+        if *actual != expected_u16 {
+            bail!(
+                "Register value mismatch at index {}: expected 0x{:04X}, got 0x{:04X}",
+                i,
+                expected_u16,
+                actual
+            );
+        }
+    }
+
+    log::info!(
+        "✅ Master register verification passed: {} registers matched",
+        register_count
+    );
+    Ok(())
+}
+
+/// Parse CLI register output to extract register values
+fn parse_cli_register_output(
+    output: &str,
+    register_type: &str,
+    expected_count: u16,
+) -> Result<Vec<u16>> {
+    let mut values = Vec::new();
+
+    // For coils/discrete inputs, look for ON/OFF or 0/1 patterns
+    // For holding/input registers, look for hex values
+
+    match register_type {
+        "Coils" | "DiscreteInputs" => {
+            // Look for patterns like "0x0000: ON" or "Register 0: 1"
+            for line in output.lines() {
+                if line.contains("ON") || line.contains("1") {
+                    values.push(1);
+                } else if line.contains("OFF") || line.contains("0") {
+                    values.push(0);
+                }
+
+                if values.len() >= expected_count as usize {
+                    break;
+                }
+            }
+        }
+        "Holding" | "Input" => {
+            // Look for patterns like "0x0000: 0x1234" or similar hex values
+            for line in output.lines() {
+                if let Some(pos) = line.find("0x") {
+                    let hex_str = &line[pos..].split_whitespace().next().unwrap_or("");
+                    if let Ok(val) = u16::from_str_radix(hex_str.trim_start_matches("0x"), 16) {
+                        values.push(val);
+                    }
+                }
+
+                if values.len() >= expected_count as usize {
+                    break;
+                }
+            }
+        }
+        _ => bail!("Unsupported register type for parsing: {}", register_type),
+    }
+
+    if values.len() < expected_count as usize {
+        bail!(
+            "Could not parse enough register values from CLI output. Expected {}, got {}. Output: {}",
+            expected_count,
+            values.len(),
+            output
+        );
+    }
+
+    Ok(values)
 }
