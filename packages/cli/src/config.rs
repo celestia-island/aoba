@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-pub use crate::protocol::status::types::modbus::{
+pub use aoba_protocol::status::types::modbus::{
     RegisterMap, RegisterRange, StationConfig, StationMode,
 };
 
@@ -71,7 +71,7 @@ pub struct CommunicationParams {
 
 /// Root configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
+pub struct ModbusBootConfig {
     /// Port name
     pub port_name: String,
     /// Port communication configuration (baud rate)
@@ -94,7 +94,7 @@ impl Default for CommunicationParams {
     }
 }
 
-impl Config {
+impl ModbusBootConfig {
     /// Parse configuration from a JSON string
     pub fn from_json(json_str: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(json_str)
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_config_serialization() {
-        let config = Config {
+        let config = ModbusBootConfig {
             port_name: "COM1".to_string(),
             baud_rate: 9600,
             communication_params: CommunicationParams::default(),
@@ -153,7 +153,7 @@ mod tests {
         let json = config.to_json().unwrap();
         println!("{json}");
 
-        let parsed_config = Config::from_json(&json).unwrap();
+        let parsed_config = ModbusBootConfig::from_json(&json).unwrap();
         assert_eq!(parsed_config.port_name, "COM1");
         assert_eq!(parsed_config.stations.len(), 2);
         assert_eq!(parsed_config.stations[0].station_id, 1);

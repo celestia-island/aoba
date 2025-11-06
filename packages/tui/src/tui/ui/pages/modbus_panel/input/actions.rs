@@ -1,9 +1,12 @@
 use anyhow::{anyhow, Result};
 
-use crate::tui::status as types;
-use crate::tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode};
-use crate::tui::status::{read_status, write_status};
-use crate::tui::utils::bus::{Bus, UiToCore};
+use crate::{
+    tui::status as types,
+    tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode},
+    tui::status::{read_status, write_status},
+    tui::utils::bus::{Bus, UiToCore},
+};
+use aoba_protocol::modbus::generate_pull_set_holding_request;
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");
@@ -227,8 +230,6 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                                     );
 
                                                     if should_queue {
-                                                        use crate::protocol::modbus::generate_pull_set_holding_request;
-
                                                         let coil_value = if new_value_flag {
                                                             0xFF00
                                                         } else {

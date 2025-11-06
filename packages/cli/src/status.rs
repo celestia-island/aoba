@@ -1,4 +1,4 @@
-pub use crate::protocol::status::types::{CliMode, CliStatus, RegisterMode};
+pub use aoba_protocol::status::types::{CliMode, CliStatus, RegisterMode};
 
 /// CLI status module
 ///

@@ -24,6 +24,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
+import shutil
+import subprocess
 
 try:  # Python 3.11+
     import tomllib  # type: ignore
@@ -44,6 +46,7 @@ GROUP1_CRATES = {
     "serde_path_to_error",
     "serde_cbor",
     "serde_urlencoded",
+    "serde_json_path",
     "toml",
     "ron",
     "regex",
@@ -140,6 +143,9 @@ class UseStatement:
     simple_prefix: Optional[str]
     simple_leaf: Optional[str]
     has_attrs: bool
+    # For more general merging by top-level crate, store base and remainder
+    merge_base: Optional[str]
+    merge_remainder: Optional[str]
 
     def text(self) -> str:
         return "".join(self.lines)
@@ -172,7 +178,8 @@ def load_workspace_crates(root: Path) -> set[str]:
 
 
 def extract_use_path(lines: Sequence[str]) -> Optional[str]:
-    joined = " ".join(line.strip() for line in lines if not ATTR_RE.match(line))
+    joined = " ".join(line.strip()
+                      for line in lines if not ATTR_RE.match(line))
     match = re.search(r"\buse\s+([^;]+);", joined)
     return match.group(1).strip() if match else None
 
@@ -217,6 +224,36 @@ def compute_simple_components(path: Optional[str], has_attrs: bool) -> Tuple[Opt
     if not prefix or not leaf:
         return None, None
     return prefix, leaf
+
+
+def compute_merge_components(path: Optional[str], has_attrs: bool) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Compute components for merging by top-level crate.
+
+    Returns (base, remainder) where base is the first path segment (e.g., 'crate', 'std', 'serde')
+    and remainder is the rest (e.g., 'renderer::render_tui_to_string' or
+    'mock_state::{init,save}'). If merging is unsafe (attributes present or path None),
+    returns (None, None).
+    """
+    if has_attrs or not path:
+        return None, None
+    token = path.strip()
+    # strip leading 'pub ' or 'use ' if present (defensive)
+    if token.startswith("pub "):
+        token = token[4:].strip()
+    if token.startswith("use "):
+        token = token[4:].strip()
+    token = token.lstrip(":")
+    parts = token.split("::", 1)
+    if not parts:
+        return None, None
+    base = parts[0]
+    if len(parts) == 1:
+        # path like `use foo;` - no remainder
+        remainder = ""
+    else:
+        remainder = parts[1]
+    return base, remainder
 
 
 def append_blank_line(buf: List[str]) -> None:
@@ -264,8 +301,19 @@ def build_use_statement(lines: List[str]) -> UseStatement:
     is_pub = bool(code_lines and code_lines[0].lstrip().startswith("pub "))
     has_attrs = any(ATTR_RE.match(line) for line in lines)
     prefix, leaf = compute_simple_components(path, has_attrs)
+    merge_base, merge_remainder = compute_merge_components(path, has_attrs)
     group = classify_use(path, WORKSPACE_CRATES)
-    return UseStatement(lines, path, is_pub, group, prefix, leaf, has_attrs)
+    return UseStatement(
+        lines,
+        path,
+        is_pub,
+        group,
+        prefix,
+        leaf,
+        has_attrs,
+        merge_base,
+        merge_remainder,
+    )
 
 
 def flush_simple(pending: OrderedDict[Tuple[bool, str], List[str]], output: List[str]) -> None:
@@ -278,6 +326,7 @@ def flush_simple(pending: OrderedDict[Tuple[bool, str], List[str]], output: List
                 seen.add(leaf)
         if not unique_leaves:
             continue
+        # If there's only one unique leaf, prefer the short form
         if len(unique_leaves) == 1:
             line = f"{'pub ' if is_pub else ''}use {prefix}::{unique_leaves[0]};\n"
         else:
@@ -287,35 +336,87 @@ def flush_simple(pending: OrderedDict[Tuple[bool, str], List[str]], output: List
     pending.clear()
 
 
+def normalize_remainder_items(remainder: str) -> List[str]:
+    """
+    Normalize a remainder into a list of items suitable for placing inside
+    `use <base>::{ ... }`.
+
+    - If remainder starts with '{' and ends with '}', split inner by commas.
+    - Otherwise, keep the remainder as a single item.
+    """
+    remainder = remainder.strip()
+    # If the remainder is a braced group, split on top-level commas only.
+    # We must respect nested braces to avoid splitting inside nested `{ ... }`.
+    if remainder.startswith("{") and remainder.endswith("}"):
+        inner = remainder[1:-1]
+        parts: List[str] = []
+        cur: List[str] = []
+        depth = 0
+        for ch in inner:
+            if ch == '{':
+                depth += 1
+                cur.append(ch)
+            elif ch == '}':
+                depth -= 1
+                cur.append(ch)
+            elif ch == ',' and depth == 0:
+                part = ''.join(cur).strip()
+                if part:
+                    parts.append(part)
+                cur = []
+            else:
+                cur.append(ch)
+        last = ''.join(cur).strip()
+        if last:
+            parts.append(last)
+        return parts
+    if remainder == "":
+        return []
+    return [remainder]
+
+
 def render_group(statements: List[UseStatement]) -> List[str]:
     if not statements:
         return []
     output: List[str] = []
+    # New pending keyed by (is_pub, merge_base). Values are list of remainder items.
     pending: OrderedDict[Tuple[bool, str], List[str]] = OrderedDict()
 
     for stmt in statements:
-        if stmt.simple_prefix and stmt.simple_leaf and not stmt.has_attrs:
-            key = (stmt.is_pub, stmt.simple_prefix)
+        # Prefer to merge by top-level base when possible
+        if stmt.merge_base and stmt.merge_remainder is not None and not stmt.has_attrs:
+            key = (stmt.is_pub, stmt.merge_base)
             if key not in pending:
                 pending[key] = []
-            pending[key].append(stmt.simple_leaf)
+            # Normalize remainder into one or more items
+            items = normalize_remainder_items(stmt.merge_remainder)
+            # If the remainder was a simple single identifier (no braces), we still
+            # append it as-is (e.g., 'renderer::render_tui_to_string').
+            # For remainders like 'mock_state::{a,b}', we will keep it as a single
+            # item and not attempt to split nested braces (safe fallback).
+            if items:
+                pending[key].extend(items)
             continue
 
+        # Fallback: flush any pending merges and emit the original statement lines
         flush_simple(pending, output)
         output.extend(stmt.lines)
 
+    # Flush remaining pending groups
+    # Note: reuse flush_simple which expects prefix keys - adapt by temporarily
+    # converting keys to the expected format (prefix == base)
     flush_simple(pending, output)
     return output
 
 
 def render_use_section(use_statements: List[UseStatement]) -> List[str]:
-    grouped = {1: [], 2: [], 3: []}
+    grouped: dict[int, List[UseStatement]] = {1: [], 2: [], 3: []}
     for stmt in use_statements:
-        grouped.setdefault(stmt.group, []).append(stmt)
+        grouped[stmt.group].append(stmt)
 
     rendered: List[str] = []
     for group in (1, 2, 3):
-        block = render_group(grouped.get(group, []))
+        block = render_group(grouped[group])
         if not block:
             continue
         if rendered and rendered[-1].strip():
@@ -363,7 +464,8 @@ def process_file(path: Path) -> Optional[str]:
     if not statements:
         return None
 
-    use_statements = [stmt.use_stmt for stmt in statements if stmt.kind == "use" and stmt.use_stmt]
+    use_statements = [
+        stmt.use_stmt for stmt in statements if stmt.kind == "use" and stmt.use_stmt]
     if not use_statements:
         return None
 
@@ -417,6 +519,17 @@ def main() -> int:
     print(f"Updated {len(changed)} files")
     for item in changed:
         print(item)
+
+    # Try to run `cargo fmt` once at the end, if `cargo` is available.
+    try:
+        if shutil.which("cargo"):
+            # Run in the repository root (current working directory)
+            subprocess.run(["cargo", "fmt"], check=False)
+        else:
+            print("cargo not found in PATH; skipping cargo fmt")
+    except Exception as e:  # pragma: no cover - don't fail the script on fmt errors
+        print(f"Failed to run cargo fmt: {e}")
+
     return 0
 
 

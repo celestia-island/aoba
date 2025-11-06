@@ -4,6 +4,7 @@ use crate::tui::{
     status::port::{PortData, PortState},
     utils::bus::CoreToUi,
 };
+use aoba_protocol::tty::available_ports_sorted;
 
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
 /// because another scan was already in progress.
@@ -19,7 +20,7 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     *scan_in_progress = true;
 
     // Enumerate ports using platform-specific function that respects CI debug mode
-    let ports = crate::protocol::tty::available_ports_sorted();
+    let ports = available_ports_sorted();
 
     log::debug!("scan_ports: found {} ports", ports.len());
 

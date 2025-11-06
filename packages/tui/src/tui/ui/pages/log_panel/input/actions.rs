@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Result};
 
-use crate::tui::status as types;
-use crate::tui::status::{read_status, write_status};
-use crate::tui::utils::bus::{Bus, UiToCore};
+use crate::{
+    tui::status as types,
+    tui::status::{read_status, write_status},
+    tui::utils::bus::{Bus, UiToCore},
+};
 
 pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     let selected_port = read_status(|status| {

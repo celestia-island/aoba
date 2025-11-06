@@ -13,11 +13,11 @@ use rmodbus::{server::context::ModbusContext, ModbusProto};
 use serialport::SerialPort;
 
 use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
-use crate::protocol::modbus::{
+use crate::{actions, cleanup};
+use aoba_protocol::modbus::{
     build_slave_coils_response, build_slave_discrete_inputs_response,
     build_slave_holdings_response, build_slave_inputs_response,
 };
-use crate::{actions, cleanup};
 
 const SERIAL_PORT_OPEN_RETRIES: usize = 10;
 const SERIAL_PORT_OPEN_RETRY_DELAY_MS: u64 = 200;
@@ -83,22 +83,22 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     {
         let mut context = storage.lock().unwrap();
         match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
+            aoba_protocol::status::types::modbus::RegisterMode::Holding => {
                 for (i, &val) in values.iter().enumerate() {
                     context.set_holding(register_address + i as u16, val)?;
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+            aoba_protocol::status::types::modbus::RegisterMode::Coils => {
                 for (i, &val) in values.iter().enumerate() {
                     context.set_coil(register_address + i as u16, val != 0)?;
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
                 for (i, &val) in values.iter().enumerate() {
                     context.set_discrete(register_address + i as u16, val != 0)?;
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
+            aoba_protocol::status::types::modbus::RegisterMode::Input => {
                 for (i, &val) in values.iter().enumerate() {
                     context.set_input(register_address + i as u16, val)?;
                 }
@@ -216,22 +216,20 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         let dump_path =
             std::path::PathBuf::from(format!("/tmp/ci_cli_{port_basename}_status.json"));
 
-        Some(
-            crate::protocol::status::debug_dump::start_status_dump_thread(
-                dump_path,
-                None,
-                move || {
-                    crate::protocol::status::types::cli::CliStatus::new_master_provide(
-                        port_name.clone(),
-                        station_id_copy,
-                        reg_mode_copy,
-                        register_address_copy,
-                        register_length_copy,
-                    )
-                    .to_json()
-                },
-            ),
-        )
+        Some(aoba_protocol::status::debug_dump::start_status_dump_thread(
+            dump_path,
+            None,
+            move || {
+                aoba_protocol::status::types::cli::CliStatus::new_master_provide(
+                    port_name.clone(),
+                    station_id_copy,
+                    reg_mode_copy,
+                    register_address_copy,
+                    register_length_copy,
+                )
+                .to_json()
+            },
+        ))
     } else {
         None
     };
@@ -244,7 +242,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             if let Some(ref mut ipc_conns) = ipc_connections {
                 let _ = ipc_conns
                     .status
-                    .send(&crate::protocol::ipc::IpcMessage::PortError {
+                    .send(&aoba_protocol::ipc::IpcMessage::PortError {
                         port_name: port.to_string(),
                         error: format!("Failed to open port: {err}"),
                         timestamp: None,
@@ -260,7 +258,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     if let Some(ref mut ipc_conns) = ipc_connections {
         let _ = ipc_conns
             .status
-            .send(&crate::protocol::ipc::IpcMessage::PortOpened {
+            .send(&aoba_protocol::ipc::IpcMessage::PortOpened {
                 port_name: port.to_string(),
                 timestamp: None,
             });
@@ -287,22 +285,22 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     {
         let mut context = storage.lock().unwrap();
         match reg_mode {
-            crate::protocol::status::types::modbus::RegisterMode::Holding => {
+            aoba_protocol::status::types::modbus::RegisterMode::Holding => {
                 for (i, &val) in initial_values.iter().enumerate() {
                     context.set_holding(register_address + i as u16, val)?;
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+            aoba_protocol::status::types::modbus::RegisterMode::Coils => {
                 for (i, &val) in initial_values.iter().enumerate() {
                     context.set_coil(register_address + i as u16, val != 0)?;
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+            aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
                 for (i, &val) in initial_values.iter().enumerate() {
                     context.set_discrete(register_address + i as u16, val != 0)?;
                 }
             }
-            crate::protocol::status::types::modbus::RegisterMode::Input => {
+            aoba_protocol::status::types::modbus::RegisterMode::Input => {
                 for (i, &val) in initial_values.iter().enumerate() {
                     context.set_input(register_address + i as u16, val)?;
                 }
@@ -449,7 +447,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
                     match msg {
-                        crate::protocol::ipc::IpcMessage::StationsUpdate {
+                        aoba_protocol::ipc::IpcMessage::StationsUpdate {
                             stations_data, ..
                         } => {
                             log::info!("Received stations update, {} bytes", stations_data.len());
@@ -585,22 +583,22 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     0x01 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::Coils))
                                     }
                                     0x02 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs))
                                     }
                                     0x03 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::Holding))
                                     }
                                     0x04 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::Input))
                                     }
                                     _ => None,
                                 }
@@ -673,22 +671,22 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     0x01 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Coils))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::Coils))
                                     }
                                     0x02 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs))
                                     }
                                     0x03 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Holding))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::Holding))
                                     }
                                     0x04 => {
                                         let start = u16::from_be_bytes([request[2], request[3]]);
                                         let qty = u16::from_be_bytes([request[4], request[5]]);
-                                        Some((start, qty, crate::protocol::status::types::modbus::RegisterMode::Input))
+                                        Some((start, qty, aoba_protocol::status::types::modbus::RegisterMode::Input))
                                     }
                                     _ => None,
                                 }
@@ -901,7 +899,7 @@ fn respond_to_request(
 fn update_storage_loop(
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     data_source: DataSource,
-    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    reg_mode: aoba_protocol::status::types::modbus::RegisterMode,
     register_address: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
 ) -> Result<()> {
@@ -943,22 +941,22 @@ fn update_storage_loop(
                             );
                             let mut context = storage.lock().unwrap();
                             match reg_mode {
-                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                aoba_protocol::status::types::modbus::RegisterMode::Holding => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_holding(register_address + i as u16, val)?;
                                     }
                                 }
-                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                aoba_protocol::status::types::modbus::RegisterMode::Coils => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_coil(register_address + i as u16, val != 0)?;
                                     }
                                 }
-                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_discrete(register_address + i as u16, val != 0)?;
                                     }
                                 }
-                                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                aoba_protocol::status::types::modbus::RegisterMode::Input => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_input(register_address + i as u16, val)?;
                                     }
@@ -1007,22 +1005,22 @@ fn update_storage_loop(
                             log::info!("Updating storage with values: {values:?}");
                             let mut context = storage.lock().unwrap();
                             match reg_mode {
-                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                aoba_protocol::status::types::modbus::RegisterMode::Holding => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_holding(register_address + i as u16, val)?;
                                     }
                                 }
-                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                aoba_protocol::status::types::modbus::RegisterMode::Coils => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_coil(register_address + i as u16, val != 0)?;
                                     }
                                 }
-                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_discrete(register_address + i as u16, val != 0)?;
                                     }
                                 }
-                                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                aoba_protocol::status::types::modbus::RegisterMode::Input => {
                                     for (i, &val) in values.iter().enumerate() {
                                         context.set_input(register_address + i as u16, val)?;
                                     }

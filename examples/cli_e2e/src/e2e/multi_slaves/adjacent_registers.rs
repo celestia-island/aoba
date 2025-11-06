@@ -5,17 +5,17 @@ use std::{
 };
 
 use crate::utils::build_debug_bin;
-use aoba::cli::config::{
-    CommunicationMethod, CommunicationParams, Config, PersistenceMode, RegisterMap, RegisterRange,
-    StationConfig, StationMode,
+use aoba_cli::config::{
+    CommunicationMethod, CommunicationParams, ModbusBootConfig, PersistenceMode, RegisterMap,
+    RegisterRange, StationConfig, StationMode,
 };
 
 /// Test multiple slaves with adjacent and non-adjacent register addresses
 pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
     log::info!("🧪 Testing multiple slaves with adjacent and non-adjacent register addresses...");
 
-    // Create configuration using the type-safe Config struct
-    let config = Config {
+    // Create configuration using the type-safe ModbusBootConfig struct
+    let config = ModbusBootConfig {
         port_name: "/tmp/vcom2".to_string(),
         baud_rate: 9600,
         communication_params: CommunicationParams {

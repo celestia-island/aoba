@@ -11,8 +11,6 @@ use log::LevelFilter;
 #[cfg(debug_assertions)]
 use std::io::Write;
 
-pub use aoba_cli as cli;
-pub use aoba_protocol as protocol;
 pub use aoba_protocol::i18n;
 
 /// Common initialization used by TUI entrypoint.

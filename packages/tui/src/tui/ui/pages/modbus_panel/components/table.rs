@@ -3,12 +3,14 @@ use anyhow::Result;
 use ratatui::{prelude::*, text::Line};
 use unicode_width::UnicodeWidthStr;
 
-use crate::tui::status as types;
-use crate::tui::status::modbus::RegisterMode;
-use crate::tui::status::read_status;
-use crate::tui::ui::components::{
-    kv_line::render_kv_line,
-    styled_label::{input_spans, switch_spans, TextState},
+use crate::{
+    tui::status as types,
+    tui::status::modbus::RegisterMode,
+    tui::status::read_status,
+    tui::ui::components::{
+        kv_line::render_kv_line,
+        styled_label::{input_spans, switch_spans, TextState},
+    },
 };
 
 /// Determine the number of registers to display per row based on terminal width.

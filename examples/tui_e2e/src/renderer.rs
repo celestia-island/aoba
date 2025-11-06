@@ -4,6 +4,7 @@
 //! for snapshot testing, without needing to spawn a real process.
 
 use anyhow::{bail, Result};
+
 use ratatui::{backend::TestBackend, Terminal};
 
 use aoba_ci_utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};

@@ -6,8 +6,6 @@ pub mod status;
 
 use clap::{Arg, ArgMatches, Command};
 
-pub use aoba_protocol as protocol;
-
 /// Parse command line arguments and return ArgMatches.
 pub fn parse_args() -> ArgMatches {
     Command::new("aoba")

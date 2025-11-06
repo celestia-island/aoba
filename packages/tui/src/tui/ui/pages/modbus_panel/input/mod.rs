@@ -11,9 +11,7 @@ pub use editing::handle_editing_input as handle_edit_input;
 use navigation::handle_navigation_input;
 pub use navigation::handle_navigation_input as handle_nav_input;
 
-use crate::tui::status as types;
-use crate::tui::status::read_status;
-use crate::tui::utils::bus::Bus;
+use crate::{tui::status as types, tui::status::read_status, tui::utils::bus::Bus};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     let editing = read_status(|status| {

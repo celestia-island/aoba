@@ -7,9 +7,9 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::tui::status as types;
 use crate::{
     i18n::lang,
+    tui::status as types,
     tui::{
         status::{
             port::{PortData, PortState},

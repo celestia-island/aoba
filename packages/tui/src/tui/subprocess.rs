@@ -9,8 +9,13 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use crate::protocol::ipc::{IpcClient, IpcConnection, IpcMessage};
-pub use crate::tui::status::cli::CliMode;
+use crate::tui::status::read_status;
+use aoba_cli::{config::StationConfig, status::CliMode};
+use aoba_protocol::{
+    ipc::{generate_socket_name, IpcClient, IpcMessage},
+    ipc::{get_command_channel_name, IpcCommandClient, IpcConnection},
+    status::{debug_dump::is_debug_dump_enabled, port_stations_to_config},
+};
 
 /// Configuration for a CLI subprocess
 #[derive(Debug, Clone)]
@@ -31,10 +36,9 @@ pub struct ManagedSubprocess {
     pub child: Child,
     pub ipc_socket_name: String,
     pub ipc_connection: Option<IpcConnection>,
-    pub command_client: Option<crate::protocol::ipc::IpcCommandClient>,
+    pub command_client: Option<IpcCommandClient>,
     ipc_accept_thread: Option<std::thread::JoinHandle<Result<IpcConnection>>>,
-    command_connect_thread:
-        Option<std::thread::JoinHandle<Result<crate::protocol::ipc::IpcCommandClient>>>,
+    command_connect_thread: Option<std::thread::JoinHandle<Result<IpcCommandClient>>>,
     stdout_thread: Option<std::thread::JoinHandle<()>>,
     stderr_thread: Option<std::thread::JoinHandle<()>>,
 }
@@ -51,7 +55,7 @@ impl ManagedSubprocess {
     /// Spawn a new CLI subprocess with the given configuration
     pub fn spawn(config: CliSubprocessConfig) -> Result<Self> {
         // Generate unique IPC socket name
-        let ipc_socket_name = crate::protocol::ipc::generate_socket_name();
+        let ipc_socket_name = generate_socket_name();
 
         log::info!(
             "Spawning CLI subprocess for port {} in mode {:?}",
@@ -109,7 +113,7 @@ impl ManagedSubprocess {
         args.push(ipc_socket_name.clone());
 
         // If TUI is in debug CI E2E test mode, propagate to CLI subprocess
-        if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+        if is_debug_dump_enabled() {
             args.push("--debug-ci-e2e-test".to_string());
             log::debug!("Injecting --debug-ci-e2e-test flag to CLI subprocess");
         }
@@ -184,15 +188,14 @@ impl ManagedSubprocess {
         let accept_thread = std::thread::spawn(move || ipc_client.accept());
 
         // Spawn thread to connect to command channel (with retry)
-        let command_channel_name = crate::protocol::ipc::get_command_channel_name(&ipc_socket_name);
+        let command_channel_name = get_command_channel_name(&ipc_socket_name);
         let command_connect_thread = std::thread::spawn(move || {
             // Wait a bit for CLI to set up its command listener
             std::thread::sleep(std::time::Duration::from_millis(500));
 
             // Try to connect with retries (increased timeout for slow subprocess startup)
             for attempt in 1..=30 {
-                match crate::protocol::ipc::IpcCommandClient::connect(command_channel_name.clone())
-                {
+                match IpcCommandClient::connect(command_channel_name.clone()) {
                     Ok(client) => {
                         log::info!("Connected to CLI command channel on attempt {attempt}");
                         return Ok(client);
@@ -334,10 +337,7 @@ impl ManagedSubprocess {
     }
 
     /// Send a full stations configuration update to the subprocess via command channel
-    pub fn send_stations_update(
-        &mut self,
-        stations: &[crate::cli::config::StationConfig],
-    ) -> Result<()> {
+    pub fn send_stations_update(&mut self, stations: &[StationConfig]) -> Result<()> {
         self.try_complete_ipc_connection()?;
 
         if let Some(ref mut client) = self.command_client {
@@ -556,11 +556,8 @@ impl SubprocessManager {
     /// Send full stations update to CLI subprocess via IPC
     /// This sends the complete station configuration for the port
     pub fn send_stations_update_for_port(&mut self, port_name: &str) -> Result<()> {
-        use crate::protocol::status::port_stations_to_config;
-        use crate::tui::status::read_status;
-
         // Get current stations configuration from the port
-        let stations: Vec<crate::cli::config::StationConfig> = read_status(|status| {
+        let stations: Vec<StationConfig> = read_status(|status| {
             if let Some(port_arc) = status.ports.map.get(port_name) {
                 let port_data = port_arc;
                 let stations_vec = port_stations_to_config(port_data);

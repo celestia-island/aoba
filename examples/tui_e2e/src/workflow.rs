@@ -116,4 +116,12 @@ pub struct WorkflowStep {
     /// Expected mock state value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mock_verify_value: Option<serde_json::Value>,
+
+    /// Trigger name for custom actions (e.g., "match_master_registers")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<String>,
+
+    /// Trigger parameters (passed as JSON)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trigger_params: Option<serde_json::Value>,
 }

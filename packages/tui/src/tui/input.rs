@@ -3,13 +3,10 @@ use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{
-    // removed unused import: protocol::status::types
-    tui::{
-        status::{read_status, write_status},
-        ui::pages,
-        utils::bus::{Bus, UiToCore},
-    },
+use crate::tui::{
+    status::{read_status, write_status},
+    ui::pages,
+    utils::bus::{Bus, UiToCore},
 };
 
 /// Spawn the input handling thread that processes keyboard and mouse events
