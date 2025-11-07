@@ -3,14 +3,15 @@
 //! This module provides cross-platform IPC for communication between
 //! TUI E2E tests and the TUI process using the `interprocess` library.
 
-use std::io::ErrorKind;
-use std::time::Instant;
-
 use anyhow::{anyhow, bail, Result};
-use interprocess::local_socket::prelude::*;
-use interprocess::local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions};
 use serde::{Deserialize, Serialize};
+use std::{io::ErrorKind, time::Instant};
 use tokio::time::sleep;
+
+use interprocess::{
+    local_socket::prelude::*,
+    local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions},
+};
 
 use super::{
     E2EToTuiMessage, IpcChannelId, TuiToE2EMessage, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
