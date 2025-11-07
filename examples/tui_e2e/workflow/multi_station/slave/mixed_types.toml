@@ -184,8 +184,8 @@ description = "Initialize second master station structure"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves"
 mock_set_value = [
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [false, false, false, false, false, false, false, false, false, false] },
   { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-  { station_id = 2, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
 # Step 6: Configure Station 1 Fields
@@ -379,8 +379,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 0"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[0]"
-mock_set_value = "true"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[0]"
+mock_set_value = 1
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -395,8 +395,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 1"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[1]"
-mock_set_value = "false"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[1]"
+mock_set_value = 0
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -411,8 +411,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 2"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[2]"
-mock_set_value = "true"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[2]"
+mock_set_value = 1
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -427,8 +427,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 3"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[3]"
-mock_set_value = "false"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[3]"
+mock_set_value = 0
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -443,8 +443,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 4"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[4]"
-mock_set_value = "true"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[4]"
+mock_set_value = 1
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -459,8 +459,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 5"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[5]"
-mock_set_value = "false"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[5]"
+mock_set_value = 0
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -475,8 +475,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 6"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[6]"
-mock_set_value = "true"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[6]"
+mock_set_value = 1
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -491,8 +491,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 7"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[7]"
-mock_set_value = "false"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[7]"
+mock_set_value = 0
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -507,8 +507,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 8"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[8]"
-mock_set_value = "true"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[8]"
+mock_set_value = 1
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -523,8 +523,8 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state for coil register 9"
 action = "mock_set_value"
-mock_path = "ports[0].modbus_slaves[0].registers[9]"
-mock_set_value = "false"
+mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[0].registers[9]"
+mock_set_value = 0
 
 [[workflow.edit_station1_round1]]
 description = "Move to next register"
@@ -561,9 +561,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station2_fields]]
-description = "Type station ID value 2"
+description = "Type station ID value 1"
 input = "decimal"
-value = 2
+value = 1
 
 [[workflow.configure_station2_fields]]
 description = "Confirm Station ID"
@@ -573,7 +573,7 @@ key = "Enter"
 description = "Update Station ID in mock state"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[1].station_id"
-mock_set_value = 2
+mock_set_value = 1
 
 # Navigate to Register Type
 [[workflow.configure_station2_fields]]
@@ -653,9 +653,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station2_fields]]
-description = "Type start address 0x0010"
+description = "Type start address 0x0000"
 input = "hex"
-value = 0x0010
+value = 0x0000
 
 [[workflow.configure_station2_fields]]
 description = "Confirm Start Address"
@@ -665,7 +665,7 @@ key = "Enter"
 description = "Update Start Address in mock state"
 action = "mock_set_value"
 mock_path = "$.ports['/tmp/vcom1'].modbus_slaves[1].start_address"
-mock_set_value = 16
+mock_set_value = 0
 
 # Navigate to Register Count
 [[workflow.configure_station2_fields]]
