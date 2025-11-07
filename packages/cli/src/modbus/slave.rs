@@ -530,48 +530,6 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
 
     // Setup IPC if requested
     let mut ipc = actions::setup_ipc(matches);
-    
-    // Create shared storage for multiple stations configuration
-    // Initialize with the station from command line args
-    let initial_station = crate::config::StationConfig {
-        station_id: station_id as u16,
-        mode: reg_mode,
-        map: crate::config::RegisterMap {
-            holding: if matches!(reg_mode, crate::config::RegisterMode::Holding) {
-                vec![crate::config::RegisterRange {
-                    address_start: register_address,
-                    initial_values: vec![0; register_length as usize],
-                }]
-            } else {
-                vec![]
-            },
-            input: if matches!(reg_mode, crate::config::RegisterMode::Input) {
-                vec![crate::config::RegisterRange {
-                    address_start: register_address,
-                    initial_values: vec![0; register_length as usize],
-                }]
-            } else {
-                vec![]
-            },
-            coils: if matches!(reg_mode, crate::config::RegisterMode::Coils) {
-                vec![crate::config::RegisterRange {
-                    address_start: register_address,
-                    initial_values: vec![0; register_length as usize],
-                }]
-            } else {
-                vec![]
-            },
-            discrete_inputs: if matches!(reg_mode, crate::config::RegisterMode::DiscreteInputs) {
-                vec![crate::config::RegisterRange {
-                    address_start: register_address,
-                    initial_values: vec![0; register_length as usize],
-                }]
-            } else {
-                vec![]
-            },
-        },
-    };
-    let stations = Arc::new(Mutex::new(vec![initial_station]));
 
     // Check if debug CI E2E test mode is enabled
     let _debug_dump_thread = if matches.get_flag("debug-ci-e2e-test") {
@@ -670,9 +628,8 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
         std::sync::atomic::AtomicBool::new(false);
 
     // Continuously poll
-    // Keep track of last written values per station to avoid consecutive duplicate outputs
-    let mut last_written_values: std::collections::HashMap<(u8, u16, crate::config::RegisterMode), Vec<u16>> = 
-        std::collections::HashMap::new();
+    // Keep track of last written values to avoid consecutive duplicate outputs
+    let mut last_written_values: Option<Vec<u16>> = None;
 
     loop {
         // Try to accept incoming command channel connection (non-blocking)
@@ -691,7 +648,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             }
         }
 
-        // Check for incoming StationsUpdate commands
+        // Check for incoming StationsUpdate commands (for future multi-station support)
         if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
             if let Some(ref mut ipc_conns) = ipc {
                 if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
@@ -699,25 +656,12 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                         aoba_protocol::ipc::IpcMessage::StationsUpdate {
                             stations_data, ..
                         } => {
-                            log::info!("Received stations update, {} bytes", stations_data.len());
-
-                            // Deserialize stations using postcard
-                            if let Ok(new_stations) = postcard::from_bytes::<
-                                Vec<crate::config::StationConfig>,
-                            >(&stations_data)
-                            {
-                                log::info!("Deserialized {} stations", new_stations.len());
-                                
-                                // Update the stations configuration
-                                if let Ok(mut stations_guard) = stations.lock() {
-                                    *stations_guard = new_stations;
-                                    log::info!("Updated stations configuration with {} stations", stations_guard.len());
-                                } else {
-                                    log::warn!("Failed to acquire lock on stations for update");
-                                }
-                            } else {
-                                log::warn!("Failed to deserialize stations update");
-                            }
+                            log::info!(
+                                "Received stations update ({} bytes) - multi-station slave mode not yet fully implemented",
+                                stations_data.len()
+                            );
+                            // TODO: Deserialize and use the stations configuration
+                            // For now, we continue polling the initial station from command line args
                         }
                         _ => {
                             log::debug!("Received unexpected IPC message in slave poll mode");
@@ -727,113 +671,43 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             }
         }
 
-        // Poll all configured stations
-        let stations_snapshot = if let Ok(guard) = stations.lock() {
-            guard.clone()
-        } else {
-            log::warn!("Failed to acquire lock on stations for polling");
-            std::thread::sleep(Duration::from_millis(500));
-            continue;
-        };
+        match send_request_and_wait(
+            port_arc.clone(),
+            station_id,
+            register_address,
+            register_length,
+            reg_mode,
+        ) {
+            Ok(response) => {
+                // If the values are identical to the last written ones, skip writing
+                let write_this = match &last_written_values {
+                    Some(prev) => &response.values != prev,
+                    None => true,
+                };
 
-        for station in &stations_snapshot {
-            let station_id = station.station_id as u8;
-            
-            // Poll each register range in the station
-            for range in &station.map.holding {
-                if let Ok(response) = send_request_and_wait(
-                    port_arc.clone(),
-                    station_id,
-                    range.address_start,
-                    range.initial_values.len() as u16,
-                    crate::config::RegisterMode::Holding,
-                ) {
-                    let key = (station_id, range.address_start, crate::config::RegisterMode::Holding);
-                    let write_this = last_written_values.get(&key)
-                        .map(|prev| &response.values != prev)
-                        .unwrap_or(true);
+                if write_this {
+                    let json = serde_json::to_string(&response)?;
+                    output_sink.write(&json)?;
+                    last_written_values = Some(response.values.clone());
 
-                    if write_this {
-                        let json = serde_json::to_string(&response).ok();
-                        if let Some(json_str) = json {
-                            let _ = output_sink.write(&json_str);
-                        }
-                        last_written_values.insert(key, response.values);
+                    // Send RegisterUpdate via IPC
+                    if let Some(ref _ipc_conns) = ipc {
+                        log::info!(
+                            "IPC: Would send StationsUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
+                            response.values
+                        );
+                        // TODO: With new design, we send full StationsUpdate instead of individual RegisterUpdate
+                        // For now, we skip this to avoid breaking the new IPC message format
+                        // Later, we'll implement proper state synchronization that sends all stations
                     }
                 }
             }
-
-            for range in &station.map.input {
-                if let Ok(response) = send_request_and_wait(
-                    port_arc.clone(),
-                    station_id,
-                    range.address_start,
-                    range.initial_values.len() as u16,
-                    crate::config::RegisterMode::Input,
-                ) {
-                    let key = (station_id, range.address_start, crate::config::RegisterMode::Input);
-                    let write_this = last_written_values.get(&key)
-                        .map(|prev| &response.values != prev)
-                        .unwrap_or(true);
-
-                    if write_this {
-                        let json = serde_json::to_string(&response).ok();
-                        if let Some(json_str) = json {
-                            let _ = output_sink.write(&json_str);
-                        }
-                        last_written_values.insert(key, response.values);
-                    }
-                }
-            }
-
-            for range in &station.map.coils {
-                if let Ok(response) = send_request_and_wait(
-                    port_arc.clone(),
-                    station_id,
-                    range.address_start,
-                    range.initial_values.len() as u16,
-                    crate::config::RegisterMode::Coils,
-                ) {
-                    let key = (station_id, range.address_start, crate::config::RegisterMode::Coils);
-                    let write_this = last_written_values.get(&key)
-                        .map(|prev| &response.values != prev)
-                        .unwrap_or(true);
-
-                    if write_this {
-                        let json = serde_json::to_string(&response).ok();
-                        if let Some(json_str) = json {
-                            let _ = output_sink.write(&json_str);
-                        }
-                        last_written_values.insert(key, response.values);
-                    }
-                }
-            }
-
-            for range in &station.map.discrete_inputs {
-                if let Ok(response) = send_request_and_wait(
-                    port_arc.clone(),
-                    station_id,
-                    range.address_start,
-                    range.initial_values.len() as u16,
-                    crate::config::RegisterMode::DiscreteInputs,
-                ) {
-                    let key = (station_id, range.address_start, crate::config::RegisterMode::DiscreteInputs);
-                    let write_this = last_written_values.get(&key)
-                        .map(|prev| &response.values != prev)
-                        .unwrap_or(true);
-
-                    if write_this {
-                        let json = serde_json::to_string(&response).ok();
-                        if let Some(json_str) = json {
-                            let _ = output_sink.write(&json_str);
-                        }
-                        last_written_values.insert(key, response.values);
-                    }
-                }
+            Err(err) => {
+                log::warn!("Poll error: {err}");
             }
         }
 
-        // Small delay between poll cycles
+        // Small delay between polls
         std::thread::sleep(Duration::from_millis(500));
     }
 }
