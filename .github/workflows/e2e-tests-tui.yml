@@ -61,18 +61,13 @@ jobs:
       - name: Build packages
         run: cargo build --package aoba --package tui_e2e
 
-      - name: Make binaries executable
+      - name: Make scripts executable
         run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/tui_e2e
-
-      - name: Setup virtual serial ports
-        run: |
+          chmod +x scripts/run_ci_locally.sh
           chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
 
       - name: Run TUI E2E module (rendering mode)
-        run: ./target/debug/tui_e2e --module ${{ matrix.module }} --screen-capture-only
+        run: ./scripts/run_ci_locally.sh --workflow tui-rendering --module ${{ matrix.module }}
 
   # Drill-down mode tests (full integration) - 14 modules
   tui-e2e-drilldown:
@@ -126,15 +121,10 @@ jobs:
       - name: Build packages
         run: cargo build --package aoba --package tui_e2e
 
-      - name: Make binaries executable
+      - name: Make scripts executable
         run: |
-          chmod +x target/debug/aoba
-          chmod +x target/debug/tui_e2e
-
-      - name: Setup virtual serial ports
-        run: |
+          chmod +x scripts/run_ci_locally.sh
           chmod +x scripts/socat_init.sh
-          ./scripts/socat_init.sh
 
       - name: Run TUI E2E module (drill-down mode)
-        run: ./target/debug/tui_e2e --module ${{ matrix.module }}
+        run: ./scripts/run_ci_locally.sh --workflow tui-drilldown --module ${{ matrix.module }}
