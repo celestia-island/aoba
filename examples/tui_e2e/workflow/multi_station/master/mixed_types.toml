@@ -2,15 +2,15 @@
 # Test ID: tui_multi_master_mixed_types
 # Stations:
 #   - Station A: ID=1, Type=Holding, Address=0x0000, Length=10
-#   - Station B: ID=2, Type=Coils, Address=0x0010, Length=10
+#   - Station B: ID=1, Type=Coils, Address=0x0000, Length=10
 #
 # Test Data (3 Rounds across both stations):
-# Round 1 - Station A: [0x0100, 0x0102, 0x0104, 0x0106, 0x0108, 0x010A, 0x010C, 0x010E, 0x0110, 0x0112]
+# Round 1 - Station A: [0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007, 0x0008, 0x0009]
+#           Station B: [ON, ON, ON, ON, ON, ON, ON, ON, ON, ON]
+# Round 2 - Station A: [0x0009, 0x0008, 0x0007, 0x0006, 0x0005, 0x0004, 0x0003, 0x0002, 0x0001, 0x0000]
 #           Station B: [ON, OFF, ON, OFF, ON, OFF, ON, OFF, ON, OFF]
-# Round 2 - Station A: [0x0200, 0x0204, 0x0208, 0x020C, 0x0210, 0x0214, 0x0218, 0x021C, 0x0220, 0x0224]
-#           Station B: [OFF, OFF, ON, ON, OFF, OFF, ON, ON, OFF, OFF]
-# Round 3 - Station A: [0x1010, 0x2020, 0x3030, 0x4040, 0x5050, 0x6060, 0x7070, 0x8080, 0x9090, 0xA0A0]
-#           Station B: [ON, ON, ON, ON, OFF, OFF, OFF, OFF, ON, ON]
+# Round 3 - Station A: [0x1234, 0x5678, 0x9ABC, 0xDEF0, 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666]
+#           Station B: [ON, ON, OFF, ON, ON, OFF, ON, ON, OFF, ON]
 
 [manifest]
 id = "multi_station_master_mixed_types"
@@ -18,7 +18,7 @@ description = "Two master stations with different register types"
 is_master = true
 stations = [
   { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 10 },
-  { station_id = 2, register_type = "Coils", start_address = 0x0010, register_count = 10 },
+  { station_id = 1, register_type = "Coils", start_address = 0x0000, register_count = 10 },
 ]
 
 init_order = [
@@ -152,7 +152,7 @@ description = "Initialize second master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
   { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
-  { station_id = 2, register_type = "Coils", start_address = 16, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Coils", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
 # Step 6: Configure Station 1 Fields
@@ -562,9 +562,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station2_fields]]
-description = "Type station ID value 2"
+description = "Type station ID value 1"
 input = "decimal"
-value = 2
+value = 1
 
 [[workflow.configure_station2_fields]]
 description = "Confirm Station ID"
@@ -573,7 +573,7 @@ key = "Enter"
 [[workflow.configure_station2_fields]]
 description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].station_id"
-mock_set_value = 2
+mock_set_value = 1
 
 # Navigate to Register Type
 [[workflow.configure_station2_fields]]
@@ -652,9 +652,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station2_fields]]
-description = "Type start address 0x0010"
+description = "Type start address 0x0000"
 input = "hex"
-value = 0x0010
+value = 0x0000
 
 [[workflow.configure_station2_fields]]
 description = "Confirm Start Address"
@@ -663,7 +663,7 @@ key = "Enter"
 [[workflow.configure_station2_fields]]
 description = "Update Start Address in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].start_address"
-mock_set_value = 16
+mock_set_value = 0
 
 # Navigate to Register Count
 [[workflow.configure_station2_fields]]
