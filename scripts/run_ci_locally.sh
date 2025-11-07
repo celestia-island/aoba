@@ -343,8 +343,8 @@ run_workflow_tests() {
 main() {
     local total_failed=0
 
-    # This runner executes tests locally by default (Docker support removed).
-    echo -e "${YELLOW}Running tests locally (Docker support removed).${NC}"
+    # This runner executes tests locally by default.
+    echo -e "${YELLOW}Running tests locally.${NC}"
     echo ""
 
     case "$WORKFLOW" in
