@@ -9,17 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/basic-checks.yml?branch=master&label=Basic%20Checks&logo=github" alt="Basic Checks Status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-cli.yml?branch=master&label=CLI%20E2E&logo=github" alt="CLI E2E Status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-tui.yml?branch=master&label=TUI%20Logic%20E2E&logo=github" alt="TUI Logic E2E Status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui-ui.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-tui-ui.yml?branch=master&label=TUI%20UI%20E2E&logo=github" alt="TUI UI E2E Status" />
+  <a href="https://github.com/celestia-island/aoba/actions">
+    <img src="https://img.shields.io/github/checks-status/celestia-island/aoba/master?label=ci&logo=github" alt="CI status" />
   </a>
   <a href="https://github.com/celestia-island/aoba/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/celestia-island/aoba?color=blue" alt="License" />
@@ -35,21 +26,26 @@
 
 本项目为多协议调试与模拟 CLI 工具，支持 Modbus RTU、MQTT、TCP 等协议。
 
-> 正在开发中
+> 正在积极开发中
 
 ## 功能
 
-- 串口/网络协议调试
+- 串口和网络协议调试
 - 协议模拟（主/从站、客户端/服务端）
-- TUI/GUI 自动切换
-- 创建虚拟串口
+- 自动切换 TUI/GUI
+- 创建与管理虚拟串口
 
 ## 快速开始
 
 1. 安装 Rust 工具链
-2. `cargo build --bins`
-3. `cargo run` 或运行生成的可执行文件
+2. 构建二进制：`cargo build --bins`
+3. 运行工具：`cargo run` 或直接执行生成的二进制文件
+
+说明：
+
+- 示例与扩展文档位于 `examples/` 和 `docs/` 目录。
+- 若需 CI 或自动化脚本，请查看 `./scripts/`。
 
 ## 贡献
 
-欢迎提交 issue 或 PR！
+欢迎贡献 — 请提交 issue 或 PR。仓库中包含代码风格与 CI 配置说明。
