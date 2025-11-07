@@ -453,23 +453,28 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                 return Ok(());
             }
 
-            // Mark config as not modified
-            write_status(|status| {
+            // Mark config as not modified and check port state
+            let is_enabled = write_status(|status| {
                 let port = status
                     .ports
                     .map
                     .get_mut(&port_name)
                     .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                 port.config_modified = false;
-                // Set status to AppliedSuccess for 3 seconds
-                port.status_indicator = types::port::PortStatusIndicator::AppliedSuccess {
-                    timestamp: Local::now(),
-                };
-                Ok(())
+                
+                // Check if port is already enabled
+                let is_enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
+                
+                // Only set AppliedSuccess when enabling for the first time
+                // For restart (port already running), let ToggleRuntime set the status
+                if !is_enabled {
+                    port.status_indicator = types::port::PortStatusIndicator::AppliedSuccess {
+                        timestamp: Local::now(),
+                    };
+                }
+                
+                Ok(is_enabled)
             })?;
-
-            // Check if port is already enabled
-            let is_enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
 
             if !is_enabled {
                 // Enable the port if not already enabled
