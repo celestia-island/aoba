@@ -443,16 +443,19 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     let (thr_tx, thr_rx) = flume::unbounded::<Result<()>>();
 
     // Thread 1: Core processing thread - handles UiToCore and CoreToUi communication
+    // Create input kill channel before spawning core thread so core can signal input to quit
+    let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
+
     let core_handle = thread::spawn({
         let core_tx = core_tx.clone();
         let thr_tx = thr_tx.clone();
         let ui_rx = ui_rx.clone();
+        let input_kill_tx = input_kill_tx.clone();
 
-        move || thr_tx.send(run_core_thread(ui_rx, core_tx))
+        move || thr_tx.send(run_core_thread(ui_rx, core_tx, input_kill_tx))
     });
 
     // Thread 2: Input handling thread - processes keyboard input
-    let (input_kill_tx, input_kill_rx) = flume::bounded::<()>(1);
     let input_handle = thread::spawn({
         let bus = bus.clone();
         move || input::run_input_thread(bus, input_kill_rx)
@@ -551,6 +554,7 @@ fn run_rendering_loop(bus: Bus, thr_rx: flume::Receiver<Result<()>>) -> Result<(
 fn run_core_thread(
     ui_rx: flume::Receiver<UiToCore>,
     core_tx: flume::Sender<CoreToUi>,
+    input_kill_tx: flume::Sender<()>,
 ) -> Result<()> {
     let mut polling_enabled = true;
     let scan_interval = Duration::from_secs(30); // Reduced from 2s to 30s
@@ -589,6 +593,10 @@ fn run_core_thread(
             match msg {
                 UiToCore::Quit => {
                     log::info!("Received quit signal");
+                    // Signal input thread to quit immediately
+                    if let Err(err) = input_kill_tx.send(()) {
+                        log::warn!("Failed to send input kill signal: {err}");
+                    }
                     // Notify UI to quit and then exit core thread
                     core_tx
                         .send(CoreToUi::Quit)
@@ -1171,12 +1179,15 @@ async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result
     let (core_tx, core_rx) = flume::unbounded::<CoreToUi>();
     let (ui_tx, ui_rx) = flume::unbounded::<UiToCore>();
 
+    // Create dummy input kill channel (not used in IPC mode but required for run_core_thread signature)
+    let (input_kill_tx, _input_kill_rx) = flume::bounded::<()>(1);
+
     // Start core thread
     let core_handle = thread::spawn({
         let core_tx = core_tx.clone();
         let ui_rx = ui_rx.clone();
 
-        move || run_core_thread(ui_rx, core_tx)
+        move || run_core_thread(ui_rx, core_tx, input_kill_tx)
     });
 
     // Create IPC receiver using ci_utils
