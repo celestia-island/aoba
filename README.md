@@ -9,14 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/basic-checks.yml?branch=master&label=Basic%20Checks&logo=github" alt="Basic Checks Status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-cli.yml?branch=master&label=CLI%20E2E&logo=github" alt="CLI E2E Status" />
-  </a>
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/celestia-island/aoba/e2e-tests-tui.yml?branch=master&label=TUI%20E2E&logo=github" alt="TUI E2E Status" />
+  <a href="https://github.com/celestia-island/aoba/actions">
+    <img src="https://img.shields.io/github/checks-status/celestia-island/aoba/master?label=ci&logo=github" alt="CI status" />
   </a>
   <a href="https://github.com/celestia-island/aoba/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/celestia-island/aoba?color=blue" alt="License" />
@@ -30,63 +24,28 @@
   EN | <a href="./README_zh.md">ZH</a>
 </p>
 
-Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, TCP, etc.
+Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, TCP and more.
 
-> Still developing
+> Under active development
 
 ## Features
 
-- Serial/network protocol debugging
+- Serial and network protocol debugging
 - Protocol simulation (master/slave, client/server)
-- TUI/GUI auto switch
-- Create virtual serial ports
+- Automatic TUI/GUI switching
+- Create and manage virtual serial ports
 
-## Quick Start
+## Quick start
 
-1. Install Rust toolchain
-2. `cargo build --bins`
-3. `cargo run` or run the generated executable
+1. Install the Rust toolchain
+2. Build binaries: `cargo build --bins`
+3. Run the tool: `cargo run` or execute the produced binary
 
-## Testing
+Notes:
 
-Aoba includes comprehensive E2E testing for both CLI and TUI components using an IPC-based architecture.
-
-### Running Tests Locally
-
-Use the provided CI script to run tests locally:
-
-```bash
-# Run all tests (CLI + TUI)
-./scripts/run_ci_locally.sh --workflow all
-
-# Run only TUI tests
-./scripts/run_ci_locally.sh --workflow tui-rendering    # Fast UI tests
-./scripts/run_ci_locally.sh --workflow tui-drilldown   # Full integration tests
-
-# Run only CLI tests
-./scripts/run_ci_locally.sh --workflow cli
-
-# Run specific test module
-./scripts/run_ci_locally.sh --workflow tui-drilldown --module single_station_master_coils
-```
-
-### Test Architecture
-
-- **TUI E2E Tests** (`examples/tui_e2e`): IPC-based testing using Unix domain sockets
-  - Screen Capture mode: Fast UI regression testing without process spawning
-  - DrillDown mode: Full integration testing with real TUI process
-  - No terminal emulation dependencies (expectrl/vt100 removed)
-  
-- **CLI E2E Tests** (`examples/cli_e2e`): Modbus protocol testing with virtual serial ports
-  - Single and multi-station configurations
-  - All register types (Coils, Discrete Inputs, Holding, Input)
-  - Master/Slave communication validation
-
-For more details, see:
-- [TUI E2E Testing Documentation](examples/tui_e2e/README.md)
-- [IPC Architecture Details](examples/tui_e2e/IPC_ARCHITECTURE.md)
-- [IPC Mode Documentation](docs/IPC_MODE.md)
+- Examples and extended documentation live in the `examples/` and `docs/` directories.
+- If you want to run automated tests or CI workflows, check `./scripts/` and the example test folders for guidance.
 
 ## Contribution
 
-Feel free to submit issues or PRs!
+Contributions are welcome — please open issues or pull requests. See the repository for coding guidelines and CI configuration.
