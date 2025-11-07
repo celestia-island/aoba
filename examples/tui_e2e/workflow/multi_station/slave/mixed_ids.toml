@@ -24,9 +24,9 @@ stations = [
 init_order = [
   "navigate_to_entry",
   "enter_config_panel",
-  "switch_to_slave_mode",
   "navigate_to_business_config",
   "enter_modbus_panel",
+  "switch_to_slave_mode",
   "create_stations",
   "configure_station1_fields",
   "edit_station1_round1",

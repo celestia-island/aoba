@@ -2,15 +2,15 @@
 # Test ID: tui_multi_slave_mixed_types
 # Stations:
 #   - Station A: ID=1, Type=Coils, Address=0x0000, Length=10
-#   - Station B: ID=2, Type=Holding, Address=0x0010, Length=10
+#   - Station B: ID=1, Type=Holding, Address=0x0000, Length=10
 #
 # Test Data (3 Rounds across both stations):
-# Round 1 - Station A: [ON, OFF, ON, OFF, ON, OFF, ON, OFF, ON, OFF]
-#           Station B: [0x1100, 0x1102, 0x1104, 0x1106, 0x1108, 0x110A, 0x110C, 0x110E, 0x1110, 0x1112]
-# Round 2 - Station A: [OFF, OFF, ON, ON, OFF, OFF, ON, ON, OFF, OFF]
-#           Station B: [0x2100, 0x2104, 0x2108, 0x210C, 0x2110, 0x2114, 0x2118, 0x211C, 0x2120, 0x2124]
-# Round 3 - Station A: [ON, ON, ON, ON, OFF, OFF, OFF, OFF, ON, ON]
-#           Station B: [0xAAAA, 0xBBBB, 0xCCCC, 0xDDDD, 0xEEEE, 0xFFFF, 0xABCD, 0xBCDE, 0xCDEF, 0xDEF0]
+# Round 1 - Station A: [ON, ON, ON, ON, ON, ON, ON, ON, ON, ON]
+#           Station B: [0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007, 0x0008, 0x0009]
+# Round 2 - Station A: [ON, OFF, ON, OFF, ON, OFF, ON, OFF, ON, OFF]
+#           Station B: [0x0009, 0x0008, 0x0007, 0x0006, 0x0005, 0x0004, 0x0003, 0x0002, 0x0001, 0x0000]
+# Round 3 - Station A: [ON, ON, OFF, ON, ON, OFF, ON, ON, OFF, ON]
+#           Station B: [0x1234, 0x5678, 0x9ABC, 0xDEF0, 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666]
 
 [manifest]
 id = "multi_station_slave_mixed_types"
@@ -18,14 +18,14 @@ description = "Two slave stations with different register types (Coils + Holding
 is_master = false
 stations = [
   { station_id = 1, register_type = "Coils", start_address = 0x0000, register_count = 10 },
-  { station_id = 2, register_type = "Holding", start_address = 0x0010, register_count = 10 },
+  { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 10 },
 ]
 init_order = [
   "navigate_to_entry",
   "enter_config_panel",
-  "switch_to_slave_mode",
   "navigate_to_business_config",
   "enter_modbus_panel",
+  "switch_to_slave_mode",
   "create_stations",
   "configure_station1_fields",
   "edit_station1_round1",
