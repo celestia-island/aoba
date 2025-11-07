@@ -51,6 +51,11 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
             // DrillDown mode: spawn TUI process with IPC
             log::info!("🚀 Starting TUI process with IPC communication");
             spawn_tui_with_ipc(ctx, &workflow.manifest.id).await?;
+            
+            // Generate and spawn CLI emulator for this test
+            // This is needed for ALL tests (single and multi-station) to provide
+            // a Modbus counterpart for the TUI to communicate with
+            spawn_cli_emulator(ctx, workflow).await?;
         }
     }
 
@@ -179,6 +184,136 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
 
     ctx.ipc_sender = Some(sender);
 
+    Ok(())
+}
+
+/// Spawn CLI emulator process to act as Modbus counterpart for TUI
+///
+/// Generates a JSON config file and spawns CLI with --config flag.
+/// For master mode tests, CLI acts as slave.
+/// For slave mode tests, CLI acts as master.
+async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
+    use serde_json::json;
+    
+    // Determine if TUI is master or slave
+    let tui_is_master = workflow.manifest.is_master.unwrap_or(true);
+    
+    // CLI acts as opposite mode: if TUI is master, CLI is slave (and vice versa)
+    let cli_mode = if tui_is_master { "slave" } else { "master" };
+    
+    log::info!("📡 Preparing CLI emulator (TUI is {}, CLI is {})", 
+               if tui_is_master { "master" } else { "slave" },
+               cli_mode);
+    
+    // Build station configurations
+    let stations = if let Some(ref multi_stations) = workflow.manifest.stations {
+        // Multi-station test
+        log::info!("   Multi-station config: {} stations", multi_stations.len());
+        
+        let mut station_configs = Vec::new();
+        for station in multi_stations {
+            let register_field = match station.register_type.as_str() {
+                "Holding" | "holding" => "holding",
+                "Coils" | "coils" => "coils",
+                "DiscreteInputs" | "discrete_inputs" => "discrete_inputs",
+                "Input" | "input" => "input",
+                _ => bail!("Unknown register type: {}", station.register_type),
+            };
+            
+            let config = json!({
+                "id": station.station_id,
+                "mode": cli_mode,
+                "map": {
+                    register_field: [{
+                        "address_start": station.start_address,
+                        "length": station.register_count,
+                        "initial_values": []
+                    }]
+                }
+            });
+            
+            station_configs.push(config);
+        }
+        station_configs
+    } else {
+        // Single-station test
+        log::info!("   Single-station config");
+        
+        let station_id = workflow.manifest.station_id
+            .ok_or_else(|| anyhow::anyhow!("Missing station_id in manifest"))?;
+        let register_type = workflow.manifest.register_type.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Missing register_type in manifest"))?;
+        let start_address = workflow.manifest.start_address
+            .ok_or_else(|| anyhow::anyhow!("Missing start_address in manifest"))?;
+        let register_count = workflow.manifest.register_count
+            .ok_or_else(|| anyhow::anyhow!("Missing register_count in manifest"))?;
+        
+        let register_field = match register_type.as_str() {
+            "Holding" | "holding" => "holding",
+            "Coils" | "coils" => "coils",
+            "DiscreteInputs" | "discrete_inputs" => "discrete_inputs",
+            "Input" | "input" => "input",
+            _ => bail!("Unknown register type: {}", register_type),
+        };
+        
+        vec![json!({
+            "id": station_id,
+            "mode": cli_mode,
+            "map": {
+                register_field: [{
+                    "address_start": start_address,
+                    "length": register_count,
+                    "initial_values": []
+                }]
+            }
+        })]
+    };
+    
+    // Build complete CLI config
+    let config = json!({
+        "port_name": ctx.port2,  // CLI uses port2 to connect to TUI on port1
+        "baud_rate": 9600,
+        "communication_params": {
+            "mode": "stdio",
+            "dynamic_pull": false,
+            "wait_time": 1.0,
+            "timeout": 3.0,
+            "persistence": "persistent"
+        },
+        "stations": stations
+    });
+    
+    // Write config to fixed location
+    let config_path = "/tmp/tui_e2e_emulator.json";
+    std::fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
+    log::info!("📝 Wrote CLI config to {}", config_path);
+    log::debug!("Config: {}", serde_json::to_string_pretty(&config)?);
+    
+    // Find CLI binary
+    let cli_binary = if std::path::Path::new("target/debug/aoba").exists() {
+        "target/debug/aoba"
+    } else if std::path::Path::new("target/release/aoba").exists() {
+        "target/release/aoba"
+    } else {
+        bail!("aoba binary not found in target/debug or target/release");
+    };
+    
+    // Spawn CLI emulator process
+    log::info!("🚀 Spawning CLI emulator: {} --config {}", cli_binary, config_path);
+    
+    let _child = tokio::process::Command::new(cli_binary)
+        .args(["--config", config_path])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI emulator: {}", e))?;
+    
+    log::info!("✅ CLI emulator spawned successfully");
+    
+    // Give CLI time to initialize
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    
     Ok(())
 }
 
