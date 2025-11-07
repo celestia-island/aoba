@@ -623,11 +623,54 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
         log::debug!("Registered cleanup handler for port {port}");
     }
 
+    // Flag to track whether command channel has been accepted
+    static COMMAND_ACCEPTED: std::sync::atomic::AtomicBool =
+        std::sync::atomic::AtomicBool::new(false);
+
     // Continuously poll
     // Keep track of last written values to avoid consecutive duplicate outputs
     let mut last_written_values: Option<Vec<u16>> = None;
 
     loop {
+        // Try to accept incoming command channel connection (non-blocking)
+        if let Some(ref mut ipc_conns) = ipc {
+            if !COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+                match ipc_conns.command_listener.accept() {
+                    Ok(()) => {
+                        log::info!("Command channel accepted");
+                        COMMAND_ACCEPTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        // Don't log every attempt to avoid spam, just keep trying
+                        log::trace!("Command channel accept not ready yet: {e}");
+                    }
+                }
+            }
+        }
+
+        // Check for incoming StationsUpdate commands (for future multi-station support)
+        if COMMAND_ACCEPTED.load(std::sync::atomic::Ordering::Relaxed) {
+            if let Some(ref mut ipc_conns) = ipc {
+                if let Ok(Some(msg)) = ipc_conns.command_listener.try_recv() {
+                    match msg {
+                        aoba_protocol::ipc::IpcMessage::StationsUpdate {
+                            stations_data, ..
+                        } => {
+                            log::info!(
+                                "Received stations update ({} bytes) - multi-station slave mode not yet fully implemented",
+                                stations_data.len()
+                            );
+                            // TODO: Deserialize and use the stations configuration
+                            // For now, we continue polling the initial station from command line args
+                        }
+                        _ => {
+                            log::debug!("Received unexpected IPC message in slave poll mode");
+                        }
+                    }
+                }
+            }
+        }
+
         match send_request_and_wait(
             port_arc.clone(),
             station_id,
