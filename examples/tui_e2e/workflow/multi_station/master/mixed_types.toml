@@ -1,24 +1,24 @@
 # Multi-Station - Master Mode - Mixed Types
 # Test ID: tui_multi_master_mixed_types
 # Stations:
-#   - Station A: ID=1, Type=Holding, Address=0x0000, Length=8
-#   - Station B: ID=3, Type=Coils, Address=0x0010, Length=8
+#   - Station A: ID=1, Type=Holding, Address=0x0000, Length=10
+#   - Station B: ID=2, Type=Coils, Address=0x0010, Length=10
 #
 # Test Data (3 Rounds across both stations):
-# Round 1 - Station A: [0x0100, 0x0102, 0x0104, 0x0106, 0x0108, 0x010A, 0x010C, 0x010E]
-#           Station B: [ON, OFF, ON, OFF, ON, OFF, ON, OFF]
-# Round 2 - Station A: [0x0200, 0x0204, 0x0208, 0x020C, 0x0210, 0x0214, 0x0218, 0x021C]
-#           Station B: [OFF, OFF, ON, ON, OFF, OFF, ON, ON]
-# Round 3 - Station A: [0x1010, 0x2020, 0x3030, 0x4040, 0x5050, 0x6060, 0x7070, 0x8080]
-#           Station B: [ON, ON, ON, ON, OFF, OFF, OFF, OFF]
+# Round 1 - Station A: [0x0100, 0x0102, 0x0104, 0x0106, 0x0108, 0x010A, 0x010C, 0x010E, 0x0110, 0x0112]
+#           Station B: [ON, OFF, ON, OFF, ON, OFF, ON, OFF, ON, OFF]
+# Round 2 - Station A: [0x0200, 0x0204, 0x0208, 0x020C, 0x0210, 0x0214, 0x0218, 0x021C, 0x0220, 0x0224]
+#           Station B: [OFF, OFF, ON, ON, OFF, OFF, ON, ON, OFF, OFF]
+# Round 3 - Station A: [0x1010, 0x2020, 0x3030, 0x4040, 0x5050, 0x6060, 0x7070, 0x8080, 0x9090, 0xA0A0]
+#           Station B: [ON, ON, ON, ON, OFF, OFF, OFF, OFF, ON, ON]
 
 [manifest]
 id = "multi_station_master_mixed_types"
 description = "Two master stations with different register types"
 is_master = true
 stations = [
-  { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 8 },
-  { station_id = 3, register_type = "Coils", start_address = 0x0010, register_count = 8 },
+  { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 10 },
+  { station_id = 2, register_type = "Coils", start_address = 0x0010, register_count = 10 },
 ]
 
 init_order = [
@@ -136,7 +136,7 @@ key = "Enter"
 description = "Initialize first master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 8, registers = [0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
 [[workflow.create_stations]]
@@ -151,8 +151,8 @@ key = "Enter"
 description = "Initialize second master station structure"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
-  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 8, registers = [0, 0, 0, 0, 0, 0, 0, 0] },
-  { station_id = 3, register_type = "Coils", start_address = 16, register_count = 8, registers = [0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+  { station_id = 2, register_type = "Coils", start_address = 16, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
 ]
 
 # Step 6: Configure Station 1 Fields
@@ -309,9 +309,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station1_fields]]
-description = "Type register count 8"
+description = "Type register count 10"
 input = "decimal"
-value = 8
+value = 10
 
 [[workflow.configure_station1_fields]]
 description = "Confirm Register Count"
@@ -320,12 +320,12 @@ key = "Enter"
 [[workflow.configure_station1_fields]]
 description = "Update Register Count in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
-mock_set_value = 8
+mock_set_value = 10
 
 [[workflow.configure_station1_fields]]
 description = "Ensure registers array matches length"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
-mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0]
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 # Step 7: Edit Station 1 Registers - Round 1
 [[workflow.edit_station1_round1]]
@@ -489,6 +489,46 @@ mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
 mock_set_value = 0x010E
 
 [[workflow.edit_station1_round1]]
+description = "Move to register 8"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 8 - Enter and type 0x0110"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+input = "hex"
+value = 0x0110
+
+[[workflow.edit_station1_round1]]
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value = 0x0110
+
+[[workflow.edit_station1_round1]]
+description = "Move to register 9"
+key = "Right"
+
+[[workflow.edit_station1_round1]]
+description = "Register 9 - Enter and type 0x0112"
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+input = "hex"
+value = 0x0112
+
+[[workflow.edit_station1_round1]]
+key = "Enter"
+
+[[workflow.edit_station1_round1]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value = 0x0112
+
+[[workflow.edit_station1_round1]]
 description = "Return to top"
 key = "Ctrl+PageUp"
 
@@ -522,9 +562,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station2_fields]]
-description = "Type station ID value 3"
+description = "Type station ID value 2"
 input = "decimal"
-value = 3
+value = 2
 
 [[workflow.configure_station2_fields]]
 description = "Confirm Station ID"
@@ -533,7 +573,7 @@ key = "Enter"
 [[workflow.configure_station2_fields]]
 description = "Update Station ID in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].station_id"
-mock_set_value = 3
+mock_set_value = 2
 
 # Navigate to Register Type
 [[workflow.configure_station2_fields]]
@@ -667,9 +707,9 @@ description = "Delete cleared content"
 key = "Backspace"
 
 [[workflow.configure_station2_fields]]
-description = "Type register count 8"
+description = "Type register count 10"
 input = "decimal"
-value = 8
+value = 10
 
 [[workflow.configure_station2_fields]]
 description = "Confirm Register Count"
@@ -678,12 +718,12 @@ key = "Enter"
 [[workflow.configure_station2_fields]]
 description = "Update Register Count in mock state"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].register_count"
-mock_set_value = 8
+mock_set_value = 10
 
 [[workflow.configure_station2_fields]]
 description = "Ensure registers array matches length"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers"
-mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0]
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 # Step 9: Edit Station 2 Registers - Round 1
 [[workflow.edit_station2_round1]]
@@ -756,6 +796,23 @@ key = "Right"
 
 [[workflow.edit_station2_round1]]
 description = "Register 7 - Skip (already OFF=0)"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 8 - Set ON (value=1)"
+key = "Enter"
+
+[[workflow.edit_station2_round1]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[8]"
+mock_set_value = 1
+
+[[workflow.edit_station2_round1]]
+description = "Move to register 9"
+key = "Right"
+
+[[workflow.edit_station2_round1]]
+description = "Register 9 - Skip (already OFF=0)"
 key = "Right"
 
 [[workflow.edit_station2_round1]]
@@ -976,6 +1033,44 @@ mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
 mock_set_value = 0x021C
 
 [[workflow.edit_station1_round2]]
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 8 - Enter and type 0x0220"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+input = "hex"
+value = 0x0220
+
+[[workflow.edit_station1_round2]]
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value = 0x0220
+
+[[workflow.edit_station1_round2]]
+key = "Right"
+
+[[workflow.edit_station1_round2]]
+description = "Register 9 - Enter and type 0x0224"
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+input = "hex"
+value = 0x0224
+
+[[workflow.edit_station1_round2]]
+key = "Enter"
+
+[[workflow.edit_station1_round2]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value = 0x0224
+
+[[workflow.edit_station1_round2]]
 description = "Return to top"
 key = "Ctrl+PageUp"
 
@@ -1071,6 +1166,17 @@ key = "Enter"
 description = "Update mock state register 7"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[7]"
 mock_set_value = 1
+
+[[workflow.edit_station2_round2]]
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 8 - Skip (already OFF=0, needs OFF)"
+key = "Right"
+
+[[workflow.edit_station2_round2]]
+description = "Register 9 - Skip (already OFF=0, needs OFF)"
+key = "Right"
 
 [[workflow.edit_station2_round2]]
 description = "Return to top"
@@ -1260,6 +1366,44 @@ mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
 mock_set_value = 0x8080
 
 [[workflow.edit_station1_round3]]
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 8 - Enter and type 0x9090"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+input = "hex"
+value = 0x9090
+
+[[workflow.edit_station1_round3]]
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
+mock_set_value = 0x9090
+
+[[workflow.edit_station1_round3]]
+key = "Right"
+
+[[workflow.edit_station1_round3]]
+description = "Register 9 - Enter and type 0xA0A0"
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+input = "hex"
+value = 0xA0A0
+
+[[workflow.edit_station1_round3]]
+key = "Enter"
+
+[[workflow.edit_station1_round3]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
+mock_set_value = 0xA0A0
+
+[[workflow.edit_station1_round3]]
 description = "Return to top"
 key = "Ctrl+PageUp"
 
@@ -1355,6 +1499,30 @@ key = "Enter"
 description = "Update mock state register 7"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[7]"
 mock_set_value = 0
+
+[[workflow.edit_station2_round3]]
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 8 - Set ON (was OFF)"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Update mock state register 8"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[8]"
+mock_set_value = 1
+
+[[workflow.edit_station2_round3]]
+key = "Right"
+
+[[workflow.edit_station2_round3]]
+description = "Register 9 - Skip (already OFF=0, but needs ON)"
+key = "Enter"
+
+[[workflow.edit_station2_round3]]
+description = "Update mock state register 9"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[1].registers[9]"
+mock_set_value = 1
 
 [[workflow.edit_station2_round3]]
 description = "Return to top"

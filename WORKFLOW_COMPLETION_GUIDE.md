@@ -3,7 +3,9 @@
 ## Status: 1 of 6 Complete ✅
 
 ### Completed
-- ✅ master/mixed_types.toml (1362 lines) - **Both drill-down and rendering modes passing**
+- ✅ master/mixed_types.toml (~1550 lines) - **Both drill-down and rendering modes passing**
+  - Updated to 10 registers per station
+  - Station IDs: 1 and 2 (standardized)
 
 ### Remaining (5 files)
 - [ ] master/mixed_ids.toml
@@ -12,9 +14,16 @@
 - [ ] slave/mixed_ids.toml
 - [ ] slave/spaced_addresses.toml
 
+## **IMPORTANT: Standardized Specifications**
+
+All multi-station tests now follow these standards:
+1. **Register count**: ALL stations have **10 registers** (not 8)
+2. **Mixed ID tests**: Use station IDs **1 and 2** (not 2 and 6, not 1 and 3)
+3. **Mixed address tests**: Use addresses **0x0000 and 0x0100** (decimal 256, not 0x00A0)
+
 ## Template File
 **File:** `examples/tui_e2e/workflow/multi_station/master/mixed_types.toml`  
-**Size:** 1362 lines  
+**Size:** ~1550 lines (updated from 1362)  
 **Status:** Complete and tested ✅
 
 ## Completion Approach
@@ -22,17 +31,17 @@
 ### Option 1: Manual Editing (2-3 hours per file)
 Copy mixed_types.toml and modify specific sections:
 
-1. **Header (lines 1-13)**: Update test ID, station configs, data values
-2. **Manifest (lines 15-23)**: Update id, description, station configs
+1. **Header (lines 1-13)**: Update test ID, station configs, data values (10 registers each)
+2. **Manifest (lines 15-23)**: Update id, description, station configs (register_count = 10)
 3. **init_order (lines 25-36)**: Add "switch_to_slave_mode" for slave workflows
-4. **Station 1 config (~lines 169-320)**: Update ID, type, address values
-5. **Station 1 round 1 (~lines 322-463)**: Update register values
-6. **Station 2 config (~lines 465-616)**: Update ID, type, address values  
-7. **Station 2 round 1 (~lines 618-724)**: Update register values (note: Coils use Enter toggle, Holding uses hex entry)
-8. **Station 1 round 2 (~lines 781-924)**: Update register values
-9. **Station 2 round 2 (~lines 926-1033)**: Update register values
-10. **Station 1 round 3 (~lines 1040-1183)**: Update register values
-11. **Station 2 round 3 (~lines 1185-1292)**: Update register values
+4. **Station 1 config**: Update ID, type, address values, register_count = 10
+5. **Station 1 round 1**: Update 10 register values
+6. **Station 2 config**: Update ID, type, address values, register_count = 10
+7. **Station 2 round 1**: Update 10 register values (note: Coils use Enter toggle, Holding uses hex entry)
+8. **Station 1 round 2**: Update 10 register values
+9. **Station 2 round 2**: Update 10 register values
+10. **Station 1 round 3**: Update 10 register values
+11. **Station 2 round 3**: Update 10 register values
 
 ### Option 2: Automated Script (30 min setup + 5 min per file)
 Create Python script to:
@@ -44,81 +53,91 @@ Create Python script to:
 ## Workflow Specifications
 
 ### master/mixed_ids.toml
+**Purpose**: Test two stations with different IDs on identical address ranges  
 **Changes from mixed_types:**
-- Station A: ID 1→2, Type=Holding (same), Address=0x0000 (same)
-- Station B: ID 3→6, Type Coils→**Holding**, Address 0x0010→**0x0000**
+- Station A: ID=1 (same), Type=Holding (same), Address=0x0000 (same), **10 registers**
+- Station B: ID 2→**2** (same now), Type Coils→**Holding**, Address 0x0010→**0x0000**, **10 registers**
 - Register editing: Station B changes from coil toggles to hex value entry
+- Test data: 10 registers × 3 rounds per station (see file header)
 - Round 1 values: See file header comments
 - Round 2 values: See file header comments  
 - Round 3 values: See file header comments
 
 **Critical Changes:**
-1. All "Type station ID value 1" → "Type station ID value 2"
-2. All "Type station ID value 3" → "Type station ID value 6"
-3. Station 2 type selection: Remove `key = "Char(h)"`, `times = 2` (Coils→Holding uses default Enter)
-4. Station 2 address: "0x0010" → "0x0000", mock_set_value: 16 → 0
-5. Station 2 register editing: Replace all coil toggles with hex value entry pattern (Enter, input hex, Enter, Right)
+1. Station 2 ID: Already 2 (no change needed)
+2. Station 2 type selection: Remove `key = "Char(h)"`, `times = 2` (Coils→Holding uses default Enter)
+3. Station 2 address: "0x0010" → "0x0000", mock_set_value: 16 → 0
+4. Station 2 register editing: Replace all coil toggles with hex value entry pattern (Enter, input hex, Enter, Right)
+5. Update all register arrays from 8 to 10 elements
+6. Add register 8 and 9 editing for all rounds
 
 ### master/spaced_addresses.toml
+**Purpose**: Test two stations with separated address ranges  
 **Changes from mixed_types:**
-- Station A: ID=1 (same), Type=Holding (same), Address=0x0000 (same)
-- Station B: ID=3 (same), Type Coils→**Holding**, Address 0x0010→**0x00A0**
+- Station A: ID=1 (same), Type=Holding (same), Address=0x0000 (same), **10 registers**
+- Station B: ID 2 (same), Type Coils→**Holding**, Address 0x0010→**0x0100** (decimal 256), **10 registers**
 - Register editing: Station B changes from coil toggles to hex value entry
-- Test data values: See file header
+- Test data: 10 registers × 3 rounds per station
 
 **Critical Changes:**
-1. Station 2 type: Coils→Holding (same as mixed_ids)
-2. Station 2 address: "0x0010" → "0x00A0", mock_set_value: 16 → 160
+1. Station 2 type: Coils→Holding
+2. Station 2 address: "0x0010" → "0x0100", mock_set_value: 16 → 256
 3. Station 2 register editing: Coil toggles → hex value entry
-4. All register values for both stations across 3 rounds
+4. Update all register arrays from 8 to 10 elements
+5. Add register 8 and 9 editing for all rounds
 
 ### slave/mixed_types.toml
+**Purpose**: Test slave mode with different register types  
 **Changes from mixed_types:**
 - Add "switch_to_slave_mode" step in init_order
-- Station A: ID=1 (same), Type Holding→**Coils**, Address=0x0000 (same)
-- Station B: ID 3→**2**, Type=Coils→**Holding**, Address=0x0010 (same)
+- Station A: ID=1 (same), Type Holding→**Coils**, Address=0x0000 (same), **10 registers**
+- Station B: ID 2 (same), Type Coils→**Holding**, Address=0x0010 (same), **10 registers**
 - Register editing: Station A changes to coil toggles, Station B to hex entry
-- Test data values: Different from master mode
+- Test data: 10 registers × 3 rounds per station
 
 **Critical Changes:**
 1. Add switch_to_slave_mode step
-2. Change mock_path to "modbus_slaves"
+2. Change mock_path from "modbus_masters" to "modbus_slaves"
 3. Station A: Type Holding→Coils (use `key = "Char(h)"` with `times = 2` for type selection)
 4. Station A register editing: Hex values → coil toggles
-5. Station B: ID 3→2, type Coils→Holding
+5. Station B: Type Coils→Holding
 6. Station B register editing: Coil toggles → hex values
-7. All test data values updated
+7. Update all register arrays from 8 to 10 elements
+8. Add register 8 and 9 editing for all rounds
 
 ### slave/mixed_ids.toml
+**Purpose**: Test slave mode with different IDs on identical addresses  
 **Changes from mixed_types:**
 - Add "switch_to_slave_mode" step
-- Station A: ID 1→**2**, Type=Holding (same), Address=0x0000 (same)
-- Station B: ID 3→**6**, Type Coils→**Holding**, Address 0x0010→**0x0000**
+- Station A: ID=1 (same), Type=Holding (same), Address=0x0000 (same), **10 registers**
+- Station B: ID=2 (same), Type Coils→**Holding**, Address 0x0010→**0x0000**, **10 registers**
 - Both stations use hex value entry
-- Test data values: Different
+- Test data: 10 registers × 3 rounds per station
 
 **Critical Changes:**
 1. Add switch_to_slave_mode step
-2. Change mock_path to "modbus_slaves"
-3. Station IDs: 1→2, 3→6
-4. Station B: Type Coils→Holding, Address 0x0010→0x0000
-5. Station B: Coil toggles → hex value entry
-6. All test data values
+2. Change mock_path from "modbus_masters" to "modbus_slaves"
+3. Station B: Type Coils→Holding, Address 0x0010→0x0000
+4. Station B register editing: Coil toggles → hex value entry
+5. Update all register arrays from 8 to 10 elements
+6. Add register 8 and 9 editing for all rounds
 
 ### slave/spaced_addresses.toml
+**Purpose**: Test slave mode with separated address ranges  
 **Changes from mixed_types:**
 - Add "switch_to_slave_mode" step  
-- Station A: ID=1 (same), Type=Holding (same), Address=0x0000 (same)
-- Station B: ID 3→**2**, Type Coils→**Holding**, Address 0x0010→**0x0100**
+- Station A: ID=1 (same), Type=Holding (same), Address=0x0000 (same), **10 registers**
+- Station B: ID=2 (same), Type Coils→**Holding**, Address 0x0010→**0x0100** (decimal 256), **10 registers**
 - Both stations use hex value entry
-- Test data values: Different
+- Test data: 10 registers × 3 rounds per station
 
 **Critical Changes:**
 1. Add switch_to_slave_mode step
-2. Change mock_path to "modbus_slaves"
-3. Station B: ID 3→2, Type Coils→Holding, Address 0x0010→0x0100 (256)
-4. Station B: Coil toggles → hex value entry
-5. All test data values
+2. Change mock_path from "modbus_masters" to "modbus_slaves"
+3. Station B: Type Coils→Holding, Address 0x0010→0x0100 (256)
+4. Station B register editing: Coil toggles → hex value entry
+5. Update all register arrays from 8 to 10 elements
+6. Add register 8 and 9 editing for all rounds
 
 ## Register Editing Patterns
 
