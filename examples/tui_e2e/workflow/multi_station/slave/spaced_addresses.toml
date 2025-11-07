@@ -15,7 +15,7 @@
 [manifest]
 id = "multi_station_slave_spaced_addresses"
 description = "Two slave stations with separated address ranges"
-is_master = false
+mode = "slave"
 stations = [
   { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 10 },
   { station_id = 2, register_type = "Holding", start_address = 0x0100, register_count = 10 },

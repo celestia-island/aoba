@@ -193,16 +193,17 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
 /// For master mode tests, CLI acts as slave.
 /// For slave mode tests, CLI acts as master.
 async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
+    use aoba_protocol::status::types::modbus::StationMode;
     use serde_json::json;
     
-    // Determine if TUI is master or slave
-    let tui_is_master = workflow.manifest.is_master.unwrap_or(true);
+    // Determine TUI mode (default to Master if not specified)
+    let tui_mode = workflow.manifest.mode.unwrap_or(StationMode::Master);
     
     // CLI acts as opposite mode: if TUI is master, CLI is slave (and vice versa)
-    let cli_mode = if tui_is_master { "slave" } else { "master" };
+    let cli_mode = if tui_mode.is_master() { "slave" } else { "master" };
     
     log::info!("📡 Preparing CLI emulator (TUI is {}, CLI is {})", 
-               if tui_is_master { "master" } else { "slave" },
+               tui_mode,
                cli_mode);
     
     // Build station configurations

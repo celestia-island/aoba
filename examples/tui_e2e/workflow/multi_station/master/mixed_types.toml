@@ -15,7 +15,7 @@
 [manifest]
 id = "multi_station_master_mixed_types"
 description = "Two master stations with different register types"
-is_master = true
+mode = "master"
 stations = [
   { station_id = 1, register_type = "Holding", start_address = 0x0000, register_count = 10 },
   { station_id = 1, register_type = "Coils", start_address = 0x0000, register_count = 10 },
