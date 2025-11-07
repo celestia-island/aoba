@@ -41,7 +41,17 @@ pub enum TuiToE2EMessage {
 pub struct IpcChannelId(pub String);
 
 impl IpcChannelId {
-    /// Create IPC channel paths for the given ID
+    /// Create IPC socket names for the given ID
+    /// Uses platform-appropriate naming (paths on Unix, namespaced on Linux with abstract sockets)
+    pub fn socket_names(&self) -> (String, String) {
+        let to_tui = format!("aoba_e2e_to_tui_{}", self.0);
+        let from_tui = format!("aoba_tui_to_e2e_{}", self.0);
+        (to_tui, from_tui)
+    }
+
+    /// Legacy method for compatibility - returns paths
+    /// Note: The actual socket implementation will use platform-appropriate naming
+    #[deprecated(note = "Use socket_names() instead")]
     pub fn paths(&self) -> (PathBuf, PathBuf) {
         let base = std::env::temp_dir();
         let to_tui = base.join(format!("aoba_e2e_to_tui_{}.sock", self.0));

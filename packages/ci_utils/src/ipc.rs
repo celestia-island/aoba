@@ -1,89 +1,188 @@
 //! IPC communication utilities for TUI E2E testing
 //!
-//! This module provides Unix socket-based IPC for communication between
-//! TUI E2E tests and the TUI process.
+//! This module provides cross-platform IPC for communication between
+//! TUI E2E tests and the TUI process using the `interprocess` library.
 
-use anyhow::{anyhow, bail, Context, Result};
-use std::{fs, path::Path, time::Instant};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::unix::{OwnedReadHalf, OwnedWriteHalf},
-    net::{UnixListener, UnixStream},
-    time::{sleep, timeout},
-};
+use std::io::ErrorKind;
+use std::time::Instant;
+
+use anyhow::{anyhow, bail, Result};
+use interprocess::local_socket::prelude::*;
+use interprocess::local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions};
+use serde::{Deserialize, Serialize};
+use tokio::time::sleep;
 
 use super::{
     E2EToTuiMessage, IpcChannelId, TuiToE2EMessage, CONNECT_RETRY_INTERVAL, CONNECT_TIMEOUT,
     IO_TIMEOUT,
 };
 
-/// IPC sender (E2E test side - now the SERVER)
+/// Helper struct for bidirectional IPC pipe communication
+struct Pipe {
+    conn: LocalSocketStream,
+    buffer: Vec<u8>,
+}
+
+impl Pipe {
+    /// Create new pipe from stream
+    fn new(conn: LocalSocketStream) -> Self {
+        let buffer = Vec::with_capacity(1024);
+        Pipe { conn, buffer }
+    }
+
+    /// Write serialized data using postcard encoding with chunked transfer
+    fn do_write<T: Serialize>(&mut self, data: &T) -> Result<()> {
+        use std::io::Write;
+
+        let data = postcard::to_allocvec(data)?;
+
+        let len = data.len();
+        let chunks_len = len / 1024 + if len % 1024 == 0 { 0 } else { 1 };
+
+        // Send length metadata
+        let metadata = postcard::to_allocvec(&(len, chunks_len))?;
+        self.conn.write_all(&metadata)?;
+        self.conn.flush()?;
+
+        // Send data in chunks
+        for chunk in data.chunks(1024) {
+            self.conn.write_all(chunk)?;
+            self.conn.flush()?;
+        }
+
+        // Send ACK
+        self.conn.write_all(b"ACK")?;
+        self.conn.flush()?;
+
+        Ok(())
+    }
+
+    /// Read serialized data using postcard encoding with chunked transfer
+    fn do_read<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T> {
+        use std::io::Read;
+
+        // Read length metadata
+        self.buffer.resize(1024, 0);
+        self.conn.read_exact(&mut self.buffer[..1024])?;
+        let (len, chunks_len): (usize, usize) = postcard::from_bytes(&self.buffer)?;
+        self.buffer.clear();
+
+        // Read data chunks
+        let mut data = Vec::with_capacity(len);
+        for _ in 0..chunks_len {
+            let mut chunk = vec![0u8; 1024];
+            self.conn.read_exact(&mut chunk)?;
+            data.extend_from_slice(&chunk);
+        }
+
+        // Read ACK
+        let mut ack = [0u8; 3];
+        self.conn.read_exact(&mut ack)?;
+        if &ack != b"ACK" {
+            return Err(anyhow!("No ACK received"));
+        }
+
+        // Deserialize
+        Ok(postcard::from_bytes(&data[0..len])?)
+    }
+
+    /// Write with error logging
+    fn write<T: Serialize>(&mut self, data: &T) -> Result<()> {
+        self.do_write(data).map_err(|err| {
+            log::error!("Pipe failed to write: {:?}", err);
+            err
+        })
+    }
+
+    /// Read with error logging
+    fn read<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T> {
+        self.do_read().map_err(|err| {
+            log::error!("Pipe failed to read: {:?}", err);
+            err
+        })
+    }
+}
+
+/// IPC sender (E2E test side - SERVER)
 pub struct IpcSender {
     channel_id: IpcChannelId,
-    to_tui_writer: OwnedWriteHalf,
-    from_tui_reader: BufReader<OwnedReadHalf>,
+    to_tui_pipe: Option<Pipe>,
+    from_tui_pipe: Option<Pipe>,
 }
 
 impl IpcSender {
     /// Create a new IPC sender (as server - binds sockets and waits for TUI to connect)
     pub async fn new(channel_id: IpcChannelId) -> Result<Self> {
-        let (to_tui_path, from_tui_path) = channel_id.paths();
+        let (to_tui_name, from_tui_name) = channel_id.socket_names();
 
-        // Clean up any existing sockets
-        cleanup_socket(&to_tui_path);
-        cleanup_socket(&from_tui_path);
+        log::info!(
+            "IPC [{}] Creating server sockets: {} and {}",
+            channel_id.0,
+            to_tui_name,
+            from_tui_name
+        );
 
-        // Bind server sockets
-        let to_tui_listener = UnixListener::bind(&to_tui_path)
-            .with_context(|| format!("Failed to bind IPC socket: {}", to_tui_path.display()))?;
-        let from_tui_listener = UnixListener::bind(&from_tui_path)
-            .with_context(|| format!("Failed to bind IPC socket: {}", from_tui_path.display()))?;
+        // Create listeners
+        let to_tui_listener = create_listener(&to_tui_name)?;
+        let from_tui_listener = create_listener(&from_tui_name)?;
 
         log::info!(
             "IPC [{}] Server sockets created, waiting for TUI to connect...",
             channel_id.0
         );
 
-        // Accept connections from TUI
-        let (to_tui_stream, _) = to_tui_listener.accept().await.with_context(|| {
-            format!(
-                "Failed to accept IPC connection on {}",
-                to_tui_path.display()
-            )
-        })?;
-        let (from_tui_stream, _) = from_tui_listener.accept().await.with_context(|| {
-            format!(
-                "Failed to accept IPC connection on {}",
-                from_tui_path.display()
-            )
-        })?;
+        // Accept connections from TUI in a blocking task
+        let to_tui_stream = tokio::task::spawn_blocking(move || {
+            to_tui_listener
+                .accept()
+                .map_err(|e| anyhow!("Failed to accept connection: {}", e))
+        })
+        .await??;
+
+        let from_tui_stream = tokio::task::spawn_blocking(move || {
+            from_tui_listener
+                .accept()
+                .map_err(|e| anyhow!("Failed to accept connection: {}", e))
+        })
+        .await??;
 
         log::info!("IPC [{}] TUI connected successfully", channel_id.0);
 
-        let (_, to_tui_writer) = to_tui_stream.into_split();
-        let (from_tui_reader, _) = from_tui_stream.into_split();
-
         Ok(Self {
             channel_id,
-            to_tui_writer,
-            from_tui_reader: BufReader::new(from_tui_reader),
+            to_tui_pipe: Some(Pipe::new(to_tui_stream)),
+            from_tui_pipe: Some(Pipe::new(from_tui_stream)),
         })
     }
 
     /// Send a message to TUI
     pub async fn send(&mut self, message: E2EToTuiMessage) -> Result<()> {
         log::debug!("IPC [{}] Send: {:?}", self.channel_id.0, message);
-        let payload = serde_json::to_vec(&message)?;
 
-        timeout(IO_TIMEOUT, async {
-            self.to_tui_writer.write_all(&payload).await?;
-            self.to_tui_writer.write_all(b"\n").await?;
-            self.to_tui_writer.flush().await
+        let mut pipe = self
+            .to_tui_pipe
+            .take()
+            .ok_or_else(|| anyhow!("Pipe already taken"))?;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let start = Instant::now();
+            let result = pipe.write(&message);
+
+            if start.elapsed() > IO_TIMEOUT {
+                return Err(anyhow!("Operation timed out"));
+            }
+
+            result.map(|_| pipe)
         })
-        .await
-        .map_err(|_| anyhow!("Timed out sending IPC message"))??;
+        .await?;
 
-        Ok(())
+        match result {
+            Ok(p) => {
+                self.to_tui_pipe = Some(p);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Receive a message from TUI
@@ -93,18 +192,30 @@ impl IpcSender {
             self.channel_id.0
         );
 
-        let mut line = String::new();
-        let bytes_read = timeout(IO_TIMEOUT, self.from_tui_reader.read_line(&mut line))
-            .await
-            .map_err(|_| anyhow!("Timed out waiting for IPC message"))??;
+        let mut pipe = self
+            .from_tui_pipe
+            .take()
+            .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        if bytes_read == 0 {
-            bail!("IPC connection closed by TUI");
+        let result = tokio::task::spawn_blocking(move || {
+            let start = Instant::now();
+            let result = pipe.read();
+
+            if start.elapsed() > IO_TIMEOUT {
+                return Err(anyhow!("Operation timed out"));
+            }
+
+            result.map(|msg| (msg, pipe))
+        })
+        .await?;
+
+        match result {
+            Ok((msg, p)) => {
+                self.from_tui_pipe = Some(p);
+                Ok(msg)
+            }
+            Err(e) => Err(e),
         }
-
-        let trimmed = line.trim_end();
-        serde_json::from_str(trimmed)
-            .with_context(|| format!("Failed to deserialize IPC message from TUI: {}", trimmed))
     }
 
     /// Send key press and wait for screen update
@@ -119,33 +230,35 @@ impl IpcSender {
     }
 }
 
-/// IPC receiver (TUI side - now the CLIENT)
+/// IPC receiver (TUI side - CLIENT)
 pub struct IpcReceiver {
     channel_id: IpcChannelId,
-    to_tui_reader: BufReader<OwnedReadHalf>,
-    from_tui_writer: OwnedWriteHalf,
+    to_tui_pipe: Option<Pipe>,
+    from_tui_pipe: Option<Pipe>,
 }
 
 impl IpcReceiver {
     /// Create a new IPC receiver (as client - connects to existing server sockets)
     pub async fn new(channel_id: IpcChannelId) -> Result<Self> {
-        let (to_tui_path, from_tui_path) = channel_id.paths();
+        let (to_tui_name, from_tui_name) = channel_id.socket_names();
 
-        log::info!("IPC [{}] Connecting to E2E test server...", channel_id.0);
+        log::info!(
+            "IPC [{}] Connecting to E2E test server: {} and {}",
+            channel_id.0,
+            to_tui_name,
+            from_tui_name
+        );
 
-        // Connect to E2E test's server sockets
-        let to_tui_stream = connect_with_retry(&to_tui_path).await?;
-        let from_tui_stream = connect_with_retry(&from_tui_path).await?;
+        // Connect to E2E test's server sockets with retry
+        let to_tui_stream = connect_with_retry(&to_tui_name).await?;
+        let from_tui_stream = connect_with_retry(&from_tui_name).await?;
 
         log::info!("IPC [{}] Connected to E2E test successfully", channel_id.0);
 
-        let (to_tui_reader, _) = to_tui_stream.into_split();
-        let (_, from_tui_writer) = from_tui_stream.into_split();
-
         Ok(Self {
             channel_id,
-            to_tui_reader: BufReader::new(to_tui_reader),
-            from_tui_writer,
+            to_tui_pipe: Some(Pipe::new(to_tui_stream)),
+            from_tui_pipe: Some(Pipe::new(from_tui_stream)),
         })
     }
 
@@ -156,59 +269,131 @@ impl IpcReceiver {
             self.channel_id.0
         );
 
-        let mut line = String::new();
-        let bytes_read = timeout(IO_TIMEOUT, self.to_tui_reader.read_line(&mut line))
-            .await
-            .map_err(|_| anyhow!("Timed out waiting for IPC message"))??;
+        let mut pipe = self
+            .to_tui_pipe
+            .take()
+            .ok_or_else(|| anyhow!("Pipe already taken"))?;
 
-        if bytes_read == 0 {
-            bail!("IPC connection closed by E2E test");
-        }
+        let result = tokio::task::spawn_blocking(move || {
+            let start = Instant::now();
+            let result = pipe.read();
 
-        let trimmed = line.trim_end();
-        serde_json::from_str(trimmed).with_context(|| {
-            format!(
-                "Failed to deserialize IPC message from E2E test: {}",
-                trimmed
-            )
+            if start.elapsed() > IO_TIMEOUT {
+                return Err(anyhow!("Operation timed out"));
+            }
+
+            result.map(|msg| (msg, pipe))
         })
+        .await?;
+
+        match result {
+            Ok((msg, p)) => {
+                self.to_tui_pipe = Some(p);
+                Ok(msg)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Send a message to E2E test
     pub async fn send(&mut self, message: TuiToE2EMessage) -> Result<()> {
         log::debug!("IPC [{}] Send: {:?}", self.channel_id.0, message);
-        let payload = serde_json::to_vec(&message)?;
 
-        timeout(IO_TIMEOUT, async {
-            self.from_tui_writer.write_all(&payload).await?;
-            self.from_tui_writer.write_all(b"\n").await?;
-            self.from_tui_writer.flush().await
+        let mut pipe = self
+            .from_tui_pipe
+            .take()
+            .ok_or_else(|| anyhow!("Pipe already taken"))?;
+
+        let result = tokio::task::spawn_blocking(move || {
+            let start = Instant::now();
+            let result = pipe.write(&message);
+
+            if start.elapsed() > IO_TIMEOUT {
+                return Err(anyhow!("Operation timed out"));
+            }
+
+            result.map(|_| pipe)
         })
-        .await
-        .map_err(|_| anyhow!("Timed out sending IPC message"))??;
+        .await?;
 
-        Ok(())
+        match result {
+            Ok(p) => {
+                self.from_tui_pipe = Some(p);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
-impl Drop for IpcSender {
-    fn drop(&mut self) {
-        let (to_tui_path, from_tui_path) = self.channel_id.paths();
-        cleanup_socket(&to_tui_path);
-        cleanup_socket(&from_tui_path);
-    }
+/// Create a local socket listener with proper platform detection
+fn create_listener(name: &str) -> Result<LocalSocketListener> {
+    // Use the simpler API - GenericNamespaced supports both namespaced and path-based sockets
+    let socket_name = {
+        if cfg!(unix) {
+            // On Unix, try abstract namespace first, fall back to file path
+            match name.to_ns_name::<GenericNamespaced>() {
+                Ok(ns) => ListenerOptions::new().name(ns).create_sync(),
+                Err(_) => {
+                    let path = name.to_fs_name::<GenericFilePath>()?;
+                    ListenerOptions::new().name(path).create_sync()
+                }
+            }
+        } else {
+            // On Windows, use named pipes
+            let pipe_name = name.to_ns_name::<GenericNamespaced>()?;
+            ListenerOptions::new().name(pipe_name).create_sync()
+        }
+    };
+
+    socket_name.map_err(|e| {
+        if e.kind() == ErrorKind::AddrInUse {
+            anyhow!(
+                "Socket address already in use: {}. Please ensure no other instance is running.",
+                name
+            )
+        } else {
+            anyhow!("Failed to create listener for {}: {}", name, e)
+        }
+    })
 }
 
-async fn connect_with_retry(path: &Path) -> Result<UnixStream> {
+/// Connect to local socket with retry logic
+async fn connect_with_retry(name: &str) -> Result<LocalSocketStream> {
     let start = Instant::now();
+    let name = name.to_string();
+
     loop {
-        match UnixStream::connect(path).await {
-            Ok(stream) => return Ok(stream),
+        let name_clone = name.clone();
+        let connect_result = tokio::task::spawn_blocking(move || {
+            if cfg!(unix) {
+                // On Unix, try abstract namespace first, fall back to file path
+                let name_ref = name_clone.as_str();
+                match name_ref.to_ns_name::<GenericNamespaced>() {
+                    Ok(ns) => LocalSocketStream::connect(ns),
+                    Err(_) => {
+                        let path = name_ref.to_fs_name::<GenericFilePath>()?;
+                        LocalSocketStream::connect(path)
+                    }
+                }
+            } else {
+                // On Windows, use named pipes
+                let pipe_name = name_clone.to_ns_name::<GenericNamespaced>()?;
+                LocalSocketStream::connect(pipe_name)
+            }
+        })
+        .await?;
+
+        match connect_result {
+            Ok(stream) => {
+                log::info!("Connected to {}", name);
+                return Ok(stream);
+            }
             Err(err) => {
                 if start.elapsed() >= CONNECT_TIMEOUT {
                     return Err(anyhow!(
                         "Failed to connect to {} within {:?}: {}",
-                        path.display(),
+                        name,
                         CONNECT_TIMEOUT,
                         err
                     ));
@@ -216,14 +401,6 @@ async fn connect_with_retry(path: &Path) -> Result<UnixStream> {
 
                 sleep(CONNECT_RETRY_INTERVAL).await;
             }
-        }
-    }
-}
-
-fn cleanup_socket(path: &Path) {
-    if let Err(err) = fs::remove_file(path) {
-        if err.kind() != std::io::ErrorKind::NotFound {
-            log::warn!("Failed to remove IPC socket {}: {}", path.display(), err);
         }
     }
 }
