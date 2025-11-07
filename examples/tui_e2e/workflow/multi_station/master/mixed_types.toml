@@ -1076,9 +1076,8 @@ mock_set_value = 1
 description = "Return to top"
 key = "Ctrl+PageUp"
 
-# Skipped register editing for simplified test
 [[workflow.verify_mock_data]]
-description = "Verify mock state (simplified for drilldown mode)"
+description = "Verify mock state"
 mock_verify_path = "$.page"
 mock_verify_value = { type = "modbus_dashboard" }
 

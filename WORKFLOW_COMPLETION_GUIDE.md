@@ -81,9 +81,9 @@ Create Python script to:
 - Test data values: Different from master mode
 
 **Critical Changes:**
-1. Insert switch_to_slave_mode workflow section after enter_modbus_panel
-2. Change mock_path from "modbus_masters" to "modbus_slaves" throughout
-3. Station A: Type Holding→Coils (add char(h) x2 for type selection)
+1. Add switch_to_slave_mode step
+2. Change mock_path to "modbus_slaves"
+3. Station A: Type Holding→Coils (use `key = "Char(h)"` with `times = 2` for type selection)
 4. Station A register editing: Hex values → coil toggles
 5. Station B: ID 3→2, type Coils→Holding
 6. Station B register editing: Coil toggles → hex values
