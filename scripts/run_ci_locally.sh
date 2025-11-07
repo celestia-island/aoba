@@ -232,11 +232,14 @@ run_workflow_tests() {
     echo -e "${YELLOW}Running locally. Will run socat_init.sh before each module.${NC}"
 
     # Build packages once per workflow
-        case "$workflow_type" in
+                case "$workflow_type" in
             tui-rendering|tui-drilldown)
                 echo "=== Building (local) packages: aoba, tui_e2e ==="
-                run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package tui_e2e"
-                local build_exit=$?
+                if ! run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package tui_e2e"; then
+                    local build_exit=$?
+                else
+                    local build_exit=0
+                fi
                 if [[ $build_exit -ne 0 ]]; then
                     echo -e "${RED}Build failed for workflow ${workflow_type} (exit ${build_exit}). See $OUTPUT_DIR/${workflow_type}_build.log${NC}"
                     return $build_exit
@@ -245,8 +248,11 @@ run_workflow_tests() {
                 ;;
             cli)
                 echo "=== Building (local) packages: aoba, aoba_cli, cli_e2e ==="
-                run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package aoba_cli --package cli_e2e"
-                local build_exit=$?
+                if ! run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package aoba_cli --package cli_e2e"; then
+                    local build_exit=$?
+                else
+                    local build_exit=0
+                fi
                 if [[ $build_exit -ne 0 ]]; then
                     echo -e "${RED}Build failed for workflow ${workflow_type} (exit ${build_exit}). See $OUTPUT_DIR/${workflow_type}_build.log${NC}"
                     return $build_exit
@@ -274,7 +280,7 @@ run_workflow_tests() {
             echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
             # Ensure socat reset script runs before every module
-            if [[ -x "${REPO_ROOT}/scripts/socat_init.sh" ]]; then
+                if [[ -x "${REPO_ROOT}/scripts/socat_init.sh" ]]; then
                 echo "=== Resetting virtual serial ports before module: ${module} ===" | tee -a "$result_file"
                 run_and_log_cmd "$result_file" "socat_init" "cd \"${REPO_ROOT}\" && ./scripts/socat_init.sh" || true
             else
@@ -285,16 +291,25 @@ run_workflow_tests() {
             local exit_code=0
             case "$workflow_type" in
                 tui-rendering)
-                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only ${TUI_E2E_EXTRA_ARGS}"
-                    exit_code=$?
+                    if ! run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" --screen-capture-only ${TUI_E2E_EXTRA_ARGS}"; then
+                        exit_code=$?
+                    else
+                        exit_code=0
+                    fi
                     ;;
                 tui-drilldown)
-                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" ${TUI_E2E_EXTRA_ARGS}"
-                    exit_code=$?
+                    if ! run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/tui_e2e --module \"$module\" ${TUI_E2E_EXTRA_ARGS}"; then
+                        exit_code=$?
+                    else
+                        exit_code=0
+                    fi
                     ;;
                 cli)
-                    run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\""
-                    exit_code=$?
+                    if ! run_and_log_cmd "$result_file" "module:${workflow_type}/${module}" "cd \"${REPO_ROOT}\" && ${module_runner:+$module_runner }./target/debug/cli_e2e --module \"$module\""; then
+                        exit_code=$?
+                    else
+                        exit_code=0
+                    fi
                     ;;
                 *)
                     echo "Unknown workflow type: $workflow_type" | tee -a "$result_file"
