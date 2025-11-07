@@ -2,6 +2,7 @@
 //!
 //! Defines the structure of TOML workflow files.
 
+use aoba_protocol::status::types::modbus::StationMode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -31,8 +32,9 @@ pub struct Manifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub register_count: Option<u16>,
 
+    /// Station mode (Master or Slave) - replaces is_master
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_master: Option<bool>,
+    pub mode: Option<StationMode>,
 
     /// For multi-station tests
     #[serde(skip_serializing_if = "Option::is_none")]

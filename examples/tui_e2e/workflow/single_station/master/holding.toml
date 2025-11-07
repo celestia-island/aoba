@@ -14,7 +14,7 @@ station_id = 1
 register_type = "Holding"
 start_address = 0x0000
 register_count = 10
-is_master = true
+mode = "master"
 
 init_order = [
   "navigate_to_entry",
