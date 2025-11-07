@@ -51,7 +51,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
             // DrillDown mode: spawn TUI process with IPC
             log::info!("🚀 Starting TUI process with IPC communication");
             spawn_tui_with_ipc(ctx, &workflow.manifest.id).await?;
-            
+
             // Generate and spawn CLI emulator for this test
             // This is needed for ALL tests (single and multi-station) to provide
             // a Modbus counterpart for the TUI to communicate with
@@ -195,22 +195,28 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
 async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
     use aoba_protocol::status::types::modbus::StationMode;
     use serde_json::json;
-    
+
     // Determine TUI mode (default to Master if not specified)
     let tui_mode = workflow.manifest.mode.unwrap_or(StationMode::Master);
-    
+
     // CLI acts as opposite mode: if TUI is master, CLI is slave (and vice versa)
-    let cli_mode = if tui_mode.is_master() { "slave" } else { "master" };
-    
-    log::info!("📡 Preparing CLI emulator (TUI is {}, CLI is {})", 
-               tui_mode,
-               cli_mode);
-    
+    let cli_mode = if tui_mode.is_master() {
+        "slave"
+    } else {
+        "master"
+    };
+
+    log::info!(
+        "📡 Preparing CLI emulator (TUI is {}, CLI is {})",
+        tui_mode,
+        cli_mode
+    );
+
     // Build station configurations
     let stations = if let Some(ref multi_stations) = workflow.manifest.stations {
         // Multi-station test
         log::info!("   Multi-station config: {} stations", multi_stations.len());
-        
+
         let mut station_configs = Vec::new();
         for station in multi_stations {
             let register_field = match station.register_type.as_str() {
@@ -220,7 +226,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
                 "Input" | "input" => "input",
                 _ => bail!("Unknown register type: {}", station.register_type),
             };
-            
+
             let config = json!({
                 "id": station.station_id,
                 "mode": cli_mode,
@@ -232,23 +238,32 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
                     }]
                 }
             });
-            
+
             station_configs.push(config);
         }
         station_configs
     } else {
         // Single-station test
         log::info!("   Single-station config");
-        
-        let station_id = workflow.manifest.station_id
+
+        let station_id = workflow
+            .manifest
+            .station_id
             .ok_or_else(|| anyhow::anyhow!("Missing station_id in manifest"))?;
-        let register_type = workflow.manifest.register_type.as_ref()
+        let register_type = workflow
+            .manifest
+            .register_type
+            .as_ref()
             .ok_or_else(|| anyhow::anyhow!("Missing register_type in manifest"))?;
-        let start_address = workflow.manifest.start_address
+        let start_address = workflow
+            .manifest
+            .start_address
             .ok_or_else(|| anyhow::anyhow!("Missing start_address in manifest"))?;
-        let register_count = workflow.manifest.register_count
+        let register_count = workflow
+            .manifest
+            .register_count
             .ok_or_else(|| anyhow::anyhow!("Missing register_count in manifest"))?;
-        
+
         let register_field = match register_type.as_str() {
             "Holding" | "holding" => "holding",
             "Coils" | "coils" => "coils",
@@ -256,7 +271,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
             "Input" | "input" => "input",
             _ => bail!("Unknown register type: {}", register_type),
         };
-        
+
         vec![json!({
             "id": station_id,
             "mode": cli_mode,
@@ -269,7 +284,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
             }
         })]
     };
-    
+
     // Build complete CLI config
     let config = json!({
         "port_name": ctx.port2,  // CLI uses port2 to connect to TUI on port1
@@ -283,13 +298,13 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         },
         "stations": stations
     });
-    
+
     // Write config to fixed location
     let config_path = "/tmp/tui_e2e_emulator.json";
     std::fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
     log::info!("📝 Wrote CLI config to {}", config_path);
     log::debug!("Config: {}", serde_json::to_string_pretty(&config)?);
-    
+
     // Find CLI binary
     let cli_binary = if std::path::Path::new("target/debug/aoba").exists() {
         "target/debug/aoba"
@@ -298,10 +313,14 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
     } else {
         bail!("aoba binary not found in target/debug or target/release");
     };
-    
+
     // Spawn CLI emulator process
-    log::info!("🚀 Spawning CLI emulator: {} --config {}", cli_binary, config_path);
-    
+    log::info!(
+        "🚀 Spawning CLI emulator: {} --config {}",
+        cli_binary,
+        config_path
+    );
+
     let _child = tokio::process::Command::new(cli_binary)
         .args(["--config", config_path])
         .stdin(std::process::Stdio::null())
@@ -309,12 +328,12 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         .stderr(std::process::Stdio::piped())
         .spawn()
         .map_err(|e| anyhow::anyhow!("Failed to spawn CLI emulator: {}", e))?;
-    
+
     log::info!("✅ CLI emulator spawned successfully");
-    
+
     // Give CLI time to initialize
     tokio::time::sleep(Duration::from_millis(1000)).await;
-    
+
     Ok(())
 }
 
