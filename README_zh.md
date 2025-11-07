@@ -9,8 +9,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/celestia-island/aoba/actions">
-    <img src="https://img.shields.io/github/checks-status/celestia-island/aoba/master?label=ci&logo=github" alt="CI status" />
+  <a href="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml">
+    <img src="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml/badge.svg?branch=master" alt="Basic Checks status" />
+  </a>
+  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml">
+    <img src="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg?branch=master" alt="E2E TUI status" />
+  </a>
+  <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml">
+    <img src="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-cli.yml/badge.svg?branch=master" alt="E2E CLI status" />
   </a>
   <a href="https://github.com/celestia-island/aoba/blob/master/LICENSE">
     <img src="https://img.shields.io/github/license/celestia-island/aoba?color=blue" alt="License" />
