@@ -338,7 +338,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0100
+value = 0x1234
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -346,7 +346,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 0"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
-mock_set_value = 0x0100
+mock_set_value = 0x1234
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 1"
@@ -358,7 +358,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0102
+value = 0x5678
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -366,7 +366,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 1"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
-mock_set_value = 0x0102
+mock_set_value = 0x5678
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 2"
@@ -378,7 +378,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0104
+value = 0x9abc
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -386,7 +386,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 2"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
-mock_set_value = 0x0104
+mock_set_value = 0x9abc
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 3"
@@ -398,7 +398,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0106
+value = 0xdef0
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -406,7 +406,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 3"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
-mock_set_value = 0x0106
+mock_set_value = 0xdef0
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 4"
@@ -418,7 +418,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0108
+value = 0x1111
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -426,7 +426,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 4"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
-mock_set_value = 0x0108
+mock_set_value = 0x1111
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 5"
@@ -438,7 +438,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x010A
+value = 0x2222
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -446,7 +446,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 5"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
-mock_set_value = 0x010A
+mock_set_value = 0x2222
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 6"
@@ -458,7 +458,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x010C
+value = 0x3333
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -466,7 +466,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 6"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
-mock_set_value = 0x010C
+mock_set_value = 0x3333
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 7"
@@ -478,7 +478,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x010E
+value = 0x4444
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -486,7 +486,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 7"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
-mock_set_value = 0x010E
+mock_set_value = 0x4444
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 8"
@@ -498,7 +498,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0110
+value = 0x5555
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -506,7 +506,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 8"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
-mock_set_value = 0x0110
+mock_set_value = 0x5555
 
 [[workflow.edit_station1_round1]]
 description = "Move to register 9"
@@ -518,7 +518,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round1]]
 input = "hex"
-value = 0x0112
+value = 0x6666
 
 [[workflow.edit_station1_round1]]
 key = "Enter"
@@ -526,7 +526,7 @@ key = "Enter"
 [[workflow.edit_station1_round1]]
 description = "Update mock state register 9"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
-mock_set_value = 0x0112
+mock_set_value = 0x6666
 
 [[workflow.edit_station1_round1]]
 description = "Return to top"
@@ -889,7 +889,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0200
+value = 0x6666
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -897,7 +897,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 0"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
-mock_set_value = 0x0200
+mock_set_value = 0x5555
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -908,7 +908,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0204
+value = 0x5678
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -916,7 +916,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 1"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
-mock_set_value = 0x0204
+mock_set_value = 0x5678
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -927,7 +927,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0208
+value = 0x9abc
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -935,7 +935,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 2"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
-mock_set_value = 0x0208
+mock_set_value = 0x9abc
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -946,7 +946,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x020C
+value = 0xdef0
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -954,7 +954,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 3"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
-mock_set_value = 0x020C
+mock_set_value = 0xdef0
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -965,7 +965,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0210
+value = 0x1111
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -973,7 +973,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 4"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
-mock_set_value = 0x0210
+mock_set_value = 0x1111
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -984,7 +984,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0214
+value = 0x2222
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -992,7 +992,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 5"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
-mock_set_value = 0x0214
+mock_set_value = 0x2222
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -1003,7 +1003,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0218
+value = 0x3333
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -1011,7 +1011,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 6"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
-mock_set_value = 0x0218
+mock_set_value = 0x3333
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -1022,7 +1022,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x021C
+value = 0x4444
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -1030,7 +1030,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 7"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
-mock_set_value = 0x021C
+mock_set_value = 0x4444
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -1041,7 +1041,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0220
+value = 0x5555
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -1049,7 +1049,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 8"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
-mock_set_value = 0x0220
+mock_set_value = 0x5555
 
 [[workflow.edit_station1_round2]]
 key = "Right"
@@ -1060,7 +1060,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round2]]
 input = "hex"
-value = 0x0224
+value = 0x6666
 
 [[workflow.edit_station1_round2]]
 key = "Enter"
@@ -1068,7 +1068,7 @@ key = "Enter"
 [[workflow.edit_station1_round2]]
 description = "Update mock state register 9"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
-mock_set_value = 0x0224
+mock_set_value = 0x6666
 
 [[workflow.edit_station1_round2]]
 description = "Return to top"
@@ -1222,7 +1222,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x1010
+value = 0x6666
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1230,7 +1230,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 0"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
-mock_set_value = 0x1010
+mock_set_value = 0x4444
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1241,7 +1241,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x2020
+value = 0x5678
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1249,7 +1249,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 1"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
-mock_set_value = 0x2020
+mock_set_value = 0x5678
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1260,7 +1260,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x3030
+value = 0x9abc
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1268,7 +1268,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 2"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
-mock_set_value = 0x3030
+mock_set_value = 0x9abc
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1279,7 +1279,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x4040
+value = 0xdef0
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1287,7 +1287,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 3"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
-mock_set_value = 0x4040
+mock_set_value = 0xdef0
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1298,7 +1298,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x5050
+value = 0x1111
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1306,7 +1306,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 4"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
-mock_set_value = 0x5050
+mock_set_value = 0x1111
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1317,7 +1317,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x6060
+value = 0x2222
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1325,7 +1325,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 5"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
-mock_set_value = 0x6060
+mock_set_value = 0x2222
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1336,7 +1336,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x7070
+value = 0x3333
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1344,7 +1344,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 6"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
-mock_set_value = 0x7070
+mock_set_value = 0x3333
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1355,7 +1355,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x8080
+value = 0x4444
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1363,7 +1363,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 7"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
-mock_set_value = 0x8080
+mock_set_value = 0x4444
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1374,7 +1374,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0x9090
+value = 0x5555
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1382,7 +1382,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 8"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
-mock_set_value = 0x9090
+mock_set_value = 0x5555
 
 [[workflow.edit_station1_round3]]
 key = "Right"
@@ -1393,7 +1393,7 @@ key = "Enter"
 
 [[workflow.edit_station1_round3]]
 input = "hex"
-value = 0xA0A0
+value = 0x6666
 
 [[workflow.edit_station1_round3]]
 key = "Enter"
@@ -1401,7 +1401,7 @@ key = "Enter"
 [[workflow.edit_station1_round3]]
 description = "Update mock state register 9"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
-mock_set_value = 0xA0A0
+mock_set_value = 0x6666
 
 [[workflow.edit_station1_round3]]
 description = "Return to top"
