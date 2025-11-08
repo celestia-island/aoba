@@ -3,8 +3,9 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
+    i18n::lang,
     tui::status as types,
-    tui::status::modbus::{ModbusConnectionMode, RegisterMode},
+    tui::status::modbus::{ModbusConnectionMode, RegisterMode, StationMode},
     tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode},
     tui::status::{read_status, write_status},
     tui::ui::components::input_span_handler::handle_input_span,
@@ -265,6 +266,11 @@ fn commit_selector_edit(
                     };
 
                     let mut should_restart = false;
+                    let connection_mode = if new_mode.is_master() {
+                        StationMode::Master
+                    } else {
+                        StationMode::Slave
+                    };
                     write_status(|status| {
                         let port = status
                             .ports
@@ -297,6 +303,17 @@ fn commit_selector_edit(
                     })?;
 
                     if should_restart {
+                        let translations = lang();
+                        let reason = format!(
+                            "{} {}",
+                            translations
+                                .tabs
+                                .log
+                                .runtime_restart_reason_connection_mode_change
+                                .clone(),
+                            new_mode
+                        );
+                        crate::tui::append_runtime_restart_log(&port_name, reason, connection_mode);
                         return Ok(Some(port_name.clone()));
                     }
                 }
@@ -304,20 +321,27 @@ fn commit_selector_edit(
                     // Apply register mode changes
                     let new_mode = RegisterMode::from_u8((selected_index as u8) + 1);
 
+                    let mut should_restart = false;
+                    let mut connection_mode = StationMode::Master;
                     write_status(|status| {
                         let port = status
                             .ports
                             .map
                             .get_mut(&port_name)
                             .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                        let types::port::PortConfig::Modbus { mode: _, stations } =
-                            &mut port.config;
+                        let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
                         let mut all_items: Vec<_> = stations.iter_mut().collect();
                         if let Some(item) = all_items.get_mut(index) {
                             item.register_mode = new_mode;
                             port.config_modified = true; // Mark as modified
-                                                         // Update status indicator if port is running
+                            connection_mode = if mode.is_master() {
+                                StationMode::Master
+                            } else {
+                                StationMode::Slave
+                            };
+                            // Update status indicator if port is running and schedule restart
                             if matches!(port.state, types::port::PortState::OccupiedByThis) {
+                                should_restart = true;
                                 port.status_indicator =
                                     types::port::PortStatusIndicator::RunningWithChanges;
                             }
@@ -325,6 +349,21 @@ fn commit_selector_edit(
                         }
                         Ok(())
                     })?;
+
+                    if should_restart {
+                        let translations = lang();
+                        let reason = format!(
+                            "{} {}",
+                            translations
+                                .tabs
+                                .log
+                                .runtime_restart_reason_station_mode_change
+                                .clone(),
+                            new_mode
+                        );
+                        crate::tui::append_runtime_restart_log(&port_name, reason, connection_mode);
+                        return Ok(Some(port_name.clone()));
+                    }
                 }
                 _ => {}
             }
