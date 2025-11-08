@@ -494,6 +494,22 @@ fn append_subprocess_exited_log(port_name: &str, exit_status: Option<ExitStatus>
     );
 }
 
+pub(crate) fn append_runtime_restart_log(
+    port_name: &str,
+    reason: String,
+    connection_mode: StationMode,
+) {
+    let summary = lang().tabs.log.runtime_restart_summary.clone();
+    append_management_log(
+        port_name,
+        summary,
+        PortManagementEvent::RuntimeRestart {
+            reason,
+            connection_mode,
+        },
+    );
+}
+
 fn cli_mode_label(mode: &CliMode) -> String {
     match mode {
         CliMode::SlavePoll => lang().tabs.log.cli_mode_slave_poll.clone(),
@@ -1187,6 +1203,18 @@ fn run_core_thread(
             match msg {
                 UiToCore::Quit => {
                     log::info!("Received quit signal");
+                    log::info!("Force shutting down all CLI subprocesses before exit");
+                    subprocess_manager.shutdown_all();
+                    if let Err(err) = self::status::write_status(|status| {
+                        for port in status.ports.map.values_mut() {
+                            port.state = PortState::Free;
+                            port.subprocess_info = None;
+                            port.status_indicator = PortStatusIndicator::NotStarted;
+                        }
+                        Ok(())
+                    }) {
+                        log::warn!("Failed to reset port statuses while quitting: {err}");
+                    }
                     // Signal input thread to quit immediately
                     if let Err(err) = input_kill_tx.send(()) {
                         log::warn!("Failed to send input kill signal: {err}");
