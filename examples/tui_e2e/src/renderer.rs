@@ -47,9 +47,6 @@ pub async fn render_tui_via_ipc(sender: &mut IpcSender) -> Result<(String, u16, 
 /// mock state manipulation must be implemented through direct TUI status writes using
 /// `aoba::tui::status::write_status()`.
 ///
-/// **Future Enhancement**: See implementation plan in TODO comment below for details
-/// on how to add mock state synchronization when needed by workflow tests.
-///
 /// # Arguments
 /// * `width` - Terminal width in characters
 /// * `height` - Terminal height in characters
