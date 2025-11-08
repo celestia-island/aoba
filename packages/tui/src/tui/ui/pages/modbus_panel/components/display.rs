@@ -47,7 +47,7 @@ fn create_line(
 
 /// Generate lines for modbus panel with 2:20:remaining layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
-pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'static>>> {
+pub fn render_kv_lines_with_indicators(_sel_index: usize, terminal_width: u16) -> Result<Vec<Line<'static>>> {
     let mut lines: Vec<Line> = Vec::new();
 
     // Separator configuration for this file
@@ -379,9 +379,8 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
                 let item_start = item.register_address;
                 let item_end = item_start + item.register_length;
 
-                // Use 4 registers per row for 80-column terminals
-                // TODO: Make this dynamic based on actual terminal width
-                let registers_per_row = 4;
+                // Calculate registers per row dynamically based on terminal width
+                let registers_per_row = super::table::get_registers_per_row(terminal_width);
 
                 let first_row = (item_start / registers_per_row as u16) * registers_per_row as u16;
                 let last_row =
@@ -414,7 +413,7 @@ pub fn render_kv_lines_with_indicators(_sel_index: usize) -> Result<Vec<Line<'st
 }
 
 /// Generate status lines for modbus panel display
-pub fn render_modbus_status_lines() -> Result<Vec<Line<'static>>> {
+pub fn render_modbus_status_lines(terminal_width: u16) -> Result<Vec<Line<'static>>> {
     let sel_index = read_status(|status| {
         if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
             Ok(*selected_port)
@@ -423,5 +422,5 @@ pub fn render_modbus_status_lines() -> Result<Vec<Line<'static>>> {
         }
     })?;
 
-    render_kv_lines_with_indicators(sel_index)
+    render_kv_lines_with_indicators(sel_index, terminal_width)
 }
