@@ -59,106 +59,9 @@ pub fn render_log_display(
 
     let mut rendered_lines: Vec<Line> = Vec::new();
 
-    // Helper: parse a log entry into (line1, line2, line3) as Strings
-    fn format_entry(entry: &types::port::PortLogEntry) -> (String, String, String) {
-        // Line1: timestamp + status
-        let time_str = entry.when.format("%H:%M:%S%.3f").to_string();
-
-        // Determine status (very heuristic)
-        let lower = entry.raw.to_lowercase();
-        let status =
-            if lower.contains("fail") || lower.contains("timeout") || lower.contains("error") {
-                "[ERR]"
-            } else {
-                "[OK]"
-            };
-
-        let line1 = format!("{time_str} {status}");
-
-        // Try to parse hex bytes from raw
-        let mut bytes: Vec<u8> = Vec::new();
-        for token in entry.raw.split_whitespace() {
-            if token.len() == 2 {
-                if let Ok(v) = u8::from_str_radix(token, 16) {
-                    bytes.push(v);
-                    continue;
-                }
-            }
-        }
-
-        // Build detail items
-        let mut details: Vec<String> = Vec::new();
-        // role and id
-        if entry.raw.contains("Master") {
-            if !bytes.is_empty() {
-                details.push(format!("Master id={} ", bytes[0]));
-            } else {
-                details.push("Master".into());
-            }
-        } else if entry.raw.contains("Slave") {
-            if !bytes.is_empty() {
-                details.push(format!("Slave id={} ", bytes[0]));
-            } else {
-                details.push("Slave".into());
-            }
-        } else if !bytes.is_empty() {
-            details.push(format!("id={} ", bytes[0]));
-        }
-
-        // Register type and range (best-effort)
-        if bytes.len() >= 6 {
-            let func = bytes[1];
-            let addr = ((bytes[2] as u16) << 8) | (bytes[3] as u16);
-            let qty = ((bytes[4] as u16) << 8) | (bytes[5] as u16);
-            let reg_type = match func {
-                0x01 => "Coils",
-                0x02 => "DiscreteInputs",
-                0x03 => "Holding",
-                0x04 => "Input",
-                0x05 => "WriteCoil",
-                0x06 => "WriteHolding",
-                0x0F => "WriteCoils",
-                0x10 => "WriteHoldings",
-                _ => "Func",
-            };
-            let end = addr.saturating_add(qty.saturating_sub(1));
-            details.push(format!("{reg_type} {addr}-{end}"));
-        } else {
-            // Fallback: include raw trimmed tokens as detail items
-            let parts: Vec<String> = entry
-                .raw
-                .split(|c: char| c.is_whitespace() || c == ':' || c == ',')
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect();
-            // Keep a few tokens as fallback
-            if !parts.is_empty() {
-                let take = std::cmp::min(4, parts.len());
-                let join = parts[..take].join(" ");
-                details.push(join);
-            }
-        }
-
-        // Compose detail line as comma-separated items, items separated by single spaces inside
-        let line2 = details.join(", ");
-
-        // Line3: data bytes displayed as hex, comma separated, wrapped in brackets
-        let mut data_items: Vec<String> = Vec::new();
-        if !bytes.is_empty() {
-            for b in &bytes {
-                data_items.push(format!("{b:02X}"));
-            }
-        }
-        let line3 = format!("[{}]", data_items.join(", "));
-
-        (line1, line2, line3)
-    }
-
     for i in 0..items_visible {
         let idx = start_index.saturating_add(i);
         if let Some(entry) = logs.get(idx) {
-            let (l1, l2, l3) = format_entry(entry);
-
             // Determine if this item is selected
             let selected = if let Some(sel_idx) = selected_item {
                 sel_idx == idx
@@ -167,21 +70,16 @@ pub fn render_log_display(
                 idx == logs.len().saturating_sub(1)
             };
 
-            // Prefix: two-space area; show '>' in green when selected, otherwise two spaces
+            let mut lines = build_log_lines(entry);
             let prefix_span = if selected {
                 Span::styled("> ", Style::default().fg(Color::Green))
             } else {
                 Span::raw("  ")
             };
 
-            // Build three Lines with prefix (no background change; only marker differs)
-            let line_one = Line::from(vec![prefix_span.clone(), Span::raw(l1)]);
-            let line_two = Line::from(vec![Span::raw("  "), Span::raw(l2)]);
-            let line_three = Line::from(vec![Span::raw("  "), Span::raw(l3)]);
+            lines[0].spans.insert(0, prefix_span);
 
-            rendered_lines.push(line_one);
-            rendered_lines.push(line_two);
-            rendered_lines.push(line_three);
+            rendered_lines.extend_from_slice(&lines);
         } else {
             // blank item filler to keep layout
             rendered_lines.push(Line::from(Span::raw("")));
@@ -276,4 +174,502 @@ pub fn render_log_input(frame: &mut Frame, area: Rect) -> Result<()> {
     frame.render_widget(paragraph, area);
 
     Ok(())
+}
+
+fn build_log_lines(entry: &types::port::PortLogEntry) -> [Line<'static>; 3] {
+    let time_line = Line::from(vec![Span::raw(
+        entry.when.format("%H:%M:%S%.3f").to_string(),
+    )]);
+
+    match &entry.metadata {
+        Some(types::port::PortLogMetadata::Lifecycle(data)) => {
+            build_lifecycle_lines(time_line, data)
+        }
+        Some(types::port::PortLogMetadata::Communication(data)) => {
+            build_communication_lines(time_line, data)
+        }
+        Some(types::port::PortLogMetadata::Management(data)) => {
+            build_management_lines(time_line, data)
+        }
+        None => build_legacy_lines(time_line, entry),
+    }
+}
+
+fn build_lifecycle_lines(
+    time_line: Line<'static>,
+    lifecycle: &types::port::PortLifecycleLog,
+) -> [Line<'static>; 3] {
+    let lang = lang();
+    let status_text = match lifecycle.phase {
+        types::port::PortLifecyclePhase::Created => lang.tabs.log.lifecycle_started.clone(),
+        types::port::PortLifecyclePhase::Shutdown => lang.tabs.log.lifecycle_shutdown.clone(),
+        types::port::PortLifecyclePhase::Restarted => lang.tabs.log.lifecycle_restarted.clone(),
+        types::port::PortLifecyclePhase::Failed => lang.tabs.log.lifecycle_failed.clone(),
+    };
+
+    let status_color = match lifecycle.phase {
+        types::port::PortLifecyclePhase::Created => Color::Green,
+        types::port::PortLifecyclePhase::Shutdown => Color::Green,
+        types::port::PortLifecyclePhase::Restarted => Color::Yellow,
+        types::port::PortLifecyclePhase::Failed => Color::Red,
+    };
+
+    let line_two = Line::from(vec![
+        Span::raw("  "),
+        Span::styled(
+            lang.tabs.log.lifecycle_label.clone(),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::raw(" | "),
+        Span::styled(
+            status_text,
+            Style::default()
+                .fg(status_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ]);
+
+    let line_three = if let Some(note) = &lifecycle.note {
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(
+                lang.tabs.log.reason_label.clone(),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::raw(": "),
+            Span::raw(note.clone()),
+        ])
+    } else {
+        Line::from(vec![Span::raw("  ")])
+    };
+
+    [time_line, line_two, line_three]
+}
+
+fn build_communication_lines(
+    time_line: Line<'static>,
+    comm: &types::port::PortCommunicationLog,
+) -> [Line<'static>; 3] {
+    let lang = lang();
+    let success = comm.parse_error.is_none();
+
+    let (heading_text, heading_color) = match comm.role {
+        types::modbus::StationMode::Master => {
+            (lang.tabs.log.comm_master_response.clone(), Color::Green)
+        }
+        types::modbus::StationMode::Slave => {
+            (lang.tabs.log.comm_slave_request.clone(), Color::Yellow)
+        }
+    };
+
+    let mut line_two_spans = vec![
+        Span::raw("  "),
+        Span::styled(
+            heading_text,
+            Style::default()
+                .fg(heading_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
+
+    let unknown_label = lang.tabs.log.comm_unknown.clone();
+    let config_value = comm
+        .config_index
+        .map(|index| format!("0x{index:04X} ({index})"))
+        .unwrap_or_else(|| unknown_label.clone());
+
+    line_two_spans.push(Span::raw(" #"));
+    line_two_spans.push(Span::raw(config_value));
+    line_two_spans.push(Span::raw(" | "));
+
+    let result_text = if success {
+        lang.tabs.log.result_success.clone()
+    } else {
+        lang.tabs.log.result_failure.clone()
+    };
+    let result_color = if success { Color::Green } else { Color::Red };
+
+    line_two_spans.push(Span::styled(
+        result_text,
+        Style::default()
+            .fg(result_color)
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    let line_two = Line::from(line_two_spans);
+
+    let line_three = if success {
+        build_comm_success_line(&lang, comm)
+    } else {
+        let detail = comm
+            .parse_error
+            .clone()
+            .unwrap_or_else(|| lang.tabs.log.reason_none.clone());
+        let reason_label = lang.tabs.log.reason_label.clone();
+
+        Line::from(vec![
+            Span::raw("  "),
+            Span::raw(format!("{reason_label}: {detail}")),
+        ])
+    };
+
+    [time_line, line_two, line_three]
+}
+
+fn build_comm_success_line(
+    lang: &crate::i18n::Lang,
+    comm: &types::port::PortCommunicationLog,
+) -> Line<'static> {
+    let station_label = lang.tabs.log.comm_station_id_label.clone();
+    let unknown = lang.tabs.log.comm_unknown.clone();
+    let station_value = comm
+        .station_id
+        .map(|station| format!("0x{station:02X}"))
+        .unwrap_or_else(|| unknown.clone());
+    let station_segment = format!("{station_label} {station_value}");
+
+    let register_label = lang.tabs.log.comm_register_type_label.clone();
+    let register_segment = match comm.register_mode {
+        Some(mode) => {
+            let (code, name) = register_mode_descriptor(mode);
+            format!("{register_label} {code:02} {name}")
+        }
+        None => format!("{register_label} {}", unknown.clone()),
+    };
+
+    let computed_end = comm.register_end.or_else(|| {
+        if let (Some(start), Some(count)) = (comm.register_start, comm.register_quantity) {
+            Some(start.saturating_add(count.saturating_sub(1)))
+        } else {
+            None
+        }
+    });
+
+    let range_label = lang.tabs.log.comm_address_range_label.clone();
+    let range_value = match (comm.register_start, computed_end) {
+        (Some(start), Some(end)) => format!("0x{start:04X} - 0x{end:04X}"),
+        _ => unknown.clone(),
+    };
+    let range_segment = format!("{range_label} {range_value}");
+
+    let combined = format!(
+        "{}; {}; {}",
+        station_segment, register_segment, range_segment
+    );
+
+    Line::from(vec![Span::raw("  "), Span::raw(combined)])
+}
+
+fn register_mode_descriptor(mode: types::modbus::RegisterMode) -> (u8, String) {
+    match mode {
+        types::modbus::RegisterMode::Coils => (1, "Coils".to_string()),
+        types::modbus::RegisterMode::DiscreteInputs => (2, "Discrete".to_string()),
+        types::modbus::RegisterMode::Holding => (3, "Holding".to_string()),
+        types::modbus::RegisterMode::Input => (4, "Input".to_string()),
+    }
+}
+
+fn build_management_lines(
+    time_line: Line<'static>,
+    management: &types::port::PortManagementLog,
+) -> [Line<'static>; 3] {
+    use types::port::PortManagementEvent as Event;
+
+    let lang = lang();
+    let label_style = Style::default().fg(Color::DarkGray);
+    let reason_line = |detail: String| -> Line<'static> {
+        Line::from(vec![
+            Span::raw("  "),
+            Span::styled(lang.tabs.log.reason_label.clone(), label_style),
+            Span::raw(": "),
+            Span::raw(detail),
+        ])
+    };
+
+    match &management.event {
+        Event::StationsUpdate {
+            station_count,
+            success,
+            error,
+        } => {
+            let mut spans = vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.stations_count_label.clone(), label_style),
+                Span::raw(": "),
+                Span::raw(format!("0x{station_count:04X} ({station_count})")),
+                Span::raw(" | "),
+            ];
+
+            let status_text = if *success {
+                lang.tabs.log.result_success.clone()
+            } else {
+                lang.tabs.log.result_failure.clone()
+            };
+            let status_color = if *success { Color::Green } else { Color::Red };
+            spans.push(Span::styled(status_text, Style::default().fg(status_color)));
+
+            let line_two = Line::from(spans);
+            let line_three = if let Some(err) = error {
+                reason_line(err.clone())
+            } else {
+                reason_line(lang.tabs.log.reason_none.clone())
+            };
+
+            [time_line, line_two, line_three]
+        }
+        Event::ConfigSync {
+            mode,
+            config_index,
+            station_id,
+            register_mode,
+            address_start,
+            address_end,
+            success,
+            error,
+        } => {
+            let (heading_text, heading_color) = match mode {
+                types::modbus::StationMode::Master => {
+                    (lang.tabs.log.comm_master_response.clone(), Color::Green)
+                }
+                types::modbus::StationMode::Slave => {
+                    (lang.tabs.log.comm_slave_request.clone(), Color::Yellow)
+                }
+            };
+
+            let mut line_two_spans = vec![
+                Span::raw("  "),
+                Span::styled(
+                    heading_text,
+                    Style::default()
+                        .fg(heading_color)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" #"),
+                Span::raw(format!("0x{config_index:04X} ({config_index})")),
+                Span::raw(" | "),
+            ];
+
+            let result_text = if *success {
+                lang.tabs.log.result_success.clone()
+            } else {
+                lang.tabs.log.result_failure.clone()
+            };
+            let result_color = if *success { Color::Green } else { Color::Red };
+
+            line_two_spans.push(Span::styled(
+                result_text,
+                Style::default()
+                    .fg(result_color)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+            let line_two = Line::from(line_two_spans);
+
+            let line_three = if *success {
+                let station_segment =
+                    format!("{} 0x{station_id:02X}", lang.tabs.log.comm_station_id_label);
+                let (register_code, register_name) = register_mode_descriptor(*register_mode);
+                let register_segment = format!(
+                    "{} {register_code:02} {register_name}",
+                    lang.tabs.log.comm_register_type_label
+                );
+                let range_segment = format!(
+                    "{} 0x{address_start:04X} - 0x{address_end:04X}",
+                    lang.tabs.log.comm_address_range_label
+                );
+
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::raw(format!(
+                        "{}; {}; {}",
+                        station_segment, register_segment, range_segment
+                    )),
+                ])
+            } else {
+                let detail = error
+                    .clone()
+                    .unwrap_or_else(|| lang.tabs.log.reason_none.clone());
+
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(lang.tabs.log.reason_label.clone(), label_style),
+                    Span::raw(": "),
+                    Span::raw(detail),
+                ])
+            };
+
+            [time_line, line_two, line_three]
+        }
+        Event::StateLockRequest { requester } => {
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(
+                    lang.tabs.log.state_lock_requester_label.clone(),
+                    label_style,
+                ),
+                Span::raw(": "),
+                Span::raw(requester.clone()),
+            ]);
+
+            let line_three = reason_line(lang.tabs.log.reason_none.clone());
+
+            [time_line, line_two, line_three]
+        }
+        Event::StateLockAck { locked } => {
+            let status_text = if *locked {
+                lang.tabs.log.state_lock_locked.clone()
+            } else {
+                lang.tabs.log.state_lock_unlocked.clone()
+            };
+            let status_color = if *locked { Color::Yellow } else { Color::Green };
+
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.management_label.clone(), label_style),
+                Span::raw(": "),
+                Span::styled(status_text, Style::default().fg(status_color)),
+            ]);
+
+            let line_three = reason_line(lang.tabs.log.reason_none.clone());
+
+            [time_line, line_two, line_three]
+        }
+        Event::Status { status, details } => {
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.status_label.clone(), label_style),
+                Span::raw(": "),
+                Span::raw(status.clone()),
+            ]);
+
+            let line_three = if let Some(detail) = details {
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
+                    Span::raw(": "),
+                    Span::raw(detail.clone()),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(lang.tabs.log.status_details_label.clone(), label_style),
+                    Span::raw(": "),
+                    Span::raw(lang.tabs.log.reason_none.clone()),
+                ])
+            };
+
+            [time_line, line_two, line_three]
+        }
+        Event::LogMessage { level, message } => {
+            let level_upper = level.to_uppercase();
+            let level_color = match level_upper.as_str() {
+                "ERROR" => Color::Red,
+                "WARN" => Color::Yellow,
+                "INFO" => Color::Green,
+                "DEBUG" => Color::Cyan,
+                _ => Color::Magenta,
+            };
+
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.log_level_label.clone(), label_style),
+                Span::raw(": "),
+                Span::styled(level_upper, Style::default().fg(level_color)),
+            ]);
+
+            let line_three = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.log_message_label.clone(), label_style),
+                Span::raw(": "),
+                Span::raw(message.clone()),
+            ]);
+
+            [time_line, line_two, line_three]
+        }
+        Event::SubprocessSpawned { mode, pid } => {
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.subprocess_mode_label.clone(), label_style),
+                Span::raw(": "),
+                Span::raw(mode.clone()),
+            ]);
+
+            let pid_text = pid
+                .map(|value| format!("0x{value:04X} ({value})"))
+                .unwrap_or_else(|| lang.tabs.log.comm_unknown.clone());
+
+            let line_three = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.subprocess_pid_label.clone(), label_style),
+                Span::raw(": "),
+                Span::raw(pid_text),
+            ]);
+
+            [time_line, line_two, line_three]
+        }
+        Event::SubprocessStopped { reason } => {
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.management_label.clone(), label_style),
+                Span::raw(": "),
+                Span::styled(
+                    lang.tabs.log.subprocess_stopped_summary.clone(),
+                    Style::default().fg(Color::Yellow),
+                ),
+            ]);
+
+            let line_three = if let Some(reason) = reason {
+                reason_line(reason.clone())
+            } else {
+                reason_line(lang.tabs.log.reason_none.clone())
+            };
+
+            [time_line, line_two, line_three]
+        }
+        Event::SubprocessExited { success, detail } => {
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(lang.tabs.log.subprocess_exit_label.clone(), label_style),
+                Span::raw(": "),
+                Span::raw(detail.clone()),
+            ]);
+
+            let line_three = if let Some(is_success) = success {
+                let status_label = if *is_success {
+                    lang.tabs.log.result_success.clone()
+                } else {
+                    lang.tabs.log.result_failure.clone()
+                };
+                let status_color = if *is_success {
+                    Color::Green
+                } else {
+                    Color::Red
+                };
+
+                Line::from(vec![
+                    Span::raw("  "),
+                    Span::styled(lang.tabs.log.result_label.clone(), label_style),
+                    Span::raw(": "),
+                    Span::styled(status_label, Style::default().fg(status_color)),
+                ])
+            } else {
+                reason_line(lang.tabs.log.reason_none.clone())
+            };
+
+            [time_line, line_two, line_three]
+        }
+    }
+}
+
+fn build_legacy_lines(
+    time_line: Line<'static>,
+    entry: &types::port::PortLogEntry,
+) -> [Line<'static>; 3] {
+    let second = Line::from(vec![Span::raw("  "), Span::raw(entry.raw.clone())]);
+    let third = Line::from(vec![
+        Span::raw("  "),
+        Span::raw(entry.parsed.clone().unwrap_or_else(|| String::new())),
+    ]);
+
+    [time_line, second, third]
 }
