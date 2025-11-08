@@ -97,7 +97,7 @@ pub fn render(frame: &mut Frame, area: Rect) -> Result<()> {
         }
     })?;
 
-    let lines = render_modbus_status_lines()?;
+    let lines = render_modbus_status_lines(area.width)?;
     render_boxed_paragraph(frame, area, lines, view_offset, None, false, true);
 
     Ok(())
