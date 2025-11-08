@@ -5,6 +5,8 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 
+use interprocess::local_socket::{prelude::*, Stream};
+
 /// Message types exchanged between TUI (parent) and CLI (child) processes
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -183,22 +185,20 @@ impl IpcMessage {
 /// IPC Server (runs in CLI subprocess)
 pub struct IpcServer {
     socket_name: String,
-    writer: Option<interprocess::local_socket::Stream>,
-    reader: Option<BufReader<interprocess::local_socket::Stream>>,
+    writer: Option<Stream>,
+    reader: Option<BufReader<Stream>>,
 }
 
 impl IpcServer {
     /// Create a new IPC server that connects to the given socket name
     pub fn connect(socket_name: String) -> Result<Self> {
-        use interprocess::local_socket::prelude::*;
-
         log::debug!("IPC: Attempting to connect to socket: {socket_name}");
 
         // Try to connect to the named socket (TUI is listening)
         let name = socket_name
             .clone()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
-        let stream = interprocess::local_socket::Stream::connect(name)?;
+        let stream = Stream::connect(name)?;
 
         log::info!("IPC: Successfully connected to socket: {socket_name}");
 
@@ -267,10 +267,6 @@ pub struct IpcClient {
 impl IpcClient {
     /// Create a new IPC client that listens on a socket with the given name
     pub fn listen(socket_name: String) -> Result<Self> {
-        use interprocess::local_socket::prelude::*;
-
-        log::debug!("IPC: Creating listener on socket: {socket_name}");
-
         let name = socket_name
             .clone()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
@@ -290,9 +286,9 @@ impl IpcClient {
     pub fn accept(&self) -> Result<IpcConnection> {
         let socket_name = self.socket_name.clone();
         log::debug!("IPC: Waiting for connection on {socket_name}");
-        // Use trait method accept() directly
-        use interprocess::local_socket::traits::Listener;
+
         let stream = self.listener.accept()?;
+        stream.set_nonblocking(true)?;
         log::info!("IPC: Accepted connection on {socket_name}");
 
         Ok(IpcConnection {
@@ -309,8 +305,8 @@ impl IpcClient {
 
 /// An active IPC connection from a CLI subprocess
 pub struct IpcConnection {
-    reader: BufReader<interprocess::local_socket::Stream>,
-    _writer: Option<interprocess::local_socket::Stream>,
+    reader: BufReader<Stream>,
+    _writer: Option<Stream>,
 }
 
 impl IpcConnection {
@@ -374,20 +370,16 @@ impl IpcConnection {
 /// This is the reverse channel: TUI → CLI
 pub struct IpcCommandClient {
     _socket_name: String,
-    stream: Option<interprocess::local_socket::Stream>,
+    stream: Option<Stream>,
 }
 
 impl IpcCommandClient {
     /// Connect to a CLI subprocess's command channel
     pub fn connect(command_channel_name: String) -> Result<Self> {
-        use interprocess::local_socket::prelude::*;
-
-        log::debug!("IPC CMD: Attempting to connect to command channel: {command_channel_name}");
-
         let name = command_channel_name
             .clone()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
-        let stream = interprocess::local_socket::Stream::connect(name)?;
+        let stream = Stream::connect(name)?;
 
         log::info!("IPC CMD: Successfully connected to command channel: {command_channel_name}");
 
@@ -436,10 +428,6 @@ pub struct IpcCommandListener {
 impl IpcCommandListener {
     /// Create a command listener for the CLI subprocess
     pub fn listen(command_channel_name: String) -> Result<Self> {
-        use interprocess::local_socket::prelude::*;
-
-        log::debug!("IPC CMD: Creating command listener on: {command_channel_name}");
-
         let name = command_channel_name
             .clone()
             .to_ns_name::<interprocess::local_socket::GenericNamespaced>()?;
@@ -462,8 +450,6 @@ impl IpcCommandListener {
     /// Accept a connection from TUI (blocking, call once)
     pub fn accept(&mut self) -> Result<()> {
         if let Some(ref listener) = self.listener {
-            log::debug!("IPC CMD: Waiting for TUI connection");
-            use interprocess::local_socket::traits::Listener;
             let stream = listener.accept()?;
             log::info!("IPC CMD: Accepted TUI connection");
 
@@ -488,7 +474,7 @@ impl IpcCommandListener {
 
 /// Connection for receiving commands from TUI
 pub struct IpcCommandConnection {
-    reader: BufReader<interprocess::local_socket::Stream>,
+    reader: BufReader<Stream>,
 }
 
 impl IpcCommandConnection {

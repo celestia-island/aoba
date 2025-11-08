@@ -1,13 +1,27 @@
 use anyhow::{anyhow, Result};
 use std::time::Duration;
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::tui::{
     status::{read_status, write_status},
     ui::pages,
     utils::bus::{Bus, UiToCore},
 };
+
+fn key_is_ctrl_c(key: &KeyEvent) -> bool {
+    if let KeyCode::Char(ch) = key.code {
+        if ch == '\u{3}' {
+            return true;
+        }
+
+        if key.modifiers.contains(KeyModifiers::CONTROL) && ch.eq_ignore_ascii_case(&'c') {
+            return true;
+        }
+    }
+
+    false
+}
 
 /// Spawn the input handling thread that processes keyboard and mouse events
 pub fn run_input_thread(bus: Bus, kill_rx: flume::Receiver<()>) -> Result<()> {
@@ -38,12 +52,12 @@ pub fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
     match event {
         crossterm::event::Event::Key(key) => {
             // Early catch for Ctrl + C at the top-level so the app can exit immediately.
-            if key.kind == crossterm::event::KeyEventKind::Press
-                && key
-                    .modifiers
-                    .contains(crossterm::event::KeyModifiers::CONTROL)
-                && matches!(key.code, KeyCode::Char('c'))
+            if matches!(
+                key.kind,
+                crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
+            ) && key_is_ctrl_c(&key)
             {
+                log::info!("Global quit: Ctrl+C detected in input thread (pre-handler)");
                 bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
                 return Ok(());
             }
@@ -68,26 +82,35 @@ pub fn handle_event(event: crossterm::event::Event, bus: &Bus) -> Result<()> {
 }
 
 fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
-    if key.kind != crossterm::event::KeyEventKind::Press {
-        return Ok(()); // Ignore non-initial key press (repeat / release)
+    if !matches!(
+        key.kind,
+        crossterm::event::KeyEventKind::Press | crossterm::event::KeyEventKind::Repeat
+    ) {
+        return Ok(()); // Ignore key release events
     }
 
     // Handle global quit with Ctrl + C
-    if key
-        .modifiers
-        .contains(crossterm::event::KeyModifiers::CONTROL)
-    {
-        if let KeyCode::Char('c') = key.code {
-            bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
-            return Ok(());
-        }
+    if key_is_ctrl_c(&key) {
+        log::info!("Global quit: Ctrl+C detected in handle_key_event");
+        bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+        return Ok(());
+    }
 
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
         // Handle Ctrl + Esc for "force return without saving"
         if let KeyCode::Esc = key.code {
             log::info!("⚠️ Ctrl+Esc detected: force return without saving");
             // This will be handled by page-specific handlers
             // The modifier flag will be checked in the page handlers
         }
+    }
+
+    // Global quit shortcut with "q" (lower/upper) when Control is not held.
+    let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    if !has_ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
+        log::info!("Global quit: q/Q detected (no modifiers)");
+        bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;
+        return Ok(());
     }
 
     // Check if we're in global edit mode first
