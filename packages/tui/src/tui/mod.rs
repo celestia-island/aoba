@@ -307,9 +307,76 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
                     format!("CLI stations update: {} stations", stations.len()),
                 );
 
-                // TODO: Apply the stations update to the port's ModbusRegisterItem list
-                // This will require converting from StationConfig format to ModbusRegisterItem format
-                // For now, just log it
+                // Apply the stations update to the port's ModbusRegisterItem list
+                self::status::write_status(|status| {
+                    if let Some(port) = status.ports.map.get_mut(port_name) {
+                        let types::port::PortConfig::Modbus { mode: _, stations: ref mut modbus_stations } = &mut port.config;
+                        log::info!("CLI[{port_name}]: Applying {} station configs to port", stations.len());
+                        
+                        // Convert each StationConfig to ModbusRegisterItem
+                        for station_config in &stations {
+                            // Find or create the corresponding ModbusRegisterItem
+                            // For simplicity, we'll update the first matching station by ID
+                            // or create a new one if it doesn't exist
+                            
+                            // Helper function to update register values from RegisterRange
+                            let mut update_registers = |ranges: &[types::modbus::RegisterRange], register_mode: types::modbus::RegisterMode| {
+                                for range in ranges {
+                                    let station_index = modbus_stations.iter().position(|s| 
+                                        s.station_id == station_config.station_id 
+                                        && s.register_mode == register_mode
+                                        && s.register_address == range.address_start
+                                        && s.register_length == range.length
+                                    );
+                                    
+                                    if let Some(idx) = station_index {
+                                        // Update existing station
+                                        modbus_stations[idx].last_values = range.initial_values.clone();
+                                        log::debug!(
+                                            "CLI[{port_name}]: Updated station {} {:?} at 0x{:04X} with {} values",
+                                            station_config.station_id,
+                                            register_mode,
+                                            range.address_start,
+                                            range.initial_values.len()
+                                        );
+                                    } else if !range.initial_values.is_empty() {
+                                        // Create new station entry
+                                        let new_item = types::modbus::ModbusRegisterItem {
+                                            station_id: station_config.station_id,
+                                            register_mode,
+                                            register_address: range.address_start,
+                                            register_length: range.length,
+                                            last_values: range.initial_values.clone(),
+                                            req_success: 0,
+                                            req_total: 0,
+                                            next_poll_at: std::time::Instant::now(),
+                                            last_request_time: None,
+                                            last_response_time: None,
+                                            pending_requests: Vec::new(),
+                                        };
+                                        modbus_stations.push(new_item);
+                                        log::debug!(
+                                            "CLI[{port_name}]: Created new station {} {:?} at 0x{:04X} with {} values",
+                                            station_config.station_id,
+                                            register_mode,
+                                            range.address_start,
+                                            range.initial_values.len()
+                                        );
+                                    }
+                                }
+                            };
+                            
+                            // Update all register types from the station config
+                            update_registers(&station_config.map.coils, types::modbus::RegisterMode::Coils);
+                            update_registers(&station_config.map.discrete_inputs, types::modbus::RegisterMode::DiscreteInputs);
+                            update_registers(&station_config.map.holding, types::modbus::RegisterMode::Holding);
+                            update_registers(&station_config.map.input, types::modbus::RegisterMode::Input);
+                        }
+                        
+                        log::info!("CLI[{port_name}]: Successfully applied stations update");
+                    }
+                    Ok(())
+                })?;
             } else {
                 log::warn!("CLI[{port_name}]: Failed to deserialize stations data");
                 append_port_log(

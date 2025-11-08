@@ -690,15 +690,37 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     output_sink.write(&json)?;
                     last_written_values = Some(response.values.clone());
 
-                    // Send RegisterUpdate via IPC
-                    if let Some(ref _ipc_conns) = ipc {
+                    // Send StationsUpdate via IPC
+                    if let Some(ref mut ipc_conns) = ipc {
                         log::info!(
-                            "IPC: Would send StationsUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
+                            "IPC: Sending StationsUpdate for {port}: station={station_id}, type={register_mode}, addr=0x{register_address:04X}, values={:?}",
                             response.values
                         );
-                        // TODO: With new design, we send full StationsUpdate instead of individual RegisterUpdate
-                        // For now, we skip this to avoid breaking the new IPC message format
-                        // Later, we'll implement proper state synchronization that sends all stations
+                        
+                        // Build a StationConfig with current register values
+                        let station_config = crate::config::StationConfig::single_range(
+                            station_id,
+                            crate::config::StationMode::Slave,
+                            reg_mode,
+                            register_address,
+                            register_length,
+                            Some(response.values.clone()),
+                        );
+                        
+                        // Serialize the station configuration using postcard
+                        match postcard::to_allocvec(&vec![station_config]) {
+                            Ok(stations_data) => {
+                                let msg = aoba_protocol::ipc::IpcMessage::stations_update(stations_data);
+                                if let Err(e) = ipc_conns.status.send(&msg) {
+                                    log::warn!("Failed to send StationsUpdate via IPC: {e}");
+                                } else {
+                                    log::debug!("Successfully sent StationsUpdate via IPC");
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to serialize StationConfig: {e}");
+                            }
+                        }
                     }
                 }
             }
