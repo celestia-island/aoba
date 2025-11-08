@@ -167,8 +167,10 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     // 1. Input dialog for port path
                     // 2. Validation of the port path
                     // 3. Platform-specific virtual port handling
-                    log::info!("Virtual port creation requested - feature not yet fully implemented");
-                    
+                    log::info!(
+                        "Virtual port creation requested - feature not yet fully implemented"
+                    );
+
                     // Show a message in the error state to inform the user
                     write_status(|status| {
                         status.temporarily.error = Some(crate::tui::status::ErrorInfo {

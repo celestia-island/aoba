@@ -310,15 +310,21 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
                 // Apply the stations update to the port's ModbusRegisterItem list
                 self::status::write_status(|status| {
                     if let Some(port) = status.ports.map.get_mut(port_name) {
-                        let types::port::PortConfig::Modbus { mode: _, stations: ref mut modbus_stations } = &mut port.config;
-                        log::info!("CLI[{port_name}]: Applying {} station configs to port", stations.len());
-                        
+                        let types::port::PortConfig::Modbus {
+                            mode: _,
+                            stations: ref mut modbus_stations,
+                        } = &mut port.config;
+                        log::info!(
+                            "CLI[{port_name}]: Applying {} station configs to port",
+                            stations.len()
+                        );
+
                         // Convert each StationConfig to ModbusRegisterItem
                         for station_config in &stations {
                             // Find or create the corresponding ModbusRegisterItem
                             // For simplicity, we'll update the first matching station by ID
                             // or create a new one if it doesn't exist
-                            
+
                             // Helper function to update register values from RegisterRange
                             let mut update_registers = |ranges: &[types::modbus::RegisterRange], register_mode: types::modbus::RegisterMode| {
                                 for range in ranges {
@@ -365,14 +371,26 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
                                     }
                                 }
                             };
-                            
+
                             // Update all register types from the station config
-                            update_registers(&station_config.map.coils, types::modbus::RegisterMode::Coils);
-                            update_registers(&station_config.map.discrete_inputs, types::modbus::RegisterMode::DiscreteInputs);
-                            update_registers(&station_config.map.holding, types::modbus::RegisterMode::Holding);
-                            update_registers(&station_config.map.input, types::modbus::RegisterMode::Input);
+                            update_registers(
+                                &station_config.map.coils,
+                                types::modbus::RegisterMode::Coils,
+                            );
+                            update_registers(
+                                &station_config.map.discrete_inputs,
+                                types::modbus::RegisterMode::DiscreteInputs,
+                            );
+                            update_registers(
+                                &station_config.map.holding,
+                                types::modbus::RegisterMode::Holding,
+                            );
+                            update_registers(
+                                &station_config.map.input,
+                                types::modbus::RegisterMode::Input,
+                            );
                         }
-                        
+
                         log::info!("CLI[{port_name}]: Successfully applied stations update");
                     }
                     Ok(())
@@ -391,13 +409,13 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
                 port_name,
                 format!("CLI state lock request from {requester}"),
             );
-            
+
             // Basic state locking mechanism implementation
             // For now, we always acknowledge the lock request immediately
             // In a more complex implementation, this would check if the state
             // is currently being modified and potentially queue the request
             log::debug!("CLI[{port_name}]: Auto-acknowledging state lock request");
-            
+
             // In a full implementation, we would:
             // 1. Check if state is currently locked by another process
             // 2. Queue the request if locked, or grant it immediately
@@ -407,7 +425,7 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
         IpcMessage::StateLockAck { locked, .. } => {
             log::info!("CLI[{port_name}]: StateLockAck locked={locked}");
             append_port_log(port_name, format!("CLI state lock ack: locked={locked}"));
-            
+
             // Handle state lock acknowledgment
             // This message is sent by CLI to acknowledge that it has locked or unlocked its state
             // The TUI can use this to coordinate updates safely
