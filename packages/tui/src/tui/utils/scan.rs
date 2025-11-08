@@ -42,8 +42,10 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
 
             // Check if port already exists in status
             if let Some(existing_port) = status.ports.map.get(port_name) {
-                // Port already exists, preserve its entire state (config, logs, etc.)
-                new_map.insert(port_name.clone(), existing_port.clone());
+                // Port already exists, preserve its state but refresh port type from enumeration
+                let mut preserved = existing_port.clone();
+                preserved.port_type = port_type.clone();
+                new_map.insert(port_name.clone(), preserved);
             } else {
                 // New port discovered, create PortData with default values
                 let port_data = PortData {

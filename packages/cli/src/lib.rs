@@ -31,6 +31,12 @@ pub fn parse_args() -> ArgMatches {
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("log-file")
+                .long("log-file")
+                .help("Write detailed logs to the specified file (overrides AOBA_LOG_FILE)")
+                .value_name("FILE"),
+        )
+        .arg(
             Arg::new("config")
                 .long("config")
                 .short('c')

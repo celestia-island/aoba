@@ -166,7 +166,7 @@ impl std::fmt::Display for RegisterMode {
 pub struct RegisterRange {
     pub address_start: u16,
     pub length: u16,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub initial_values: Vec<u16>,
 }
 
@@ -182,13 +182,13 @@ impl Default for RegisterRange {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RegisterMap {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub coils: Vec<RegisterRange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub discrete_inputs: Vec<RegisterRange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub holding: Vec<RegisterRange>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub input: Vec<RegisterRange>,
 }
 
