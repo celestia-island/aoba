@@ -37,6 +37,97 @@ pub struct PortLogEntry {
     pub when: DateTime<Local>,
     pub raw: String,
     pub parsed: Option<String>,
+    pub metadata: Option<PortLogMetadata>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PortLogMetadata {
+    Lifecycle(PortLifecycleLog),
+    Communication(PortCommunicationLog),
+    Management(PortManagementLog),
+}
+
+#[derive(Debug, Clone)]
+pub struct PortLifecycleLog {
+    pub phase: PortLifecyclePhase,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortLifecyclePhase {
+    Created,
+    Shutdown,
+    Restarted,
+    Failed,
+}
+
+#[derive(Debug, Clone)]
+pub struct PortCommunicationLog {
+    pub direction: PortCommunicationDirection,
+    pub role: super::modbus::StationMode,
+    pub station_id: Option<u8>,
+    pub config_index: Option<u16>,
+    pub register_mode: Option<super::modbus::RegisterMode>,
+    pub register_start: Option<u16>,
+    pub register_end: Option<u16>,
+    pub register_quantity: Option<u16>,
+    pub payload: Vec<u8>,
+    pub parse_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PortCommunicationDirection {
+    Outbound,
+    Inbound,
+}
+
+#[derive(Debug, Clone)]
+pub struct PortManagementLog {
+    pub event: PortManagementEvent,
+}
+
+#[derive(Debug, Clone)]
+pub enum PortManagementEvent {
+    StationsUpdate {
+        station_count: usize,
+        success: bool,
+        error: Option<String>,
+    },
+    ConfigSync {
+        mode: super::modbus::StationMode,
+        config_index: u16,
+        station_id: u8,
+        register_mode: super::modbus::RegisterMode,
+        address_start: u16,
+        address_end: u16,
+        success: bool,
+        error: Option<String>,
+    },
+    StateLockRequest {
+        requester: String,
+    },
+    StateLockAck {
+        locked: bool,
+    },
+    Status {
+        status: String,
+        details: Option<String>,
+    },
+    LogMessage {
+        level: String,
+        message: String,
+    },
+    SubprocessSpawned {
+        mode: String,
+        pid: Option<u32>,
+    },
+    SubprocessStopped {
+        reason: Option<String>,
+    },
+    SubprocessExited {
+        success: Option<bool>,
+        detail: String,
+    },
 }
 
 /// Port status indicator shown in the title bar
