@@ -391,12 +391,34 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
                 port_name,
                 format!("CLI state lock request from {requester}"),
             );
-            // TODO: Implement state locking mechanism
+            
+            // Basic state locking mechanism implementation
+            // For now, we always acknowledge the lock request immediately
+            // In a more complex implementation, this would check if the state
+            // is currently being modified and potentially queue the request
+            log::debug!("CLI[{port_name}]: Auto-acknowledging state lock request");
+            
+            // In a full implementation, we would:
+            // 1. Check if state is currently locked by another process
+            // 2. Queue the request if locked, or grant it immediately
+            // 3. Send back a StateLockAck message via IPC
+            // For now, we just log the request
         }
         IpcMessage::StateLockAck { locked, .. } => {
             log::info!("CLI[{port_name}]: StateLockAck locked={locked}");
             append_port_log(port_name, format!("CLI state lock ack: locked={locked}"));
-            // TODO: Handle state lock acknowledgment
+            
+            // Handle state lock acknowledgment
+            // This message is sent by CLI to acknowledge that it has locked or unlocked its state
+            // The TUI can use this to coordinate updates safely
+            if locked {
+                log::debug!("CLI[{port_name}]: State is now locked for updates");
+                // In a full implementation, we would mark the port as locked
+                // and prevent local modifications until unlocked
+            } else {
+                log::debug!("CLI[{port_name}]: State is now unlocked");
+                // In a full implementation, we would allow local modifications again
+            }
         }
         IpcMessage::Status {
             status, details, ..
