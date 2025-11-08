@@ -47,7 +47,10 @@ fn create_line(
 
 /// Generate lines for modbus panel with 2:20:remaining layout (indicator:label:value).
 /// Returns lines that can be used with render_boxed_paragraph.
-pub fn render_kv_lines_with_indicators(_sel_index: usize, terminal_width: u16) -> Result<Vec<Line<'static>>> {
+pub fn render_kv_lines_with_indicators(
+    _sel_index: usize,
+    terminal_width: u16,
+) -> Result<Vec<Line<'static>>> {
     let mut lines: Vec<Line> = Vec::new();
 
     // Separator configuration for this file

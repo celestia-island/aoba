@@ -630,7 +630,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     // Continuously poll
     // Keep track of last written values to avoid consecutive duplicate outputs
     let mut last_written_values: Option<Vec<u16>> = None;
-    
+
     // Store current station configuration (can be updated via IPC)
     let mut current_station_id = station_id;
     let mut current_register_address = register_address;
@@ -666,18 +666,21 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                 "Received stations update ({} bytes), updating slave configuration",
                                 stations_data.len()
                             );
-                            
+
                             // Deserialize and use the stations configuration
-                            if let Ok(stations) = postcard::from_bytes::<Vec<crate::config::StationConfig>>(&stations_data) {
+                            if let Ok(stations) = postcard::from_bytes::<
+                                Vec<crate::config::StationConfig>,
+                            >(&stations_data)
+                            {
                                 log::info!("Deserialized {} stations", stations.len());
-                                
+
                                 // For slave poll mode, we focus on the first slave station
                                 // In the future, this could be extended to handle multiple stations
                                 if let Some(first_station) = stations.first() {
                                     if first_station.mode == crate::config::StationMode::Slave {
                                         // Update configuration from the first slave station
                                         current_station_id = first_station.station_id;
-                                        
+
                                         // Find the first register range to use as the polling target
                                         if let Some(range) = first_station.map.holding.first() {
                                             current_register_address = range.address_start;
@@ -687,7 +690,8 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                                 "Updated slave config: station={}, type=Holding, addr=0x{:04X}, len={}",
                                                 current_station_id, current_register_address, current_register_length
                                             );
-                                        } else if let Some(range) = first_station.map.coils.first() {
+                                        } else if let Some(range) = first_station.map.coils.first()
+                                        {
                                             current_register_address = range.address_start;
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::Coils;
@@ -695,7 +699,9 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                                 "Updated slave config: station={}, type=Coils, addr=0x{:04X}, len={}",
                                                 current_station_id, current_register_address, current_register_length
                                             );
-                                        } else if let Some(range) = first_station.map.discrete_inputs.first() {
+                                        } else if let Some(range) =
+                                            first_station.map.discrete_inputs.first()
+                                        {
                                             current_register_address = range.address_start;
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs;
@@ -703,7 +709,8 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                                 "Updated slave config: station={}, type=DiscreteInputs, addr=0x{:04X}, len={}",
                                                 current_station_id, current_register_address, current_register_length
                                             );
-                                        } else if let Some(range) = first_station.map.input.first() {
+                                        } else if let Some(range) = first_station.map.input.first()
+                                        {
                                             current_register_address = range.address_start;
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::Input;
@@ -712,7 +719,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                                 current_station_id, current_register_address, current_register_length
                                             );
                                         }
-                                        
+
                                         // Reset last written values when configuration changes
                                         last_written_values = None;
                                     } else {
@@ -759,7 +766,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                             current_reg_mode,
                             response.values
                         );
-                        
+
                         // Build a StationConfig with current register values
                         let station_config = crate::config::StationConfig::single_range(
                             current_station_id,
@@ -769,11 +776,12 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                             current_register_length,
                             Some(response.values.clone()),
                         );
-                        
+
                         // Serialize the station configuration using postcard
                         match postcard::to_allocvec(&vec![station_config]) {
                             Ok(stations_data) => {
-                                let msg = aoba_protocol::ipc::IpcMessage::stations_update(stations_data);
+                                let msg =
+                                    aoba_protocol::ipc::IpcMessage::stations_update(stations_data);
                                 if let Err(e) = ipc_conns.status.send(&msg) {
                                     log::warn!("Failed to send StationsUpdate via IPC: {e}");
                                 } else {
