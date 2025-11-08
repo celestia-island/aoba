@@ -128,6 +128,10 @@ pub enum PortManagementEvent {
         success: Option<bool>,
         detail: String,
     },
+    RuntimeRestart {
+        reason: String,
+        connection_mode: super::modbus::StationMode,
+    },
 }
 
 /// Port status indicator shown in the title bar

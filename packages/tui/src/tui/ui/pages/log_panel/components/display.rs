@@ -586,6 +586,27 @@ fn build_management_lines(
 
             [time_line, line_two, line_three]
         }
+        Event::RuntimeRestart {
+            reason,
+            connection_mode,
+        } => {
+            let mode_label = lang.tabs.log.runtime_restart_mode_label.clone();
+            let mode_text = match connection_mode {
+                types::modbus::StationMode::Master => lang.protocol.modbus.role_master.clone(),
+                types::modbus::StationMode::Slave => lang.protocol.modbus.role_slave.clone(),
+            };
+
+            let line_two = Line::from(vec![
+                Span::raw("  "),
+                Span::styled(mode_label, label_style),
+                Span::raw(": "),
+                Span::raw(mode_text),
+            ]);
+
+            let line_three = reason_line(reason.clone());
+
+            [time_line, line_two, line_three]
+        }
         Event::SubprocessSpawned { mode, pid } => {
             let line_two = Line::from(vec![
                 Span::raw("  "),
