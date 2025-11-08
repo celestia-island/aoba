@@ -5,6 +5,12 @@ use aoba_cli::{self as cli, actions, cleanup};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let matches = cli::parse_args();
+
+    if let Some(log_file) = matches.get_one::<String>("log-file") {
+        std::env::set_var("AOBA_LOG_FILE", log_file);
+    }
+
     // Console launcher: keep it simple and let the OS / terminal manage stdio.
     init_common();
 
@@ -27,8 +33,6 @@ async fn main() -> Result<()> {
         cleanup::run_cleanups();
         default_panic(info);
     }));
-
-    let matches = cli::parse_args();
 
     // Handle configuration mode first
     if actions::handle_config_mode(&matches) {

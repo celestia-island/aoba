@@ -114,6 +114,7 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
             let serializable_config = match config {
                 PortConfig::Modbus { mode, stations } => {
                     let mode_str = if mode.is_master() { "Master" } else { "Slave" };
+                    let persist_values = mode.is_master();
                     let serializable_stations = stations
                         .iter()
                         .map(|station| SerializableStation {
@@ -121,7 +122,11 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
                             register_mode: format!("{:?}", station.register_mode),
                             register_address: station.register_address,
                             register_length: station.register_length,
-                            last_values: station.last_values.clone(),
+                            last_values: if persist_values {
+                                station.last_values.clone()
+                            } else {
+                                Vec::new()
+                            },
                         })
                         .collect();
 
