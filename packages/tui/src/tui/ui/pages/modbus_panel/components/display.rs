@@ -169,6 +169,102 @@ pub fn render_kv_lines_with_indicators(
         global_mode_renderer,
     )?);
 
+    // Add RequestInterval and Timeout only in Slave mode
+    if let Some(ref port) = port_data {
+        let types::port::PortConfig::Modbus { mode, .. } = &port.config;
+        if mode.is_slave() {
+            // RequestInterval field
+            let request_interval_renderer = || -> Result<Vec<Span<'static>>> {
+                if let Some(ref port) = port_data {
+                    let current_value = port.serial_config.request_interval_ms;
+                    
+                    let selected = matches!(
+                        current_selection,
+                        types::cursor::ModbusDashboardCursor::RequestInterval
+                    );
+                    
+                    let editing = selected
+                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+                    
+                    let state = if editing {
+                        TextState::Editing
+                    } else if selected {
+                        TextState::Selected
+                    } else {
+                        TextState::Normal
+                    };
+                    
+                    if editing {
+                        if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
+                            let custom_value = String::from_utf8_lossy(bytes);
+                            Ok(input_spans(format!("{} ms", custom_value), state)?)
+                        } else {
+                            Ok(input_spans(format!("{} ms", current_value), state)?)
+                        }
+                    } else {
+                        Ok(input_spans(format!("{} ms", current_value), state)?)
+                    }
+                } else {
+                    Ok(vec![])
+                }
+            };
+            
+            lines.push(create_line(
+                &lang().protocol.common.label_request_interval,
+                matches!(
+                    current_selection,
+                    types::cursor::ModbusDashboardCursor::RequestInterval
+                ),
+                request_interval_renderer,
+            )?);
+            
+            // Timeout field
+            let timeout_renderer = || -> Result<Vec<Span<'static>>> {
+                if let Some(ref port) = port_data {
+                    let current_value = port.serial_config.timeout_ms;
+                    
+                    let selected = matches!(
+                        current_selection,
+                        types::cursor::ModbusDashboardCursor::Timeout
+                    );
+                    
+                    let editing = selected
+                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+                    
+                    let state = if editing {
+                        TextState::Editing
+                    } else if selected {
+                        TextState::Selected
+                    } else {
+                        TextState::Normal
+                    };
+                    
+                    if editing {
+                        if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
+                            let custom_value = String::from_utf8_lossy(bytes);
+                            Ok(input_spans(format!("{} ms", custom_value), state)?)
+                        } else {
+                            Ok(input_spans(format!("{} ms", current_value), state)?)
+                        }
+                    } else {
+                        Ok(input_spans(format!("{} ms", current_value), state)?)
+                    }
+                } else {
+                    Ok(vec![])
+                }
+            };
+            
+            lines.push(create_line(
+                &lang().protocol.common.label_timeout,
+                matches!(
+                    current_selection,
+                    types::cursor::ModbusDashboardCursor::Timeout
+                ),
+                timeout_renderer,
+            )?);
+        }
+    }
+
     // Separator before stations will be added only when we actually have stations
 
     // reuse sep_len from above and helper for separator
