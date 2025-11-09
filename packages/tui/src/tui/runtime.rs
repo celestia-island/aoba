@@ -148,6 +148,11 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     let render_handle =
         thread::spawn(move || crate::tui::rendering::run_rendering_loop(bus, thr_rx));
 
+    // NOTE: Initial port scan will be triggered automatically by core thread's first loop iteration
+    // since last_scan is initialized to (now - scan_interval), making it immediately eligible for scanning.
+    // This approach avoids race conditions between manual RescanPorts message and automatic scanning.
+    log::info!("🔍 Core thread will perform initial port scan on first iteration");
+
     for port_name in &autostart_ports {
         if let Err(err) = ui_tx.send(UiToCore::ToggleRuntime(port_name.clone())) {
             log::warn!("⚠️ Failed to auto-start CLI subprocess for {port_name}: {err}");

@@ -299,11 +299,11 @@ run_workflow_tests() {
 
         if [[ $exit_code -eq 0 ]]; then
             echo "SUCCESS" > "$status_file" || true
-            echo -e "${GREEN}✓ PASSED${NC}: ${workflow_type} / ${module}"
+            echo -e "${GREEN}✅ PASSED${NC}: ${workflow_type} / ${module}"
             ((passed++))
         else
             echo "FAILED (exit code: $exit_code)" > "$status_file" || true
-            echo -e "${RED}✗ FAILED${NC}: ${workflow_type} / ${module} (exit code: $exit_code)"
+            echo -e "${RED}❌ FAILED${NC}: ${workflow_type} / ${module} (exit code: $exit_code)"
             ((failed++))
         fi
 
@@ -390,15 +390,15 @@ main() {
     echo ""
 
     if [[ $total_failed -eq 0 ]]; then
-        echo -e "${GREEN}✓ All tests passed!${NC}"
+        echo -e "${GREEN}✅ All tests passed!${NC}"
         exit 0
     else
-        echo -e "${RED}✗ $total_failed test(s) failed${NC}"
+        echo -e "${RED}❌ $total_failed test(s) failed${NC}"
         echo ""
         echo "Failed tests:"
         grep -l "FAILED" "${OUTPUT_DIR}"/*.status 2>/dev/null | while read -r status_file; do
             local log_file="${status_file%.status}.log"
-            echo -e "  ${RED}✗${NC} $(basename "$log_file")"
+            echo -e "  ${RED}❌${NC} $(basename "$log_file")"
         done
         exit 1
     fi
