@@ -1,8 +1,7 @@
 use anyhow::{anyhow, Result};
-use std::{process::Command, thread::sleep, time::Duration};
-
 #[cfg(not(windows))]
 use std::process::Stdio;
+use std::{process::Command, thread::sleep, time::Duration};
 
 #[cfg(not(windows))]
 use crate::utils::build_debug_bin;
