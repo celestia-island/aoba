@@ -12,8 +12,10 @@ use std::{
 use crate::tui::status::read_status;
 use aoba_cli::{config::StationConfig, status::CliMode};
 use aoba_protocol::{
-    ipc::{generate_socket_name, IpcClient, IpcMessage},
-    ipc::{get_command_channel_name, IpcCommandClient, IpcConnection},
+    ipc::{
+        {generate_socket_name, IpcClient, IpcMessage},
+        {get_command_channel_name, IpcCommandClient, IpcConnection},
+    },
     status::{debug_dump::is_debug_dump_enabled, port_stations_to_config},
 };
 

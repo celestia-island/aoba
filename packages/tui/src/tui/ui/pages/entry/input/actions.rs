@@ -3,7 +3,7 @@ use anyhow::Result;
 use crossterm::event::MouseEventKind;
 
 use super::navigation::{handle_move_next, handle_move_prev};
-use crate::{tui::status as types, tui::utils::bus::Bus};
+use crate::tui::{status as types, utils::bus::Bus};
 
 pub fn handle_mouse(event: crossterm::event::MouseEvent, _bus: &Bus) -> Result<()> {
     match event.kind {

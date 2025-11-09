@@ -375,6 +375,121 @@ def normalize_remainder_items(remainder: str) -> List[str]:
     return [remainder]
 
 
+def build_import_tree(items: List[str]) -> dict:
+    """
+    Build a tree structure from import paths for recursive merging.
+
+    For example, ["cli_data::initialize_cli_data_source", "ipc::handle_cli_ipc_message"]
+    becomes:
+    {
+        "cli_data": {"initialize_cli_data_source": {}},
+        "ipc": {"handle_cli_ipc_message": {}}
+    }
+
+    Empty string "" represents importing the module itself (for 'self').
+    """
+    tree: dict = {}
+    for item in items:
+        if item == "":
+            # Mark that the module itself is imported
+            tree[""] = {}
+            continue
+        parts = item.split("::")
+        current = tree
+        for part in parts:
+            if part not in current:
+                current[part] = {}
+            current = current[part]
+    return tree
+
+
+def format_import_tree(tree: dict, indent: int = 0) -> str:
+    """
+    Format an import tree into a string suitable for use statements.
+    Handles 'self' when a module is imported alongside its children.
+    """
+    if not tree:
+        return ""
+
+    # Check if we need 'self' (empty key means module itself is imported)
+    has_self = "" in tree
+
+    # Get all non-empty keys
+    keys = sorted([k for k in tree.keys() if k != ""])
+
+    if not keys:
+        # Only self, no children - shouldn't add self in braces, just import the module
+        # This case is handled at the caller level
+        return ""
+
+    if len(keys) == 1 and not tree[keys[0]] and not has_self:
+        # Single leaf item, no self
+        return keys[0]
+
+    # Multiple items or has self - need braces
+    parts: List[str] = []
+
+    if has_self:
+        parts.append("self")
+
+    for key in keys:
+        subtree = tree[key]
+        if not subtree:
+            # Leaf node
+            parts.append(key)
+        else:
+            # Has children - check if the key itself is also imported (has empty string child)
+            child_has_self = "" in subtree
+            # Has children - recursively format
+            child_str = format_import_tree(subtree)
+            if child_str:
+                if "{" in child_str or child_has_self:
+                    parts.append(f"{key}::{child_str}")
+                else:
+                    parts.append(f"{key}::{child_str}")
+            else:
+                parts.append(key)
+
+    if len(parts) == 1 and not has_self:
+        return parts[0]
+
+    return "{" + ", ".join(parts) + "}"
+
+
+def find_common_prefix(paths: List[str]) -> str:
+    """
+    Find the longest common prefix among a list of paths.
+
+    For example:
+    - ["tui::status", "tui::logs::append", "tui"] -> "tui"
+    - ["status::port::A", "status::port::B", "status::C"] -> "status"
+    """
+    if not paths:
+        return ""
+    if len(paths) == 1:
+        # Single path - check if it has any "::" separator
+        if "::" in paths[0]:
+            # Return up to the last "::"
+            return "::".join(paths[0].split("::")[:-1])
+        return ""
+
+    # Split all paths into parts
+    all_parts = [p.split("::") if p else [] for p in paths]
+    if not all_parts or not all(parts for parts in all_parts):
+        return ""
+
+    # Find common prefix
+    prefix_parts: List[str] = []
+    for i in range(min(len(parts) for parts in all_parts)):
+        part = all_parts[0][i]
+        if all(parts[i] == part for parts in all_parts):
+            prefix_parts.append(part)
+        else:
+            break
+
+    return "::".join(prefix_parts)
+
+
 def render_group(statements: List[UseStatement]) -> List[str]:
     if not statements:
         return []
@@ -396,17 +511,81 @@ def render_group(statements: List[UseStatement]) -> List[str]:
             # item and not attempt to split nested braces (safe fallback).
             if items:
                 pending[key].extend(items)
+            else:
+                # Empty remainder means importing the base itself (e.g., "use crate::tui;")
+                # Mark with empty string
+                pending[key].append("")
             continue
 
         # Fallback: flush any pending merges and emit the original statement lines
-        flush_simple(pending, output)
+        flush_merged_groups(pending, output)
         output.extend(stmt.lines)
 
-    # Flush remaining pending groups
-    # Note: reuse flush_simple which expects prefix keys - adapt by temporarily
-    # converting keys to the expected format (prefix == base)
-    flush_simple(pending, output)
+    # Flush remaining pending groups with recursive merging
+    flush_merged_groups(pending, output)
     return output
+
+
+def flush_merged_groups(pending: OrderedDict[Tuple[bool, str], List[str]], output: List[str]) -> None:
+    """
+    Flush pending import groups with recursive merging.
+    This handles deep path merging like:
+    crate::tui::cli_data::a + crate::tui::ipc::b -> crate::tui::{cli_data::a, ipc::b}
+    """
+    for (is_pub, base), items in pending.items():
+        if not items:
+            continue
+
+        # Find common prefix among all items to enable deeper merging
+        common_prefix = find_common_prefix(items)
+
+        # If we have a common prefix, extend the base and adjust items
+        if common_prefix:
+            new_base = f"{base}::{common_prefix}"
+            # Strip the common prefix from each item
+            new_items: List[str] = []
+            for item in items:
+                if item == "":
+                    # The base module itself is imported
+                    new_items.append("")
+                elif item == common_prefix:
+                    # This item IS the common prefix
+                    new_items.append("")
+                elif item.startswith(common_prefix + "::"):
+                    # Strip the prefix
+                    new_items.append(item[len(common_prefix) + 2:])
+                else:
+                    # Item doesn't start with prefix (shouldn't happen if find_common_prefix works correctly)
+                    new_items.append(item)
+
+            # Build import tree for recursive merging
+            tree = build_import_tree(new_items)
+
+            # Format the tree
+            formatted = format_import_tree(tree)
+
+            if formatted:
+                line = f"{'pub ' if is_pub else ''}use {new_base}::{formatted};\n"
+            else:
+                # Just importing the base itself
+                line = f"{'pub ' if is_pub else ''}use {new_base};\n"
+        else:
+            # No common prefix - merge at the base level
+            # Build import tree for recursive merging
+            tree = build_import_tree(items)
+
+            # Format the tree
+            formatted = format_import_tree(tree)
+
+            if formatted:
+                line = f"{'pub ' if is_pub else ''}use {base}::{formatted};\n"
+            else:
+                # Just importing the base itself
+                line = f"{'pub ' if is_pub else ''}use {base};\n"
+
+        output.append(line)
+
+    pending.clear()
 
 
 def render_use_section(use_statements: List[UseStatement]) -> List[str]:

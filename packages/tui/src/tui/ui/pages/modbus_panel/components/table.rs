@@ -3,11 +3,10 @@ use anyhow::Result;
 use ratatui::{prelude::*, text::Line};
 use unicode_width::UnicodeWidthStr;
 
-use crate::{
-    tui::status as types,
-    tui::status::modbus::RegisterMode,
-    tui::status::read_status,
-    tui::ui::components::{
+use crate::tui::{
+    status as types,
+    status::{modbus::RegisterMode, read_status},
+    ui::components::{
         kv_line::render_kv_line,
         styled_label::{input_spans, switch_spans, TextState},
     },

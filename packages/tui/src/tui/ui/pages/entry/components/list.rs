@@ -9,14 +9,17 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    tui::status as types,
     tui::{
-        status::{
-            port::{PortData, PortState},
-            read_status,
-        },
-        ui::{
-            components::boxed_paragraph::render_boxed_paragraph, pages::entry::SPECIAL_ITEMS_COUNT,
+        status as types,
+        {
+            status::{
+                port::{PortData, PortState},
+                read_status,
+            },
+            ui::{
+                components::boxed_paragraph::render_boxed_paragraph,
+                pages::entry::SPECIAL_ITEMS_COUNT,
+            },
         },
     },
 };
