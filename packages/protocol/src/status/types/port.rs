@@ -73,6 +73,8 @@ pub struct PortCommunicationLog {
     pub register_quantity: Option<u16>,
     pub payload: Vec<u8>,
     pub parse_error: Option<String>,
+    pub success_hint: Option<bool>,
+    pub failure_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

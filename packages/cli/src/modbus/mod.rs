@@ -5,6 +5,51 @@ use anyhow::{anyhow, Result};
 use serde::Serialize;
 use std::io::Write;
 
+/// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
+pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    bytes
+        .iter()
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Emit a Modbus IPC log message to the TUI if IPC connections are active.
+pub(crate) fn emit_modbus_ipc_log(
+    ipc_connections: &mut Option<crate::actions::IpcConnections>,
+    port: &str,
+    direction: &str,
+    frame: &[u8],
+    station_id: Option<u8>,
+    register_mode: Option<aoba_protocol::status::types::modbus::RegisterMode>,
+    start_address: Option<u16>,
+    quantity: Option<u16>,
+    success: Option<bool>,
+    error: Option<String>,
+    config_index: Option<u16>,
+) {
+    if let Some(ref mut ipc) = ipc_connections {
+        let _ = ipc
+            .status
+            .send(&aoba_protocol::ipc::IpcMessage::ModbusData {
+                port_name: port.to_string(),
+                direction: direction.to_string(),
+                data: format_hex_bytes(frame),
+                timestamp: None,
+                station_id,
+                register_mode: register_mode.map(|mode| format!("{mode:?}")),
+                start_address,
+                quantity,
+                success,
+                error,
+                config_index,
+            });
+    }
+}
+
 /// Response structure for modbus operations
 #[derive(Serialize, Clone)]
 pub struct ModbusResponse {

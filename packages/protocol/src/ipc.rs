@@ -39,6 +39,20 @@ pub enum IpcMessage {
         data: String,
         #[serde(default)]
         timestamp: Option<i64>,
+        #[serde(default)]
+        station_id: Option<u8>,
+        #[serde(default)]
+        register_mode: Option<String>,
+        #[serde(default)]
+        start_address: Option<u16>,
+        #[serde(default)]
+        quantity: Option<u16>,
+        #[serde(default)]
+        success: Option<bool>,
+        #[serde(default)]
+        error: Option<String>,
+        #[serde(default)]
+        config_index: Option<u16>,
     },
 
     /// Heartbeat to verify subprocess is alive
