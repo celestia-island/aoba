@@ -251,43 +251,43 @@ fn build_communication_lines(
     comm: &types::port::PortCommunicationLog,
 ) -> [Line<'static>; 3] {
     let lang = lang();
-    let success = comm.parse_error.is_none();
+    match comm.role {
+        types::modbus::StationMode::Master => build_master_comm_lines(time_line, comm, &lang),
+        types::modbus::StationMode::Slave => build_slave_comm_lines(time_line, comm, &lang),
+    }
+}
 
-    let (heading_text, heading_color) = match comm.role {
-        types::modbus::StationMode::Master => {
-            (lang.tabs.log.comm_master_response.clone(), Color::Green)
-        }
-        types::modbus::StationMode::Slave => {
-            (lang.tabs.log.comm_slave_request.clone(), Color::Yellow)
-        }
-    };
+fn build_master_comm_lines(
+    time_line: Line<'static>,
+    comm: &types::port::PortCommunicationLog,
+    lang: &crate::i18n::Lang,
+) -> [Line<'static>; 3] {
+    let success = comm_is_success(comm);
 
     let mut line_two_spans = vec![
         Span::raw("  "),
         Span::styled(
-            heading_text,
+            lang.tabs.log.comm_master_response.clone(),
             Style::default()
-                .fg(heading_color)
+                .fg(Color::Green)
                 .add_modifier(Modifier::BOLD),
         ),
     ];
 
-    let unknown_label = lang.tabs.log.comm_unknown.clone();
     let config_value = comm
         .config_index
         .map(|index| format!("0x{index:04X} ({index})"))
-        .unwrap_or_else(|| unknown_label.clone());
+        .unwrap_or_else(|| lang.tabs.log.comm_unknown.clone());
 
     line_two_spans.push(Span::raw(" #"));
     line_two_spans.push(Span::raw(config_value));
     line_two_spans.push(Span::raw(" | "));
 
-    let result_text = if success {
-        lang.tabs.log.result_success.clone()
+    let (result_text, result_color) = if success {
+        (lang.tabs.log.result_success.clone(), Color::Green)
     } else {
-        lang.tabs.log.result_failure.clone()
+        (lang.tabs.log.result_failure.clone(), Color::Red)
     };
-    let result_color = if success { Color::Green } else { Color::Red };
 
     line_two_spans.push(Span::styled(
         result_text,
@@ -299,21 +299,91 @@ fn build_communication_lines(
     let line_two = Line::from(line_two_spans);
 
     let line_three = if success {
-        build_comm_success_line(&lang, comm)
+        build_comm_success_line(lang, comm)
     } else {
-        let detail = comm
-            .parse_error
-            .clone()
-            .unwrap_or_else(|| lang.tabs.log.reason_none.clone());
         let reason_label = lang.tabs.log.reason_label.clone();
-
+        let reason = comm_failure_reason(comm, lang);
         Line::from(vec![
             Span::raw("  "),
-            Span::raw(format!("{reason_label}: {detail}")),
+            Span::raw(format!("{reason_label}: {reason}")),
         ])
     };
 
     [time_line, line_two, line_three]
+}
+
+fn build_slave_comm_lines(
+    time_line: Line<'static>,
+    comm: &types::port::PortCommunicationLog,
+    lang: &crate::i18n::Lang,
+) -> [Line<'static>; 3] {
+    let success = comm_is_success(comm);
+
+    let mut line_two_spans = vec![
+        Span::raw("  "),
+        Span::styled(
+            lang.tabs.log.comm_slave_request.clone(),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+    ];
+
+    let config_value = comm
+        .config_index
+        .map(|index| format!("0x{index:04X} ({index})"))
+        .unwrap_or_else(|| lang.tabs.log.comm_unknown.clone());
+
+    line_two_spans.push(Span::raw(" #"));
+    line_two_spans.push(Span::raw(config_value));
+    line_two_spans.push(Span::raw(" | "));
+
+    let (result_text, result_color) = if success {
+        (lang.tabs.log.result_success.clone(), Color::Green)
+    } else {
+        (lang.tabs.log.result_failure.clone(), Color::Red)
+    };
+
+    line_two_spans.push(Span::styled(
+        result_text,
+        Style::default()
+            .fg(result_color)
+            .add_modifier(Modifier::BOLD),
+    ));
+
+    let line_two = Line::from(line_two_spans);
+
+    let line_three = if success {
+        build_comm_success_line(lang, comm)
+    } else {
+        let reason_label = lang.tabs.log.reason_label.clone();
+        let reason = comm_failure_reason(comm, lang);
+        Line::from(vec![
+            Span::raw("  "),
+            Span::raw(format!("{reason_label}: {reason}")),
+        ])
+    };
+
+    [time_line, line_two, line_three]
+}
+
+fn comm_is_success(comm: &types::port::PortCommunicationLog) -> bool {
+    match comm.success_hint {
+        Some(value) => value,
+        None => comm.parse_error.is_none(),
+    }
+}
+
+fn comm_failure_reason(
+    comm: &types::port::PortCommunicationLog,
+    lang: &crate::i18n::Lang,
+) -> String {
+    comm.failure_reason
+        .clone()
+        .or_else(|| comm.parse_error.clone())
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| lang.tabs.log.reason_none.clone())
 }
 
 fn build_comm_success_line(

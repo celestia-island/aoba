@@ -121,7 +121,18 @@ fn append_lifecycle_log(port_name: &str, phase: PortLifecyclePhase, note: Option
     append_port_log_internal(port_name, summary, Some(metadata));
 }
 
-fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
+#[derive(Default)]
+struct ModbusLogHints {
+    station_id: Option<u8>,
+    register_mode: Option<RegisterMode>,
+    register_start: Option<u16>,
+    register_quantity: Option<u16>,
+    config_index: Option<u16>,
+    success: Option<bool>,
+    error: Option<String>,
+}
+
+fn append_modbus_log(port_name: &str, direction: &str, data: &str, hints: Option<ModbusLogHints>) {
     let payload = parse_hex_payload(data);
     let direction_enum = match direction {
         "tx" => PortCommunicationDirection::Outbound,
@@ -134,46 +145,83 @@ fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
         PortCommunicationDirection::Inbound => translations.tabs.log.comm_receive.clone(),
     };
 
-    let mut station_id = None;
-    let mut register_mode = None;
-    let mut register_start = None;
-    let mut register_quantity = None;
-    let mut config_index: Option<u16> = None;
+    let ModbusLogHints {
+        station_id: hint_station_id,
+        register_mode: hint_register_mode,
+        register_start: hint_register_start,
+        register_quantity: hint_register_quantity,
+        config_index: hint_config_index,
+        success: hint_success,
+        error: hint_failure_reason,
+    } = hints.unwrap_or_default();
+
+    let mut station_id = hint_station_id;
+    let mut register_mode = hint_register_mode;
+    let mut register_start = hint_register_start;
+    let mut register_quantity = hint_register_quantity;
+    let mut config_index: Option<u16> = hint_config_index;
     let mut parse_error: Option<String> = None;
+    let success_hint = hint_success;
+    let mut failure_reason = hint_failure_reason;
+
+    if failure_reason
+        .as_ref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        failure_reason = None;
+    }
 
     if payload.len() >= 2 {
-        station_id = Some(payload[0]);
+        if station_id.is_none() {
+            station_id = Some(payload[0]);
+        }
         let function_code = payload[1];
-        register_mode = map_function_to_register_mode(function_code);
+        if register_mode.is_none() {
+            register_mode = map_function_to_register_mode(function_code);
+        }
 
         match function_code {
             0x01 | 0x02 | 0x03 | 0x04 => {
                 if payload.len() >= 6 {
-                    register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
-                    register_quantity = Some(u16::from_be_bytes([payload[4], payload[5]]));
+                    if register_start.is_none() {
+                        register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
+                    }
+                    if register_quantity.is_none() {
+                        register_quantity = Some(u16::from_be_bytes([payload[4], payload[5]]));
+                    }
                 } else if payload.len() >= 3 {
                     let byte_count = payload[2] as u16;
-                    register_quantity = match function_code {
-                        0x01 | 0x02 => Some(byte_count * 8),
-                        0x03 | 0x04 => Some(byte_count / 2),
-                        _ => None,
-                    };
+                    if register_quantity.is_none() {
+                        register_quantity = match function_code {
+                            0x01 | 0x02 => Some(byte_count * 8),
+                            0x03 | 0x04 => Some(byte_count / 2),
+                            _ => None,
+                        };
+                    }
                 } else {
                     parse_error = Some(translations.tabs.log.comm_error_frame_short.clone());
                 }
             }
             0x05 | 0x06 => {
                 if payload.len() >= 6 {
-                    register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
-                    register_quantity = Some(1);
+                    if register_start.is_none() {
+                        register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
+                    }
+                    if register_quantity.is_none() {
+                        register_quantity = Some(1);
+                    }
                 } else {
                     parse_error = Some(translations.tabs.log.comm_error_frame_short.clone());
                 }
             }
             0x0F | 0x10 => {
                 if payload.len() >= 6 {
-                    register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
-                    register_quantity = Some(u16::from_be_bytes([payload[4], payload[5]]));
+                    if register_start.is_none() {
+                        register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
+                    }
+                    if register_quantity.is_none() {
+                        register_quantity = Some(u16::from_be_bytes([payload[4], payload[5]]));
+                    }
                 } else {
                     parse_error = Some(translations.tabs.log.comm_error_frame_short.clone());
                 }
@@ -243,7 +291,9 @@ fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
             role = detected_role;
             role_confident = true;
             if let Some((index, start, length)) = matched {
-                config_index = Some(index);
+                if config_index.is_none() {
+                    config_index = Some(index);
+                }
 
                 if register_start.is_none() {
                     register_start = Some(start);
@@ -262,8 +312,7 @@ fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
     if role_confident {
         let skip = matches!(
             (role, direction_enum),
-            (StationMode::Master, PortCommunicationDirection::Outbound)
-                | (StationMode::Slave, PortCommunicationDirection::Inbound)
+            (StationMode::Slave, PortCommunicationDirection::Inbound)
         );
 
         if skip {
@@ -284,6 +333,19 @@ fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
             .join(" ")
     };
 
+    if failure_reason.is_none() {
+        failure_reason = parse_error.clone();
+    }
+
+    if success_hint == Some(true) {
+        parse_error = None;
+        failure_reason = None;
+    }
+
+    if success_hint == Some(false) && failure_reason.is_none() {
+        failure_reason = Some(translations.tabs.log.reason_none.clone());
+    }
+
     let metadata = PortCommunicationLog {
         direction: direction_enum,
         role,
@@ -295,12 +357,20 @@ fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
         register_quantity,
         payload,
         parse_error,
+        success_hint,
+        failure_reason,
     };
 
     if let Some(err) = &metadata.parse_error {
         log::warn!(
             "CLI[{port_name}]: unable to parse modbus frame ({direction}): {err}; frame={full_payload_hex}"
         );
+    } else if matches!(metadata.success_hint, Some(false)) {
+        if let Some(reason) = &metadata.failure_reason {
+            log::warn!(
+                "CLI[{port_name}]: reported failed modbus operation ({direction}): {reason}; frame={full_payload_hex}"
+            );
+        }
     }
 
     append_port_log_internal(
@@ -308,6 +378,16 @@ fn append_modbus_log(port_name: &str, direction: &str, data: &str) {
         summary,
         Some(PortLogMetadata::Communication(metadata)),
     );
+}
+
+fn map_register_mode_hint(value: Option<String>) -> Option<RegisterMode> {
+    value.and_then(|mode| match mode.as_str() {
+        "Coils" => Some(RegisterMode::Coils),
+        "DiscreteInputs" => Some(RegisterMode::DiscreteInputs),
+        "Holding" => Some(RegisterMode::Holding),
+        "Input" => Some(RegisterMode::Input),
+        _ => None,
+    })
 }
 
 fn append_management_log(port_name: &str, summary: String, event: PortManagementEvent) {
@@ -733,10 +813,40 @@ fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Result<()> {
             append_lifecycle_log(port_name, PortLifecyclePhase::Shutdown, None);
         }
         IpcMessage::ModbusData {
-            direction, data, ..
+            direction,
+            data,
+            station_id,
+            register_mode,
+            start_address,
+            quantity,
+            success,
+            error,
+            config_index,
+            ..
         } => {
             log::debug!("CLI[{port_name}]: ModbusData {direction} {data}");
-            append_modbus_log(port_name, &direction, &data);
+
+            let register_mode = map_register_mode_hint(register_mode);
+            let sanitized_error = error.and_then(|value| {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            });
+
+            let hints = ModbusLogHints {
+                station_id,
+                register_mode,
+                register_start: start_address,
+                register_quantity: quantity,
+                config_index,
+                success,
+                error: sanitized_error,
+            };
+
+            append_modbus_log(port_name, &direction, &data, Some(hints));
         }
         IpcMessage::Heartbeat { .. } => {
             // Heartbeat can be ignored for now or used for future monitoring

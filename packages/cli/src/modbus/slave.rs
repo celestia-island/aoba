@@ -1,12 +1,28 @@
 use anyhow::{anyhow, Result};
 use clap::ArgMatches;
 use std::{
+    io::Write,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
-use super::{extract_values_from_storage, parse_register_mode, ModbusResponse, OutputSink};
+use super::{
+    emit_modbus_ipc_log, extract_values_from_storage, parse_register_mode, ModbusResponse,
+    OutputSink,
+};
 use crate::{actions, cleanup};
+
+/// Outcome of a slave polling transaction.
+enum SlavePollTransaction {
+    Success {
+        response: ModbusResponse,
+        request_frame: Vec<u8>,
+    },
+    Failure {
+        error: anyhow::Error,
+        request_frame: Vec<u8>,
+    },
+}
 
 /// Handle slave listen (temporary: output once and exit)
 pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
@@ -66,6 +82,168 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
     output_sink.write(&json)?;
 
     Ok(())
+}
+
+/// Execute a single slave polling transaction, returning either a successful response or
+/// the failure reason along with the request frame that was sent.
+fn run_slave_poll_transaction(
+    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
+    station_id: u8,
+    register_address: u16,
+    register_length: u16,
+    reg_mode: aoba_protocol::status::types::modbus::RegisterMode,
+) -> SlavePollTransaction {
+    let mut request_frame = Vec::new();
+
+    let transaction_result: Result<ModbusResponse> = (|| {
+        log::debug!(
+            "run_slave_poll_transaction: Preparing request for station={station_id}, addr=0x{register_address:04X}, len={register_length}, mode={reg_mode:?}"
+        );
+
+        let request_bytes = match reg_mode {
+            aoba_protocol::status::types::modbus::RegisterMode::Holding => {
+                aoba_protocol::modbus::generate_pull_get_holdings_request(
+                    station_id,
+                    register_address,
+                    register_length,
+                )?
+            }
+            aoba_protocol::status::types::modbus::RegisterMode::Input => {
+                aoba_protocol::modbus::generate_pull_get_inputs_request(
+                    station_id,
+                    register_address,
+                    register_length,
+                )?
+            }
+            aoba_protocol::status::types::modbus::RegisterMode::Coils => {
+                aoba_protocol::modbus::generate_pull_get_coils_request(
+                    station_id,
+                    register_address,
+                    register_length,
+                )?
+            }
+            aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                aoba_protocol::modbus::generate_pull_get_discrete_inputs_request(
+                    station_id,
+                    register_address,
+                    register_length,
+                )?
+            }
+        };
+
+        request_frame = request_bytes.1.clone();
+
+        log::info!(
+            "run_slave_poll_transaction: Sending request to master: {:02X?}",
+            request_frame
+        );
+        {
+            let mut port = port_arc.lock().unwrap();
+            port.write_all(&request_frame)?;
+            port.flush()?;
+        }
+
+        log::debug!("run_slave_poll_transaction: Request sent, waiting for response...");
+
+        let mut buffer = vec![0u8; 256];
+        let bytes_read = {
+            let mut port = port_arc.lock().unwrap();
+            port.read(&mut buffer)?
+        };
+
+        if bytes_read == 0 {
+            log::warn!("run_slave_poll_transaction: No response received from master");
+            return Err(anyhow!("No response received"));
+        }
+
+        let response = &buffer[..bytes_read];
+        log::info!(
+            "run_slave_poll_transaction: Received response from master: {response:02X?} ({bytes_read} bytes)"
+        );
+
+        let values = match reg_mode {
+            aoba_protocol::status::types::modbus::RegisterMode::Holding
+            | aoba_protocol::status::types::modbus::RegisterMode::Input => {
+                if bytes_read < 5 {
+                    log::error!("run_slave_poll_transaction: Response too short (need at least 5 bytes, got {bytes_read})");
+                    return Err(anyhow!("Response too short"));
+                }
+
+                let byte_count = response[2] as usize;
+                if bytes_read < 3 + byte_count + 2 {
+                    log::error!(
+                        "run_slave_poll_transaction: Incomplete response (need {} bytes, got {bytes_read})",
+                        3 + byte_count + 2
+                    );
+                    return Err(anyhow!("Incomplete response"));
+                }
+
+                let mut values = Vec::new();
+                for i in 0..(byte_count / 2) {
+                    let offset = 3 + i * 2;
+                    let value = u16::from_be_bytes([response[offset], response[offset + 1]]);
+                    values.push(value);
+                }
+                values
+            }
+            aoba_protocol::status::types::modbus::RegisterMode::Coils
+            | aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                if bytes_read < 5 {
+                    log::error!("run_slave_poll_transaction: Response too short (need at least 5 bytes, got {bytes_read})");
+                    return Err(anyhow!("Response too short"));
+                }
+
+                let byte_count = response[2] as usize;
+                if bytes_read < 3 + byte_count + 2 {
+                    log::error!(
+                        "run_slave_poll_transaction: Incomplete response (need {} bytes, got {bytes_read})",
+                        3 + byte_count + 2
+                    );
+                    return Err(anyhow!("Incomplete response"));
+                }
+
+                let mut values = Vec::new();
+                for byte_idx in 0..byte_count {
+                    let byte_val = response[3 + byte_idx];
+                    for bit_idx in 0..8 {
+                        if values.len() >= register_length as usize {
+                            break;
+                        }
+                        let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
+                            1
+                        } else {
+                            0
+                        };
+                        values.push(bit_value);
+                    }
+                    if values.len() >= register_length as usize {
+                        break;
+                    }
+                }
+                values.truncate(register_length as usize);
+                values
+            }
+        };
+
+        Ok(ModbusResponse {
+            station_id,
+            register_address,
+            register_mode: format!("{reg_mode:?}"),
+            values,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        })
+    })();
+
+    match transaction_result {
+        Ok(response) => SlavePollTransaction::Success {
+            response,
+            request_frame,
+        },
+        Err(error) => SlavePollTransaction::Failure {
+            error,
+            request_frame,
+        },
+    }
 }
 
 /// Handle slave listen persist (continuous JSONL output)
@@ -320,18 +498,21 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
-        // Send request and wait for response
-        let response = send_request_and_wait(
+        // Execute single poll transaction
+        let outcome = run_slave_poll_transaction(
             port_arc.clone(),
             station_id,
             register_address,
             register_length,
             reg_mode,
-        )?;
+        );
 
         // Explicitly drop port_arc to close the port
         drop(port_arc);
-        response
+        match outcome {
+            SlavePollTransaction::Success { response, .. } => response,
+            SlavePollTransaction::Failure { error, .. } => return Err(error),
+        }
     };
 
     // Output response as JSON
@@ -339,173 +520,6 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     println!("{json}");
 
     Ok(())
-}
-
-/// Send a Modbus request and wait for response (act as Modbus Master/Client)
-fn send_request_and_wait(
-    port_arc: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
-    station_id: u8,
-    register_address: u16,
-    register_length: u16,
-    reg_mode: aoba_protocol::status::types::modbus::RegisterMode,
-) -> Result<ModbusResponse> {
-    log::debug!(
-        "send_request_and_wait: Preparing request for station={station_id}, addr=0x{register_address:04X}, len={register_length}, mode={reg_mode:?}"
-    );
-
-    // Generate request based on register mode
-    let request_bytes = match reg_mode {
-        aoba_protocol::status::types::modbus::RegisterMode::Holding => {
-            aoba_protocol::modbus::generate_pull_get_holdings_request(
-                station_id,
-                register_address,
-                register_length,
-            )?
-        }
-        aoba_protocol::status::types::modbus::RegisterMode::Input => {
-            aoba_protocol::modbus::generate_pull_get_inputs_request(
-                station_id,
-                register_address,
-                register_length,
-            )?
-        }
-        aoba_protocol::status::types::modbus::RegisterMode::Coils => {
-            aoba_protocol::modbus::generate_pull_get_coils_request(
-                station_id,
-                register_address,
-                register_length,
-            )?
-        }
-        aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-            aoba_protocol::modbus::generate_pull_get_discrete_inputs_request(
-                station_id,
-                register_address,
-                register_length,
-            )?
-        }
-    };
-
-    // Send request
-    log::info!(
-        "send_request_and_wait: Sending request to master: {:02X?}",
-        request_bytes.1
-    );
-    let mut port = port_arc.lock().unwrap();
-    port.write_all(&request_bytes.1)?; // .1 is the raw frame bytes
-    port.flush()?;
-    log::debug!("send_request_and_wait: Request sent, waiting for response...");
-    drop(port);
-
-    // Wait for response
-    let mut buffer = vec![0u8; 256];
-    let mut port = port_arc.lock().unwrap();
-    let bytes_read = port.read(&mut buffer)?;
-    drop(port);
-
-    if bytes_read == 0 {
-        log::warn!("send_request_and_wait: No response received from master");
-        return Err(anyhow!("No response received"));
-    }
-
-    let response = &buffer[..bytes_read];
-    log::info!(
-        "send_request_and_wait: Received response from master: {response:02X?} ({bytes_read} bytes)"
-    );
-
-    // Parse response
-    let values = match reg_mode {
-        aoba_protocol::status::types::modbus::RegisterMode::Holding
-        | aoba_protocol::status::types::modbus::RegisterMode::Input => {
-            // Response format for read holdings/inputs:
-            // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
-            if bytes_read < 5 {
-                log::error!("send_request_and_wait: Response too short (need at least 5 bytes, got {bytes_read})");
-                return Err(anyhow!("Response too short"));
-            }
-
-            let byte_count = response[2] as usize;
-            log::debug!(
-                "send_request_and_wait: Parsing response - byte_count={byte_count}, expected data bytes={byte_count}"
-            );
-            if bytes_read < 3 + byte_count + 2 {
-                log::error!(
-                    "send_request_and_wait: Incomplete response (need {} bytes, got {bytes_read})",
-                    3 + byte_count + 2
-                );
-                return Err(anyhow!("Incomplete response"));
-            }
-
-            let mut values = Vec::new();
-            for i in 0..(byte_count / 2) {
-                let offset = 3 + i * 2;
-                let value = u16::from_be_bytes([response[offset], response[offset + 1]]);
-                values.push(value);
-            }
-            log::info!(
-                "send_request_and_wait: Parsed {} register values: {values:?}",
-                values.len(),
-            );
-            values
-        }
-        aoba_protocol::status::types::modbus::RegisterMode::Coils
-        | aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-            // Response format for read coils/discrete inputs:
-            // [slave_id, function_code, byte_count, data..., crc_low, crc_high]
-            if bytes_read < 5 {
-                log::error!("send_request_and_wait: Response too short (need at least 5 bytes, got {bytes_read})");
-                return Err(anyhow!("Response too short"));
-            }
-
-            let byte_count = response[2] as usize;
-            if bytes_read < 3 + byte_count + 2 {
-                log::error!(
-                    "send_request_and_wait: Incomplete response (need {} bytes, got {bytes_read})",
-                    3 + byte_count + 2
-                );
-                return Err(anyhow!("Incomplete response"));
-            }
-
-            let mut values = Vec::new();
-            // Each byte contains 8 bits (coils/discrete inputs)
-            for byte_idx in 0..byte_count {
-                let byte_val = response[3 + byte_idx];
-                for bit_idx in 0..8 {
-                    if values.len() >= register_length as usize {
-                        break;
-                    }
-                    // Extract bit value (LSB first)
-                    let bit_value = if (byte_val & (1 << bit_idx)) != 0 {
-                        1
-                    } else {
-                        0
-                    };
-                    values.push(bit_value);
-                }
-                if values.len() >= register_length as usize {
-                    break;
-                }
-            }
-            // Truncate to requested length
-            values.truncate(register_length as usize);
-            log::info!(
-                "send_request_and_wait: Parsed {} coil/discrete values: {values:?}",
-                values.len(),
-            );
-            values
-        }
-    };
-
-    log::info!(
-        "send_request_and_wait: Successfully completed - station={station_id}, addr=0x{register_address:04X}, values={values:?}"
-    );
-
-    Ok(ModbusResponse {
-        station_id,
-        register_address,
-        register_mode: format!("{reg_mode:?}"),
-        values,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    })
 }
 
 /// Handle slave poll persist (continuous polling mode)
@@ -630,6 +644,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     // Continuously poll
     // Keep track of last written values to avoid consecutive duplicate outputs
     let mut last_written_values: Option<Vec<u16>> = None;
+    let mut last_failure_log: Option<(String, Instant)> = None;
 
     // Store current station configuration (can be updated via IPC)
     let mut current_station_id = station_id;
@@ -740,15 +755,17 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             }
         }
 
-        match send_request_and_wait(
+        match run_slave_poll_transaction(
             port_arc.clone(),
             current_station_id,
             current_register_address,
             current_register_length,
             current_reg_mode,
         ) {
-            Ok(response) => {
-                // If the values are identical to the last written ones, skip writing
+            SlavePollTransaction::Success {
+                response,
+                request_frame,
+            } => {
                 let write_this = match &last_written_values {
                     Some(prev) => &response.values != prev,
                     None => true,
@@ -759,7 +776,20 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     output_sink.write(&json)?;
                     last_written_values = Some(response.values.clone());
 
-                    // Send StationsUpdate via IPC
+                    emit_modbus_ipc_log(
+                        &mut ipc,
+                        port,
+                        "tx",
+                        &request_frame,
+                        Some(response.station_id),
+                        Some(current_reg_mode),
+                        Some(current_register_address),
+                        Some(current_register_length),
+                        Some(true),
+                        None,
+                        None,
+                    );
+
                     if let Some(ref mut ipc_conns) = ipc {
                         log::info!(
                             "IPC: Sending StationsUpdate for {port}: station={current_station_id}, type={:?}, addr=0x{current_register_address:04X}, values={:?}",
@@ -767,7 +797,6 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                             response.values
                         );
 
-                        // Build a StationConfig with current register values
                         let station_config = crate::config::StationConfig::single_range(
                             current_station_id,
                             crate::config::StationMode::Slave,
@@ -777,7 +806,6 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                             Some(response.values.clone()),
                         );
 
-                        // Serialize the station configuration using postcard
                         match postcard::to_allocvec(&vec![station_config]) {
                             Ok(stations_data) => {
                                 let msg =
@@ -794,9 +822,42 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                         }
                     }
                 }
+
+                last_failure_log = None;
             }
-            Err(err) => {
-                log::warn!("Poll error: {err}");
+            SlavePollTransaction::Failure {
+                request_frame,
+                error,
+            } => {
+                let error_text = format!("{error:#}");
+                log::warn!("Poll error: {error_text}");
+
+                let trimmed_error = error_text.trim().to_string();
+                let should_emit = match &last_failure_log {
+                    Some((prev, ts))
+                        if prev == &trimmed_error && ts.elapsed() < Duration::from_secs(2) =>
+                    {
+                        false
+                    }
+                    _ => true,
+                };
+
+                if should_emit {
+                    emit_modbus_ipc_log(
+                        &mut ipc,
+                        port,
+                        "tx",
+                        &request_frame,
+                        Some(current_station_id),
+                        Some(current_reg_mode),
+                        Some(current_register_address),
+                        Some(current_register_length),
+                        Some(false),
+                        Some(trimmed_error.clone()),
+                        None,
+                    );
+                    last_failure_log = Some((trimmed_error, Instant::now()));
+                }
             }
         }
 
