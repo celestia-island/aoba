@@ -249,6 +249,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
 
     let output_sink = matches
         .get_one::<String>("output")
@@ -259,7 +260,7 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     let reg_mode = parse_register_mode(register_mode)?;
 
     log::info!(
-        "Starting persistent slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
+        "Starting persistent slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate}, timeout={timeout_ms}ms)"
     );
 
     // Setup IPC if requested
@@ -302,9 +303,9 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
         None
     };
 
-    // Open serial port
+    // Open serial port with configured timeout
     let port_handle = match serialport::new(port, baud_rate)
-        .timeout(Duration::from_millis(100))
+        .timeout(Duration::from_millis(timeout_ms as u64))
         .open()
     {
         Ok(handle) => handle,
@@ -525,6 +526,8 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let request_interval_ms = *matches.get_one::<u32>("request-interval-ms").unwrap();
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
 
     let output_sink = matches
         .get_one::<String>("output")
@@ -535,7 +538,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     let reg_mode = parse_register_mode(register_mode)?;
 
     log::info!(
-        "Starting persistent slave poll on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
+        "Starting persistent slave poll on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate}, request_interval={request_interval_ms}ms, timeout={timeout_ms}ms)"
     );
 
     // Setup IPC if requested
@@ -579,9 +582,9 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
         None
     };
 
-    // Open serial port
+    // Open serial port with configured timeout
     let port_handle = match serialport::new(port, baud_rate)
-        .timeout(Duration::from_millis(500))
+        .timeout(Duration::from_millis(timeout_ms as u64))
         .open()
     {
         Ok(handle) => handle,
@@ -803,6 +806,9 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 }
 
                 last_failure_log = None;
+
+                // Wait configured request interval after successful poll
+                std::thread::sleep(Duration::from_millis(request_interval_ms as u64));
             }
             SlavePollTransaction::Failure {
                 request_frame,
@@ -837,10 +843,10 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     );
                     last_failure_log = Some((trimmed_error, Instant::now()));
                 }
+
+                // Wait configured timeout duration after failure
+                std::thread::sleep(Duration::from_millis(timeout_ms as u64));
             }
         }
-
-        // Small delay between polls
-        std::thread::sleep(Duration::from_millis(500));
     }
 }

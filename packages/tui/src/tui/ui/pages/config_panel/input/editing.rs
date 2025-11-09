@@ -22,7 +22,14 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     sanitize_configpanel_cursor()?;
 
-    let in_edit = read_status(|status| Ok(!status.temporarily.input_raw_buffer.is_empty()))?;
+    // Check if we're in editing mode: buffer should not be None
+    // (even if bytes are empty, we're still editing)
+    let in_edit = read_status(|status| {
+        Ok(!matches!(
+            status.temporarily.input_raw_buffer,
+            types::ui::InputRawBuffer::None
+        ))
+    })?;
     log::info!("ConfigPanel::handle_input: in_edit={in_edit}, cursor={selected_cursor:?}");
 
     if in_edit {
@@ -56,65 +63,239 @@ fn handle_editing_input(
         types::cursor::ConfigPanelCursor::ProtocolMode => {
             Some(1) // Only one option: Modbus RTU for now
         }
+        types::cursor::ConfigPanelCursor::RequestInterval
+        | types::cursor::ConfigPanelCursor::Timeout => None, // String input for these fields
         _ => None,
     };
 
-    crate::tui::ui::components::input_span_handler::handle_input_span(
-        key,
-        bus,
-        index_choices,
-        None,
-        |_| true,
-        |maybe_string| -> Result<()> {
-            let port_name_opt = read_status(|status| {
-                if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = status.page {
-                    Ok(status.ports.order.get(selected_port).cloned())
-                } else {
-                    Ok(None)
-                }
-            })?;
-
-            if let Some(port_name) = port_name_opt {
-                if let Some(_port) =
-                    read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
-                {
-                    if let Some(s) = maybe_string {
-                        if selected_cursor == types::cursor::ConfigPanelCursor::BaudRate {
-                            if let Ok(parsed) = s.trim().parse::<u32>() {
-                                if (1000..=2_000_000).contains(&parsed) {
-                                    // Update serial config directly in status
-                                    write_status(|status| {
-                                        if let Some(port) = status.ports.map.get_mut(&port_name) {
-                                            port.serial_config.baud = parsed;
-                                            port.config_modified = true;
-                                        }
-                                        Ok(())
-                                    })?;
-                                } else {
-                                    log::warn!("Custom baud is out of allowed range: {parsed}");
-                                }
-                            } else {
-                                log::warn!("Failed to parse custom baud value: {s}");
-                            }
-                        }
-
-                        write_status(|status| {
-                            status.temporarily.input_raw_buffer.clear();
-                            Ok(())
-                        })?;
+    // For RequestInterval and Timeout, only allow numeric input during editing
+    if matches!(
+        selected_cursor,
+        types::cursor::ConfigPanelCursor::RequestInterval
+            | types::cursor::ConfigPanelCursor::Timeout
+    ) {
+        // Numeric input only for timeout/interval fields
+        crate::tui::ui::components::input_span_handler::handle_input_span(
+            key,
+            bus,
+            index_choices,
+            None,
+            |c: char| c.is_ascii_digit(),
+            |maybe_string| -> Result<()> {
+                let port_name_opt = read_status(|status| {
+                    if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = status.page
+                    {
+                        Ok(status.ports.order.get(selected_port).cloned())
                     } else {
-                        // Handle selector edits
-                        handle_selector_commit(&port_name, selected_cursor)?;
+                        Ok(None)
+                    }
+                })?;
+
+                if let Some(port_name) = port_name_opt {
+                    if let Some(_port) =
+                        read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
+                    {
+                        if let Some(s) = maybe_string {
+                            if selected_cursor == types::cursor::ConfigPanelCursor::BaudRate {
+                                if let Ok(parsed) = s.trim().parse::<u32>() {
+                                    if (1000..=2_000_000).contains(&parsed) {
+                                        // Update serial config directly in status
+                                        write_status(|status| {
+                                            if let Some(port) = status.ports.map.get_mut(&port_name)
+                                            {
+                                                port.serial_config.baud = parsed;
+                                                port.config_modified = true;
+                                            }
+                                            Ok(())
+                                        })?;
+                                    } else {
+                                        log::warn!("Custom baud is out of allowed range: {parsed}");
+                                    }
+                                } else {
+                                    log::warn!("Failed to parse custom baud value: {s}");
+                                }
+                            } else if selected_cursor
+                                == types::cursor::ConfigPanelCursor::RequestInterval
+                            {
+                                // Handle empty input: use default value of 1 ms
+                                let trimmed = s.trim();
+                                let parsed_result = if trimmed.is_empty() {
+                                    Ok(1u32) // Default to 1 ms if empty
+                                } else {
+                                    trimmed.parse::<u32>()
+                                };
+
+                                if let Ok(parsed) = parsed_result {
+                                    if (1..=60_000).contains(&parsed) {
+                                        let needs_restart = write_status(|status| {
+                                            if let Some(port) = status.ports.map.get_mut(&port_name)
+                                            {
+                                                port.serial_config.request_interval_ms = parsed;
+                                                port.config_modified = true;
+                                                // Check if port is currently running
+                                                Ok(matches!(
+                                                    port.state,
+                                                    types::port::PortState::OccupiedByThis
+                                                ))
+                                            } else {
+                                                Ok(false)
+                                            }
+                                        })?;
+
+                                        // If port is running, restart the CLI subprocess to apply new config
+                                        if needs_restart {
+                                            log::info!(
+                                                "Request interval changed, restarting port: {}",
+                                                port_name
+                                            );
+                                            bus.ui_tx
+                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
+                                                .map_err(|err| anyhow!(err))?;
+                                            std::thread::sleep(std::time::Duration::from_millis(
+                                                100,
+                                            ));
+                                            bus.ui_tx
+                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
+                                                .map_err(|err| anyhow!(err))?;
+                                        }
+                                    } else {
+                                        log::warn!(
+                                        "Request interval is out of allowed range (1-60000 ms): {parsed}"
+                                    );
+                                    }
+                                } else {
+                                    log::warn!("Failed to parse request interval value: {s}");
+                                }
+                            } else if selected_cursor == types::cursor::ConfigPanelCursor::Timeout {
+                                // Handle empty input: use default value of 1 ms
+                                let trimmed = s.trim();
+                                let parsed_result = if trimmed.is_empty() {
+                                    Ok(1u32) // Default to 1 ms if empty
+                                } else {
+                                    trimmed.parse::<u32>()
+                                };
+
+                                if let Ok(parsed) = parsed_result {
+                                    if (100..=60_000).contains(&parsed) {
+                                        let needs_restart = write_status(|status| {
+                                            if let Some(port) = status.ports.map.get_mut(&port_name)
+                                            {
+                                                port.serial_config.timeout_ms = parsed;
+                                                port.config_modified = true;
+                                                // Check if port is currently running
+                                                Ok(matches!(
+                                                    port.state,
+                                                    types::port::PortState::OccupiedByThis
+                                                ))
+                                            } else {
+                                                Ok(false)
+                                            }
+                                        })?;
+
+                                        // If port is running, restart the CLI subprocess to apply new config
+                                        if needs_restart {
+                                            log::info!(
+                                                "Timeout changed, restarting port: {}",
+                                                port_name
+                                            );
+                                            bus.ui_tx
+                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
+                                                .map_err(|err| anyhow!(err))?;
+                                            std::thread::sleep(std::time::Duration::from_millis(
+                                                100,
+                                            ));
+                                            bus.ui_tx
+                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
+                                                .map_err(|err| anyhow!(err))?;
+                                        }
+                                    } else {
+                                        log::warn!(
+                                        "Timeout is out of allowed range (100-60000 ms): {parsed}"
+                                    );
+                                    }
+                                } else {
+                                    log::warn!("Failed to parse timeout value: {s}");
+                                }
+                            }
+
+                            write_status(|status| {
+                                status.temporarily.input_raw_buffer.clear();
+                                Ok(())
+                            })?;
+                        } else {
+                            // Handle selector edits
+                            handle_selector_commit(&port_name, selected_cursor)?;
+                        }
                     }
                 }
-            }
 
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
-            Ok(())
-        },
-    )?;
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            },
+        )?;
+    } else {
+        // Accept all characters for other fields (non-numeric fields)
+        crate::tui::ui::components::input_span_handler::handle_input_span(
+            key,
+            bus,
+            index_choices,
+            None,
+            |_: char| true,
+            |maybe_string| -> Result<()> {
+                let port_name_opt = read_status(|status| {
+                    if let crate::tui::status::Page::ConfigPanel { selected_port, .. } = status.page
+                    {
+                        Ok(status.ports.order.get(selected_port).cloned())
+                    } else {
+                        Ok(None)
+                    }
+                })?;
+
+                if let Some(port_name) = port_name_opt {
+                    if let Some(_port) =
+                        read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))?
+                    {
+                        if let Some(s) = maybe_string {
+                            if selected_cursor == types::cursor::ConfigPanelCursor::BaudRate {
+                                if let Ok(parsed) = s.trim().parse::<u32>() {
+                                    if (1000..=2_000_000).contains(&parsed) {
+                                        // Update serial config directly in status
+                                        write_status(|status| {
+                                            if let Some(port) = status.ports.map.get_mut(&port_name)
+                                            {
+                                                port.serial_config.baud = parsed;
+                                                port.config_modified = true;
+                                            }
+                                            Ok(())
+                                        })?;
+                                    } else {
+                                        log::warn!("Custom baud is out of allowed range: {parsed}");
+                                    }
+                                } else {
+                                    log::warn!("Failed to parse custom baud value: {s}");
+                                }
+                            }
+
+                            write_status(|status| {
+                                status.temporarily.input_raw_buffer.clear();
+                                Ok(())
+                            })?;
+                        } else {
+                            // Handle selector edits
+                            handle_selector_commit(&port_name, selected_cursor)?;
+                        }
+                    }
+                }
+
+                bus.ui_tx
+                    .send(crate::tui::utils::bus::UiToCore::Refresh)
+                    .map_err(|err| anyhow!(err))?;
+                Ok(())
+            },
+        )?;
+    }
     Ok(())
 }
 
@@ -340,7 +521,9 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
         types::cursor::ConfigPanelCursor::BaudRate
         | types::cursor::ConfigPanelCursor::DataBits { .. }
         | types::cursor::ConfigPanelCursor::StopBits
-        | types::cursor::ConfigPanelCursor::Parity => {
+        | types::cursor::ConfigPanelCursor::Parity
+        | types::cursor::ConfigPanelCursor::RequestInterval
+        | types::cursor::ConfigPanelCursor::Timeout => {
             start_editing_mode(selected_cursor)?;
             Ok(())
         }
@@ -371,6 +554,26 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
 
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
+                        }
+                        types::cursor::ConfigPanelCursor::RequestInterval => {
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::String {
+                                    bytes: port
+                                        .serial_config
+                                        .request_interval_ms
+                                        .to_string()
+                                        .into_bytes(),
+                                    offset: port.serial_config.request_interval_ms.to_string().len()
+                                        as isize,
+                                };
+                        }
+                        types::cursor::ConfigPanelCursor::Timeout => {
+                            status.temporarily.input_raw_buffer =
+                                types::ui::InputRawBuffer::String {
+                                    bytes: port.serial_config.timeout_ms.to_string().into_bytes(),
+                                    offset: port.serial_config.timeout_ms.to_string().len()
+                                        as isize,
+                                };
                         }
                         types::cursor::ConfigPanelCursor::DataBits { .. } => {
                             let index = match port.serial_config.data_bits {
