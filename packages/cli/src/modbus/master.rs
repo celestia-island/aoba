@@ -12,7 +12,9 @@ use std::{
 use rmodbus::{server::context::ModbusContext, ModbusProto};
 use serialport::SerialPort;
 
-use super::{parse_data_line, parse_register_mode, DataSource, ModbusResponse};
+use super::{
+    emit_modbus_ipc_log, parse_data_line, parse_register_mode, DataSource, ModbusResponse,
+};
 use crate::{actions, cleanup};
 use aoba_protocol::modbus::{
     build_slave_coils_response, build_slave_discrete_inputs_response,
@@ -134,7 +136,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                     drop(port);
 
                     let request = assembling.clone();
-                    let response =
+                    let (response, _) =
                         respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
 
                     // Output JSON
@@ -154,7 +156,7 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
                     drop(port);
 
                     let request = assembling.clone();
-                    let response =
+                    let (response, _) =
                         respond_to_request(port_arc.clone(), &request, station_id, &storage)?;
 
                     // Output JSON
@@ -189,6 +191,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
     let reg_mode = parse_register_mode(register_mode)?;
     let data_source = data_source_str.parse::<DataSource>()?;
+    let port_name = port;
 
     log::info!(
         "Starting persistent master provide on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
@@ -612,7 +615,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                 station_id,
                                 &storage,
                             ) {
-                                Ok(response) => {
+                                Ok((response, response_frame)) => {
                                     let mut hasher = DefaultHasher::new();
                                     hasher.write(&request);
                                     let request_key = hasher.finish();
@@ -640,9 +643,36 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     if let Err(e) = print_response(request_key, &response, force) {
                                         log::warn!("Failed to print response: {e}");
                                     }
+
+                                    emit_modbus_ipc_log(
+                                        &mut ipc_connections,
+                                        port_name,
+                                        "tx",
+                                        &response_frame,
+                                        Some(response.station_id),
+                                        parsed_range.map(|(_, _, mode)| mode),
+                                        parsed_range.map(|(start, _, _)| start),
+                                        parsed_range.map(|(_, qty, _)| qty),
+                                        Some(true),
+                                        None,
+                                        None,
+                                    );
                                 }
                                 Err(err) => {
                                     log::warn!("Error responding to request: {err}");
+                                    emit_modbus_ipc_log(
+                                        &mut ipc_connections,
+                                        port_name,
+                                        "tx",
+                                        &request,
+                                        request.first().copied(),
+                                        parsed_range.map(|(_, _, mode)| mode),
+                                        parsed_range.map(|(start, _, _)| start),
+                                        parsed_range.map(|(_, qty, _)| qty),
+                                        Some(false),
+                                        Some(format!("{err:#}")),
+                                        None,
+                                    );
                                 }
                             }
 
@@ -700,7 +730,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                 station_id,
                                 &storage,
                             ) {
-                                Ok(response) => {
+                                Ok((response, response_frame)) => {
                                     // Build a stable key from the request bytes to use for debounce
                                     let mut hasher = DefaultHasher::new();
                                     hasher.write(&request);
@@ -729,9 +759,36 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
                                     if let Err(e) = print_response(request_key, &response, force) {
                                         log::warn!("Failed to print response: {e}");
                                     }
+
+                                    emit_modbus_ipc_log(
+                                        &mut ipc_connections,
+                                        port_name,
+                                        "tx",
+                                        &response_frame,
+                                        Some(response.station_id),
+                                        parsed_range.map(|(_, _, mode)| mode),
+                                        parsed_range.map(|(start, _, _)| start),
+                                        parsed_range.map(|(_, qty, _)| qty),
+                                        Some(true),
+                                        None,
+                                        None,
+                                    );
                                 }
                                 Err(err) => {
                                     log::warn!("Error responding to request: {err}");
+                                    emit_modbus_ipc_log(
+                                        &mut ipc_connections,
+                                        port_name,
+                                        "tx",
+                                        &request,
+                                        request.first().copied(),
+                                        parsed_range.map(|(_, _, mode)| mode),
+                                        parsed_range.map(|(start, _, _)| start),
+                                        parsed_range.map(|(_, qty, _)| qty),
+                                        Some(false),
+                                        Some(format!("{err:#}")),
+                                        None,
+                                    );
                                 }
                             }
 
@@ -758,7 +815,7 @@ fn respond_to_request(
     request: &[u8],
     station_id: u8,
     storage: &Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
-) -> Result<ModbusResponse> {
+) -> Result<(ModbusResponse, Vec<u8>)> {
     use rmodbus::server::ModbusFrame;
 
     if request.len() < 2 {
@@ -868,6 +925,7 @@ fn respond_to_request(
 
     // Send response
     let mut port = port_arc.lock().unwrap();
+    let response_frame = response.clone();
     port.write_all(&response)?;
     port.flush()?;
     drop(port);
@@ -886,13 +944,16 @@ fn respond_to_request(
         _ => "unknown",
     };
 
-    Ok(ModbusResponse {
-        station_id,
-        register_address: frame.reg,
-        register_mode: register_mode_label.to_string(),
-        values,
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    })
+    Ok((
+        ModbusResponse {
+            station_id,
+            register_address: frame.reg,
+            register_mode: register_mode_label.to_string(),
+            values,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        },
+        response_frame,
+    ))
 }
 
 /// Update storage loop - continuously reads data from source and updates storage
