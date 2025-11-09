@@ -24,6 +24,13 @@ pub fn parse_args() -> ArgMatches {
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("check-port")
+                .long("check-port")
+                .help("Check if a specific port is available (exit 0=free, 1=occupied)")
+                .value_name("PORT")
+                .conflicts_with_all(["list-ports", "tui", "config", "config-json", "slave-listen", "slave-listen-persist", "slave-poll", "slave-poll-persist", "master-provide", "master-provide-persist"]),
+        )
+        .arg(
             Arg::new("json")
                 .long("json")
                 .short('j')

@@ -147,14 +147,48 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
             };
 
             match final_cursor {
-                Some(types::cursor::EntryCursor::Com { index }) => write_status(|status| {
-                    status.page = Page::ConfigPanel {
-                        selected_port: index,
-                        view_offset: 0,
-                        cursor: types::cursor::ConfigPanelCursor::EnablePort,
-                    };
-                    Ok(())
-                })?,
+                Some(types::cursor::EntryCursor::Com { index }) => {
+                    // Check if port is occupied by another program before allowing access
+                    let port_state = read_status(|status| {
+                        Ok(status
+                            .ports
+                            .order
+                            .get(index)
+                            .and_then(|name| status.ports.map.get(name))
+                            .map(|port| port.state.clone()))
+                    })?;
+
+                    if let Some(state) = port_state {
+                        if state.is_occupied_by_other() {
+                            // Port is occupied by another program, show error and prevent access
+                            write_status(|status| {
+                                status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                    message: aoba_protocol::i18n::lang()
+                                        .index
+                                        .port_occupied_error
+                                        .clone(),
+                                    timestamp: chrono::Local::now(),
+                                });
+                                Ok(())
+                            })?;
+                            log::warn!(
+                                "Cannot access port at index {}: occupied by another program",
+                                index
+                            );
+                            return Ok(());
+                        }
+                    }
+
+                    // Port is free, allow access to config panel
+                    write_status(|status| {
+                        status.page = Page::ConfigPanel {
+                            selected_port: index,
+                            view_offset: 0,
+                            cursor: types::cursor::ConfigPanelCursor::EnablePort,
+                        };
+                        Ok(())
+                    })?;
+                }
                 Some(types::cursor::EntryCursor::Refresh) => {
                     bus.ui_tx
                         .send(crate::tui::utils::bus::UiToCore::RescanPorts)
