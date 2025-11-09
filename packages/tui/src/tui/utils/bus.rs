@@ -3,8 +3,10 @@ use flume::{Receiver, Sender};
 /// Messages sent from UI thread to core worker thread.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UiToCore {
-    /// Request an immediate full port / device refresh (equivalent to pressing 'r').
+    /// Request an immediate UI redraw without forcing a port rescan.
     Refresh,
+    /// Trigger a full port rescan (equivalent to pressing the Refresh entry).
+    RescanPorts,
     /// Graceful shutdown request.
     Quit,
     /// Pause polling / stop master polling loop.
@@ -13,6 +15,8 @@ pub enum UiToCore {
     ResumePolling,
     /// Toggle (start/stop) per-port runtime. Contains port name.
     ToggleRuntime(String),
+    /// Restart per-port runtime (stop if running, then start). Contains port name.
+    RestartRuntime(String),
     /// Send register update to CLI subprocess via IPC
     SendRegisterUpdate {
         port_name: String,
