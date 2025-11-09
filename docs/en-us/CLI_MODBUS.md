@@ -4,7 +4,9 @@ This document describes the new CLI features for Modbus operations added to the 
 
 ## Features
 
-### 1. Enhanced Port Listing
+### 1. Port Detection and Listing
+
+#### List All Ports
 
 The `--list-ports` command now provides more detailed information when used with `--json`:
 
@@ -33,6 +35,74 @@ Example output:
     "pid": 5678
   }
 ]
+```
+
+#### Check Single Port Occupation Status
+
+The `--check-port` command is used to detect whether a specific port is occupied. This is useful for script automation and port status monitoring:
+
+```bash
+aoba --check-port COM3
+```
+
+**Exit Codes:**
+
+- `0` - Port is free and available
+- `1` - Port is occupied by another program
+
+**Plain Output:**
+
+```
+Port COM3 is free
+```
+
+or
+
+```
+Port COM3 is occupied
+```
+
+**JSON Format Output:**
+
+```bash
+aoba --check-port COM3 --json
+```
+
+Example output:
+
+```json
+{"port":"COM3","occupied":false,"status":"Free"}
+```
+
+or
+
+```json
+{"port":"COM3","occupied":true,"status":"Occupied"}
+```
+
+**Usage Examples:**
+
+Using in shell scripts:
+
+```bash
+# Bash example
+if aoba --check-port /dev/ttyUSB0; then
+    echo "Port is free, ready to use"
+    # Perform your operations
+else
+    echo "Port is occupied, please close the program using this port"
+    exit 1
+fi
+```
+
+```powershell
+# PowerShell example
+cargo run --package aoba -- --check-port COM3
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Port is free"
+} else {
+    Write-Host "Port is occupied"
+}
 ```
 
 ### 2. Slave Listen Modes

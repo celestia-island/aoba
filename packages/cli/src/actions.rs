@@ -7,6 +7,152 @@ pub struct IpcConnections {
     pub command_listener: aoba_protocol::ipc::IpcCommandListener,
 }
 
+/// Check if a port is occupied using Windows API (Windows) or file lock checking (Unix)
+/// Returns true if occupied, false if free
+fn check_port_occupation(port_name: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::{
+            core::PCWSTR,
+            Win32::{
+                Foundation::{CloseHandle, GetLastError, WIN32_ERROR},
+                Storage::FileSystem::{
+                    CreateFileW, FILE_FLAG_OVERLAPPED, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+                    FILE_SHARE_NONE, OPEN_EXISTING,
+                },
+            },
+        };
+
+        // Convert COM port name to Windows device path (e.g., "COM3" -> "\\\\.\\COM3")
+        let device_path = if port_name.starts_with("\\\\.\\") {
+            port_name.to_string()
+        } else {
+            format!("\\\\.\\{}", port_name)
+        };
+
+        // Convert to UTF-16 for Windows API
+        let wide_path: Vec<u16> = device_path
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+
+        // Try to open port with exclusive access (FILE_SHARE_NONE)
+        // If another process has it open, this will fail with ERROR_SHARING_VIOLATION
+        unsafe {
+            let handle = CreateFileW(
+                PCWSTR(wide_path.as_ptr()),
+                FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0,
+                FILE_SHARE_NONE,
+                None,
+                OPEN_EXISTING,
+                FILE_FLAG_OVERLAPPED,
+                None,
+            );
+
+            if let Err(_) = handle {
+                // Failed to open, check error code
+                let error = GetLastError();
+
+                // ERROR_SHARING_VIOLATION (32) means port is occupied by another process
+                // ERROR_ACCESS_DENIED (5) may also indicate occupation
+                let is_occupied = matches!(error, WIN32_ERROR(32) | WIN32_ERROR(5));
+
+                log::debug!(
+                    "Windows API CreateFileW failed for {}: error={:?}, occupied={}",
+                    port_name,
+                    error,
+                    is_occupied
+                );
+
+                return is_occupied;
+            }
+
+            // Successfully opened, close it and return free
+            let handle = handle.unwrap();
+            let _ = CloseHandle(handle);
+            log::debug!(
+                "Windows API successfully opened {}, port is free",
+                port_name
+            );
+            false
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // On Unix-like systems, use TIOCEXCL ioctl to detect exclusive access
+        use std::{
+            fs::OpenOptions,
+            os::unix::{fs::OpenOptionsExt, io::AsRawFd},
+        };
+
+        // Try to open the device file
+        match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY)
+            .open(port_name)
+        {
+            Ok(file) => {
+                let fd = file.as_raw_fd();
+
+                // Try to set exclusive terminal control (TIOCEXCL)
+                // If another process already has exclusive access, this will fail
+                let tiocexcl_result = unsafe { libc::ioctl(fd, libc::TIOCEXCL) };
+
+                if tiocexcl_result == 0 {
+                    // Successfully acquired exclusive access - port is free
+                    // Release exclusive access before closing
+                    unsafe {
+                        libc::ioctl(fd, libc::TIOCNXCL);
+                    }
+                    log::debug!("Unix TIOCEXCL succeeded for {}, port is free", port_name);
+                    false
+                } else {
+                    // Failed to get exclusive access - might be occupied or not a TTY
+                    // Try additional check: attempt to get terminal attributes
+                    let mut termios: libc::termios = unsafe { std::mem::zeroed() };
+                    let tcgetattr_result = unsafe { libc::tcgetattr(fd, &mut termios) };
+
+                    if tcgetattr_result == 0 {
+                        // Can get termios, but TIOCEXCL failed - likely occupied
+                        log::debug!(
+                            "Unix TIOCEXCL failed but tcgetattr succeeded for {}, port is occupied",
+                            port_name
+                        );
+                        true
+                    } else {
+                        // Both failed - not a proper TTY device or has issues
+                        log::debug!(
+                            "Unix both TIOCEXCL and tcgetattr failed for {}, assuming free",
+                            port_name
+                        );
+                        false
+                    }
+                }
+            }
+            Err(e) => {
+                // Failed to open device file at all
+                let error_string = format!("{}", e);
+                let error_lower = error_string.to_lowercase();
+                let is_occupied = error_lower.contains("permission denied")
+                    || error_lower.contains("device or resource busy")
+                    || error_lower.contains("in use")
+                    || error_lower.contains("resource temporarily unavailable");
+
+                log::debug!(
+                    "Unix open failed for {}: {}, occupied={}",
+                    port_name,
+                    e,
+                    is_occupied
+                );
+
+                is_occupied
+            }
+        }
+    }
+}
+
 /// Helper to establish IPC connections if requested (bidirectional)
 pub fn setup_ipc(matches: &ArgMatches) -> Option<IpcConnections> {
     if let Some(channel_id) = matches.get_one::<String>("ipc-channel") {
@@ -68,6 +214,39 @@ struct PortInfo<'a> {
 }
 
 pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
+    // Handle check-port command (must be before list-ports)
+    if let Some(port_name) = matches.get_one::<String>("check-port") {
+        let is_occupied = check_port_occupation(port_name);
+
+        let want_json = matches.get_flag("json");
+        if want_json {
+            #[derive(serde::Serialize)]
+            struct CheckResult {
+                port: String,
+                occupied: bool,
+                status: &'static str,
+            }
+            let result = CheckResult {
+                port: port_name.clone(),
+                occupied: is_occupied,
+                status: if is_occupied { "Occupied" } else { "Free" },
+            };
+            if let Ok(s) = serde_json::to_string(&result) {
+                println!("{}", s);
+            }
+        } else {
+            // Plain text output
+            if is_occupied {
+                eprintln!("Port {} is occupied", port_name);
+            } else {
+                println!("Port {} is free", port_name);
+            }
+        }
+
+        // Exit with appropriate code: 0 = free, 1 = occupied
+        std::process::exit(if is_occupied { 1 } else { 0 });
+    }
+
     if matches.get_flag("list-ports") {
         let ports_enriched = aoba_protocol::tty::available_ports_enriched();
 

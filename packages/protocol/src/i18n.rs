@@ -20,6 +20,7 @@ derive_struct! {
             port_state_free: String = "port_state_free".to_string(),
             port_state_owned: String = "port_state_owned".to_string(),
             port_state_other: String = "port_state_other".to_string(),
+            port_occupied_error: String = "port_occupied_error".to_string(),
             refresh_action: String = "refresh_action".to_string(),
             manual_specify_label: String = "manual_specify_label".to_string(),
             about_label: String = "about_label".to_string(),

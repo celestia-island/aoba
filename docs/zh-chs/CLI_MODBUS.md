@@ -4,7 +4,9 @@
 
 ## 功能
 
-### 1. 增强的端口列表
+### 1. 端口检测与列表
+
+#### 列出所有端口
 
 `--list-ports` 命令现在可以与 `--json` 一起使用，提供更详细的端口信息：
 
@@ -33,6 +35,74 @@ aoba --list-ports --json
     "pid": 5678
   }
 ]
+```
+
+#### 检查单个端口占用状态
+
+`--check-port` 命令用于检测特定端口是否被占用，这对于脚本自动化和端口状态监控非常有用：
+
+```bash
+aoba --check-port COM3
+```
+
+**退出码：**
+
+- `0` - 端口空闲可用
+- `1` - 端口被其他程序占用
+
+**普通输出：**
+
+```
+Port COM3 is free
+```
+
+或
+
+```
+Port COM3 is occupied
+```
+
+**JSON格式输出：**
+
+```bash
+aoba --check-port COM3 --json
+```
+
+输出示例：
+
+```json
+{"port":"COM3","occupied":false,"status":"Free"}
+```
+
+或
+
+```json
+{"port":"COM3","occupied":true,"status":"Occupied"}
+```
+
+**使用示例：**
+
+在shell脚本中使用：
+
+```bash
+# Bash示例
+if aoba --check-port /dev/ttyUSB0; then
+    echo "端口空闲，可以使用"
+    # 执行你的操作
+else
+    echo "端口被占用，请先关闭占用该端口的程序"
+    exit 1
+fi
+```
+
+```powershell
+# PowerShell示例
+cargo run --package aoba -- --check-port COM3
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "端口空闲"
+} else {
+    Write-Host "端口被占用"
+}
 ```
 
 ### 2. 从站监听模式
