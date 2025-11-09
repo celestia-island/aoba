@@ -5,6 +5,7 @@ mod list_ports_json;
 mod list_ports_status;
 mod modbus_cli;
 mod modbus_e2e;
+mod port_occupation;
 mod utils;
 
 use anyhow::Result;
@@ -31,6 +32,10 @@ use modbus_cli::{
 use modbus_e2e::{
     test_master_provide_with_vcom, test_master_slave_communication, test_slave_listen_with_vcom,
 };
+#[cfg(not(windows))]
+use port_occupation::test_port_occupation_detection_linux;
+#[cfg(windows)]
+use port_occupation::test_port_occupation_detection_windows;
 
 /// CLI E2E test suite with module-based test execution
 #[derive(Parser, Debug)]
@@ -150,6 +155,8 @@ async fn main() -> Result<()> {
             log::info!("    - modbus_multi_slaves");
             log::info!("    - modbus_multi_slaves_same_station");
             log::info!("    - modbus_multi_slaves_adjacent_registers");
+            log::info!("  Port Occupation Detection:");
+            log::info!("    - port_occupation_detection");
             log::info!("");
             log::info!("Usage: cargo run --package cli_e2e -- --module <module_name>");
             return Ok(());
@@ -182,6 +189,12 @@ async fn main() -> Result<()> {
         "modbus_multi_slaves" => test_multi_slaves().await?,
         "modbus_multi_slaves_same_station" => test_multi_slaves_same_station().await?,
         "modbus_multi_slaves_adjacent_registers" => test_multi_slaves_adjacent_registers().await?,
+
+        // Port occupation detection tests
+        #[cfg(windows)]
+        "port_occupation_detection" => test_port_occupation_detection_windows()?,
+        #[cfg(not(windows))]
+        "port_occupation_detection" => test_port_occupation_detection_linux()?,
 
         _ => {
             log::error!("❌ Unknown module: {module}");

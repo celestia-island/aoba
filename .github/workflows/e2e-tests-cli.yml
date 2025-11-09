@@ -21,6 +21,7 @@ jobs:
           - list_ports_json
           - list_ports_status
           - modbus_basic_master_slave
+          - port_occupation_detection
 
     steps:
       - uses: actions/checkout@v5
@@ -53,11 +54,9 @@ jobs:
           chmod +x target/debug/cli_e2e
 
       - name: Install socat
-        if: matrix.module == 'modbus_basic_master_slave'
         run: sudo apt-get update && sudo apt-get install -y socat
 
       - name: Setup virtual serial ports
-        if: matrix.module == 'modbus_basic_master_slave'
         run: |
           chmod +x scripts/socat_init.sh
           ./scripts/socat_init.sh
