@@ -1,12 +1,11 @@
 pub mod tui;
 
-use std::io::{self, Write};
-
 use anyhow::Result;
 use chrono::Local;
 use clap::ArgMatches;
 use env_logger::{Builder, Target};
 use log::LevelFilter;
+use std::io::{self, Write};
 
 pub use aoba_protocol::i18n;
 
