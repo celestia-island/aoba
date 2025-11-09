@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 /// For the config panel we have groups of options separated by blank lines.
 /// Define the sizes of each group so view_offset can account for the
 /// extra blank rows introduced between groups.
-pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4];
+pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4, 2];
 
 /// Cursor trait to unify cursor behaviour across pages.
 pub trait Cursor {
@@ -132,6 +132,10 @@ pub enum ConfigPanelCursor {
     StopBits,
     /// View communication log
     ViewCommunicationLog,
+    /// Request interval time (ms)
+    RequestInterval,
+    /// Timeout waiting time (ms)
+    Timeout,
 }
 
 impl ConfigPanelCursor {
@@ -146,6 +150,8 @@ impl ConfigPanelCursor {
             ConfigPanelCursor::DataBits { custom_mode: false },
             ConfigPanelCursor::Parity,
             ConfigPanelCursor::StopBits,
+            ConfigPanelCursor::RequestInterval,
+            ConfigPanelCursor::Timeout,
         ]
     }
 

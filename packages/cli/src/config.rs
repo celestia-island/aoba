@@ -61,12 +61,28 @@ pub struct CommunicationParams {
     pub mode: CommunicationMethod,
     /// Dynamically pull data from external source
     pub dynamic_pull: bool,
-    /// Wait time (seconds)
+    /// Wait time (seconds) - deprecated, use request_interval_ms instead
+    #[serde(default)]
     pub wait_time: Option<f64>,
-    /// Timeout (seconds)
+    /// Timeout (seconds) - deprecated, use timeout_ms instead
+    #[serde(default)]
     pub timeout: Option<f64>,
+    /// Request interval time in milliseconds (replaces wait_time)
+    #[serde(default = "default_request_interval_ms")]
+    pub request_interval_ms: u32,
+    /// Timeout waiting time in milliseconds (replaces timeout)
+    #[serde(default = "default_timeout_ms")]
+    pub timeout_ms: u32,
     /// Persistence mode
     pub persistence: PersistenceMode,
+}
+
+fn default_request_interval_ms() -> u32 {
+    1000
+}
+
+fn default_timeout_ms() -> u32 {
+    3000
 }
 
 /// Root configuration structure
@@ -89,6 +105,8 @@ impl Default for CommunicationParams {
             dynamic_pull: false,
             wait_time: Some(1.0),
             timeout: Some(3.0),
+            request_interval_ms: 1000,
+            timeout_ms: 3000,
             persistence: PersistenceMode::Persistent,
         }
     }

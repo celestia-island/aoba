@@ -46,7 +46,7 @@ fn create_line(
     };
 
     let adapted = |_ts: TextState| -> Result<Vec<Span<'static>>> { render_closure() };
-    render_kv_line(label, text_state, adapted)
+    render_kv_line(label, text_state, adapted, false)
 }
 
 /// Generate lines for modbus panel with 2:20:remaining layout (indicator:label:value).

@@ -11,6 +11,10 @@ pub struct SerialConfig {
     pub data_bits: u8,
     pub stop_bits: u8,
     pub parity: SerialParity,
+    /// Request interval time in milliseconds (for Modbus polling)
+    pub request_interval_ms: u32,
+    /// Timeout waiting time in milliseconds (for Modbus communication)
+    pub timeout_ms: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -27,6 +31,8 @@ impl Default for SerialConfig {
             data_bits: 8,
             stop_bits: 1,
             parity: SerialParity::None,
+            request_interval_ms: 1000,
+            timeout_ms: 3000,
         }
     }
 }

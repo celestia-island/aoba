@@ -29,6 +29,8 @@ pub struct CliSubprocessConfig {
     pub register_length: u16,
     pub register_mode: String,
     pub baud_rate: u32,
+    pub request_interval_ms: u32,
+    pub timeout_ms: u32,
     pub data_source: Option<String>,
 }
 
@@ -109,6 +111,10 @@ impl ManagedSubprocess {
         args.push(config.register_mode.clone());
         args.push("--baud-rate".to_string());
         args.push(config.baud_rate.to_string());
+        args.push("--request-interval-ms".to_string());
+        args.push(config.request_interval_ms.to_string());
+        args.push("--timeout-ms".to_string());
+        args.push(config.timeout_ms.to_string());
 
         // Add IPC channel UUID
         args.push("--ipc-channel".to_string());

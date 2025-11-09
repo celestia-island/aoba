@@ -188,6 +188,8 @@ derive_struct! {
                 label_data_bits: String = "label_data_bits".to_string(),
                 label_parity: String = "label_parity".to_string(),
                 label_stop_bits: String = "label_stop_bits".to_string(),
+                label_request_interval: String = "label_request_interval".to_string(),
+                label_timeout: String = "label_timeout".to_string(),
                 label_guid: String = "label_guid".to_string(),
                 label_mapping_code: String = "label_mapping_code".to_string(),
                 label_usb: String = "label_usb".to_string(),
