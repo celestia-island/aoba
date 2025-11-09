@@ -469,17 +469,27 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                 let needs_restart = is_enabled && port.config_modified;
 
                 if !is_enabled {
+                    // Port not running: show "已应用" success status
                     port.status_indicator = types::port::PortStatusIndicator::AppliedSuccess {
                         timestamp: Local::now(),
                     };
+                    port.config_modified = false;
                 } else if needs_restart {
-                    port.status_indicator = types::port::PortStatusIndicator::Running;
+                    // Port running and needs restart: show "重启中" status
+                    // Note: Don't clear config_modified yet - restart_runtime() will do it
+                    port.status_indicator = types::port::PortStatusIndicator::Restarting;
+                } else {
+                    // Port running and no changes: keep current status
+                    port.config_modified = false;
                 }
-
-                port.config_modified = false;
 
                 Ok((is_enabled, needs_restart))
             })?;
+
+            // Trigger immediate UI refresh to show status change
+            bus.ui_tx
+                .send(UiToCore::Refresh)
+                .map_err(|err| anyhow!(err))?;
 
             if !is_enabled {
                 // Enable the port if not already enabled
@@ -496,10 +506,6 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             } else {
                 log::info!("Port already enabled and runtime up-to-date; skipping restart");
             }
-
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
         }
     }
 

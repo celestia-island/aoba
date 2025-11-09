@@ -285,13 +285,7 @@ pub fn run_core_thread(
                 }
                 UiToCore::RestartRuntime(port_name) => {
                     log::info!("RestartRuntime requested for {port_name}");
-                    stop_runtime(
-                        "RestartRuntime",
-                        &port_name,
-                        &mut subprocess_manager,
-                        &core_tx,
-                    )?;
-                    start_runtime(
+                    restart_runtime(
                         "RestartRuntime",
                         &port_name,
                         &mut subprocess_manager,
@@ -374,13 +368,73 @@ pub fn run_core_thread(
             Ok(())
         })?;
 
-        crate::tui::status_utils::check_and_update_temporary_statuses()?;
+        // Check and auto-transition temporary statuses (AppliedSuccess, StartupFailed)
+        // Pass core_tx to trigger immediate UI refresh when status changes
+        crate::tui::status_utils::check_and_update_temporary_statuses(Some(&core_tx))?;
 
         core_tx
             .send(CoreToUi::Tick)
             .map_err(|err| anyhow!("failed to send Tick: {err}"))?;
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+fn restart_runtime(
+    label: &str,
+    port_name: &str,
+    subprocess_manager: &mut SubprocessManager,
+    core_tx: &flume::Sender<CoreToUi>,
+) -> Result<()> {
+    // Set status to Restarting before stopping the process
+    crate::tui::status::write_status(|status| {
+        if let Some(port) = status.ports.map.get_mut(port_name) {
+            port.status_indicator = types::port::PortStatusIndicator::Restarting;
+            port.config_modified = false; // Clear the modified flag since we're restarting
+        }
+        Ok(())
+    })?;
+
+    if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+        log::warn!("{label}: failed to send Refreshed after setting Restarting: {err}");
+    }
+
+    // Stop the subprocess (but don't clear the state)
+    let subprocess_info_opt = crate::tui::status::read_status(|status| {
+        if let Some(port) = status.ports.map.get(port_name) {
+            return Ok(port.subprocess_info.clone());
+        }
+        Ok(None)
+    })?;
+
+    if let Some(info) = subprocess_info_opt {
+        if let Err(err) = subprocess_manager.stop_subprocess(port_name) {
+            log::warn!("{label}: failed to stop CLI subprocess for {port_name}: {err}");
+        }
+
+        if let Some(path) = info.data_source_path.clone() {
+            if let Err(err) = fs::remove_file(&path) {
+                log::debug!("{label}: failed to remove data source {path}: {err}");
+            }
+        }
+
+        // Clear subprocess info but KEEP the port state and Modbus config
+        crate::tui::status::write_status(|status| {
+            if let Some(port) = status.ports.map.get_mut(port_name) {
+                port.subprocess_info = None;
+                // Keep port.state as OccupiedByThis
+                // Keep port.config and all Modbus stations
+                // Keep status_indicator as Restarting
+            }
+            Ok(())
+        })?;
+
+        append_subprocess_stopped_log(port_name, Some("重启中 - 停止旧进程".to_string()));
+    }
+
+    // Start the new subprocess
+    start_runtime(label, port_name, subprocess_manager, core_tx)?;
+
+    Ok(())
 }
 
 fn stop_runtime(
@@ -518,11 +572,9 @@ fn start_runtime(
                                 if let Some(port) = status.ports.map.get_mut(port_name) {
                                     port.state = PortState::OccupiedByThis;
                                     port.subprocess_info = Some(subprocess_info.clone());
-                                    port.status_indicator = if port.config_modified {
-                                        types::port::PortStatusIndicator::RunningWithChanges
-                                    } else {
-                                        types::port::PortStatusIndicator::Running
-                                    };
+                                    port.status_indicator =
+                                        types::port::PortStatusIndicator::Running;
+                                    port.config_modified = false; // Clear modified flag when starting
                                 }
                                 Ok(())
                             })?;
@@ -607,11 +659,9 @@ fn start_runtime(
                                 if let Some(port) = status.ports.map.get_mut(port_name) {
                                     port.state = PortState::OccupiedByThis;
                                     port.subprocess_info = Some(subprocess_info.clone());
-                                    port.status_indicator = if port.config_modified {
-                                        types::port::PortStatusIndicator::RunningWithChanges
-                                    } else {
-                                        types::port::PortStatusIndicator::Running
-                                    };
+                                    port.status_indicator =
+                                        types::port::PortStatusIndicator::Running;
+                                    port.config_modified = false; // Clear modified flag when starting
                                 }
                                 Ok(())
                             })?;
