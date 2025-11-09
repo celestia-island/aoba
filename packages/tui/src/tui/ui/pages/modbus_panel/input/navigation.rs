@@ -453,27 +453,28 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                 return Ok(());
             }
 
-            // Mark config as not modified and check port state
-            let is_enabled = write_status(|status| {
+            // Mark config as applied and check whether a restart is required
+            let (is_enabled, needs_restart) = write_status(|status| {
                 let port = status
                     .ports
                     .map
                     .get_mut(&port_name)
                     .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                port.config_modified = false;
 
-                // Check if port is already enabled
                 let is_enabled = matches!(port.state, types::port::PortState::OccupiedByThis);
+                let needs_restart = is_enabled && port.config_modified;
 
-                // Only set AppliedSuccess when enabling for the first time
-                // For restart (port already running), let ToggleRuntime set the status
                 if !is_enabled {
                     port.status_indicator = types::port::PortStatusIndicator::AppliedSuccess {
                         timestamp: Local::now(),
                     };
+                } else if needs_restart {
+                    port.status_indicator = types::port::PortStatusIndicator::Running;
                 }
 
-                Ok(is_enabled)
+                port.config_modified = false;
+
+                Ok((is_enabled, needs_restart))
             })?;
 
             if !is_enabled {
@@ -482,15 +483,14 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                 bus.ui_tx
                     .send(UiToCore::ToggleRuntime(port_name.clone()))
                     .map_err(|err| anyhow!(err))?;
-            } else {
+            } else if needs_restart {
                 // Port already enabled, just restart it with new config
                 log::info!("Port already enabled, restarting with new config");
                 bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name.clone()))
+                    .send(UiToCore::RestartRuntime(port_name))
                     .map_err(|err| anyhow!(err))?;
-                bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name))
-                    .map_err(|err| anyhow!(err))?;
+            } else {
+                log::info!("Port already enabled and runtime up-to-date; skipping restart");
             }
 
             bus.ui_tx

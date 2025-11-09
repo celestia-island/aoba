@@ -65,13 +65,8 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 .map_err(|err| anyhow!(err))?;
 
             if let Some(port_name) = maybe_restart {
-                // Toggle twice: first message stops the live runtime, the second message restarts it with the
-                // freshly committed configuration while keeping the user anchored in the Modbus panel.
                 bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name.clone()))
-                    .map_err(|err| anyhow!(err))?;
-                bus.ui_tx
-                    .send(UiToCore::ToggleRuntime(port_name))
+                    .send(UiToCore::RestartRuntime(port_name))
                     .map_err(|err| anyhow!(err))?;
             }
             Ok(())
@@ -137,12 +132,8 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     .map_err(|err| anyhow!(err))?;
 
                 if let Some(port_name) = maybe_restart {
-                    // Toggle twice to restart runtime with new config
                     bus.ui_tx
-                        .send(UiToCore::ToggleRuntime(port_name.clone()))
-                        .map_err(|err| anyhow!(err))?;
-                    bus.ui_tx
-                        .send(UiToCore::ToggleRuntime(port_name))
+                        .send(UiToCore::RestartRuntime(port_name))
                         .map_err(|err| anyhow!(err))?;
                 }
             } else {
@@ -550,23 +541,14 @@ fn commit_text_edit(
                             log::info!(
                                 "📤 Sending RegisterUpdate to core: port={port_name}, station={station_id}, type={register_type}, addr={start_address}, values={values:?}"
                             );
-                            match bus.ui_tx.send(UiToCore::SendRegisterUpdate {
+                            if let Err(err) = bus.ui_tx.send(UiToCore::SendRegisterUpdate {
                                 port_name: port_name.clone(),
                                 station_id: *station_id,
                                 register_type: register_type.clone(),
                                 start_address: *start_address,
                                 values: values.clone(),
                             }) {
-                                Ok(()) => {
-                                    log::info!(
-                                        "✅ RegisterUpdate message SENT successfully to channel"
-                                    );
-                                }
-                                Err(err) => {
-                                    log::error!(
-                                        "❌ Failed to send RegisterUpdate to channel: {err}"
-                                    );
-                                }
+                                log::error!("❌ Failed to send RegisterUpdate to channel: {err}");
                             }
 
                             // WORKAROUND: Also directly update the data source file if in MasterProvide mode

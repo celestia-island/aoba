@@ -157,7 +157,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 })?,
                 Some(types::cursor::EntryCursor::Refresh) => {
                     bus.ui_tx
-                        .send(crate::tui::utils::bus::UiToCore::Refresh)
+                        .send(crate::tui::utils::bus::UiToCore::RescanPorts)
                         .map_err(|err| anyhow!(err))?;
                 }
                 Some(types::cursor::EntryCursor::CreateVirtual) => {
