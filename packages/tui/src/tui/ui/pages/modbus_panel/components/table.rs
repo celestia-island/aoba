@@ -143,5 +143,5 @@ pub fn render_register_row_line(
         Ok(spans)
     };
 
-    render_kv_line(label, text_state, value_closure)
+    render_kv_line(label, text_state, value_closure, false)
 }

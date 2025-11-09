@@ -20,6 +20,7 @@ pub(crate) const INDICATOR_UNSELECTED: &str = "  ";
 /// - `value_renderer`: closure that receives the same `TextState` and returns
 ///   the value spans (third column) as `Vec<Span<'static>>` wrapped in a
 ///   `Result` so rendering errors can be propagated.
+/// - `dimmed`: if true, the label will be rendered in gray and italic style
 ///
 /// The indicator text and style are derived from `text_state` and there is
 /// no override parameter anymore.
@@ -29,6 +30,7 @@ pub fn render_kv_line<F>(
     label: impl ToString,
     text_state: TextState,
     value_renderer: F,
+    dimmed: bool,
 ) -> Result<Line<'static>>
 where
     F: FnOnce(TextState) -> Result<Vec<Span<'static>>>,
@@ -60,10 +62,17 @@ where
 
     let mut spans: Vec<Span> = Vec::new();
     spans.push(Span::styled(indicator_text, indicator_style));
-    spans.push(Span::styled(
-        label_str,
-        Style::default().add_modifier(Modifier::BOLD),
-    ));
+
+    // Apply dimmed style (gray + italic) if requested
+    let label_style = if dimmed {
+        Style::default()
+            .fg(Color::DarkGray)
+            .add_modifier(Modifier::ITALIC)
+    } else {
+        Style::default().add_modifier(Modifier::BOLD)
+    };
+
+    spans.push(Span::styled(label_str, label_style));
     spans.push(Span::raw(" ".repeat(padding_needed)));
     spans.extend(value_spans);
 
