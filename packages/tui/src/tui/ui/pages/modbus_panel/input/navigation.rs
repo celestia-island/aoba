@@ -595,19 +595,20 @@ fn jump_to_next_group(
                             if let Some(port_entry) = status.ports.map.get(port_name) {
                                 let port = port_entry;
                                 let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port.config;
-                            return Ok(!stations.is_empty());
+                                    &port.config;
+                                return Ok(!stations.is_empty());
+                            }
                         }
                     }
-                }
-                Ok(false)
-            })?;
+                    Ok(false)
+                })?;
 
-            if has_stations {
-                Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
-            } else {
-                // No stations, stay at ModbusMode
-                Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+                if has_stations {
+                    Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
+                } else {
+                    // No stations, stay at ModbusMode
+                    Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+                }
             }
         }
         types::cursor::ModbusDashboardCursor::RequestInterval
