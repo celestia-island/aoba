@@ -188,11 +188,19 @@ fn get_status_display(indicator: &PortStatusIndicator) -> Result<(String, String
             "●".to_string(),
             Color::Green,
         )),
-        PortStatusIndicator::RunningWithChanges => Ok((
-            lang.protocol.common.status_running_with_changes.clone(),
-            "○".to_string(),
-            Color::Yellow,
-        )),
+        PortStatusIndicator::Restarting => {
+            // Yellow spinning animation for "restarting" state
+            let frame_index =
+                read_status(|status| Ok(status.temporarily.busy.spinner_frame))? as usize;
+            let frames = ['⠏', '⠛', '⠹', '⠼', '⠶', '⠧'];
+            let spinner = frames[frame_index % frames.len()].to_string();
+
+            Ok((
+                lang.protocol.common.status_restarting.clone(),
+                spinner,
+                Color::Yellow,
+            ))
+        }
         PortStatusIndicator::Saving => {
             // Green spinning animation for "saving" state
             let frame_index =

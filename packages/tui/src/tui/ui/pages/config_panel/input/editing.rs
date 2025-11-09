@@ -148,14 +148,9 @@ fn handle_editing_input(
                                                 "Request interval changed, restarting port: {}",
                                                 port_name
                                             );
+                                            // Use RestartRuntime to perform a smooth restart (preserves state)
                                             bus.ui_tx
-                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
-                                                .map_err(|err| anyhow!(err))?;
-                                            std::thread::sleep(std::time::Duration::from_millis(
-                                                100,
-                                            ));
-                                            bus.ui_tx
-                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
+                                                .send(UiToCore::RestartRuntime(port_name.clone()))
                                                 .map_err(|err| anyhow!(err))?;
                                         }
                                     } else {
@@ -198,14 +193,9 @@ fn handle_editing_input(
                                                 "Timeout changed, restarting port: {}",
                                                 port_name
                                             );
+                                            // Use RestartRuntime to perform a smooth restart (preserves state)
                                             bus.ui_tx
-                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
-                                                .map_err(|err| anyhow!(err))?;
-                                            std::thread::sleep(std::time::Duration::from_millis(
-                                                100,
-                                            ));
-                                            bus.ui_tx
-                                                .send(UiToCore::ToggleRuntime(port_name.clone()))
+                                                .send(UiToCore::RestartRuntime(port_name.clone()))
                                                 .map_err(|err| anyhow!(err))?;
                                         }
                                     } else {

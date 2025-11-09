@@ -287,13 +287,8 @@ fn commit_selector_edit(
                         *mode = new_mode.clone();
                         log::info!("Updated global connection mode to {:?}", mode.is_master());
 
-                        // Mark as modified after using mode
+                        // Mark as modified - will trigger restart if needed
                         port.config_modified = true;
-                        // Update status indicator if port is running
-                        if matches!(port.state, types::port::PortState::OccupiedByThis) {
-                            port.status_indicator =
-                                types::port::PortStatusIndicator::RunningWithChanges;
-                        }
                         Ok(())
                     })?;
 
@@ -334,11 +329,9 @@ fn commit_selector_edit(
                             } else {
                                 StationMode::Slave
                             };
-                            // Update status indicator if port is running and schedule restart
+                            // Schedule restart if port is running
                             if matches!(port.state, types::port::PortState::OccupiedByThis) {
                                 should_restart = true;
-                                port.status_indicator =
-                                    types::port::PortStatusIndicator::RunningWithChanges;
                             }
                             log::info!("Updated register mode for index {index} to {new_mode:?}");
                         }
@@ -399,11 +392,6 @@ fn commit_text_edit(
                             if let Some(item) = all_items.get_mut(index) {
                                 item.station_id = station_id;
                                 port.config_modified = true; // Mark as modified
-                                                             // Update status indicator if port is running
-                                if matches!(port.state, types::port::PortState::OccupiedByThis) {
-                                    port.status_indicator =
-                                        types::port::PortStatusIndicator::RunningWithChanges;
-                                }
                                 log::info!("Updated station ID for index {index} to {station_id}");
                             }
                             Ok(())
@@ -424,11 +412,6 @@ fn commit_text_edit(
                             if let Some(item) = all_items.get_mut(index) {
                                 item.register_address = start_address;
                                 port.config_modified = true; // Mark as modified
-                                                             // Update status indicator if port is running
-                                if matches!(port.state, types::port::PortState::OccupiedByThis) {
-                                    port.status_indicator =
-                                        types::port::PortStatusIndicator::RunningWithChanges;
-                                }
                                 log::info!("Updated register start address for index {index} to {start_address}");
                             }
                             Ok(())
@@ -450,11 +433,6 @@ fn commit_text_edit(
                                 item.register_length = length;
                                 item.last_values.resize(length as usize, 0);
                                 port.config_modified = true; // Mark as modified
-                                                             // Update status indicator if port is running
-                                if matches!(port.state, types::port::PortState::OccupiedByThis) {
-                                    port.status_indicator =
-                                        types::port::PortStatusIndicator::RunningWithChanges;
-                                }
                                 log::info!("Updated register length for index {index} to {length}");
                             }
                             Ok(())

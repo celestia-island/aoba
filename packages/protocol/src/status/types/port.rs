@@ -151,8 +151,8 @@ pub enum PortStatusIndicator {
     Starting,
     /// Port is running and config is up-to-date (green ● solid dot)
     Running,
-    /// Port is running but config has been modified (yellow ○ hollow circle)
-    RunningWithChanges,
+    /// Port is restarting to apply new config (yellow spinner animation with "重启中")
+    Restarting,
     /// Config is being saved/sent (green spinner animation, for slave 02/04)
     Saving,
     /// Config is being syncing from CLI (yellow spinner animation)
