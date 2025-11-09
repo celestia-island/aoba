@@ -348,6 +348,10 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
                 log::info!("🟦 Port state: {:?}", port.state);
                 port.state.clone()
             });
+            let needs_restart = port_data
+                .as_ref()
+                .map(|p| p.config_modified)
+                .unwrap_or(false);
 
             // Check if port has subprocess info (CLI subprocess)
             let has_subprocess_info = port_data
@@ -369,14 +373,15 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
 
             // TUI only uses CLI subprocesses. Check if port has subprocess info.
             let should_restart = matches!(port_state, Some(types::port::PortState::OccupiedByThis))
-                && has_subprocess_info;
+                && has_subprocess_info
+                && needs_restart;
 
             // Auto-enable if: port is Free AND has stations configured
             let should_auto_enable =
                 matches!(port_state, Some(types::port::PortState::Free)) && has_stations;
 
             log::info!(
-                "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}"
+                "🟦 Should restart: {should_restart}, Should auto-enable: {should_auto_enable}, Has stations: {has_stations}, Needs restart: {needs_restart}"
             );
             (should_restart, should_auto_enable, has_stations)
         } else {
@@ -392,13 +397,8 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         if let Some(name) = &port_name {
             log::info!("🔄 Restarting runtime for {name} to apply Modbus configuration changes");
             bus.ui_tx
-                .send(UiToCore::ToggleRuntime(name.clone()))
-                .map_err(|err| anyhow!("Failed to send ToggleRuntime for restart: {err}"))?;
-            bus.ui_tx
-                .send(UiToCore::ToggleRuntime(name.clone()))
-                .map_err(|err| {
-                    anyhow!("Failed to send ToggleRuntime for restart (start phase): {err}")
-                })?;
+                .send(UiToCore::RestartRuntime(name.clone()))
+                .map_err(|err| anyhow!("Failed to send RestartRuntime: {err}"))?;
         }
     }
     // Auto-enable port if it's free and has stations configured
@@ -417,6 +417,15 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
     // Save configuration before leaving the page
     if let Err(e) = save_current_configs() {
         log::warn!("Failed to save port configurations: {e}");
+    }
+
+    if let Some(name) = &port_name {
+        write_status(|status| {
+            if let Some(port) = status.ports.map.get_mut(name) {
+                port.config_modified = false;
+            }
+            Ok(())
+        })?;
     }
 
     write_status(|status| {

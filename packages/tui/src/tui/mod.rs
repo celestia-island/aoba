@@ -1294,9 +1294,11 @@ fn run_core_thread(
             let msg_name = match &msg {
                 UiToCore::Quit => "Quit".to_string(),
                 UiToCore::Refresh => "Refresh".to_string(),
+                UiToCore::RescanPorts => "RescanPorts".to_string(),
                 UiToCore::PausePolling => "PausePolling".to_string(),
                 UiToCore::ResumePolling => "ResumePolling".to_string(),
                 UiToCore::ToggleRuntime(port) => format!("ToggleRuntime({port})"),
+                UiToCore::RestartRuntime(port) => format!("RestartRuntime({port})"),
                 UiToCore::SendRegisterUpdate {
                     port_name,
                     station_id,
@@ -1336,6 +1338,14 @@ fn run_core_thread(
                     return Ok(());
                 }
                 UiToCore::Refresh => {
+                    core_tx.send(CoreToUi::Refreshed).map_err(|err| {
+                        anyhow!("Failed to send Refreshed event to UI core: {err}")
+                    })?;
+                    if let Err(err) = log_state_snapshot() {
+                        log::warn!("Failed to log state snapshot: {err}");
+                    }
+                }
+                UiToCore::RescanPorts => {
                     if crate::tui::utils::scan::scan_ports(&core_tx, &mut scan_in_progress)? {
                         last_scan = std::time::Instant::now();
                     }
@@ -1363,388 +1373,39 @@ fn run_core_thread(
                 UiToCore::ToggleRuntime(port_name) => {
                     log::info!("ToggleRuntime requested for {port_name}");
 
-                    let subprocess_info_opt = self::status::read_status(|status| {
-                        if let Some(port) = status.ports.map.get(&port_name) {
-                            return Ok(port.subprocess_info.clone());
-                        }
-                        Ok(None)
-                    })?;
-
-                    if let Some(info) = subprocess_info_opt {
-                        // TUI only manages CLI subprocesses, stop it
-                        if let Err(err) = subprocess_manager.stop_subprocess(&port_name) {
-                            log::warn!(
-                                "ToggleRuntime: failed to stop CLI subprocess for {port_name}: {err}"
-                            );
-                        }
-
-                        if let Some(path) = info.data_source_path.clone() {
-                            if let Err(err) = fs::remove_file(&path) {
-                                log::debug!(
-                                    "ToggleRuntime: failed to remove data source {path}: {err}"
-                                );
-                            }
-                        }
-
-                        self::status::write_status(|status| {
-                            if let Some(port) = status.ports.map.get_mut(&port_name) {
-                                port.state = PortState::Free;
-                                port.subprocess_info = None;
-                                // Port is now stopped
-                                port.status_indicator =
-                                    types::port::PortStatusIndicator::NotStarted;
-                            }
-                            Ok(())
-                        })?;
-
-                        append_subprocess_stopped_log(
-                            &port_name,
-                            Some(lang().tabs.log.subprocess_stopped_reason_tui.clone()),
-                        );
-
-                        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
-                            log::warn!("ToggleRuntime: failed to send Refreshed: {err}");
-                        }
-                        if let Err(err) = log_state_snapshot() {
-                            log::warn!("Failed to log state snapshot: {err}");
-                        }
+                    let was_running = stop_runtime(
+                        "ToggleRuntime",
+                        &port_name,
+                        &mut subprocess_manager,
+                        &core_tx,
+                    )?;
+                    if was_running {
                         continue;
                     }
 
-                    // Extract CLI inputs WITHOUT holding any locks during subprocess operations
-                    let cli_inputs = self::status::read_status(|status| {
-                        if let Some(port) = status.ports.map.get(&port_name) {
-                            let types::port::PortConfig::Modbus { mode, stations } = &port.config;
-                            log::info!(
-                                "ToggleRuntime({port_name}): checking CLI inputs - mode={}, station_count={}",
-                                if mode.is_master() { "Master" } else { "Slave" },
-                                stations.len()
-                            );
-                            if !stations.is_empty() {
-                                // Use default baud rate (TUI uses CLI subprocesses, not direct port access)
-                                let baud = 9600;
-                                log::info!(
-                                    "ToggleRuntime({port_name}): found {} station(s) - will attempt CLI subprocess",
-                                    stations.len()
-                                );
-                                // For Master mode, pass all stations; for Slave, only first
-                                return Ok(Some((mode.clone(), stations.clone(), baud)));
-                            }
-                            log::info!(
-                                "ToggleRuntime({port_name}): no station configured - nothing to do"
-                            );
-                        }
-                        Ok(None)
-                    })?;
-                    // Lock released here - safe to do long operations
+                    start_runtime(
+                        "ToggleRuntime",
+                        &port_name,
+                        &mut subprocess_manager,
+                        &core_tx,
+                    )?;
+                }
+                UiToCore::RestartRuntime(port_name) => {
+                    log::info!("RestartRuntime requested for {port_name}");
 
-                    let mut cli_started = false;
+                    stop_runtime(
+                        "RestartRuntime",
+                        &port_name,
+                        &mut subprocess_manager,
+                        &core_tx,
+                    )?;
 
-                    if let Some((mode, stations, baud_rate)) = cli_inputs {
-                        match mode {
-                            types::modbus::ModbusConnectionMode::Slave { .. } => {
-                                // For Slave mode, use first station (slaves typically have one config)
-                                let station = &stations[0];
-
-                                log::info!(
-                                    "ToggleRuntime: attempting to spawn CLI subprocess (SlavePoll) for {port_name}"
-                                );
-
-                                // Note: Slave mode polls external master, so no data source needed
-                                let cli_config = CliSubprocessConfig {
-                                    port_name: port_name.clone(),
-                                    mode: CliMode::SlavePoll,
-                                    station_id: station.station_id,
-                                    register_address: station.register_address,
-                                    register_length: station.register_length,
-                                    register_mode: register_mode_to_cli_arg(station.register_mode)
-                                        .to_string(),
-                                    baud_rate,
-                                    data_source: None,
-                                };
-
-                                // Spawn subprocess WITHOUT holding any status locks
-                                match subprocess_manager.start_subprocess(cli_config) {
-                                    Ok(()) => {
-                                        if let Some(snapshot) =
-                                            subprocess_manager.snapshot(&port_name)
-                                        {
-                                            log::info!(
-                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?})",
-                                                snapshot.mode,
-                                                snapshot.pid
-                                            );
-                                            let subprocess_info = PortSubprocessInfo {
-                                                mode: cli_mode_to_port_mode(&snapshot.mode),
-                                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
-                                                pid: snapshot.pid,
-                                                data_source_path: None, // SlavePoll doesn't use data source
-                                            };
-
-                                            // Now update status with the result (short lock hold)
-                                            self::status::write_status(|status| {
-                                                if let Some(port) =
-                                                    status.ports.map.get_mut(&port_name)
-                                                {
-                                                    port.state = PortState::OccupiedByThis;
-                                                    port.subprocess_info =
-                                                        Some(subprocess_info.clone());
-                                                    // Port is now running
-                                                    port.status_indicator = if port.config_modified
-                                                    {
-                                                        types::port::PortStatusIndicator::RunningWithChanges
-                                                    } else {
-                                                        types::port::PortStatusIndicator::Running
-                                                    };
-                                                }
-                                                Ok(())
-                                            })?;
-
-                                            append_subprocess_spawned_log(
-                                                &port_name,
-                                                &snapshot.mode,
-                                                snapshot.pid,
-                                            );
-                                            cli_started = true;
-
-                                            // Send initial stations configuration to CLI subprocess
-                                            // Retry with delays to wait for command channel to be ready
-                                            log::info!(
-                                                "📡 Sending initial stations configuration to CLI subprocess for {port_name}"
-                                            );
-                                            let mut stations_sent = false;
-                                            for attempt in 1..=10 {
-                                                match subprocess_manager
-                                                    .send_stations_update_for_port(&port_name)
-                                                {
-                                                    Ok(()) => {
-                                                        log::info!(
-                                                            "✅ Successfully sent initial stations configuration to {port_name} (attempt {attempt})"
-                                                        );
-                                                        stations_sent = true;
-                                                        break;
-                                                    }
-                                                    Err(err) if attempt < 10 => {
-                                                        log::debug!(
-                                                            "⏳ Attempt {attempt} to send stations update failed (command channel may not be ready yet): {err}"
-                                                        );
-                                                        thread::sleep(Duration::from_millis(200));
-                                                    }
-                                                    Err(err) => {
-                                                        log::warn!(
-                                                            "⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}"
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                            if !stations_sent {
-                                                log::error!(
-                                                    "❌ Could not send initial stations configuration to {port_name} - CLI subprocess may not function correctly"
-                                                );
-                                            }
-                                        } else {
-                                            log::warn!(
-                                                "ToggleRuntime: subprocess snapshot missing for {port_name}"
-                                            );
-                                        }
-                                    }
-                                    Err(err) => {
-                                        let err_text = err.to_string();
-                                        let msg = format!(
-                                            "Failed to start CLI subprocess for {port_name}: {err_text}"
-                                        );
-                                        append_lifecycle_log(
-                                            &port_name,
-                                            PortLifecyclePhase::Failed,
-                                            Some(err_text.clone()),
-                                        );
-                                        self::status::write_status(|status| {
-                                            status.temporarily.error =
-                                                Some(crate::tui::status::ErrorInfo {
-                                                    message: msg.clone(),
-                                                    timestamp: chrono::Local::now(),
-                                                });
-                                            Ok(())
-                                        })?;
-                                        // Note: No data source file to clean up for SlavePoll mode
-                                    }
-                                }
-                            }
-                            types::modbus::ModbusConnectionMode::Master => {
-                                log::info!(
-                                    "ToggleRuntime: attempting to spawn CLI subprocess (MasterProvide) for {port_name} with {} station(s)",
-                                    stations.len()
-                                );
-
-                                // Initialize merged data source for all stations
-                                let (
-                                    data_source_path,
-                                    merged_station_id,
-                                    merged_start_addr,
-                                    merged_length,
-                                ) = initialize_cli_data_source(&port_name, &stations)?;
-
-                                let cli_config = CliSubprocessConfig {
-                                    port_name: port_name.clone(),
-                                    mode: CliMode::MasterProvide,
-                                    station_id: merged_station_id as u8,
-                                    register_address: merged_start_addr,
-                                    register_length: merged_length,
-                                    register_mode: register_mode_to_cli_arg(
-                                        stations[0].register_mode,
-                                    )
-                                    .to_string(),
-                                    baud_rate,
-                                    data_source: Some(format!(
-                                        "file:{}",
-                                        data_source_path.to_string_lossy()
-                                    )),
-                                };
-
-                                // Spawn subprocess WITHOUT holding any status locks
-                                match subprocess_manager.start_subprocess(cli_config) {
-                                    Ok(()) => {
-                                        if let Some(snapshot) =
-                                            subprocess_manager.snapshot(&port_name)
-                                        {
-                                            log::info!(
-                                                "ToggleRuntime: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
-                                                snapshot.mode,
-                                                snapshot.pid,
-                                                data_source_path.display()
-                                            );
-                                            let subprocess_info = PortSubprocessInfo {
-                                                mode: cli_mode_to_port_mode(&snapshot.mode),
-                                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
-                                                pid: snapshot.pid,
-                                                data_source_path: Some(
-                                                    data_source_path.to_string_lossy().to_string(),
-                                                ),
-                                            };
-
-                                            // Now update status with the result (short lock hold)
-                                            self::status::write_status(|status| {
-                                                if let Some(port) =
-                                                    status.ports.map.get_mut(&port_name)
-                                                {
-                                                    port.state = PortState::OccupiedByThis;
-                                                    port.subprocess_info =
-                                                        Some(subprocess_info.clone());
-                                                    // Port is now running
-                                                    port.status_indicator = if port.config_modified
-                                                    {
-                                                        types::port::PortStatusIndicator::RunningWithChanges
-                                                    } else {
-                                                        types::port::PortStatusIndicator::Running
-                                                    };
-                                                }
-                                                Ok(())
-                                            })?;
-
-                                            append_subprocess_spawned_log(
-                                                &port_name,
-                                                &snapshot.mode,
-                                                snapshot.pid,
-                                            );
-                                            cli_started = true;
-
-                                            // Send initial stations configuration to CLI subprocess
-                                            // Retry with delays to wait for command channel to be ready
-                                            log::info!(
-                                                "📡 Sending initial stations configuration to CLI subprocess for {port_name}"
-                                            );
-                                            let mut stations_sent = false;
-                                            for attempt in 1..=10 {
-                                                match subprocess_manager
-                                                    .send_stations_update_for_port(&port_name)
-                                                {
-                                                    Ok(()) => {
-                                                        log::info!(
-                                                            "✅ Successfully sent initial stations configuration to {port_name} (attempt {attempt})"
-                                                        );
-                                                        stations_sent = true;
-                                                        break;
-                                                    }
-                                                    Err(err) if attempt < 10 => {
-                                                        log::debug!(
-                                                            "⏳ Attempt {attempt} to send stations update failed (command channel may not be ready yet): {err}"
-                                                        );
-                                                        thread::sleep(Duration::from_millis(200));
-                                                    }
-                                                    Err(err) => {
-                                                        log::warn!(
-                                                            "⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}"
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                            if !stations_sent {
-                                                log::error!(
-                                                    "❌ Could not send initial stations configuration to {port_name} - CLI subprocess may not function correctly"
-                                                );
-                                            }
-                                        } else {
-                                            log::warn!(
-                                                "ToggleRuntime: subprocess snapshot missing for {port_name}"
-                                            );
-                                        }
-                                    }
-                                    Err(err) => {
-                                        let err_text = err.to_string();
-                                        let msg = format!(
-                                            "Failed to start CLI subprocess for {port_name}: {err_text}"
-                                        );
-                                        append_lifecycle_log(
-                                            &port_name,
-                                            PortLifecyclePhase::Failed,
-                                            Some(err_text.clone()),
-                                        );
-
-                                        // Update port status indicator to show failure
-                                        self::status::write_status(|status| {
-                                            if let Some(port) = status.ports.map.get_mut(&port_name)
-                                            {
-                                                port.status_indicator = types::port::PortStatusIndicator::StartupFailed {
-                                                    error_message: err_text.clone(),
-                                                    timestamp: chrono::Local::now(),
-                                                };
-                                            }
-
-                                            status.temporarily.error =
-                                                Some(crate::tui::status::ErrorInfo {
-                                                    message: msg.clone(),
-                                                    timestamp: chrono::Local::now(),
-                                                });
-                                            Ok(())
-                                        })?;
-
-                                        if let Err(remove_err) = fs::remove_file(&data_source_path)
-                                        {
-                                            log::debug!(
-                                                "Cleanup of data source {} failed: {remove_err}",
-                                                data_source_path.to_string_lossy()
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // TUI no longer falls back to native runtime.
-                    // If CLI subprocess fails to start, the port remains Free.
-                    if !cli_started {
-                        log::warn!(
-                            "ToggleRuntime: CLI subprocess failed to start for {port_name}, port remains Free"
-                        );
-                    }
-
-                    core_tx
-                        .send(CoreToUi::Refreshed)
-                        .map_err(|err| anyhow!("failed to send Refreshed: {err}"))?;
-                    if let Err(err) = log_state_snapshot() {
-                        log::warn!("Failed to log state snapshot: {err}");
-                    }
+                    start_runtime(
+                        "RestartRuntime",
+                        &port_name,
+                        &mut subprocess_manager,
+                        &core_tx,
+                    )?;
                 }
                 UiToCore::SendRegisterUpdate {
                     port_name,
@@ -1843,6 +1504,332 @@ fn run_core_thread(
             .map_err(|err| anyhow!("failed to send Tick: {err}"))?;
         thread::sleep(Duration::from_millis(50));
     }
+}
+
+fn stop_runtime(
+    label: &str,
+    port_name: &str,
+    subprocess_manager: &mut SubprocessManager,
+    core_tx: &flume::Sender<CoreToUi>,
+) -> Result<bool> {
+    let subprocess_info_opt = self::status::read_status(|status| {
+        if let Some(port) = status.ports.map.get(port_name) {
+            return Ok(port.subprocess_info.clone());
+        }
+        Ok(None)
+    })?;
+
+    if let Some(info) = subprocess_info_opt {
+        if let Err(err) = subprocess_manager.stop_subprocess(port_name) {
+            log::warn!("{label}: failed to stop CLI subprocess for {port_name}: {err}");
+        }
+
+        if let Some(path) = info.data_source_path.clone() {
+            if let Err(err) = fs::remove_file(&path) {
+                log::debug!("{label}: failed to remove data source {path}: {err}");
+            }
+        }
+
+        self::status::write_status(|status| {
+            if let Some(port) = status.ports.map.get_mut(port_name) {
+                port.state = PortState::Free;
+                port.subprocess_info = None;
+                port.status_indicator = types::port::PortStatusIndicator::NotStarted;
+            }
+            Ok(())
+        })?;
+
+        append_subprocess_stopped_log(
+            port_name,
+            Some(lang().tabs.log.subprocess_stopped_reason_tui.clone()),
+        );
+
+        if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+            log::warn!("{label}: failed to send Refreshed: {err}");
+        }
+        if let Err(err) = log_state_snapshot() {
+            log::warn!("Failed to log state snapshot: {err}");
+        }
+
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+fn start_runtime(
+    label: &str,
+    port_name: &str,
+    subprocess_manager: &mut SubprocessManager,
+    core_tx: &flume::Sender<CoreToUi>,
+) -> Result<bool> {
+    let cli_inputs = self::status::read_status(|status| {
+        if let Some(port) = status.ports.map.get(port_name) {
+            let types::port::PortConfig::Modbus { mode, stations } = &port.config;
+            log::info!(
+                "{label}({port_name}): checking CLI inputs - mode={}, station_count={}",
+                if mode.is_master() { "Master" } else { "Slave" },
+                stations.len()
+            );
+            if !stations.is_empty() {
+                let baud = 9600;
+                log::info!(
+                    "{label}({port_name}): found {} station(s) - will attempt CLI subprocess",
+                    stations.len()
+                );
+                return Ok(Some((mode.clone(), stations.clone(), baud)));
+            }
+            log::info!("{label}({port_name}): no station configured - nothing to do");
+        }
+        Ok(None)
+    })?;
+
+    let mut cli_started = false;
+
+    if let Some((mode, stations, baud_rate)) = cli_inputs {
+        match mode {
+            types::modbus::ModbusConnectionMode::Slave { .. } => {
+                let station = &stations[0];
+
+                log::info!(
+                    "{label}: attempting to spawn CLI subprocess (SlavePoll) for {port_name}"
+                );
+
+                let cli_config = CliSubprocessConfig {
+                    port_name: port_name.to_string(),
+                    mode: CliMode::SlavePoll,
+                    station_id: station.station_id,
+                    register_address: station.register_address,
+                    register_length: station.register_length,
+                    register_mode: register_mode_to_cli_arg(station.register_mode).to_string(),
+                    baud_rate,
+                    data_source: None,
+                };
+
+                match subprocess_manager.start_subprocess(cli_config) {
+                    Ok(()) => {
+                        if let Some(snapshot) = subprocess_manager.snapshot(port_name) {
+                            log::info!(
+                                "{label}: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?})",
+                                snapshot.mode,
+                                snapshot.pid
+                            );
+                            let subprocess_info = PortSubprocessInfo {
+                                mode: cli_mode_to_port_mode(&snapshot.mode),
+                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
+                                pid: snapshot.pid,
+                                data_source_path: None,
+                            };
+
+                            self::status::write_status(|status| {
+                                if let Some(port) = status.ports.map.get_mut(port_name) {
+                                    port.state = PortState::OccupiedByThis;
+                                    port.subprocess_info = Some(subprocess_info.clone());
+                                    port.status_indicator = if port.config_modified {
+                                        types::port::PortStatusIndicator::RunningWithChanges
+                                    } else {
+                                        types::port::PortStatusIndicator::Running
+                                    };
+                                }
+                                Ok(())
+                            })?;
+
+                            append_subprocess_spawned_log(port_name, &snapshot.mode, snapshot.pid);
+                            cli_started = true;
+
+                            log::info!(
+                                "📡 Sending initial stations configuration to CLI subprocess for {port_name}"
+                            );
+                            let mut stations_sent = false;
+                            for attempt in 1..=10 {
+                                match subprocess_manager.send_stations_update_for_port(port_name) {
+                                    Ok(()) => {
+                                        log::info!(
+                                            "✅ Successfully sent initial stations configuration to {port_name} (attempt {attempt})"
+                                        );
+                                        stations_sent = true;
+                                        break;
+                                    }
+                                    Err(err) if attempt < 10 => {
+                                        log::debug!(
+                                            "⏳ Attempt {attempt} to send stations update failed (command channel may not be ready yet): {err}"
+                                        );
+                                        thread::sleep(Duration::from_millis(200));
+                                    }
+                                    Err(err) => {
+                                        log::warn!(
+                                            "⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}"
+                                        );
+                                    }
+                                }
+                            }
+                            if !stations_sent {
+                                log::error!(
+                                    "❌ Could not send initial stations configuration to {port_name} - CLI subprocess may not function correctly"
+                                );
+                            }
+                        } else {
+                            log::warn!("{label}: subprocess snapshot missing for {port_name}");
+                        }
+                    }
+                    Err(err) => {
+                        let err_text = err.to_string();
+                        let msg =
+                            format!("Failed to start CLI subprocess for {port_name}: {err_text}");
+                        append_lifecycle_log(
+                            port_name,
+                            PortLifecyclePhase::Failed,
+                            Some(err_text.clone()),
+                        );
+                        self::status::write_status(|status| {
+                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                message: msg.clone(),
+                                timestamp: chrono::Local::now(),
+                            });
+                            Ok(())
+                        })?;
+                    }
+                }
+            }
+            types::modbus::ModbusConnectionMode::Master => {
+                log::info!(
+                    "{label}: attempting to spawn CLI subprocess (MasterProvide) for {port_name} with {} station(s)",
+                    stations.len()
+                );
+
+                let (data_source_path, merged_station_id, merged_start_addr, merged_length) =
+                    initialize_cli_data_source(port_name, &stations)?;
+
+                let cli_config = CliSubprocessConfig {
+                    port_name: port_name.to_string(),
+                    mode: CliMode::MasterProvide,
+                    station_id: merged_station_id as u8,
+                    register_address: merged_start_addr,
+                    register_length: merged_length,
+                    register_mode: register_mode_to_cli_arg(stations[0].register_mode).to_string(),
+                    baud_rate,
+                    data_source: Some(format!("file:{}", data_source_path.to_string_lossy())),
+                };
+
+                match subprocess_manager.start_subprocess(cli_config) {
+                    Ok(()) => {
+                        if let Some(snapshot) = subprocess_manager.snapshot(port_name) {
+                            log::info!(
+                                "{label}: CLI subprocess spawned for {port_name} (mode={:?}, pid={:?}, data_source={})",
+                                snapshot.mode,
+                                snapshot.pid,
+                                data_source_path.display()
+                            );
+                            let subprocess_info = PortSubprocessInfo {
+                                mode: cli_mode_to_port_mode(&snapshot.mode),
+                                ipc_socket_name: snapshot.ipc_socket_name.clone(),
+                                pid: snapshot.pid,
+                                data_source_path: Some(
+                                    data_source_path.to_string_lossy().to_string(),
+                                ),
+                            };
+
+                            self::status::write_status(|status| {
+                                if let Some(port) = status.ports.map.get_mut(port_name) {
+                                    port.state = PortState::OccupiedByThis;
+                                    port.subprocess_info = Some(subprocess_info.clone());
+                                    port.status_indicator = if port.config_modified {
+                                        types::port::PortStatusIndicator::RunningWithChanges
+                                    } else {
+                                        types::port::PortStatusIndicator::Running
+                                    };
+                                }
+                                Ok(())
+                            })?;
+
+                            append_subprocess_spawned_log(port_name, &snapshot.mode, snapshot.pid);
+                            cli_started = true;
+
+                            log::info!(
+                                "📡 Sending initial stations configuration to CLI subprocess for {port_name}"
+                            );
+                            let mut stations_sent = false;
+                            for attempt in 1..=10 {
+                                match subprocess_manager.send_stations_update_for_port(port_name) {
+                                    Ok(()) => {
+                                        log::info!(
+                                            "✅ Successfully sent initial stations configuration to {port_name} (attempt {attempt})"
+                                        );
+                                        stations_sent = true;
+                                        break;
+                                    }
+                                    Err(err) if attempt < 10 => {
+                                        log::debug!(
+                                            "⏳ Attempt {attempt} to send stations update failed (command channel may not be ready yet): {err}"
+                                        );
+                                        thread::sleep(Duration::from_millis(200));
+                                    }
+                                    Err(err) => {
+                                        log::warn!(
+                                            "⚠️ Failed to send initial stations update for {port_name} after {attempt} attempts: {err}"
+                                        );
+                                    }
+                                }
+                            }
+                            if !stations_sent {
+                                log::error!(
+                                    "❌ Could not send initial stations configuration to {port_name} - CLI subprocess may not function correctly"
+                                );
+                            }
+                        } else {
+                            log::warn!("{label}: subprocess snapshot missing for {port_name}");
+                        }
+                    }
+                    Err(err) => {
+                        let err_text = err.to_string();
+                        let msg =
+                            format!("Failed to start CLI subprocess for {port_name}: {err_text}");
+                        append_lifecycle_log(
+                            port_name,
+                            PortLifecyclePhase::Failed,
+                            Some(err_text.clone()),
+                        );
+
+                        self::status::write_status(|status| {
+                            if let Some(port) = status.ports.map.get_mut(port_name) {
+                                port.status_indicator =
+                                    types::port::PortStatusIndicator::StartupFailed {
+                                        error_message: err_text.clone(),
+                                        timestamp: chrono::Local::now(),
+                                    };
+                            }
+
+                            status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                                message: msg.clone(),
+                                timestamp: chrono::Local::now(),
+                            });
+                            Ok(())
+                        })?;
+
+                        if let Err(remove_err) = fs::remove_file(&data_source_path) {
+                            log::debug!(
+                                "Cleanup of data source {} failed: {remove_err}",
+                                data_source_path.to_string_lossy()
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if !cli_started {
+        log::warn!("{label}: CLI subprocess failed to start for {port_name}, port remains Free");
+    }
+
+    if let Err(err) = core_tx.send(CoreToUi::Refreshed) {
+        log::warn!("{label}: failed to send Refreshed: {err}");
+    }
+    if let Err(err) = log_state_snapshot() {
+        log::warn!("Failed to log state snapshot: {err}");
+    }
+
+    Ok(cli_started)
 }
 
 /// Render UI function that only reads from Status (immutable reference)

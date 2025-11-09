@@ -16,7 +16,6 @@ use crate::{actions, cleanup};
 enum SlavePollTransaction {
     Success {
         response: ModbusResponse,
-        request_frame: Vec<u8>,
     },
     Failure {
         error: anyhow::Error,
@@ -235,10 +234,7 @@ fn run_slave_poll_transaction(
     })();
 
     match transaction_result {
-        Ok(response) => SlavePollTransaction::Success {
-            response,
-            request_frame,
-        },
+        Ok(response) => SlavePollTransaction::Success { response },
         Err(error) => SlavePollTransaction::Failure {
             error,
             request_frame,
@@ -762,10 +758,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
             current_register_length,
             current_reg_mode,
         ) {
-            SlavePollTransaction::Success {
-                response,
-                request_frame,
-            } => {
+            SlavePollTransaction::Success { response } => {
                 let write_this = match &last_written_values {
                     Some(prev) => &response.values != prev,
                     None => true,
@@ -775,20 +768,6 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                     let json = serde_json::to_string(&response)?;
                     output_sink.write(&json)?;
                     last_written_values = Some(response.values.clone());
-
-                    emit_modbus_ipc_log(
-                        &mut ipc,
-                        port,
-                        "tx",
-                        &request_frame,
-                        Some(response.station_id),
-                        Some(current_reg_mode),
-                        Some(current_register_address),
-                        Some(current_register_length),
-                        Some(true),
-                        None,
-                        None,
-                    );
 
                     if let Some(ref mut ipc_conns) = ipc {
                         log::info!(
