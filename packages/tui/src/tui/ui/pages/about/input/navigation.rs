@@ -3,11 +3,11 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, MouseEventKind};
 
 use super::scroll::{handle_scroll_down, handle_scroll_up};
-use crate::{
-    tui::status as types,
-    tui::status::{read_status, write_status},
-    tui::ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
-    tui::utils::bus::Bus,
+use crate::tui::{
+    status as types,
+    status::{read_status, write_status},
+    ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
+    utils::bus::Bus,
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {

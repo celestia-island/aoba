@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use std::{io::ErrorKind, time::Instant};
 use tokio::time::sleep;
 
-use interprocess::{
-    local_socket::prelude::*,
-    local_socket::{GenericFilePath, GenericNamespaced, ListenerOptions},
+use interprocess::local_socket::{
+    prelude::*,
+    {GenericFilePath, GenericNamespaced, ListenerOptions},
 };
 
 use super::{

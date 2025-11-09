@@ -1,6 +1,9 @@
 use anyhow::Result;
 
-use crate::{tui::status as types, tui::status::cursor::Cursor, tui::status::write_status};
+use crate::tui::{
+    status as types,
+    status::{cursor::Cursor, write_status},
+};
 
 /// Ensure current cursor for ConfigPanel does not point to hidden items when
 /// the selected port is not occupied by this instance. This moves the cursor

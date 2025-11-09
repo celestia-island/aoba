@@ -6,11 +6,13 @@ use types::modbus::ParityOption;
 use super::utilities::{derive_selection, is_port_occupied_by_this};
 use crate::{
     i18n::lang,
-    tui::status as types,
-    tui::status::read_status,
-    tui::ui::components::{
-        kv_line::render_kv_line,
-        styled_label::{input_spans, link_spans, selector_spans, switch_spans, TextState},
+    tui::{
+        status as types,
+        status::read_status,
+        ui::components::{
+            kv_line::render_kv_line,
+            styled_label::{input_spans, link_spans, selector_spans, switch_spans, TextState},
+        },
     },
 };
 

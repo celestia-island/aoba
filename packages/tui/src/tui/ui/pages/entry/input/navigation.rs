@@ -2,7 +2,7 @@ use anyhow::{anyhow, Result};
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::{tui::status as types, tui::status::cursor};
+use crate::tui::{status as types, status::cursor};
 
 // trait for cursor helper methods (view_offset, prev, next)
 use crate::tui::status::cursor::Cursor;

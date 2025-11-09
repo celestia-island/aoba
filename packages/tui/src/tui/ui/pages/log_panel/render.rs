@@ -4,9 +4,11 @@ use ratatui::prelude::*;
 
 use crate::{
     i18n::lang,
-    tui::status::read_status,
-    tui::ui::pages::log_panel::components::{
-        extract_log_data, render_log_display, render_log_input,
+    tui::{
+        status::read_status,
+        ui::pages::log_panel::components::{
+            extract_log_data, render_log_display, render_log_input,
+        },
     },
 };
 
