@@ -223,7 +223,7 @@ derive_struct! {
                 status_not_started: String = "status_not_started".to_string(),
                 status_starting: String = "status_starting".to_string(),
                 status_running: String = "status_running".to_string(),
-                status_running_with_changes: String = "status_running_with_changes".to_string(),
+                status_restarting: String = "status_restarting".to_string(),
                 status_saving: String = "status_saving".to_string(),
                 status_syncing: String = "status_syncing".to_string(),
                 status_applied_success: String = "status_applied_success".to_string(),

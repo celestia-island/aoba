@@ -1,9 +1,13 @@
 use anyhow::Result;
 use chrono::Local;
 
-use crate::tui::status::port::PortStatusIndicator;
+use crate::tui::{status::port::PortStatusIndicator, utils::bus::CoreToUi};
 
-pub(crate) fn check_and_update_temporary_statuses() -> Result<()> {
+/// Check and update temporary statuses (AppliedSuccess, StartupFailed) that should auto-transition
+/// after a certain time period. Returns true if any status was updated.
+pub(crate) fn check_and_update_temporary_statuses(
+    core_tx: Option<&flume::Sender<CoreToUi>>,
+) -> Result<bool> {
     let now = Local::now();
     let mut ports_to_update: Vec<(String, PortStatusIndicator)> = Vec::new();
 
@@ -23,11 +27,7 @@ pub(crate) fn check_and_update_temporary_statuses() -> Result<()> {
 
             if should_update {
                 let next_status = if port.state.is_occupied_by_this() {
-                    if port.config_modified {
-                        PortStatusIndicator::RunningWithChanges
-                    } else {
-                        PortStatusIndicator::Running
-                    }
+                    PortStatusIndicator::Running
                 } else {
                     PortStatusIndicator::NotStarted
                 };
@@ -38,7 +38,11 @@ pub(crate) fn check_and_update_temporary_statuses() -> Result<()> {
         Ok(())
     })?;
 
-    if !ports_to_update.is_empty() {
+    let updated = !ports_to_update.is_empty();
+
+    if updated {
+        // CRITICAL: Update status FIRST and release the write lock BEFORE sending messages
+        // to avoid deadlock when UI thread tries to acquire read lock
         crate::tui::status::write_status(move |status| {
             for (port_name, next_status) in &ports_to_update {
                 if let Some(port) = status.ports.map.get_mut(port_name) {
@@ -52,9 +56,17 @@ pub(crate) fn check_and_update_temporary_statuses() -> Result<()> {
             }
             Ok(())
         })?;
+        // Write lock is now released here ^^^
+
+        // NOW send refresh message (after releasing the write lock)
+        if let Some(tx) = core_tx {
+            if let Err(err) = tx.send(CoreToUi::Refreshed) {
+                log::warn!("Failed to send Refreshed after status auto-transition: {err}");
+            }
+        }
     }
 
-    Ok(())
+    Ok(updated)
 }
 
 pub(crate) fn log_state_snapshot() -> Result<()> {
@@ -118,4 +130,198 @@ pub(crate) fn log_state_snapshot() -> Result<()> {
         log::info!("STATE_DUMP: {snapshot}");
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tui::status::{
+        port::{PortData, PortState, PortStatusIndicator},
+        Status,
+    };
+    use chrono::Local;
+    use parking_lot::RwLock;
+    use std::sync::Arc;
+
+    fn setup_test_env() {
+        let status = Arc::new(RwLock::new(Status::default()));
+        // Try to initialize, but ignore error if already initialized
+        let _ = crate::tui::status::init_status(status.clone());
+    }
+
+    fn cleanup_test_port(port_name: &str) {
+        let _ = crate::tui::status::write_status(|status| {
+            status.ports.map.remove(port_name);
+            status.ports.order.retain(|p| p != port_name);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn test_applied_success_auto_transition() {
+        setup_test_env();
+        let test_port = "/tmp/test_port_1";
+        cleanup_test_port(test_port);
+
+        // Add a test port with AppliedSuccess status from 5 seconds ago
+        let old_timestamp = Local::now() - chrono::Duration::seconds(5);
+        crate::tui::status::write_status(|status| {
+            let mut port = PortData::default();
+            port.port_name = test_port.to_string();
+            port.state = PortState::OccupiedByThis;
+            port.status_indicator = PortStatusIndicator::AppliedSuccess {
+                timestamp: old_timestamp,
+            };
+            port.config_modified = false;
+
+            status.ports.map.insert(test_port.to_string(), port);
+            status.ports.order.push(test_port.to_string());
+            Ok(())
+        })
+        .unwrap();
+
+        // Check and update
+        let updated = check_and_update_temporary_statuses(None).unwrap();
+        assert!(updated, "Status should have been updated");
+
+        // Verify transition to Running
+        crate::tui::status::read_status(|status| {
+            let port = status.ports.map.get(test_port).unwrap();
+            assert!(
+                matches!(port.status_indicator, PortStatusIndicator::Running),
+                "Status should transition to Running"
+            );
+            Ok(())
+        })
+        .unwrap();
+
+        cleanup_test_port(test_port);
+    }
+
+    #[test]
+    fn test_applied_success_with_changes_transition() {
+        setup_test_env();
+        let test_port = "/tmp/test_port_2";
+        cleanup_test_port(test_port);
+
+        // Add a test port with AppliedSuccess status and config_modified = true
+        let old_timestamp = Local::now() - chrono::Duration::seconds(5);
+        crate::tui::status::write_status(|status| {
+            let mut port = PortData::default();
+            port.port_name = test_port.to_string();
+            port.state = PortState::OccupiedByThis;
+            port.status_indicator = PortStatusIndicator::AppliedSuccess {
+                timestamp: old_timestamp,
+            };
+            port.config_modified = true; // Port has unsaved changes
+
+            status.ports.map.insert(test_port.to_string(), port);
+            status.ports.order.push(test_port.to_string());
+            Ok(())
+        })
+        .unwrap();
+
+        // Check and update
+        let updated = check_and_update_temporary_statuses(None).unwrap();
+        assert!(updated, "Status should have been updated");
+
+        // Verify transition to Running (no longer RunningWithChanges)
+        crate::tui::status::read_status(|status| {
+            let port = status.ports.map.get(test_port).unwrap();
+            assert!(
+                matches!(port.status_indicator, PortStatusIndicator::Running),
+                "Status should transition to Running"
+            );
+            Ok(())
+        })
+        .unwrap();
+
+        cleanup_test_port(test_port);
+    }
+
+    #[test]
+    fn test_startup_failed_auto_transition() {
+        setup_test_env();
+        let test_port = "/tmp/test_port_3";
+        cleanup_test_port(test_port);
+
+        // Add a test port with StartupFailed status from 15 seconds ago
+        let old_timestamp = Local::now() - chrono::Duration::seconds(15);
+        crate::tui::status::write_status(|status| {
+            let mut port = PortData::default();
+            port.port_name = test_port.to_string();
+            port.state = PortState::Free;
+            port.status_indicator = PortStatusIndicator::StartupFailed {
+                error_message: "Test error".to_string(),
+                timestamp: old_timestamp,
+            };
+            port.config_modified = false;
+
+            status.ports.map.insert(test_port.to_string(), port);
+            status.ports.order.push(test_port.to_string());
+            Ok(())
+        })
+        .unwrap();
+
+        // Check and update
+        let updated = check_and_update_temporary_statuses(None).unwrap();
+        assert!(updated, "Status should have been updated");
+
+        // Verify transition to NotStarted
+        crate::tui::status::read_status(|status| {
+            let port = status.ports.map.get(test_port).unwrap();
+            assert!(
+                matches!(port.status_indicator, PortStatusIndicator::NotStarted),
+                "Status should transition to NotStarted"
+            );
+            Ok(())
+        })
+        .unwrap();
+
+        cleanup_test_port(test_port);
+    }
+
+    #[test]
+    fn test_no_transition_if_not_expired() {
+        setup_test_env();
+        let test_port = "/tmp/test_port_4";
+        cleanup_test_port(test_port);
+
+        // Add a test port with AppliedSuccess status from 1 second ago (not expired)
+        let recent_timestamp = Local::now() - chrono::Duration::seconds(1);
+        crate::tui::status::write_status(|status| {
+            let mut port = PortData::default();
+            port.port_name = test_port.to_string();
+            port.state = PortState::OccupiedByThis;
+            port.status_indicator = PortStatusIndicator::AppliedSuccess {
+                timestamp: recent_timestamp,
+            };
+            port.config_modified = false;
+
+            status.ports.map.insert(test_port.to_string(), port);
+            status.ports.order.push(test_port.to_string());
+            Ok(())
+        })
+        .unwrap();
+
+        // Check and update
+        let updated = check_and_update_temporary_statuses(None).unwrap();
+        assert!(!updated, "Status should not have been updated");
+
+        // Verify status is still AppliedSuccess
+        crate::tui::status::read_status(|status| {
+            let port = status.ports.map.get(test_port).unwrap();
+            assert!(
+                matches!(
+                    port.status_indicator,
+                    PortStatusIndicator::AppliedSuccess { .. }
+                ),
+                "Status should still be AppliedSuccess"
+            );
+            Ok(())
+        })
+        .unwrap();
+
+        cleanup_test_port(test_port);
+    }
 }
