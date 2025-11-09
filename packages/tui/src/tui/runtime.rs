@@ -455,12 +455,23 @@ fn start_runtime(
                 stations.len()
             );
             if !stations.is_empty() {
-                let baud = 9600;
+                let baud = port.serial_config.baud;
+                let request_interval_ms = port.serial_config.request_interval_ms;
+                let timeout_ms = port.serial_config.timeout_ms;
                 log::info!(
-                    "{label}({port_name}): found {} station(s) - will attempt CLI subprocess",
-                    stations.len()
+                    "{label}({port_name}): found {} station(s) - will attempt CLI subprocess (baud={}, interval={}ms, timeout={}ms)",
+                    stations.len(),
+                    baud,
+                    request_interval_ms,
+                    timeout_ms
                 );
-                return Ok(Some((mode.clone(), stations.clone(), baud)));
+                return Ok(Some((
+                    mode.clone(),
+                    stations.clone(),
+                    baud,
+                    request_interval_ms,
+                    timeout_ms,
+                )));
             }
             log::info!("{label}({port_name}): no station configured - nothing to do");
         }
@@ -469,7 +480,7 @@ fn start_runtime(
 
     let mut cli_started = false;
 
-    if let Some((mode, stations, baud_rate)) = cli_inputs {
+    if let Some((mode, stations, baud_rate, request_interval_ms, timeout_ms)) = cli_inputs {
         match mode {
             types::modbus::ModbusConnectionMode::Slave { .. } => {
                 let station = &stations[0];
@@ -488,6 +499,8 @@ fn start_runtime(
                     )
                     .to_string(),
                     baud_rate,
+                    request_interval_ms,
+                    timeout_ms,
                     data_source: None,
                 };
 
@@ -574,6 +587,8 @@ fn start_runtime(
                     )
                     .to_string(),
                     baud_rate,
+                    request_interval_ms,
+                    timeout_ms,
                     data_source: Some(format!("file:{}", data_source_path.to_string_lossy())),
                 };
 

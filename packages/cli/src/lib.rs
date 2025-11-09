@@ -149,6 +149,22 @@ pub fn parse_args() -> ArgMatches {
                 .value_parser(clap::value_parser!(u32)),
         )
         .arg(
+            Arg::new("request-interval-ms")
+                .long("request-interval-ms")
+                .value_name("MS")
+                .help("Request interval time in milliseconds for successful polls (default: 1000)")
+                .value_parser(clap::value_parser!(u32))
+                .default_value("1000"),
+        )
+        .arg(
+            Arg::new("timeout-ms")
+                .long("timeout-ms")
+                .value_name("MS")
+                .help("Timeout waiting time in milliseconds for failed requests (default: 3000)")
+                .value_parser(clap::value_parser!(u32))
+                .default_value("3000"),
+        )
+        .arg(
             Arg::new("debounce-seconds")
                 .long("debounce-seconds")
                 .help("Debounce window for duplicate JSON output in seconds. Default 1 second. Set to 0 to disable.")

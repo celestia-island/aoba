@@ -16,13 +16,15 @@ pub async fn test_multi_slaves_adjacent_registers() -> Result<()> {
 
     // Create configuration using the type-safe ModbusBootConfig struct
     let config = ModbusBootConfig {
-        port_name: "/tmp/vcom2".to_string(),
+        port_name: "/tmp/vcom1".to_string(),
         baud_rate: 9600,
         communication_params: CommunicationParams {
             mode: CommunicationMethod::Stdio,
             dynamic_pull: false,
             wait_time: Some(1.0),
             timeout: Some(3.0),
+            request_interval_ms: 1000,
+            timeout_ms: 3000,
             persistence: PersistenceMode::Persistent,
         },
         stations: vec![StationConfig {
