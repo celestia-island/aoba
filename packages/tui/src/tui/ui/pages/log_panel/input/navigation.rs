@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::actions::{handle_clear_logs, handle_leave_page, handle_toggle_follow};
-use crate::{tui::status::write_status, tui::utils::bus::Bus};
+use crate::tui::{status::write_status, utils::bus::Bus};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Conservative estimate of viewport height (total height minus title, borders, bottom hints)

@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
 
-use crate::{
-    tui::status as types,
-    tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-    tui::status::{read_status, write_status},
-    tui::utils::bus::{Bus, UiToCore},
+use crate::tui::{
+    status as types,
+    status::{
+        port::{PortState, PortSubprocessInfo, PortSubprocessMode},
+        {read_status, write_status},
+    },
+    utils::bus::{Bus, UiToCore},
 };
 use aoba_protocol::modbus::generate_pull_set_holding_request;
 

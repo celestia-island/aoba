@@ -3,9 +3,15 @@ use anyhow::Result;
 use ratatui::prelude::*;
 
 use crate::{
-    i18n::lang, tui::status as types, tui::status::read_status,
-    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
-    tui::ui::pages::config_panel::components::render_kv_lines_with_indicators,
+    i18n::lang,
+    tui::{
+        status as types,
+        status::read_status,
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::config_panel::components::render_kv_lines_with_indicators,
+        },
+    },
 };
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {

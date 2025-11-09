@@ -4,12 +4,16 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
-    tui::status as types,
-    tui::status::modbus::{ModbusConnectionMode, RegisterMode, StationMode},
-    tui::status::port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-    tui::status::{read_status, write_status},
-    tui::ui::components::input_span_handler::handle_input_span,
-    tui::utils::bus::{Bus, UiToCore},
+    tui::{
+        status as types,
+        status::{
+            modbus::{ModbusConnectionMode, RegisterMode, StationMode},
+            port::{PortState, PortSubprocessInfo, PortSubprocessMode},
+            {read_status, write_status},
+        },
+        ui::components::input_span_handler::handle_input_span,
+        utils::bus::{Bus, UiToCore},
+    },
 };
 use aoba_protocol::modbus::generate_pull_set_holding_request;
 
