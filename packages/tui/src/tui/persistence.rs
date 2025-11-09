@@ -22,7 +22,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::{tui::status::modbus::ModbusRegisterItem, tui::status::port::PortConfig};
+use crate::tui::status::{modbus::ModbusRegisterItem, port::PortConfig};
 
 /// Global flag to disable config cache (set via --no-config-cache)
 static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);

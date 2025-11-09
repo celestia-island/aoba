@@ -9,11 +9,14 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::{
     i18n::lang,
-    tui::status as types,
-    tui::status::cursor::EntryCursor,
-    tui::status::read_status,
-    tui::ui::components::boxed_paragraph::render_boxed_paragraph,
-    tui::ui::pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+    tui::{
+        status as types,
+        status::{cursor::EntryCursor, read_status},
+        ui::{
+            components::boxed_paragraph::render_boxed_paragraph,
+            pages::about::components::{init_about_cache, render_about_page_manifest_lines},
+        },
+    },
 };
 
 /// Render the right details panel content

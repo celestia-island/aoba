@@ -5,10 +5,14 @@ use crossterm::event::{KeyCode, KeyEvent};
 use super::actions::{handle_enter_action, handle_leave_page};
 use crate::{
     i18n::lang,
-    tui::status as types,
-    tui::status::cursor::Cursor,
-    tui::status::{read_status, write_status},
-    tui::utils::bus::{Bus, UiToCore},
+    tui::{
+        status as types,
+        status::{
+            cursor::Cursor,
+            {read_status, write_status},
+        },
+        utils::bus::{Bus, UiToCore},
+    },
 };
 
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
