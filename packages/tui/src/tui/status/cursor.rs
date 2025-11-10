@@ -247,7 +247,7 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
         flat.push(ModbusDashboardCursor::ModbusMode);
-        
+
         // Add RequestInterval and Timeout only in Slave mode
         if is_modbus_slave_mode() {
             flat.push(ModbusDashboardCursor::RequestInterval);
@@ -281,7 +281,7 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
         flat.push(ModbusDashboardCursor::ModbusMode);
-        
+
         // Add RequestInterval and Timeout only in Slave mode
         if is_modbus_slave_mode() {
             flat.push(ModbusDashboardCursor::RequestInterval);
@@ -316,7 +316,7 @@ impl Cursor for ModbusDashboardCursor {
         // reserved (Add line, Global mode, RequestInterval/Timeout if Slave, and blank)
         let registers_per_row = 4;
         let mut offset = 0usize;
-        
+
         // Start with base rows: AddLine + ModbusMode
         let is_slave = is_modbus_slave_mode();
         let base_rows = if is_slave {

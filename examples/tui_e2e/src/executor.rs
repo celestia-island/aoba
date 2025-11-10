@@ -69,7 +69,10 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
         // Track when we enter the modbus panel
         if step_name == "enter_modbus_panel" {
             ctx.in_modbus_panel = true;
-            log::debug!("📍 Entering modbus panel - slave line adjustment enabled: {}", ctx.is_slave_test);
+            log::debug!(
+                "📍 Entering modbus panel - slave line adjustment enabled: {}",
+                ctx.is_slave_test
+            );
         }
 
         let steps = workflow
@@ -89,7 +92,10 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
             // Track when we enter the modbus panel (may happen in recycle too)
             if step_name == "enter_modbus_panel" {
                 ctx.in_modbus_panel = true;
-                log::debug!("📍 Entering modbus panel - slave line adjustment enabled: {}", ctx.is_slave_test);
+                log::debug!(
+                    "📍 Entering modbus panel - slave line adjustment enabled: {}",
+                    ctx.is_slave_test
+                );
             }
 
             let steps = workflow
@@ -655,7 +661,11 @@ async fn execute_single_step(
                 // Therefore, for any line_num >= 2 checking station content, we add 2
                 if ctx.is_slave_test && ctx.in_modbus_panel && line_num >= 2 {
                     line_num += 2;
-                    log::debug!("🔧 Adjusted line number for slave mode: {} -> {}", line_num - 2, line_num);
+                    log::debug!(
+                        "🔧 Adjusted line number for slave mode: {} -> {}",
+                        line_num - 2,
+                        line_num
+                    );
                 }
 
                 let lines: Vec<&str> = screen_content.lines().collect();
