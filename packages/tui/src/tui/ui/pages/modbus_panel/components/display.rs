@@ -177,15 +177,15 @@ pub fn render_kv_lines_with_indicators(
             let request_interval_renderer = || -> Result<Vec<Span<'static>>> {
                 if let Some(ref port) = port_data {
                     let current_value = port.serial_config.request_interval_ms;
-                    
+
                     let selected = matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::RequestInterval
                     );
-                    
+
                     let editing = selected
                         && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
-                    
+
                     let state = if editing {
                         TextState::Editing
                     } else if selected {
@@ -193,7 +193,7 @@ pub fn render_kv_lines_with_indicators(
                     } else {
                         TextState::Normal
                     };
-                    
+
                     if editing {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
@@ -208,7 +208,7 @@ pub fn render_kv_lines_with_indicators(
                     Ok(vec![])
                 }
             };
-            
+
             lines.push(create_line(
                 &lang().protocol.common.label_request_interval,
                 matches!(
@@ -217,20 +217,20 @@ pub fn render_kv_lines_with_indicators(
                 ),
                 request_interval_renderer,
             )?);
-            
+
             // Timeout field
             let timeout_renderer = || -> Result<Vec<Span<'static>>> {
                 if let Some(ref port) = port_data {
                     let current_value = port.serial_config.timeout_ms;
-                    
+
                     let selected = matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::Timeout
                     );
-                    
+
                     let editing = selected
                         && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
-                    
+
                     let state = if editing {
                         TextState::Editing
                     } else if selected {
@@ -238,7 +238,7 @@ pub fn render_kv_lines_with_indicators(
                     } else {
                         TextState::Normal
                     };
-                    
+
                     if editing {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
@@ -253,7 +253,7 @@ pub fn render_kv_lines_with_indicators(
                     Ok(vec![])
                 }
             };
-            
+
             lines.push(create_line(
                 &lang().protocol.common.label_timeout,
                 matches!(
