@@ -1,7 +1,11 @@
 [package]
 name = "cli_e2e"
-version = "0.0.1"
-edition = "2021"
+description.workspace = true
+repository.workspace = true
+license.workspace = true
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
 publish = false
 
 [dependencies]

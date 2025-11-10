@@ -6,6 +6,7 @@ license.workspace = true
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
+
 build = "build.rs"
 
 [dependencies]
