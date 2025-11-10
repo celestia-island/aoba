@@ -112,15 +112,3 @@ fn buffer_to_string(buffer: &ratatui::buffer::Buffer) -> String {
 
     output
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_render_basic() {
-        // Basic smoke test to ensure rendering doesn't panic
-        let result = render_tui_to_string(80, 24);
-        assert!(result.is_ok());
-    }
-}

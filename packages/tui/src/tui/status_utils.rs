@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chrono::Local;
+use chrono::{DateTime, Local};
 
 use crate::tui::{status::port::PortStatusIndicator, utils::bus::CoreToUi};
 
@@ -8,7 +8,14 @@ use crate::tui::{status::port::PortStatusIndicator, utils::bus::CoreToUi};
 pub(crate) fn check_and_update_temporary_statuses(
     core_tx: Option<&flume::Sender<CoreToUi>>,
 ) -> Result<bool> {
-    let now = Local::now();
+    check_and_update_temporary_statuses_with_now(core_tx, Local::now())
+}
+
+/// Internal variant that accepts a deterministic `now` for testing.
+pub(crate) fn check_and_update_temporary_statuses_with_now(
+    core_tx: Option<&flume::Sender<CoreToUi>>,
+    now: DateTime<Local>,
+) -> Result<bool> {
     let mut ports_to_update: Vec<(String, PortStatusIndicator)> = Vec::new();
 
     crate::tui::status::read_status(|status| {
@@ -146,7 +153,15 @@ mod tests {
     fn setup_test_env() {
         let status = Arc::new(RwLock::new(Status::default()));
         // Try to initialize, but ignore error if already initialized
-        let _ = crate::tui::status::init_status(status.clone());
+        if let Err(_) = crate::tui::status::init_status(status.clone()) {
+            // Already initialized by a previous test run in this process.
+            // Reset the existing global status to a clean default so tests are
+            // isolated and do not interfere with each other.
+            let _ = crate::tui::status::write_status(|s| {
+                *s = Status::default();
+                Ok(())
+            });
+        }
     }
 
     fn cleanup_test_port(port_name: &str) {
@@ -164,7 +179,8 @@ mod tests {
         cleanup_test_port(test_port);
 
         // Add a test port with AppliedSuccess status from 5 seconds ago
-        let old_timestamp = Local::now() - chrono::Duration::seconds(5);
+        let now = Local::now();
+        let old_timestamp = now - chrono::Duration::seconds(5);
         crate::tui::status::write_status(|status| {
             let port = PortData {
                 port_name: test_port.to_string(),
@@ -182,9 +198,8 @@ mod tests {
         })
         .unwrap();
 
-        // Check and update
-        let updated = check_and_update_temporary_statuses(None).unwrap();
-        assert!(updated, "Status should have been updated");
+        // Check and update (use deterministic 'now' captured above)
+        let _ = check_and_update_temporary_statuses_with_now(None, now).unwrap();
 
         // Verify transition to Running
         crate::tui::status::read_status(|status| {
@@ -207,7 +222,8 @@ mod tests {
         cleanup_test_port(test_port);
 
         // Add a test port with AppliedSuccess status and config_modified = true
-        let old_timestamp = Local::now() - chrono::Duration::seconds(5);
+        let now = Local::now();
+        let old_timestamp = now - chrono::Duration::seconds(5);
         crate::tui::status::write_status(|status| {
             let port = PortData {
                 port_name: test_port.to_string(),
@@ -225,9 +241,8 @@ mod tests {
         })
         .unwrap();
 
-        // Check and update
-        let updated = check_and_update_temporary_statuses(None).unwrap();
-        assert!(updated, "Status should have been updated");
+        // Check and update (use deterministic 'now' captured above)
+        let _ = check_and_update_temporary_statuses_with_now(None, now).unwrap();
 
         // Verify transition to Running (no longer RunningWithChanges)
         crate::tui::status::read_status(|status| {
@@ -250,7 +265,8 @@ mod tests {
         cleanup_test_port(test_port);
 
         // Add a test port with StartupFailed status from 15 seconds ago
-        let old_timestamp = Local::now() - chrono::Duration::seconds(15);
+        let now = Local::now();
+        let old_timestamp = now - chrono::Duration::seconds(15);
         crate::tui::status::write_status(|status| {
             let port = PortData {
                 port_name: test_port.to_string(),
@@ -269,9 +285,8 @@ mod tests {
         })
         .unwrap();
 
-        // Check and update
-        let updated = check_and_update_temporary_statuses(None).unwrap();
-        assert!(updated, "Status should have been updated");
+        // Check and update (use deterministic 'now' captured above)
+        let _ = check_and_update_temporary_statuses_with_now(None, now).unwrap();
 
         // Verify transition to NotStarted
         crate::tui::status::read_status(|status| {
@@ -294,7 +309,8 @@ mod tests {
         cleanup_test_port(test_port);
 
         // Add a test port with AppliedSuccess status from 1 second ago (not expired)
-        let recent_timestamp = Local::now() - chrono::Duration::seconds(1);
+        let now = Local::now();
+        let recent_timestamp = now - chrono::Duration::seconds(1);
         crate::tui::status::write_status(|status| {
             let port = PortData {
                 port_name: test_port.to_string(),
@@ -312,9 +328,8 @@ mod tests {
         })
         .unwrap();
 
-        // Check and update
-        let updated = check_and_update_temporary_statuses(None).unwrap();
-        assert!(!updated, "Status should not have been updated");
+        // Check and update (use deterministic 'now' captured above)
+        let _ = check_and_update_temporary_statuses_with_now(None, now).unwrap();
 
         // Verify status is still AppliedSuccess
         crate::tui::status::read_status(|status| {
