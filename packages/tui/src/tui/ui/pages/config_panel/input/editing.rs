@@ -445,7 +445,6 @@ fn start_editing_mode(_selected_cursor: types::cursor::ConfigPanelCursor) -> Res
                             status.temporarily.input_raw_buffer =
                                 types::ui::InputRawBuffer::Index(index);
                         }
-                        // RequestInterval and Timeout were moved to the Modbus panel
                         types::cursor::ConfigPanelCursor::DataBits { .. } => {
                             let index = match port.serial_config.data_bits {
                                 5 => 0usize,
