@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml">
-    <img src="https://github.com/celestia-island/aoba/actions/workflows/basic-checks.yml/badge.svg?branch=master" alt="Basic Checks status" />
+  <a href="https://github.com/celestia-island/aoba/actions/workflows/checks.yml">
+    <img src="https://github.com/celestia-island/aoba/actions/workflows/checks.yml/badge.svg?branch=master" alt="Checks status" />
   </a>
   <a href="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml">
     <img src="https://github.com/celestia-island/aoba/actions/workflows/e2e-tests-tui.yml/badge.svg?branch=master" alt="E2E TUI status" />
