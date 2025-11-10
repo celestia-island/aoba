@@ -1,0 +1,66 @@
+name: Checks (autofix)
+
+on:
+  push:
+    branches: [master, dev]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check (call stage1)
+    uses: ./.github/workflows/checks.yml
+
+  fixes:
+    name: Auto-fix and commit
+    runs-on: ubuntu-latest
+    needs: [check]
+    # Ensure this job runs even if the upstream `check` job failed.
+    # This lets the auto-fix steps attempt fixes and commit regardless of check result.
+    if: ${{ always() }}
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        rust: [stable]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev pkg-config libx11-dev libxcb-shape0-dev libxcb-xfixes0-dev socat
+
+      - name: Attempt auto-fix with cargo fix
+        run: |
+          echo "Attempting to fix compilation errors..."
+          cargo fix --all-targets --allow-dirty --allow-staged || true
+
+      - name: Attempt auto-fix with cargo clippy --fix
+        run: |
+          echo "Attempting to fix clippy warnings..."
+          cargo clippy --fix --all-targets --all-features --allow-dirty --allow-staged || true
+
+      - name: Run enforce_use_groups.py (auto-fix)
+        run: |
+          echo "Rewriting use statements with enforce_use_groups.py..."
+          python3 scripts/enforce_use_groups.py || true
+
+      - name: Check for changes and commit
+        if: matrix.rust == 'stable' && github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          if ! git diff --cached --quiet; then
+            echo "Changes detected, committing..."
+            git commit -m "🎨 Clippy."
+            git push
+          else
+            echo "No changes to commit"
+          fi
