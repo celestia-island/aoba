@@ -29,7 +29,7 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
     }
 
     let test_port = ports[0];
-    log::info!("Using test port: {}", test_port);
+    log::info!("Using test port: {test_port}");
 
     // Check free port
     log::info!("Checking free port...");
@@ -46,24 +46,23 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
         .status()?;
 
     if check1.code() != Some(0) {
-        log::warn!("⚠️ Port {} might be occupied by another program", test_port);
+        log::warn!("⚠️ Port {test_port} might be occupied by another program");
     } else {
-        log::info!("✅ Port {} is free", test_port);
+        log::info!("✅ Port {test_port} is free");
     }
 
     // Occupy port with PowerShell and detect
     log::info!("Occupying port with PowerShell...");
     let ps_script = format!(
         r#"
-        $port = New-Object System.IO.Ports.SerialPort('{}', 9600)
+        $port = New-Object System.IO.Ports.SerialPort('{test_port}', 9600)
         try {{
             $port.Open()
             Start-Sleep -Seconds 5
         }} finally {{
             if ($port.IsOpen) {{ $port.Close() }}
         }}
-        "#,
-        test_port
+        "#
     );
 
     let mut occupy_process = Command::new("powershell")
@@ -87,9 +86,9 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
         .status()?;
 
     if check2.code() == Some(1) {
-        log::info!("✅ Port {} correctly detected as OCCUPIED", test_port);
+        log::info!("✅ Port {test_port} correctly detected as OCCUPIED");
     } else {
-        log::error!("❌ Port {} NOT detected as occupied (FAILED)", test_port);
+        log::error!("❌ Port {test_port} NOT detected as occupied (FAILED)");
         occupy_process.kill()?;
         return Err(anyhow!("Windows API detection failed to detect occupation"));
     }
@@ -114,11 +113,10 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
 
     if check3.code() == Some(0) {
         log::info!(
-            "✅ Port {} correctly detected as FREE after release",
-            test_port
+            "✅ Port {test_port} correctly detected as FREE after release"
         );
     } else {
-        log::warn!("⚠️ Port {} still detected as occupied", test_port);
+        log::warn!("⚠️ Port {test_port} still detected as occupied");
     }
 
     log::info!("✅ Windows port occupation detection test completed");

@@ -494,7 +494,7 @@ pub(crate) fn append_subprocess_exited_log(port_name: &str, exit_status: Option<
                 translations.tabs.log.subprocess_exit_success.clone()
             } else if let Some(code) = status.code() {
                 let label = translations.tabs.log.subprocess_exit_code_label.clone();
-                format!("{} 0x{code:02X} ({code})", label)
+                format!("{label} 0x{code:02X} ({code})")
             } else {
                 translations.tabs.log.subprocess_exit_signal.clone()
             };

@@ -8,7 +8,7 @@ use std::{
 
 use super::{
     emit_modbus_ipc_log, extract_values_from_storage, open_serial_port, parse_register_mode,
-    ModbusResponse, OutputSink,
+    ModbusIpcLogPayload, ModbusResponse, OutputSink,
 };
 use crate::{actions, cleanup};
 
@@ -21,63 +21,6 @@ enum SlavePollTransaction {
         error: anyhow::Error,
         request_frame: Vec<u8>,
     },
-}
-
-/// Handle slave listen (temporary: output once and exit)
-pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
-    let station_id = *matches.get_one::<u8>("station-id").unwrap();
-    let register_address = *matches.get_one::<u16>("register-address").unwrap();
-    let register_length = *matches.get_one::<u16>("register-length").unwrap();
-    let register_mode = matches.get_one::<String>("register-mode").unwrap();
-    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
-
-    let output_sink = matches
-        .get_one::<String>("output")
-        .map(|s| s.parse::<OutputSink>())
-        .transpose()?
-        .unwrap_or(OutputSink::Stdout);
-
-    let reg_mode = parse_register_mode(register_mode)?;
-
-    log::info!(
-        "Starting slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
-    );
-
-    let response = {
-        // Open serial port in a scope to ensure it's closed before returning
-        let port_handle = open_serial_port(port, baud_rate, Duration::from_secs(5))?;
-
-        let port_arc = Arc::new(Mutex::new(port_handle));
-
-        // Initialize modbus storage
-        let storage = Arc::new(Mutex::new(
-            rmodbus::server::storage::ModbusStorageSmall::new(),
-        ));
-
-        // Wait for one request and respond
-        let response = listen_for_one_request(
-            port_arc.clone(),
-            station_id,
-            register_address,
-            register_length,
-            reg_mode,
-            storage,
-        )?;
-
-        // Explicitly drop port_arc to close the port
-        drop(port_arc);
-
-        // Give the OS time to fully release the port
-        std::thread::sleep(Duration::from_millis(100));
-
-        response
-    };
-
-    // Output JSON to configured sink
-    let json = serde_json::to_string(&response)?;
-    output_sink.write(&json)?;
-
-    Ok(())
 }
 
 /// Execute a single slave polling transaction, returning either a successful response or
@@ -129,10 +72,7 @@ fn run_slave_poll_transaction(
 
         request_frame = request_bytes.1.clone();
 
-        log::info!(
-            "run_slave_poll_transaction: Sending request to master: {:02X?}",
-            request_frame
-        );
+        log::info!("run_slave_poll_transaction: Sending request to master: {request_frame:02X?}");
         {
             let mut port = port_arc.lock().unwrap();
             port.write_all(&request_frame)?;
@@ -387,6 +327,58 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
             }
         }
     }
+}
+
+/// Handle a single slave listen (one-shot JSON output)
+pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
+    let station_id = *matches.get_one::<u8>("station-id").unwrap();
+    let register_address = *matches.get_one::<u16>("register-address").unwrap();
+    let register_length = *matches.get_one::<u16>("register-length").unwrap();
+    let register_mode = matches.get_one::<String>("register-mode").unwrap();
+    let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+
+    let output_sink = matches
+        .get_one::<String>("output")
+        .map(|s| s.parse::<OutputSink>())
+        .transpose()?
+        .unwrap_or(OutputSink::Stdout);
+
+    let reg_mode = parse_register_mode(register_mode)?;
+
+    log::info!(
+        "Starting slave listen on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
+    );
+
+    // Open serial port in a scope to ensure it's closed before returning
+    let port_handle = open_serial_port(port, baud_rate, Duration::from_secs(5))?;
+    let port_arc = Arc::new(Mutex::new(port_handle));
+
+    // Initialize modbus storage
+    let storage = Arc::new(Mutex::new(
+        rmodbus::server::storage::ModbusStorageSmall::new(),
+    ));
+
+    // Wait for one request and respond
+    let response = listen_for_one_request(
+        port_arc.clone(),
+        station_id,
+        register_address,
+        register_length,
+        reg_mode,
+        storage,
+    )?;
+
+    // Explicitly drop port_arc to close the port
+    drop(port_arc);
+
+    // Give the OS time to fully release the port
+    std::thread::sleep(Duration::from_millis(100));
+
+    // Output JSON to configured sink
+    let json = serde_json::to_string(&response)?;
+    output_sink.write(&json)?;
+
+    Ok(())
 }
 
 /// Listen for one Modbus request and respond
@@ -690,8 +682,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::Holding;
                                             log::info!(
-                                                "Updated slave config: station={}, type=Holding, addr=0x{:04X}, len={}",
-                                                current_station_id, current_register_address, current_register_length
+                                                "Updated slave config: station={current_station_id}, type=Holding, addr=0x{current_register_address:04X}, len={current_register_length}"
                                             );
                                         } else if let Some(range) = first_station.map.coils.first()
                                         {
@@ -699,8 +690,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::Coils;
                                             log::info!(
-                                                "Updated slave config: station={}, type=Coils, addr=0x{:04X}, len={}",
-                                                current_station_id, current_register_address, current_register_length
+                                                "Updated slave config: station={current_station_id}, type=Coils, addr=0x{current_register_address:04X}, len={current_register_length}"
                                             );
                                         } else if let Some(range) =
                                             first_station.map.discrete_inputs.first()
@@ -709,8 +699,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::DiscreteInputs;
                                             log::info!(
-                                                "Updated slave config: station={}, type=DiscreteInputs, addr=0x{:04X}, len={}",
-                                                current_station_id, current_register_address, current_register_length
+                                                "Updated slave config: station={current_station_id}, type=DiscreteInputs, addr=0x{current_register_address:04X}, len={current_register_length}"
                                             );
                                         } else if let Some(range) = first_station.map.input.first()
                                         {
@@ -718,8 +707,7 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                                             current_register_length = range.length;
                                             current_reg_mode = aoba_protocol::status::types::modbus::RegisterMode::Input;
                                             log::info!(
-                                                "Updated slave config: station={}, type=Input, addr=0x{:04X}, len={}",
-                                                current_station_id, current_register_address, current_register_length
+                                                "Updated slave config: station={current_station_id}, type=Input, addr=0x{current_register_address:04X}, len={current_register_length}"
                                             );
                                         }
 
@@ -807,28 +795,26 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
                 log::warn!("Poll error: {error_text}");
 
                 let trimmed_error = error_text.trim().to_string();
-                let should_emit = match &last_failure_log {
-                    Some((prev, ts))
-                        if prev == &trimmed_error && ts.elapsed() < Duration::from_secs(2) =>
-                    {
-                        false
-                    }
-                    _ => true,
-                };
+                let should_emit = !matches!(
+                    &last_failure_log,
+                    Some((prev, ts)) if prev == &trimmed_error && ts.elapsed() < Duration::from_secs(2)
+                );
 
                 if should_emit {
                     emit_modbus_ipc_log(
                         &mut ipc,
-                        port,
-                        "tx",
-                        &request_frame,
-                        Some(current_station_id),
-                        Some(current_reg_mode),
-                        Some(current_register_address),
-                        Some(current_register_length),
-                        Some(false),
-                        Some(trimmed_error.clone()),
-                        None,
+                        ModbusIpcLogPayload {
+                            port,
+                            direction: "tx",
+                            frame: &request_frame,
+                            station_id: Some(current_station_id),
+                            register_mode: Some(current_reg_mode),
+                            start_address: Some(current_register_address),
+                            quantity: Some(current_register_length),
+                            success: Some(false),
+                            error: Some(trimmed_error.clone()),
+                            config_index: None,
+                        },
                     );
                     last_failure_log = Some((trimmed_error, Instant::now()));
                 }

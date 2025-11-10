@@ -197,12 +197,12 @@ pub fn render_kv_lines_with_indicators(
                     if editing {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
-                            Ok(input_spans(format!("{} ms", custom_value), state)?)
+                            Ok(input_spans(format!("{custom_value} ms"), state)?)
                         } else {
-                            Ok(input_spans(format!("{} ms", current_value), state)?)
+                            Ok(input_spans(format!("{current_value} ms"), state)?)
                         }
                     } else {
-                        Ok(input_spans(format!("{} ms", current_value), state)?)
+                        Ok(input_spans(format!("{current_value} ms"), state)?)
                     }
                 } else {
                     Ok(vec![])
@@ -242,12 +242,12 @@ pub fn render_kv_lines_with_indicators(
                     if editing {
                         if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
                             let custom_value = String::from_utf8_lossy(bytes);
-                            Ok(input_spans(format!("{} ms", custom_value), state)?)
+                            Ok(input_spans(format!("{custom_value} ms"), state)?)
                         } else {
-                            Ok(input_spans(format!("{} ms", current_value), state)?)
+                            Ok(input_spans(format!("{current_value} ms"), state)?)
                         }
                     } else {
-                        Ok(input_spans(format!("{} ms", current_value), state)?)
+                        Ok(input_spans(format!("{current_value} ms"), state)?)
                     }
                 } else {
                     Ok(vec![])

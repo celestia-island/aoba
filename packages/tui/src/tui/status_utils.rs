@@ -166,13 +166,15 @@ mod tests {
         // Add a test port with AppliedSuccess status from 5 seconds ago
         let old_timestamp = Local::now() - chrono::Duration::seconds(5);
         crate::tui::status::write_status(|status| {
-            let mut port = PortData::default();
-            port.port_name = test_port.to_string();
-            port.state = PortState::OccupiedByThis;
-            port.status_indicator = PortStatusIndicator::AppliedSuccess {
-                timestamp: old_timestamp,
+            let port = PortData {
+                port_name: test_port.to_string(),
+                state: PortState::OccupiedByThis,
+                status_indicator: PortStatusIndicator::AppliedSuccess {
+                    timestamp: old_timestamp,
+                },
+                config_modified: false,
+                ..Default::default()
             };
-            port.config_modified = false;
 
             status.ports.map.insert(test_port.to_string(), port);
             status.ports.order.push(test_port.to_string());
@@ -207,13 +209,15 @@ mod tests {
         // Add a test port with AppliedSuccess status and config_modified = true
         let old_timestamp = Local::now() - chrono::Duration::seconds(5);
         crate::tui::status::write_status(|status| {
-            let mut port = PortData::default();
-            port.port_name = test_port.to_string();
-            port.state = PortState::OccupiedByThis;
-            port.status_indicator = PortStatusIndicator::AppliedSuccess {
-                timestamp: old_timestamp,
+            let port = PortData {
+                port_name: test_port.to_string(),
+                state: PortState::OccupiedByThis,
+                status_indicator: PortStatusIndicator::AppliedSuccess {
+                    timestamp: old_timestamp,
+                },
+                config_modified: true, // Port has unsaved changes
+                ..Default::default()
             };
-            port.config_modified = true; // Port has unsaved changes
 
             status.ports.map.insert(test_port.to_string(), port);
             status.ports.order.push(test_port.to_string());
@@ -248,14 +252,16 @@ mod tests {
         // Add a test port with StartupFailed status from 15 seconds ago
         let old_timestamp = Local::now() - chrono::Duration::seconds(15);
         crate::tui::status::write_status(|status| {
-            let mut port = PortData::default();
-            port.port_name = test_port.to_string();
-            port.state = PortState::Free;
-            port.status_indicator = PortStatusIndicator::StartupFailed {
-                error_message: "Test error".to_string(),
-                timestamp: old_timestamp,
+            let port = PortData {
+                port_name: test_port.to_string(),
+                state: PortState::Free,
+                status_indicator: PortStatusIndicator::StartupFailed {
+                    error_message: "Test error".to_string(),
+                    timestamp: old_timestamp,
+                },
+                config_modified: false,
+                ..Default::default()
             };
-            port.config_modified = false;
 
             status.ports.map.insert(test_port.to_string(), port);
             status.ports.order.push(test_port.to_string());
@@ -290,13 +296,15 @@ mod tests {
         // Add a test port with AppliedSuccess status from 1 second ago (not expired)
         let recent_timestamp = Local::now() - chrono::Duration::seconds(1);
         crate::tui::status::write_status(|status| {
-            let mut port = PortData::default();
-            port.port_name = test_port.to_string();
-            port.state = PortState::OccupiedByThis;
-            port.status_indicator = PortStatusIndicator::AppliedSuccess {
-                timestamp: recent_timestamp,
+            let port = PortData {
+                port_name: test_port.to_string(),
+                state: PortState::OccupiedByThis,
+                status_indicator: PortStatusIndicator::AppliedSuccess {
+                    timestamp: recent_timestamp,
+                },
+                config_modified: false,
+                ..Default::default()
             };
-            port.config_modified = false;
 
             status.ports.map.insert(test_port.to_string(), port);
             status.ports.order.push(test_port.to_string());
