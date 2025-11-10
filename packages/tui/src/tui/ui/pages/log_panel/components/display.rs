@@ -255,8 +255,8 @@ fn build_communication_lines(
 ) -> [Line<'static>; 3] {
     let lang = lang();
     match comm.role {
-        types::modbus::StationMode::Master => build_master_comm_lines(time_line, comm, &lang),
-        types::modbus::StationMode::Slave => build_slave_comm_lines(time_line, comm, &lang),
+        types::modbus::StationMode::Master => build_master_comm_lines(time_line, comm, lang),
+        types::modbus::StationMode::Slave => build_slave_comm_lines(time_line, comm, lang),
     }
 }
 
@@ -762,7 +762,7 @@ fn build_legacy_lines(
     let second = Line::from(vec![Span::raw("  "), Span::raw(entry.raw.clone())]);
     let third = Line::from(vec![
         Span::raw("  "),
-        Span::raw(entry.parsed.clone().unwrap_or_else(|| String::new())),
+        Span::raw(entry.parsed.clone().unwrap_or_default()),
     ]);
 
     [time_line, second, third]

@@ -197,6 +197,30 @@ pub fn group_steps(steps: &[WorkflowStep]) -> Vec<StepGroup> {
     groups
 }
 
+impl Default for WorkflowStep {
+    fn default() -> Self {
+        Self {
+            description: None,
+            key: None,
+            times: None,
+            input: None,
+            value: None,
+            verify: None,
+            at_line: None,
+            verify_with_placeholder: None,
+            cursor_at_line: None,
+            sleep_ms: None,
+            mock_path: None,
+            mock_set_value: None,
+            mock_set_value_with_placeholder: None,
+            mock_verify_path: None,
+            mock_verify_value: None,
+            trigger: None,
+            trigger_params: None,
+        }
+    }
+}
+
 // Note: helper `is_in_retryable_group` was removed because it was not used elsewhere.
 
 #[cfg(test)]
@@ -308,29 +332,5 @@ mod tests {
         assert_eq!(groups.len(), 1);
         assert_eq!(groups[0].step_indices, vec![0, 1, 2, 3, 4]);
         assert_eq!(groups[0].action_indices, vec![0, 1]);
-    }
-}
-
-impl Default for WorkflowStep {
-    fn default() -> Self {
-        Self {
-            description: None,
-            key: None,
-            times: None,
-            input: None,
-            value: None,
-            verify: None,
-            at_line: None,
-            verify_with_placeholder: None,
-            cursor_at_line: None,
-            sleep_ms: None,
-            mock_path: None,
-            mock_set_value: None,
-            mock_set_value_with_placeholder: None,
-            mock_verify_path: None,
-            mock_verify_value: None,
-            trigger: None,
-            trigger_params: None,
-        }
     }
 }
