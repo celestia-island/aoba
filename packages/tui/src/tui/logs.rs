@@ -124,7 +124,7 @@ pub(crate) fn append_modbus_log(
         }
 
         match function_code {
-            0x01 | 0x02 | 0x03 | 0x04 => {
+            0x01..=0x04 => {
                 if payload.len() >= 6 {
                     if register_start.is_none() {
                         register_start = Some(u16::from_be_bytes([payload[2], payload[3]]));
