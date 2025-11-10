@@ -13,7 +13,7 @@ use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
-    ModbusResponse,
+    ModbusIpcLogPayload, ModbusResponse,
 };
 use crate::{actions, cleanup};
 use aoba_protocol::modbus::{
@@ -646,32 +646,36 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
                                     emit_modbus_ipc_log(
                                         &mut ipc_connections,
-                                        port_name,
-                                        "tx",
-                                        &response_frame,
-                                        Some(response.station_id),
-                                        parsed_range.map(|(_, _, mode)| mode),
-                                        parsed_range.map(|(start, _, _)| start),
-                                        parsed_range.map(|(_, qty, _)| qty),
-                                        Some(true),
-                                        None,
-                                        None,
+                                        ModbusIpcLogPayload {
+                                            port: port_name,
+                                            direction: "tx",
+                                            frame: &response_frame,
+                                            station_id: Some(response.station_id),
+                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                            start_address: parsed_range.map(|(start, _, _)| start),
+                                            quantity: parsed_range.map(|(_, qty, _)| qty),
+                                            success: Some(true),
+                                            error: None,
+                                            config_index: None,
+                                        },
                                     );
                                 }
                                 Err(err) => {
                                     log::warn!("Error responding to request: {err}");
                                     emit_modbus_ipc_log(
                                         &mut ipc_connections,
-                                        port_name,
-                                        "tx",
-                                        &request,
-                                        request.first().copied(),
-                                        parsed_range.map(|(_, _, mode)| mode),
-                                        parsed_range.map(|(start, _, _)| start),
-                                        parsed_range.map(|(_, qty, _)| qty),
-                                        Some(false),
-                                        Some(format!("{err:#}")),
-                                        None,
+                                        ModbusIpcLogPayload {
+                                            port: port_name,
+                                            direction: "tx",
+                                            frame: &request,
+                                            station_id: request.first().copied(),
+                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                            start_address: parsed_range.map(|(start, _, _)| start),
+                                            quantity: parsed_range.map(|(_, qty, _)| qty),
+                                            success: Some(false),
+                                            error: Some(format!("{err:#}")),
+                                            config_index: None,
+                                        },
                                     );
                                 }
                             }
@@ -762,32 +766,36 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
 
                                     emit_modbus_ipc_log(
                                         &mut ipc_connections,
-                                        port_name,
-                                        "tx",
-                                        &response_frame,
-                                        Some(response.station_id),
-                                        parsed_range.map(|(_, _, mode)| mode),
-                                        parsed_range.map(|(start, _, _)| start),
-                                        parsed_range.map(|(_, qty, _)| qty),
-                                        Some(true),
-                                        None,
-                                        None,
+                                        ModbusIpcLogPayload {
+                                            port: port_name,
+                                            direction: "tx",
+                                            frame: &response_frame,
+                                            station_id: Some(response.station_id),
+                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                            start_address: parsed_range.map(|(start, _, _)| start),
+                                            quantity: parsed_range.map(|(_, qty, _)| qty),
+                                            success: Some(true),
+                                            error: None,
+                                            config_index: None,
+                                        },
                                     );
                                 }
                                 Err(err) => {
                                     log::warn!("Error responding to request: {err}");
                                     emit_modbus_ipc_log(
                                         &mut ipc_connections,
-                                        port_name,
-                                        "tx",
-                                        &request,
-                                        request.first().copied(),
-                                        parsed_range.map(|(_, _, mode)| mode),
-                                        parsed_range.map(|(start, _, _)| start),
-                                        parsed_range.map(|(_, qty, _)| qty),
-                                        Some(false),
-                                        Some(format!("{err:#}")),
-                                        None,
+                                        ModbusIpcLogPayload {
+                                            port: port_name,
+                                            direction: "tx",
+                                            frame: &request,
+                                            station_id: request.first().copied(),
+                                            register_mode: parsed_range.map(|(_, _, mode)| mode),
+                                            start_address: parsed_range.map(|(start, _, _)| start),
+                                            quantity: parsed_range.map(|(_, qty, _)| qty),
+                                            success: Some(false),
+                                            error: Some(format!("{err:#}")),
+                                            config_index: None,
+                                        },
                                     );
                                 }
                             }

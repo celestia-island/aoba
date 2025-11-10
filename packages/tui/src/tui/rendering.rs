@@ -70,13 +70,13 @@ pub(crate) fn run_rendering_loop(
                 }
             }
 
-            let should_quit = match bus.core_rx.recv_timeout(Duration::from_millis(100)) {
+            let should_quit = !matches!(
+                bus.core_rx.recv_timeout(Duration::from_millis(100)),
                 Ok(crate::tui::utils::bus::CoreToUi::Tick)
-                | Ok(crate::tui::utils::bus::CoreToUi::Refreshed)
-                | Ok(crate::tui::utils::bus::CoreToUi::Error)
-                | Err(flume::RecvTimeoutError::Timeout) => false,
-                _ => true,
-            };
+                    | Ok(crate::tui::utils::bus::CoreToUi::Refreshed)
+                    | Ok(crate::tui::utils::bus::CoreToUi::Error)
+                    | Err(flume::RecvTimeoutError::Timeout)
+            );
 
             if should_quit {
                 break;
@@ -111,7 +111,7 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
             "a" => (KeyCode::Char('a'), KeyModifiers::CONTROL),
             "Esc" => (KeyCode::Esc, KeyModifiers::CONTROL),
             "PageUp" => (KeyCode::PageUp, KeyModifiers::CONTROL),
-            _ => return Err(anyhow!("Unsupported Ctrl+ combination: {}", rest)),
+            _ => return Err(anyhow!("Unsupported Ctrl+ combination: {rest}")),
         }
     } else {
         match key {
@@ -138,7 +138,7 @@ fn parse_key_string(key: &str) -> Result<crossterm::event::Event> {
                 let ch = key.chars().next().unwrap();
                 (KeyCode::Char(ch), KeyModifiers::NONE)
             }
-            _ => return Err(anyhow!("Unsupported key string: {}", key)),
+            _ => return Err(anyhow!("Unsupported key string: {key}")),
         }
     };
 
@@ -153,7 +153,10 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
 
     let status_path = std::path::Path::new("/tmp/status.json");
     if status_path.exists() {
-        log::info!("📄 Loading status from {}", status_path.display());
+        log::info!(
+            "📄 Loading status from {path}",
+            path = status_path.display()
+        );
         let status_content = std::fs::read_to_string(status_path)?;
         let serializable_status: crate::tui::status::serializable::TuiStatus =
             serde_json::from_str(&status_content)?;
@@ -182,7 +185,7 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
 
     terminal.draw(|frame| {
         if let Err(err) = render_ui(frame) {
-            log::error!("Failed to render UI: {}", err);
+            log::error!("Failed to render UI: {err}");
         }
     })?;
 
@@ -219,10 +222,7 @@ pub(crate) fn run_screen_capture_mode() -> Result<()> {
 pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str) -> Result<()> {
     use ratatui::backend::TestBackend;
 
-    log::info!(
-        "🔧 Starting TUI in IPC mode with channel ID: {}",
-        channel_id
-    );
+    log::info!("🔧 Starting TUI in IPC mode with channel ID: {channel_id}");
 
     let app = Arc::new(RwLock::new(Status::default()));
     crate::tui::status::init_status(app.clone())?;
@@ -247,7 +247,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
     let mut receiver = match aoba_ci_utils::IpcReceiver::new(ipc_channel_id.clone()).await {
         Ok(r) => r,
         Err(e) => {
-            log::error!("❌ Failed to create IPC receiver: {}", e);
+            log::error!("❌ Failed to create IPC receiver: {e}");
             return Err(e);
         }
     };
@@ -258,22 +258,22 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
     loop {
         match receiver.receive().await {
             Ok(aoba_ci_utils::E2EToTuiMessage::KeyPress { key }) => {
-                log::info!("⌨️  Processing key press: {}", key);
+                log::info!("⌨️  Processing key press: {key}");
                 if let Ok(event) = parse_key_string(&key) {
                     if let Err(err) = crate::tui::input::handle_event(event, &bus) {
-                        log::warn!("Failed to handle key event: {}", err);
+                        log::warn!("Failed to handle key event: {err}");
                     }
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
             Ok(aoba_ci_utils::E2EToTuiMessage::CharInput { ch }) => {
-                log::info!("📝 Processing char input: {}", ch);
+                log::info!("📝 Processing char input: {ch}");
                 let event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
                     crossterm::event::KeyCode::Char(ch),
                     crossterm::event::KeyModifiers::NONE,
                 ));
                 if let Err(err) = crate::tui::input::handle_event(event, &bus) {
-                    log::warn!("Failed to handle char input: {}", err);
+                    log::warn!("Failed to handle char input: {err}");
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
@@ -285,10 +285,10 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                 terminal
                     .draw(|frame| {
                         if let Err(err) = render_ui(frame) {
-                            log::error!("Render error: {}", err);
+                            log::error!("Render error: {err}");
                         }
                     })
-                    .map_err(|e| anyhow!("Failed to draw: {}", e))?;
+                    .map_err(|e| anyhow!("Failed to draw: {e}"))?;
 
                 let buffer = terminal.backend().buffer();
                 let area = buffer.area();
@@ -313,7 +313,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                 };
 
                 if let Err(err) = receiver.send(response).await {
-                    log::error!("Failed to send screen content: {}", err);
+                    log::error!("Failed to send screen content: {err}");
                 } else {
                     log::info!("📤 Sent screen content");
                 }
@@ -323,7 +323,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                 break;
             }
             Err(err) => {
-                log::error!("IPC receive error: {}", err);
+                log::error!("IPC receive error: {err}");
                 break;
             }
         }
