@@ -3,7 +3,7 @@ pub mod slave;
 
 use anyhow::{anyhow, Result};
 use serde::Serialize;
-use std::io::Write;
+use std::{io::Write, time::Duration};
 
 /// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
 pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
@@ -47,6 +47,33 @@ pub(crate) fn emit_modbus_ipc_log(
                 error,
                 config_index,
             });
+    }
+}
+
+/// Open a serial port with the requested timeout, enabling exclusive access on Unix systems.
+pub(crate) fn open_serial_port(
+    port: &str,
+    baud_rate: u32,
+    timeout: Duration,
+) -> Result<Box<dyn serialport::SerialPort>> {
+    let builder = serialport::new(port, baud_rate).timeout(timeout);
+
+    #[cfg(unix)]
+    {
+        let mut handle = builder
+            .open_native()
+            .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+        handle
+            .set_exclusive(true)
+            .map_err(|err| anyhow!("Failed to acquire exclusive access to {port}: {err}"))?;
+        Ok(Box::new(handle))
+    }
+
+    #[cfg(not(unix))]
+    {
+        builder
+            .open()
+            .map_err(|err| anyhow!("Failed to open port {port}: {err}"))
     }
 }
 

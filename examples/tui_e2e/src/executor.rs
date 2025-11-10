@@ -33,6 +33,8 @@ pub struct ExecutionContext {
     pub port2: String,
     pub debug: bool,
     pub ipc_sender: Option<IpcSender>,
+    pub is_slave_test: bool,
+    pub in_modbus_panel: bool,
 }
 
 /// Execute a complete workflow
@@ -64,6 +66,12 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
     for step_name in &workflow.manifest.init_order {
         log::info!("  ▶️  Step: {}", step_name);
 
+        // Track when we enter the modbus panel
+        if step_name == "enter_modbus_panel" {
+            ctx.in_modbus_panel = true;
+            log::debug!("📍 Entering modbus panel - slave line adjustment enabled: {}", ctx.is_slave_test);
+        }
+
         let steps = workflow
             .workflow
             .get(step_name)
@@ -77,6 +85,12 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
         log::info!("📋 Executing recycle_order steps...");
         for step_name in &workflow.manifest.recycle_order {
             log::info!("  ▶️  Step: {}", step_name);
+
+            // Track when we enter the modbus panel (may happen in recycle too)
+            if step_name == "enter_modbus_panel" {
+                ctx.in_modbus_panel = true;
+                log::debug!("📍 Entering modbus panel - slave line adjustment enabled: {}", ctx.is_slave_test);
+            }
 
             let steps = workflow
                 .workflow
@@ -634,7 +648,16 @@ async fn execute_single_step(
         let expected_text = step.verify.as_ref().unwrap().clone();
 
         let verification_result: Result<(), VerificationFailure> =
-            if let Some(line_num) = step.at_line {
+            if let Some(mut line_num) = step.at_line {
+                // For slave tests in the modbus panel, adjust line numbers for group 2+ content
+                // Group 2+ starts after the separator, which is at line 2 in master mode
+                // In slave mode, we add RequestInterval and Timeout fields, so group 2+ starts at line 4
+                // Therefore, for any line_num >= 2 checking station content, we add 2
+                if ctx.is_slave_test && ctx.in_modbus_panel && line_num >= 2 {
+                    line_num += 2;
+                    log::debug!("🔧 Adjusted line number for slave mode: {} -> {}", line_num - 2, line_num);
+                }
+
                 let lines: Vec<&str> = screen_content.lines().collect();
                 if line_num >= lines.len() {
                     Err(VerificationFailure::new(

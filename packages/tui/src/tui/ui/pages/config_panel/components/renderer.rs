@@ -302,79 +302,10 @@ fn create_line(
 
                 Ok(selector_spans::<ParityOption>(selected_index, text_state)?)
             }
-            types::cursor::ConfigPanelCursor::RequestInterval => {
-                if let Some(port) = port_data {
-                    let current_value = port.serial_config.request_interval_ms;
-
-                    // Check if we're in string editing mode
-                    if matches!(text_state, TextState::Editing)
-                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. })
-                    {
-                        if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
-                            let custom_value = String::from_utf8_lossy(bytes);
-                            Ok(input_spans(format!("{} ms", custom_value), text_state)?)
-                        } else {
-                            Ok(input_spans(format!("{} ms", current_value), text_state)?)
-                        }
-                    } else {
-                        Ok(input_spans(format!("{} ms", current_value), text_state)?)
-                    }
-                } else {
-                    Ok(vec![])
-                }
-            }
-            types::cursor::ConfigPanelCursor::Timeout => {
-                if let Some(port) = port_data {
-                    let current_value = port.serial_config.timeout_ms;
-
-                    // Check if we're in string editing mode
-                    if matches!(text_state, TextState::Editing)
-                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. })
-                    {
-                        if let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer {
-                            let custom_value = String::from_utf8_lossy(bytes);
-                            Ok(input_spans(format!("{} ms", custom_value), text_state)?)
-                        } else {
-                            Ok(input_spans(format!("{} ms", current_value), text_state)?)
-                        }
-                    } else {
-                        Ok(input_spans(format!("{} ms", current_value), text_state)?)
-                    }
-                } else {
-                    Ok(vec![])
-                }
-            }
         }
     };
 
-    // Determine if the label should be dimmed (gray + italic)
-    // Only RequestInterval and Timeout should be dimmed when:
-    // 1. Port is not enabled (not occupied by this), OR
-    // 2. Port mode is not Slave-Poll (i.e., is Master or Slave-Listen)
-    let should_dim = matches!(
-        cursor_type,
-        types::cursor::ConfigPanelCursor::RequestInterval
-            | types::cursor::ConfigPanelCursor::Timeout
-    ) && !is_slave_poll_mode(port_data);
-
-    render_kv_line(label, text_state, value_closure, should_dim)
-}
-
-/// Check if port is enabled AND in Slave mode
-/// Returns true only when both conditions are met
-fn is_slave_poll_mode(port_data: Option<&types::port::PortData>) -> bool {
-    if let Some(port) = port_data {
-        // Check if port is occupied by this process
-        if !matches!(port.state, types::port::PortState::OccupiedByThis) {
-            return false;
-        }
-
-        // Check if port is in Slave mode (currently only Modbus is supported)
-        let types::port::PortConfig::Modbus { mode, .. } = &port.config;
-        mode.is_slave()
-    } else {
-        false
-    }
+    render_kv_line(label, text_state, value_closure, false)
 }
 
 fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, _occupied_by_this: bool) -> String {
@@ -397,9 +328,5 @@ fn get_cursor_label(cursor: types::cursor::ConfigPanelCursor, _occupied_by_this:
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
             lang().protocol.common.enter_log_page.clone()
         }
-        types::cursor::ConfigPanelCursor::RequestInterval => {
-            lang().protocol.common.label_request_interval.clone()
-        }
-        types::cursor::ConfigPanelCursor::Timeout => lang().protocol.common.label_timeout.clone(),
     }
 }

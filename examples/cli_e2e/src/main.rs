@@ -118,6 +118,10 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .init();
 
+    // Share the requested port configuration with downstream tests
+    std::env::set_var("CLI_E2E_PORT1", &args.port1);
+    std::env::set_var("CLI_E2E_PORT2", &args.port2);
+
     // Set debug mode if requested
     if args.debug {
         std::env::set_var("DEBUG_MODE", "1");
@@ -194,7 +198,9 @@ async fn main() -> Result<()> {
         #[cfg(windows)]
         "port_occupation_detection" => test_port_occupation_detection_windows()?,
         #[cfg(not(windows))]
-        "port_occupation_detection" => test_port_occupation_detection_linux()?,
+        "port_occupation_detection" => {
+            test_port_occupation_detection_linux(&args.port1, &args.port2)?
+        }
 
         _ => {
             log::error!("❌ Unknown module: {module}");
