@@ -10,10 +10,10 @@ use std::{
 };
 
 use rmodbus::{server::context::ModbusContext, ModbusProto};
-use serialport::SerialPort;
 
 use super::{
-    emit_modbus_ipc_log, parse_data_line, parse_register_mode, DataSource, ModbusResponse,
+    emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
+    ModbusResponse,
 };
 use crate::{actions, cleanup};
 use aoba_protocol::modbus::{
@@ -28,13 +28,13 @@ fn open_serial_port_with_retry(
     port: &str,
     baud_rate: u32,
     timeout: Duration,
-) -> Result<Box<dyn SerialPort>> {
+) -> Result<Box<dyn serialport::SerialPort>> {
     let mut last_error = String::new();
     for attempt in 1..=SERIAL_PORT_OPEN_RETRIES {
         log::info!(
             "Attempting to open serial port {port} (attempt {attempt}/{SERIAL_PORT_OPEN_RETRIES})"
         );
-        match serialport::new(port, baud_rate).timeout(timeout).open() {
+        match open_serial_port(port, baud_rate, timeout) {
             Ok(handle) => {
                 if attempt > 1 {
                     log::info!("Opened serial port {port} after {attempt} attempts");

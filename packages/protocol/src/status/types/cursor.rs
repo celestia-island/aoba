@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 /// For the config panel we have groups of options separated by blank lines.
 /// Define the sizes of each group so view_offset can account for the
 /// extra blank rows introduced between groups.
-pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4, 2];
+/// Note: RequestInterval and Timeout have been moved to Modbus panel
+pub const CONFIG_PANEL_GROUP_SIZES: &[usize] = &[4, 4];
 
 /// Cursor trait to unify cursor behaviour across pages.
 pub trait Cursor {
@@ -114,6 +115,7 @@ impl Cursor for EntryCursor {
 }
 
 /// ConfigPanelCursor describes the cursor/selection in the config panel
+/// Note: RequestInterval and Timeout have been moved to Modbus panel
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConfigPanelCursor {
     /// Enable/Disable port toggle
@@ -132,10 +134,6 @@ pub enum ConfigPanelCursor {
     StopBits,
     /// View communication log
     ViewCommunicationLog,
-    /// Request interval time (ms)
-    RequestInterval,
-    /// Timeout waiting time (ms)
-    Timeout,
 }
 
 impl ConfigPanelCursor {
@@ -150,8 +148,6 @@ impl ConfigPanelCursor {
             ConfigPanelCursor::DataBits { custom_mode: false },
             ConfigPanelCursor::Parity,
             ConfigPanelCursor::StopBits,
-            ConfigPanelCursor::RequestInterval,
-            ConfigPanelCursor::Timeout,
         ]
     }
 
@@ -221,6 +217,10 @@ pub enum ModbusDashboardCursor {
     AddLine,
     /// Select the global mode for all stations in this port (Master/Slave)
     ModbusMode,
+    /// Request interval time (ms) - only shown in Slave mode
+    RequestInterval,
+    /// Timeout waiting time (ms) - only shown in Slave mode
+    Timeout,
     StationId {
         index: usize,
     },
@@ -245,6 +245,12 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
         flat.push(ModbusDashboardCursor::ModbusMode);
+        
+        // Add RequestInterval and Timeout only in Slave mode
+        if is_modbus_slave_mode() {
+            flat.push(ModbusDashboardCursor::RequestInterval);
+            flat.push(ModbusDashboardCursor::Timeout);
+        }
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
@@ -273,6 +279,12 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
         flat.push(ModbusDashboardCursor::ModbusMode);
+        
+        // Add RequestInterval and Timeout only in Slave mode
+        if is_modbus_slave_mode() {
+            flat.push(ModbusDashboardCursor::RequestInterval);
+            flat.push(ModbusDashboardCursor::Timeout);
+        }
 
         let items_vec = build_modbus_items_vec();
         for (idx, item) in items_vec.iter().enumerate() {
@@ -298,13 +310,21 @@ impl Cursor for ModbusDashboardCursor {
     }
 
     fn view_offset(&self) -> usize {
-        // Compute the visual row offset for the cursor. Visual layout has top three rows
-        // reserved (Add line, Global mode, and blank), then each block consumes 1 (title) + N value rows
-        // where N = ceil(length/registers_per_row). Using 4 registers per row for 80-column terminals.
+        // Compute the visual row offset for the cursor. Visual layout has top rows
+        // reserved (Add line, Global mode, RequestInterval/Timeout if Slave, and blank)
         let registers_per_row = 4;
         let mut offset = 0usize;
-        // Start with top three rows
-        offset += 3;
+        
+        // Start with base rows: AddLine + ModbusMode
+        let is_slave = is_modbus_slave_mode();
+        let base_rows = if is_slave {
+            // AddLine + ModbusMode + RequestInterval + Timeout + blank separator = 5
+            5
+        } else {
+            // AddLine + ModbusMode + blank separator = 3
+            3
+        };
+        offset += base_rows;
 
         // Build items and walk until we find the current selection
         if *self == ModbusDashboardCursor::AddLine {
@@ -312,6 +332,12 @@ impl Cursor for ModbusDashboardCursor {
         }
         if *self == ModbusDashboardCursor::ModbusMode {
             return 1;
+        }
+        if *self == ModbusDashboardCursor::RequestInterval {
+            return 2;
+        }
+        if *self == ModbusDashboardCursor::Timeout {
+            return 3;
         }
 
         let items_vec = build_modbus_items_vec();
@@ -351,6 +377,23 @@ impl Cursor for ModbusDashboardCursor {
 
         offset
     }
+}
+
+/// Helper to check if the current modbus mode is Slave
+fn is_modbus_slave_mode() -> bool {
+    crate::tui::status::read_status(|status| {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_data) = status.ports.map.get(port_name) {
+                    let crate::status::types::port::PortConfig::Modbus { mode, .. } =
+                        &port_data.config;
+                    return Ok(mode.is_slave());
+                }
+            }
+        }
+        Ok(false)
+    })
+    .unwrap_or(false)
 }
 
 /// Helper to build the per-port items vector in a single consistent place.

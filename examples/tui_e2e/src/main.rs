@@ -181,6 +181,14 @@ async fn main() -> Result<()> {
     log::info!("🧪 Running module: {}", module);
     log::info!("📝 Description: {}", workflow.manifest.description);
 
+    // Check if this is a slave test based on workflow manifest
+    let is_slave_test = workflow
+        .manifest
+        .mode
+        .as_ref()
+        .map(|m| matches!(m, aoba_protocol::status::types::modbus::StationMode::Slave))
+        .unwrap_or(false);
+
     // Execute the workflow
     let mut context = ExecutionContext {
         mode: exec_mode,
@@ -188,6 +196,8 @@ async fn main() -> Result<()> {
         port2: args.port2.clone(),
         debug: args.debug,
         ipc_sender: None, // Will be initialized in DrillDown mode
+        is_slave_test,
+        in_modbus_panel: false,
     };
 
     execute_workflow(&mut context, workflow).await?;
