@@ -561,6 +561,36 @@ fn commit_text_edit(
                         }
                     }
                 }
+                types::cursor::ModbusDashboardCursor::RequestInterval => {
+                    if let Ok(interval_ms) = value.parse::<u32>() {
+                        write_status(|status| {
+                            let port = status
+                                .ports
+                                .map
+                                .get_mut(&port_name)
+                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            port.serial_config.request_interval_ms = interval_ms;
+                            port.config_modified = true; // Mark as modified
+                            log::info!("Updated request interval to {interval_ms} ms");
+                            Ok(())
+                        })?;
+                    }
+                }
+                types::cursor::ModbusDashboardCursor::Timeout => {
+                    if let Ok(timeout_ms) = value.parse::<u32>() {
+                        write_status(|status| {
+                            let port = status
+                                .ports
+                                .map
+                                .get_mut(&port_name)
+                                .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+                            port.serial_config.timeout_ms = timeout_ms;
+                            port.config_modified = true; // Mark as modified
+                            log::info!("Updated timeout to {timeout_ms} ms");
+                            Ok(())
+                        })?;
+                    }
+                }
                 _ => {}
             }
         }
