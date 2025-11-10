@@ -44,13 +44,14 @@ Multi-protocol debugging and simulation CLI tool, supporting Modbus RTU, MQTT, T
 ## Quick start
 
 1. Install the Rust toolchain
-2. Build binaries: `cargo build --bins`
-3. Run the tool: `cargo run` or execute the produced binary
+2. Install the tool: `cargo install aoba`
+3. Run the tool: execute the installed `aoba` binary (or use your package manager's path)
 
 Notes:
 
-- Examples and extended documentation live in the `examples/` and `docs/` directories.
-- If you want to run automated tests or CI workflows, check `./scripts/` and the example test folders for guidance.
+- Detailed documentation is still being written.
+  - Examples and some reference material live in the `examples/` and `docs/` directories but are not yet comprehensive.
+  - If you want to run automated tests or CI workflows, check `./scripts/` and the example test folders for guidance.
 
 ## Contribution
 
