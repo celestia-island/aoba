@@ -185,16 +185,12 @@ fn check_all_ports_occupation_via_cli() -> Result<()> {
         })?;
 
         if is_occupied_by_this {
-            log::trace!(
-                "Skipping occupation check for {port_name} (occupied by this)"
-            );
+            log::trace!("Skipping occupation check for {port_name} (occupied by this)");
             continue;
         }
 
         // Spawn CLI subprocess to check port
-        log::debug!(
-            "Checking port {port_name} via CLI subprocess"
-        );
+        log::debug!("Checking port {port_name} via CLI subprocess");
 
         let output = Command::new(&exe_path)
             .arg("--check-port")
@@ -233,15 +229,11 @@ fn check_all_ports_occupation_via_cli() -> Result<()> {
                     );
                     state_changes.push((port_name.clone(), new_state));
                 } else {
-                    log::debug!(
-                        "Port {port_name} occupation state unchanged: {current_state:?}"
-                    );
+                    log::debug!("Port {port_name} occupation state unchanged: {current_state:?}");
                 }
             }
             Err(e) => {
-                log::warn!(
-                    "Failed to spawn CLI subprocess for {port_name}: {e}"
-                );
+                log::warn!("Failed to spawn CLI subprocess for {port_name}: {e}");
             }
         }
     }
@@ -256,9 +248,7 @@ fn check_all_ports_occupation_via_cli() -> Result<()> {
             for (port_name, new_state) in &state_changes {
                 if let Some(port) = status.ports.map.get_mut(port_name) {
                     port.state = new_state.clone();
-                    log::info!(
-                        "Updated port {port_name} state to {new_state:?}"
-                    );
+                    log::info!("Updated port {port_name} state to {new_state:?}");
                 }
             }
             Ok(())
