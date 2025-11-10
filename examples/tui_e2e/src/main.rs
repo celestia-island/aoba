@@ -122,11 +122,11 @@ async fn main() -> Result<()> {
         ExecutionMode::DrillDown
     };
 
-    log::info!("🔧 Execution mode: {:?}", exec_mode);
+    log::info!("🔧 Execution mode: {exec_mode:?}");
     log::info!(
-        "📍 Port configuration: port1={}, port2={}",
-        args.port1,
-        args.port2
+        "📍 Port configuration: port1={args_port1}, port2={args_port2}",
+        args_port1 = args.port1,
+        args_port2 = args.port2
     );
 
     // Load all available workflows
@@ -176,10 +176,13 @@ async fn main() -> Result<()> {
     // Find the requested workflow
     let workflow = workflows
         .get(module)
-        .ok_or_else(|| anyhow::anyhow!("Unknown module: {}", module))?;
+        .ok_or_else(|| anyhow::anyhow!("Unknown module: {module}"))?;
 
-    log::info!("🧪 Running module: {}", module);
-    log::info!("📝 Description: {}", workflow.manifest.description);
+    log::info!("🧪 Running module: {module}");
+    log::info!(
+        "📝 Description: {description}",
+        description = workflow.manifest.description
+    );
 
     // Check if this is a slave test based on workflow manifest
     let is_slave_test = workflow
@@ -202,7 +205,7 @@ async fn main() -> Result<()> {
 
     execute_workflow(&mut context, workflow).await?;
 
-    log::info!("✅ Module '{}' completed successfully!", module);
+    log::info!("✅ Module '{module}' completed successfully!");
     Ok(())
 }
 
