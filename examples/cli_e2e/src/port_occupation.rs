@@ -112,9 +112,7 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
         .status()?;
 
     if check3.code() == Some(0) {
-        log::info!(
-            "✅ Port {test_port} correctly detected as FREE after release"
-        );
+        log::info!("✅ Port {test_port} correctly detected as FREE after release");
     } else {
         log::warn!("⚠️ Port {test_port} still detected as occupied");
     }
