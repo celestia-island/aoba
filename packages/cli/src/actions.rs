@@ -23,11 +23,11 @@ fn check_port_occupation(port_name: &str) -> bool {
             },
         };
 
-        // Convert COM port name to Windows device path (e.g., "COM3" -> "\\\\.\\COM3")
-        let device_path = if port_name.starts_with("\\\\.\\") {
+        // Convert COM port name to Windows device path (e.g., "COM3" -> "\\.\\COM3")
+        let device_path = if port_name.starts_with("\\\\.\\\\") {
             port_name.to_string()
         } else {
-            format!("\\\\.\\{}", port_name)
+            format!("\\\\.\\{port_name}")
         };
 
         // Convert to UTF-16 for Windows API
@@ -49,7 +49,7 @@ fn check_port_occupation(port_name: &str) -> bool {
                 None,
             );
 
-            if let Err(_) = handle {
+            if handle.is_err() {
                 // Failed to open, check error code
                 let error = GetLastError();
 
@@ -58,10 +58,7 @@ fn check_port_occupation(port_name: &str) -> bool {
                 let is_occupied = matches!(error, WIN32_ERROR(32) | WIN32_ERROR(5));
 
                 log::debug!(
-                    "Windows API CreateFileW failed for {}: error={:?}, occupied={}",
-                    port_name,
-                    error,
-                    is_occupied
+                    "Windows API CreateFileW failed for {port_name}: error={error:?}, occupied={is_occupied}",
                 );
 
                 return is_occupied;
@@ -70,10 +67,7 @@ fn check_port_occupation(port_name: &str) -> bool {
             // Successfully opened, close it and return free
             let handle = handle.unwrap();
             let _ = CloseHandle(handle);
-            log::debug!(
-                "Windows API successfully opened {}, port is free",
-                port_name
-            );
+            log::debug!("Windows API successfully opened {port_name}, port is free");
             false
         }
     }
@@ -266,14 +260,14 @@ pub fn run_one_shot_actions(matches: &ArgMatches) -> bool {
                 status: if is_occupied { "Occupied" } else { "Free" },
             };
             if let Ok(s) = serde_json::to_string(&result) {
-                println!("{}", s);
+                println!("{s}");
             }
         } else {
             // Plain text output
             if is_occupied {
-                eprintln!("Port {} is occupied", port_name);
+                eprintln!("Port {port_name} is occupied");
             } else {
-                println!("Port {} is free", port_name);
+                println!("Port {port_name} is free");
             }
         }
 

@@ -426,8 +426,7 @@ fn build_comm_success_line(
     let range_segment = format!("{range_label} {range_value}");
 
     let combined = format!(
-        "{}; {}; {}",
-        station_segment, register_segment, range_segment
+        "{station_segment}; {register_segment}; {range_segment}"
     );
 
     Line::from(vec![Span::raw("  "), Span::raw(combined)])
@@ -554,8 +553,7 @@ fn build_management_lines(
                 Line::from(vec![
                     Span::raw("  "),
                     Span::raw(format!(
-                        "{}; {}; {}",
-                        station_segment, register_segment, range_segment
+                        "{station_segment}; {register_segment}; {range_segment}"
                     )),
                 ])
             } else {

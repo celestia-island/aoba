@@ -172,8 +172,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                                 Ok(())
                             })?;
                             log::warn!(
-                                "Cannot access port at index {}: occupied by another program",
-                                index
+                                "Cannot access port at index {index}: occupied by another program"
                             );
                             return Ok(());
                         }

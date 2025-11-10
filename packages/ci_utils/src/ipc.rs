@@ -90,7 +90,7 @@ impl Pipe {
     /// Write with error logging
     fn write<T: Serialize>(&mut self, data: &T) -> Result<()> {
         self.do_write(data).map_err(|err| {
-            log::error!("Pipe failed to write: {:?}", err);
+            log::error!("Pipe failed to write: {err:?}");
             err
         })
     }
@@ -98,7 +98,7 @@ impl Pipe {
     /// Read with error logging
     fn read<T: for<'de> Deserialize<'de>>(&mut self) -> Result<T> {
         self.do_read().map_err(|err| {
-            log::error!("Pipe failed to read: {:?}", err);
+            log::error!("Pipe failed to read: {err:?}");
             err
         })
     }
@@ -136,14 +136,14 @@ impl IpcSender {
         let to_tui_stream = tokio::task::spawn_blocking(move || {
             to_tui_listener
                 .accept()
-                .map_err(|e| anyhow!("Failed to accept connection: {}", e))
+                .map_err(|e| anyhow!("Failed to accept connection: {e}"))
         })
         .await??;
 
         let from_tui_stream = tokio::task::spawn_blocking(move || {
             from_tui_listener
                 .accept()
-                .map_err(|e| anyhow!("Failed to accept connection: {}", e))
+                .map_err(|e| anyhow!("Failed to accept connection: {e}"))
         })
         .await??;
 
@@ -226,7 +226,7 @@ impl IpcSender {
 
         match self.receive().await? {
             TuiToE2EMessage::ScreenContent { content, .. } => Ok(content),
-            msg => bail!("Unexpected message: {:?}", msg),
+            msg => bail!("Unexpected message: {msg:?}"),
         }
     }
 }
@@ -350,11 +350,10 @@ fn create_listener(name: &str) -> Result<LocalSocketListener> {
     socket_name.map_err(|e| {
         if e.kind() == ErrorKind::AddrInUse {
             anyhow!(
-                "Socket address already in use: {}. Please ensure no other instance is running.",
-                name
+                "Socket address already in use: {name}. Please ensure no other instance is running."
             )
         } else {
-            anyhow!("Failed to create listener for {}: {}", name, e)
+            anyhow!("Failed to create listener for {name}: {e}")
         }
     })
 }
@@ -387,16 +386,13 @@ async fn connect_with_retry(name: &str) -> Result<LocalSocketStream> {
 
         match connect_result {
             Ok(stream) => {
-                log::info!("Connected to {}", name);
+                log::info!("Connected to {name}");
                 return Ok(stream);
             }
             Err(err) => {
                 if start.elapsed() >= CONNECT_TIMEOUT {
                     return Err(anyhow!(
-                        "Failed to connect to {} within {:?}: {}",
-                        name,
-                        CONNECT_TIMEOUT,
-                        err
+                        "Failed to connect to {name} within {CONNECT_TIMEOUT:?}: {err}"
                     ));
                 }
 

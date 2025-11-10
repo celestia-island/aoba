@@ -84,12 +84,12 @@ pub fn set_mock_state(path: &str, value: Value) -> Result<()> {
     let mut state = MOCK_STATE.lock().unwrap();
 
     ensure_path_exists(&mut state, &json_path)
-        .with_context(|| format!("Failed to ensure path '{}' exists", path))?;
+        .with_context(|| format!("Failed to ensure path '{path}' exists"))?;
 
     apply_value_at_path(&mut state, &json_path, value.clone())
-        .with_context(|| format!("Failed to apply value at path '{}'", path))?;
+        .with_context(|| format!("Failed to apply value at path '{path}'"))?;
 
-    log::debug!("🔧 Mock state updated: {} = {:?}", path, value);
+    log::debug!("🔧 Mock state updated: {path} = {value:?}");
     Ok(())
 }
 
@@ -99,12 +99,12 @@ pub fn get_mock_state(path: &str) -> Result<Value> {
     let state = MOCK_STATE.lock().unwrap();
 
     let parsed = JsonPath::parse(&json_path)
-        .with_context(|| format!("Invalid JSONPath expression: {}", json_path))?;
+        .with_context(|| format!("Invalid JSONPath expression: {json_path}"))?;
 
     let node = parsed
         .query(&state)
         .exactly_one()
-        .map_err(|err| anyhow!("Path '{}' must resolve to exactly one node: {err}", path))?;
+        .map_err(|err| anyhow!("Path '{path}' must resolve to exactly one node: {err}"))?;
 
     Ok(node.clone())
 }
@@ -115,14 +115,11 @@ pub fn verify_mock_state(path: &str, expected: &Value) -> Result<()> {
 
     if &actual != expected {
         bail!(
-            "Mock state verification failed at path '{}'\n  Expected: {:?}\n  Actual: {:?}",
-            path,
-            expected,
-            actual
+            "Mock state verification failed at path '{path}'\n  Expected: {expected:?}\n  Actual: {actual:?}"
         );
     }
 
-    log::debug!("✅ Mock state verified: {} = {:?}", path, expected);
+    log::debug!("✅ Mock state verified: {path} = {expected:?}");
     Ok(())
 }
 
@@ -136,7 +133,7 @@ pub fn get_full_mock_state() -> Value {
 pub fn save_mock_state_to_file(path: &str) -> Result<()> {
     let state = get_full_mock_state();
     std::fs::write(path, serde_json::to_string_pretty(&state)?)?;
-    log::debug!("💾 Saved mock state to: {}", path);
+    log::debug!("💾 Saved mock state to: {path}");
     Ok(())
 }
 
@@ -146,7 +143,7 @@ fn apply_value_at_path(root: &mut Value, json_path: &str, value: Value) -> Resul
         let located = parsed
             .query_located(&*root)
             .exactly_one()
-            .map_err(|err| anyhow!("Path '{}' must match exactly one node: {err}", json_path))?;
+            .map_err(|err| anyhow!("Path '{json_path}' must match exactly one node: {err}"))?;
         located.location().to_json_pointer()
     };
 
@@ -155,9 +152,7 @@ fn apply_value_at_path(root: &mut Value, json_path: &str, value: Value) -> Resul
         Ok(())
     } else {
         Err(anyhow!(
-            "Unable to resolve pointer '{}' derived from path '{}'",
-            pointer,
-            json_path
+            "Unable to resolve pointer '{pointer}' derived from path '{json_path}'"
         ))
     }
 }
@@ -233,9 +228,9 @@ fn normalize_json_path(path: &str) -> String {
     if trimmed.starts_with('$') {
         trimmed.to_string()
     } else if trimmed.starts_with('[') {
-        format!("${}", trimmed)
+        format!("${trimmed}")
     } else {
-        format!("$.{}", trimmed)
+        format!("$.{trimmed}")
     }
 }
 
@@ -281,7 +276,7 @@ fn parse_path(path: &str) -> Result<Vec<PathPart>> {
             }
             ']' if in_brackets && !in_quotes => {
                 if bracket_content.is_empty() {
-                    bail!("Empty bracket expression in path {}", path);
+                    bail!("Empty bracket expression in path {path}");
                 }
 
                 if let Ok(index) = bracket_content.parse::<usize>() {

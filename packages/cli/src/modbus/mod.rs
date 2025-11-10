@@ -18,34 +18,40 @@ pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
 }
 
 /// Emit a Modbus IPC log message to the TUI if IPC connections are active.
+#[derive(Clone, Debug)]
+pub(crate) struct ModbusIpcLogPayload<'a> {
+    pub port: &'a str,
+    pub direction: &'a str,
+    pub frame: &'a [u8],
+    pub station_id: Option<u8>,
+    pub register_mode: Option<aoba_protocol::status::types::modbus::RegisterMode>,
+    pub start_address: Option<u16>,
+    pub quantity: Option<u16>,
+    pub success: Option<bool>,
+    pub error: Option<String>,
+    pub config_index: Option<u16>,
+}
+
+/// Emit a Modbus IPC log message to the TUI if IPC connections are active.
 pub(crate) fn emit_modbus_ipc_log(
     ipc_connections: &mut Option<crate::actions::IpcConnections>,
-    port: &str,
-    direction: &str,
-    frame: &[u8],
-    station_id: Option<u8>,
-    register_mode: Option<aoba_protocol::status::types::modbus::RegisterMode>,
-    start_address: Option<u16>,
-    quantity: Option<u16>,
-    success: Option<bool>,
-    error: Option<String>,
-    config_index: Option<u16>,
+    payload: ModbusIpcLogPayload<'_>,
 ) {
     if let Some(ref mut ipc) = ipc_connections {
         let _ = ipc
             .status
             .send(&aoba_protocol::ipc::IpcMessage::ModbusData {
-                port_name: port.to_string(),
-                direction: direction.to_string(),
-                data: format_hex_bytes(frame),
+                port_name: payload.port.to_string(),
+                direction: payload.direction.to_string(),
+                data: format_hex_bytes(payload.frame),
                 timestamp: None,
-                station_id,
-                register_mode: register_mode.map(|mode| format!("{mode:?}")),
-                start_address,
-                quantity,
-                success,
-                error,
-                config_index,
+                station_id: payload.station_id,
+                register_mode: payload.register_mode.map(|mode| format!("{mode:?}")),
+                start_address: payload.start_address,
+                quantity: payload.quantity,
+                success: payload.success,
+                error: payload.error,
+                config_index: payload.config_index,
             });
     }
 }

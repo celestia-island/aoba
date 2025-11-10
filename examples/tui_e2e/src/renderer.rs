@@ -30,10 +30,8 @@ pub async fn render_tui_via_ipc(sender: &mut IpcSender) -> Result<(String, u16, 
             width,
             height,
         } => Ok((content, width, height)),
-        TuiToE2EMessage::Error { message } => {
-            bail!("TUI returned error: {}", message)
-        }
-        other => bail!("Unexpected response from TUI: {:?}", other),
+        TuiToE2EMessage::Error { message } => bail!("TUI returned error: {message}"),
+        other => bail!("Unexpected response from TUI: {other:?}"),
     }
 }
 
@@ -70,7 +68,7 @@ pub fn render_tui_to_string(width: u16, height: u16) -> Result<String> {
     terminal.draw(|frame| {
         // Call the main TUI render function
         if let Err(e) = aoba::tui::render_ui_for_testing(frame) {
-            log::error!("Failed to render UI: {}", e);
+            log::error!("Failed to render UI: {e}");
         }
     })?;
 

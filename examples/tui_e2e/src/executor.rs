@@ -64,7 +64,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
     // Execute init_order steps
     log::info!("📋 Executing init_order steps...");
     for step_name in &workflow.manifest.init_order {
-        log::info!("  ▶️  Step: {}", step_name);
+        log::info!("  ▶️  Step: {step_name}");
 
         // Track when we enter the modbus panel
         if step_name == "enter_modbus_panel" {
@@ -78,7 +78,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
         let steps = workflow
             .workflow
             .get(step_name)
-            .ok_or_else(|| anyhow::anyhow!("Step '{}' not found in workflow", step_name))?;
+            .ok_or_else(|| anyhow::anyhow!("Step '{step_name}' not found in workflow"))?;
 
         execute_step_sequence(ctx, &workflow.manifest.id, steps).await?;
     }
@@ -87,7 +87,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
     if !workflow.manifest.recycle_order.is_empty() {
         log::info!("📋 Executing recycle_order steps...");
         for step_name in &workflow.manifest.recycle_order {
-            log::info!("  ▶️  Step: {}", step_name);
+            log::info!("  ▶️  Step: {step_name}");
 
             // Track when we enter the modbus panel (may happen in recycle too)
             if step_name == "enter_modbus_panel" {
@@ -101,7 +101,7 @@ pub async fn execute_workflow(ctx: &mut ExecutionContext, workflow: &Workflow) -
             let steps = workflow
                 .workflow
                 .get(step_name)
-                .ok_or_else(|| anyhow::anyhow!("Step '{}' not found in workflow", step_name))?;
+                .ok_or_else(|| anyhow::anyhow!("Step '{step_name}' not found in workflow"))?;
 
             execute_step_sequence(ctx, &workflow.manifest.id, steps).await?;
         }
@@ -190,7 +190,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn TUI process: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to spawn TUI process: {e}"))?;
 
     log::info!(
         "✅ TUI process spawned with PID {}",
@@ -226,11 +226,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         "master"
     };
 
-    log::info!(
-        "📡 Preparing CLI emulator (TUI is {}, CLI is {})",
-        tui_mode,
-        cli_mode
-    );
+    log::info!("📡 Preparing CLI emulator (TUI is {tui_mode:?}, CLI is {cli_mode})");
 
     // Build station configurations
     let stations = if let Some(ref multi_stations) = workflow.manifest.stations {
@@ -289,7 +285,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
             "Coils" | "coils" => "coils",
             "DiscreteInputs" | "discrete_inputs" => "discrete_inputs",
             "Input" | "input" => "input",
-            _ => bail!("Unknown register type: {}", register_type),
+            _ => bail!("Unknown register type: {register_type}"),
         };
 
         vec![json!({
@@ -322,8 +318,11 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
     // Write config to fixed location
     let config_path = "/tmp/tui_e2e_emulator.json";
     std::fs::write(config_path, serde_json::to_string_pretty(&config)?)?;
-    log::info!("📝 Wrote CLI config to {}", config_path);
-    log::debug!("Config: {}", serde_json::to_string_pretty(&config)?);
+    log::info!("📝 Wrote CLI config to {config_path}");
+    log::debug!(
+        "Config: {config}",
+        config = serde_json::to_string_pretty(&config)?
+    );
 
     // Find CLI binary
     let cli_binary = if std::path::Path::new("target/debug/aoba").exists() {
@@ -335,11 +334,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
     };
 
     // Spawn CLI emulator process
-    log::info!(
-        "🚀 Spawning CLI emulator: {} --config {}",
-        cli_binary,
-        config_path
-    );
+    log::info!("🚀 Spawning CLI emulator: {cli_binary} --config {config_path}");
 
     let _child = tokio::process::Command::new(cli_binary)
         .args(["--config", config_path])
@@ -347,7 +342,7 @@ async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Resu
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI emulator: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI emulator: {e}"))?;
 
     log::info!("✅ CLI emulator spawned successfully");
 
@@ -388,7 +383,7 @@ async fn execute_step_sequence(
         } else {
             // Execute single step normally (not part of any group)
             if let Some(desc) = &step.description {
-                log::debug!("    [{}] {}", i, desc);
+                log::debug!("    [{i}] {desc}");
             }
             execute_single_step(ctx, workflow_id, step).await?;
             i += 1;
@@ -438,7 +433,7 @@ async fn execute_step_group_with_retry(
             let step = &all_steps[step_idx];
 
             if let Some(desc) = &step.description {
-                log::debug!("    [{}] {}", step_idx, desc);
+                log::debug!("    [{step_idx}] {desc}");
             }
 
             match execute_single_step(ctx, workflow_id, step).await {
@@ -458,15 +453,14 @@ async fn execute_step_group_with_retry(
                                 }
                                 Err(capture_err) => {
                                     log::warn!(
-                                        "⚠️  Failed to capture screenshot after verification error: {}",
-                                        capture_err
+                                        "⚠️  Failed to capture screenshot after verification error: {capture_err}",
                                     );
                                 }
                             }
                         }
 
                         if let Some(err_ref) = last_error.as_ref() {
-                            log::warn!("   Verification failed: {}", err_ref);
+                            log::warn!("   Verification failed: {err_ref}");
                         }
                         break;
                     } else {
@@ -483,7 +477,7 @@ async fn execute_step_group_with_retry(
                 } else {
                     " retries"
                 };
-                log::info!("✅ Step group succeeded after {}{}", retry_count, suffix);
+                log::info!("✅ Step group succeeded after {retry_count}{suffix}");
             }
             return Ok(());
         }
@@ -493,11 +487,11 @@ async fn execute_step_group_with_retry(
             log::error!("❌ Step group failed after {} attempts", max_retries + 1);
 
             if let Some(screenshot) = first_failure_screenshot {
-                log::error!("📸 Screenshot from first failure:\n{}", screenshot);
+                log::error!("📸 Screenshot from first failure:\n{screenshot}");
             }
 
             return Err(last_error.unwrap_or_else(|| {
-                anyhow::anyhow!("Step group failed after {} retries", max_retries)
+                anyhow::anyhow!("Step group failed after {max_retries} retries")
             }));
         }
     }
@@ -526,20 +520,20 @@ fn step_summary(step: &WorkflowStep) -> String {
 
     if let Some(key) = &step.key {
         if let Some(times) = step.times {
-            return format!("Key '{}' ×{}", key, times);
+            return format!("Key '{key}' ×{times}");
         }
-        return format!("Key '{}'", key);
+        return format!("Key '{key}'");
     }
 
     if let Some(input_kind) = &step.input {
         if let Some(value) = &step.value {
-            return format!("Input {} = {}", input_kind, value);
+            return format!("Input {input_kind} = {value}");
         }
-        return format!("Input {}", input_kind);
+        return format!("Input {input_kind}");
     }
 
     if let Some(expected) = &step.verify {
-        return format!("Verify '{}'", expected);
+        return format!("Verify '{expected}'");
     }
 
     "Unnamed step".to_string()
@@ -589,7 +583,7 @@ async fn execute_single_step(
             bail!("input specified but no value provided");
         };
 
-        log::info!("🎹 Typing value: '{}' (type: {})", value, input_type);
+        log::info!("🎹 Typing value: '{value}' (type: {input_type})");
 
         // In DrillDown mode, simulate typing the value
         if ctx.mode == ExecutionMode::DrillDown {
@@ -704,13 +698,13 @@ async fn execute_single_step(
 
         verification_result.map_err(anyhow::Error::from)?;
 
-        log::debug!("✅ Screen verified: '{}'", expected_text);
+        log::debug!("✅ Screen verified: '{expected_text}'");
     }
 
     // Handle triggers - custom actions
     if let Some(trigger_name) = &step.trigger {
         if ctx.mode == ExecutionMode::DrillDown {
-            log::info!("🔔 Executing trigger: {}", trigger_name);
+            log::info!("🔔 Executing trigger: {trigger_name}");
             execute_trigger(ctx, trigger_name, &step.trigger_params).await?;
         }
     }
@@ -728,7 +722,7 @@ async fn execute_single_step(
 /// This function is used in DrillDown mode to simulate keyboard events.
 /// It sends the keyboard event through the IPC channel to the TUI process.
 async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()> {
-    log::debug!("🎹 Simulating key press: {}", key);
+    log::debug!("🎹 Simulating key press: {key}");
 
     if let Some(sender) = ctx.ipc_sender.as_mut() {
         sender
@@ -736,7 +730,7 @@ async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()>
                 key: key.to_string(),
             })
             .await?;
-        log::debug!("   ✅ Key sent via IPC: {}", key);
+        log::debug!("   ✅ Key sent via IPC: {key}");
     } else {
         log::warn!("   ⚠️  No IPC sender available");
     }
@@ -748,11 +742,11 @@ async fn simulate_key_input(ctx: &mut ExecutionContext, key: &str) -> Result<()>
 ///
 /// This function is used in DrillDown mode to simulate typing characters.
 async fn simulate_char_input(ctx: &mut ExecutionContext, ch: char) -> Result<()> {
-    log::debug!("🎹 Simulating character input: '{}'", ch);
+    log::debug!("🎹 Simulating character input: '{ch}'");
 
     if let Some(sender) = ctx.ipc_sender.as_mut() {
         sender.send(E2EToTuiMessage::CharInput { ch }).await?;
-        log::debug!("   ✅ Character sent via IPC: '{}'", ch);
+        log::debug!("   ✅ Character sent via IPC: '{ch}'");
     } else {
         log::warn!("   ⚠️  No IPC sender available");
     }
@@ -775,7 +769,7 @@ async fn execute_trigger(
             execute_match_master_registers_trigger(ctx, params).await?;
         }
         _ => {
-            bail!("Unknown trigger: {}", trigger_name);
+            bail!("Unknown trigger: {trigger_name}");
         }
     }
     Ok(())
@@ -822,13 +816,7 @@ async fn execute_match_master_registers_trigger(
 
     let register_count = expected_values.len() as u16;
 
-    log::info!(
-        "🔍 Verifying master registers: station_id={}, type={}, addr=0x{:04X}, count={}",
-        station_id,
-        register_type,
-        start_address,
-        register_count
-    );
+    log::info!("🔍 Verifying master registers: station_id={station_id}, type={register_type}, addr=0x{start_address:04X}, count={register_count}");
 
     // Determine the appropriate CLI command based on register type
     let register_mode_arg = match register_type {
@@ -836,7 +824,7 @@ async fn execute_match_master_registers_trigger(
         "DiscreteInputs" => "02",
         "Holding" => "03",
         "Input" => "04",
-        _ => bail!("Unsupported register type: {}", register_type),
+        _ => bail!("Unsupported register type: {register_type}"),
     };
 
     // Build CLI command to act as slave and read from master
@@ -869,16 +857,16 @@ async fn execute_match_master_registers_trigger(
         ])
         .output()
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI process: {}", e))?;
+        .map_err(|e| anyhow::anyhow!("Failed to spawn CLI process: {e}"))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        log::error!("CLI process failed: {}", stderr);
-        bail!("CLI slave process failed: {}", stderr);
+        log::error!("CLI process failed: {stderr}");
+        bail!("CLI slave process failed: {stderr}");
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    log::debug!("CLI output: {}", stdout);
+    log::debug!("CLI output: {stdout}");
 
     // Parse the CLI output to extract register values
     // Expected format varies by register type, but generally includes register values in hex or decimal
@@ -887,32 +875,26 @@ async fn execute_match_master_registers_trigger(
     // Compare actual vs expected
     if actual_values.len() != expected_values.len() {
         bail!(
-            "Register count mismatch: expected {}, got {}",
-            expected_values.len(),
-            actual_values.len()
+            "Register count mismatch: expected {expected}, got {got}",
+            expected = expected_values.len(),
+            got = actual_values.len()
         );
     }
 
     for (i, (actual, expected)) in actual_values.iter().zip(expected_values.iter()).enumerate() {
         let expected_u16 = expected
             .as_u64()
-            .ok_or_else(|| anyhow::anyhow!("Expected value at index {} is not a number", i))?
+            .ok_or_else(|| anyhow::anyhow!("Expected value at index {i} is not a number"))?
             as u16;
 
         if *actual != expected_u16 {
             bail!(
-                "Register value mismatch at index {}: expected 0x{:04X}, got 0x{:04X}",
-                i,
-                expected_u16,
-                actual
+                "Register value mismatch at index {i}: expected 0x{expected_u16:04X}, got 0x{actual:04X}"
             );
         }
     }
 
-    log::info!(
-        "✅ Master register verification passed: {} registers matched",
-        register_count
-    );
+    log::info!("✅ Master register verification passed: {register_count} registers matched");
     Ok(())
 }
 
@@ -957,7 +939,7 @@ fn parse_cli_register_output(
                 }
             }
         }
-        _ => bail!("Unsupported register type for parsing: {}", register_type),
+        _ => bail!("Unsupported register type for parsing: {register_type}"),
     }
 
     if values.len() < expected_count as usize {

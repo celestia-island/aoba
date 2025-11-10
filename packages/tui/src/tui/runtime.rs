@@ -29,10 +29,7 @@ pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     }
 
     if let Some(channel_id) = matches.get_one::<String>("debug-ci") {
-        log::info!(
-            "🔧 Debug CI mode enabled - starting with IPC: {}",
-            channel_id
-        );
+        log::info!("🔧 Debug CI mode enabled - starting with IPC: {channel_id}");
         return crate::tui::rendering::start_with_ipc(matches, channel_id).await;
     }
 
