@@ -121,7 +121,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
         }
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
-        | types::cursor::ModbusDashboardCursor::RegisterLength { .. } => {
+        | types::cursor::ModbusDashboardCursor::RegisterLength { .. }
+        | types::cursor::ModbusDashboardCursor::RequestInterval
+        | types::cursor::ModbusDashboardCursor::Timeout => {
             write_status(|status| {
                 status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::String {
                     bytes: Vec::new(),

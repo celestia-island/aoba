@@ -31,8 +31,8 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
     let test_port = ports[0];
     log::info!("Using test port: {}", test_port);
 
-    // Test 1: Check free port
-    log::info!("Test 1: Checking free port...");
+    // Check free port
+    log::info!("Checking free port...");
     let check1 = Command::new("cargo")
         .args([
             "run",
@@ -51,8 +51,8 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
         log::info!("✅ Port {} is free", test_port);
     }
 
-    // Test 2: Occupy port with PowerShell and detect
-    log::info!("Test 2: Occupying port with PowerShell...");
+    // Occupy port with PowerShell and detect
+    log::info!("Occupying port with PowerShell...");
     let ps_script = format!(
         r#"
         $port = New-Object System.IO.Ports.SerialPort('{}', 9600)
@@ -73,7 +73,7 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
     sleep(Duration::from_secs(2));
 
     // Check while occupied
-    log::info!("Test 3: Checking occupied port...");
+    log::info!("Checking occupied port...");
     let check2 = Command::new("cargo")
         .args([
             "run",
@@ -98,8 +98,8 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
     occupy_process.wait()?;
     sleep(Duration::from_secs(1));
 
-    // Test 4: Check after release
-    log::info!("Test 4: Checking port after release...");
+    // Check after release
+    log::info!("Checking port after release...");
     let check3 = Command::new("cargo")
         .args([
             "run",
@@ -127,17 +127,14 @@ pub fn test_port_occupation_detection_windows() -> Result<()> {
 
 /// Test port occupation detection on Linux platform
 #[cfg(not(windows))]
-pub fn test_port_occupation_detection_linux() -> Result<()> {
+pub fn test_port_occupation_detection_linux(port1: &str, port2: &str) -> Result<()> {
     log::info!("🧪 Testing port occupation detection on Linux...");
-
-    let port1 = "/tmp/vcom1";
-    let port2 = "/tmp/vcom2";
 
     // Get aoba binary path
     let bin_path = build_debug_bin("aoba")?;
 
-    // Test 1: Check free ports
-    log::info!("Test 1: Checking free ports...");
+    // Check free ports
+    log::info!("Checking free ports...");
     let check1 = Command::new(&bin_path)
         .args(["--check-port", port1])
         .status()?;
@@ -158,8 +155,8 @@ pub fn test_port_occupation_detection_linux() -> Result<()> {
         log::warn!("⚠️ Port {} detected as occupied", port2);
     }
 
-    // Test 2: Occupy port1 with slave process
-    log::info!("Test 2: Occupying {} with slave process...", port1);
+    // Occupy port1 with slave process
+    log::info!("Occupying {} with slave process...", port1);
     let mut slave_process = Command::new(&bin_path)
         .args(["--slave-listen-persist", port1])
         .stdout(Stdio::null())
@@ -169,8 +166,19 @@ pub fn test_port_occupation_detection_linux() -> Result<()> {
     sleep(Duration::from_secs(2));
     log::info!("✅ Slave process started (PID: {})", slave_process.id());
 
-    // Test 3: Check occupied port
-    log::info!("Test 3: Checking occupied port...");
+    if let Some(status) = slave_process.try_wait()? {
+        log::error!(
+            "❌ Slave process exited early with status: {} (port may be inaccessible)",
+            status
+        );
+        return Err(anyhow!(
+            "Slave listener exited before occupation check; verify permissions for {}",
+            port1
+        ));
+    }
+
+    // Check occupied port
+    log::info!("Checking occupied port...");
     let check3 = Command::new(&bin_path)
         .args(["--check-port", port1])
         .status()?;
@@ -180,12 +188,12 @@ pub fn test_port_occupation_detection_linux() -> Result<()> {
     } else {
         log::error!("❌ Port {} NOT detected as occupied (FAILED)", port1);
         slave_process.kill()?;
-        cleanup_linux_ports()?;
+        slave_process.wait()?;
         return Err(anyhow!("Linux detection failed to detect occupation"));
     }
 
-    // Test 4: Check port2 is still free
-    log::info!("Test 4: Verifying {} is still free...", port2);
+    // Check port2 is still free
+    log::info!("Verifying {} is still free...", port2);
     let check4 = Command::new(&bin_path)
         .args(["--check-port", port2])
         .status()?;
@@ -196,8 +204,8 @@ pub fn test_port_occupation_detection_linux() -> Result<()> {
         log::error!("❌ Port {} incorrectly detected as occupied", port2);
     }
 
-    // Test 5: Release and check
-    log::info!("Test 5: Releasing port and checking...");
+    // Release and check
+    log::info!("Releasing port and checking...");
     slave_process.kill()?;
     slave_process.wait()?;
     sleep(Duration::from_secs(3));
@@ -215,21 +223,6 @@ pub fn test_port_occupation_detection_linux() -> Result<()> {
         );
     }
 
-    // Cleanup
-    cleanup_linux_ports()?;
-
     log::info!("✅ Linux port occupation detection test completed");
-    Ok(())
-}
-
-#[cfg(not(windows))]
-fn cleanup_linux_ports() -> Result<()> {
-    log::info!("Cleaning up virtual serial ports...");
-    let _ = Command::new("pkill")
-        .args(["-9", "-f", "socat.*pty.*vcom"])
-        .status();
-    let _ = Command::new("rm")
-        .args(["-f", "/tmp/vcom1", "/tmp/vcom2"])
-        .status();
     Ok(())
 }

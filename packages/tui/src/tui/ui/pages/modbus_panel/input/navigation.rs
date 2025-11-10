@@ -528,6 +528,14 @@ fn jump_to_prev_group(
             // Jump to AddLine
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
         }
+        types::cursor::ModbusDashboardCursor::RequestInterval => {
+            // Jump to AddLine
+            Ok(types::cursor::ModbusDashboardCursor::AddLine)
+        }
+        types::cursor::ModbusDashboardCursor::Timeout => {
+            // Jump to AddLine
+            Ok(types::cursor::ModbusDashboardCursor::AddLine)
+        }
         types::cursor::ModbusDashboardCursor::StationId { index }
         | types::cursor::ModbusDashboardCursor::RegisterMode { index }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { index }
@@ -559,6 +567,52 @@ fn jump_to_next_group(
             Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
         }
         types::cursor::ModbusDashboardCursor::ModbusMode => {
+            // Check if we're in slave mode and should jump to RequestInterval, or jump to first station
+            let is_slave = read_status(|status| {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_data) = status.ports.map.get(port_name) {
+                            let types::port::PortConfig::Modbus { mode, .. } = &port_data.config;
+                            return Ok(mode.is_slave());
+                        }
+                    }
+                }
+                Ok(false)
+            })?;
+
+            if is_slave {
+                // Jump to RequestInterval
+                Ok(types::cursor::ModbusDashboardCursor::RequestInterval)
+            } else {
+                // Jump to first station if exists
+                let has_stations = read_status(|status| {
+                    if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                        &status.page
+                    {
+                        if let Some(port_name) = status.ports.order.get(*selected_port) {
+                            if let Some(port_entry) = status.ports.map.get(port_name) {
+                                let port = port_entry;
+                                let types::port::PortConfig::Modbus { mode: _, stations } =
+                                    &port.config;
+                                return Ok(!stations.is_empty());
+                            }
+                        }
+                    }
+                    Ok(false)
+                })?;
+
+                if has_stations {
+                    Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
+                } else {
+                    // No stations, stay at ModbusMode
+                    Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+                }
+            }
+        }
+        types::cursor::ModbusDashboardCursor::RequestInterval
+        | types::cursor::ModbusDashboardCursor::Timeout => {
             // Jump to first station if exists
             let has_stations = read_status(|status| {
                 if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
@@ -579,8 +633,8 @@ fn jump_to_next_group(
             if has_stations {
                 Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
             } else {
-                // No stations, stay at ModbusMode
-                Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+                // No stations, stay at current
+                Ok(current_cursor)
             }
         }
         types::cursor::ModbusDashboardCursor::StationId { index }

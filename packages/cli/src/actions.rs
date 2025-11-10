@@ -80,76 +80,110 @@ fn check_port_occupation(port_name: &str) -> bool {
 
     #[cfg(not(target_os = "windows"))]
     {
-        // On Unix-like systems, use TIOCEXCL ioctl to detect exclusive access
-        use std::{
-            fs::OpenOptions,
-            os::unix::{fs::OpenOptionsExt, io::AsRawFd},
-        };
+        use std::fs;
+        use std::os::unix::fs::MetadataExt;
+        use std::path::{Path, PathBuf};
 
-        // Try to open the device file
-        match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .custom_flags(libc::O_NONBLOCK | libc::O_NOCTTY)
-            .open(port_name)
-        {
-            Ok(file) => {
-                let fd = file.as_raw_fd();
-
-                // Try to set exclusive terminal control (TIOCEXCL)
-                // If another process already has exclusive access, this will fail
-                let tiocexcl_result = unsafe { libc::ioctl(fd, libc::TIOCEXCL) };
-
-                if tiocexcl_result == 0 {
-                    // Successfully acquired exclusive access - port is free
-                    // Release exclusive access before closing
-                    unsafe {
-                        libc::ioctl(fd, libc::TIOCNXCL);
-                    }
-                    log::debug!("Unix TIOCEXCL succeeded for {}, port is free", port_name);
-                    false
-                } else {
-                    // Failed to get exclusive access - might be occupied or not a TTY
-                    // Try additional check: attempt to get terminal attributes
-                    let mut termios: libc::termios = unsafe { std::mem::zeroed() };
-                    let tcgetattr_result = unsafe { libc::tcgetattr(fd, &mut termios) };
-
-                    if tcgetattr_result == 0 {
-                        // Can get termios, but TIOCEXCL failed - likely occupied
-                        log::debug!(
-                            "Unix TIOCEXCL failed but tcgetattr succeeded for {}, port is occupied",
-                            port_name
-                        );
-                        true
+        fn canonical_device_path(port_path: &str) -> Option<PathBuf> {
+            match fs::canonicalize(port_path) {
+                Ok(path) => Some(path),
+                Err(err) => {
+                    log::warn!(
+                        "Unable to canonicalize {}: {} (will attempt raw path)",
+                        port_path,
+                        err
+                    );
+                    let candidate = Path::new(port_path);
+                    if candidate.is_absolute() {
+                        Some(candidate.to_path_buf())
                     } else {
-                        // Both failed - not a proper TTY device or has issues
-                        log::debug!(
-                            "Unix both TIOCEXCL and tcgetattr failed for {}, assuming free",
-                            port_name
-                        );
-                        false
+                        std::env::current_dir().ok().map(|cwd| cwd.join(candidate))
                     }
                 }
             }
-            Err(e) => {
-                // Failed to open device file at all
-                let error_string = format!("{}", e);
-                let error_lower = error_string.to_lowercase();
-                let is_occupied = error_lower.contains("permission denied")
-                    || error_lower.contains("device or resource busy")
-                    || error_lower.contains("in use")
-                    || error_lower.contains("resource temporarily unavailable");
+        }
 
-                log::debug!(
-                    "Unix open failed for {}: {}, occupied={}",
-                    port_name,
-                    e,
-                    is_occupied
+        fn device_rdev(path: &Path) -> Option<u64> {
+            fs::metadata(path).map(|meta| meta.rdev()).ok()
+        }
+
+        let target_path = match canonical_device_path(port_name) {
+            Some(p) => p,
+            None => {
+                log::warn!(
+                    "Cannot resolve device path for {} — assuming free",
+                    port_name
                 );
+                return false;
+            }
+        };
 
-                is_occupied
+        let target_rdev = match device_rdev(&target_path) {
+            Some(dev) if dev != 0 => dev,
+            _ => {
+                log::warn!(
+                    "Unable to obtain device id for {} — assuming free",
+                    target_path.display()
+                );
+                return false;
+            }
+        };
+
+        let self_pid = std::process::id();
+        if let Ok(proc_entries) = fs::read_dir("/proc") {
+            for entry in proc_entries.flatten() {
+                let file_name = entry.file_name();
+                let pid_str = file_name.to_string_lossy();
+                let pid: u32 = match pid_str.parse() {
+                    Ok(pid) => pid,
+                    Err(_) => continue,
+                };
+
+                if pid == self_pid {
+                    continue;
+                }
+
+                let fd_dir = entry.path().join("fd");
+                let fd_iter = match fs::read_dir(&fd_dir) {
+                    Ok(iter) => iter,
+                    Err(_) => continue,
+                };
+
+                for fd_entry in fd_iter.flatten() {
+                    let fd_path = fd_entry.path();
+
+                    // First try comparing by device id when accessible
+                    if let Ok(meta) = fs::metadata(&fd_path) {
+                        let rdev = meta.rdev();
+                        if rdev == target_rdev {
+                            log::debug!(
+                                "Detected matching device id for {} via {}",
+                                port_name,
+                                fd_path.display()
+                            );
+                            return true;
+                        }
+                    }
+
+                    // Fallback to comparing canonicalized link targets
+                    if let Ok(link) = fs::read_link(&fd_path) {
+                        if let Ok(canon) = fs::canonicalize(&link) {
+                            if canon == target_path {
+                                log::debug!(
+                                    "Detected open handle to {} by PID {} (fd: {})",
+                                    port_name,
+                                    pid,
+                                    fd_path.display()
+                                );
+                                return true;
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        false
     }
 }
 
