@@ -153,7 +153,7 @@ mod tests {
     fn setup_test_env() {
         let status = Arc::new(RwLock::new(Status::default()));
         // Try to initialize, but ignore error if already initialized
-        if let Err(_) = crate::tui::status::init_status(status.clone()) {
+        if crate::tui::status::init_status(status.clone()).is_err() {
             // Already initialized by a previous test run in this process.
             // Reset the existing global status to a clean default so tests are
             // isolated and do not interfere with each other.
