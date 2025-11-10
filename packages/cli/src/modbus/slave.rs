@@ -7,8 +7,8 @@ use std::{
 };
 
 use super::{
-    emit_modbus_ipc_log, extract_values_from_storage, parse_register_mode, ModbusResponse,
-    OutputSink,
+    emit_modbus_ipc_log, extract_values_from_storage, open_serial_port, parse_register_mode,
+    ModbusResponse, OutputSink,
 };
 use crate::{actions, cleanup};
 
@@ -45,10 +45,7 @@ pub fn handle_slave_listen(matches: &ArgMatches, port: &str) -> Result<()> {
 
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
-        let port_handle = serialport::new(port, baud_rate)
-            .timeout(Duration::from_secs(5))
-            .open()
-            .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+        let port_handle = open_serial_port(port, baud_rate, Duration::from_secs(5))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -304,25 +301,23 @@ pub fn handle_slave_listen_persist(matches: &ArgMatches, port: &str) -> Result<(
     };
 
     // Open serial port with configured timeout
-    let port_handle = match serialport::new(port, baud_rate)
-        .timeout(Duration::from_millis(timeout_ms as u64))
-        .open()
-    {
-        Ok(handle) => handle,
-        Err(err) => {
-            // Try to send error via IPC if available
-            if let Some(ref mut ipc_conns) = ipc {
-                let _ = ipc_conns
-                    .status
-                    .send(&aoba_protocol::ipc::IpcMessage::PortError {
-                        port_name: port.to_string(),
-                        error: format!("Failed to open port: {err}"),
-                        timestamp: None,
-                    });
+    let port_handle =
+        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+            Ok(handle) => handle,
+            Err(err) => {
+                if let Some(ref mut ipc_conns) = ipc {
+                    let _ = ipc_conns
+                        .status
+                        .send(&aoba_protocol::ipc::IpcMessage::PortError {
+                            port_name: port.to_string(),
+                            error: err.to_string(),
+                            timestamp: None,
+                        });
+                }
+                return Err(err);
             }
-            return Err(anyhow!("Failed to open port {port}: {err}"));
-        }
-    };
+        };
+
     let port_arc = Arc::new(Mutex::new(port_handle));
 
     // Notify IPC that port was opened successfully
@@ -488,10 +483,7 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
-        let port_handle = serialport::new(port, baud_rate)
-            .timeout(Duration::from_secs(5))
-            .open()
-            .map_err(|err| anyhow!("Failed to open port {port}: {err}"))?;
+        let port_handle = open_serial_port(port, baud_rate, Duration::from_secs(5))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -583,25 +575,22 @@ pub fn handle_slave_poll_persist(matches: &ArgMatches, port: &str) -> Result<()>
     };
 
     // Open serial port with configured timeout
-    let port_handle = match serialport::new(port, baud_rate)
-        .timeout(Duration::from_millis(timeout_ms as u64))
-        .open()
-    {
-        Ok(handle) => handle,
-        Err(err) => {
-            // Try to send error via IPC if available
-            if let Some(ref mut ipc_conns) = ipc {
-                let _ = ipc_conns
-                    .status
-                    .send(&aoba_protocol::ipc::IpcMessage::PortError {
-                        port_name: port.to_string(),
-                        error: format!("Failed to open port: {err}"),
-                        timestamp: None,
-                    });
+    let port_handle =
+        match open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64)) {
+            Ok(handle) => handle,
+            Err(err) => {
+                if let Some(ref mut ipc_conns) = ipc {
+                    let _ = ipc_conns
+                        .status
+                        .send(&aoba_protocol::ipc::IpcMessage::PortError {
+                            port_name: port.to_string(),
+                            error: err.to_string(),
+                            timestamp: None,
+                        });
+                }
+                return Err(err);
             }
-            return Err(anyhow!("Failed to open port {port}: {err}"));
-        }
-    };
+        };
 
     let port_arc = Arc::new(Mutex::new(port_handle));
 
