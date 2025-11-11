@@ -167,7 +167,7 @@ fn main() -> Result<()> {
                                     if let Some((ver, _)) = best_map.get(dep_name) {
                                         dep_tbl.insert(
                                             "version".to_string(),
-                                            TomlValue::String(ver.to_string()),
+                                            TomlValue::String(format_version_for_about(ver)),
                                         );
                                     }
                                 }
@@ -261,5 +261,13 @@ fn set_string_field_if_missing(tbl: &mut Table, key: &str, value: &str) {
 
     if should_set {
         tbl.insert(key.to_string(), TomlValue::String(value.to_string()));
+    }
+}
+
+fn format_version_for_about(ver: &Version) -> String {
+    if ver.major > 0 {
+        ver.major.to_string()
+    } else {
+        format!("0.{}", ver.minor)
     }
 }
