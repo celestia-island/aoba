@@ -113,7 +113,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-            let current_text = read_status(|status| {
+            // Determine if this is a TransparentForward selector or a text input
+            let (is_transparent_forward, current_port_index) = read_status(|status| {
                 if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
                     &status.page
                 {
@@ -121,37 +122,76 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let types::port::PortConfig::Modbus { master_source, .. } =
                                 &port_entry.config;
-                            let value = match master_source {
-                                types::modbus::ModbusMasterDataSource::TransparentForward {
-                                    port,
-                                } => port.clone().unwrap_or_default(),
-                                types::modbus::ModbusMasterDataSource::MqttServer { url }
-                                | types::modbus::ModbusMasterDataSource::HttpServer { url } => {
-                                    url.clone()
+                            match master_source {
+                                types::modbus::ModbusMasterDataSource::TransparentForward { port } => {
+                                    // Find index of selected port in available ports list
+                                    let available_ports: Vec<String> = status.ports.order.iter()
+                                        .filter(|p| *p != port_name)
+                                        .cloned()
+                                        .collect();
+                                    
+                                    let index = if let Some(selected_port) = port {
+                                        available_ports.iter().position(|p| p == selected_port).unwrap_or(0)
+                                    } else {
+                                        0
+                                    };
+                                    
+                                    return Ok((true, index));
                                 }
-                                types::modbus::ModbusMasterDataSource::IpcPipe { path }
-                                | types::modbus::ModbusMasterDataSource::PythonModule { path } => {
-                                    path.clone()
-                                }
-                                types::modbus::ModbusMasterDataSource::Manual => String::new(),
-                            };
-                            return Ok(value);
+                                _ => return Ok((false, 0)),
+                            }
                         }
                     }
                 }
-                Ok(String::new())
+                Ok((false, 0))
             })?;
 
-            let offset = current_text.chars().count() as isize;
-            let buffer = types::ui::InputRawBuffer::String {
-                bytes: current_text.into_bytes(),
-                offset,
-            };
+            if is_transparent_forward {
+                // Use Index buffer for selector
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(current_port_index);
+                    Ok(())
+                })?;
+            } else {
+                // Use String buffer for text input
+                let current_text = read_status(|status| {
+                    if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                        &status.page
+                    {
+                        if let Some(port_name) = status.ports.order.get(*selected_port) {
+                            if let Some(port_entry) = status.ports.map.get(port_name) {
+                                let types::port::PortConfig::Modbus { master_source, .. } =
+                                    &port_entry.config;
+                                let value = match master_source {
+                                    types::modbus::ModbusMasterDataSource::MqttServer { url }
+                                    | types::modbus::ModbusMasterDataSource::HttpServer { url } => {
+                                        url.clone()
+                                    }
+                                    types::modbus::ModbusMasterDataSource::IpcPipe { path }
+                                    | types::modbus::ModbusMasterDataSource::PythonModule { path } => {
+                                        path.clone()
+                                    }
+                                    _ => String::new(),
+                                };
+                                return Ok(value);
+                            }
+                        }
+                    }
+                    Ok(String::new())
+                })?;
 
-            write_status(|status| {
-                status.temporarily.input_raw_buffer = buffer.clone();
-                Ok(())
-            })?;
+                let offset = current_text.chars().count() as isize;
+                let buffer = types::ui::InputRawBuffer::String {
+                    bytes: current_text.into_bytes(),
+                    offset,
+                };
+
+                write_status(|status| {
+                    status.temporarily.input_raw_buffer = buffer.clone();
+                    Ok(())
+                })?;
+            }
+            
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {

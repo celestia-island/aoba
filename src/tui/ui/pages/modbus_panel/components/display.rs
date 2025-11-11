@@ -289,45 +289,124 @@ pub fn render_kv_lines_with_indicators(
 
                     let types::port::PortConfig::Modbus { master_source, .. } = &port.config;
 
-                    let current_value = match master_source {
-                        ModbusMasterDataSource::TransparentForward { port } => {
-                            port.clone().unwrap_or_default()
-                        }
-                        ModbusMasterDataSource::MqttServer { url }
-                        | ModbusMasterDataSource::HttpServer { url } => url.clone(),
-                        ModbusMasterDataSource::IpcPipe { path }
-                        | ModbusMasterDataSource::PythonModule { path } => path.clone(),
-                        ModbusMasterDataSource::Manual => String::new(),
-                    };
-
                     let selected = matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::MasterSourceValue
                     );
 
-                    let editing = selected
-                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+                    // Check if this is TransparentForward (selector) or text input
+                    let is_transparent_forward = matches!(
+                        master_source,
+                        ModbusMasterDataSource::TransparentForward { .. }
+                    );
 
-                    let state = if editing {
-                        TextState::Editing
-                    } else if selected {
-                        TextState::Selected
-                    } else {
-                        TextState::Normal
-                    };
-
-                    if editing {
-                        let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer
-                        else {
-                            unreachable!("editing state requires string buffer");
+                    if is_transparent_forward {
+                        // Render as selector for TransparentForward
+                        let ModbusMasterDataSource::TransparentForward { port: selected_port } = master_source else {
+                            unreachable!();
                         };
-                        let custom_value = String::from_utf8_lossy(bytes).to_string();
-                        let placeholder = get_data_source_placeholder(master_source.kind());
-                        return input_spans_with_placeholder(custom_value, placeholder, state);
-                    }
 
-                    let placeholder = get_data_source_placeholder(master_source.kind());
-                    input_spans_with_placeholder(current_value, placeholder, state)
+                        let available_ports: Vec<String> = read_status(|status| {
+                            Ok(status.ports.order.iter()
+                                .filter(|p| p != &&port.port_name)
+                                .cloned()
+                                .collect())
+                        })?;
+
+                        if available_ports.is_empty() {
+                            // No ports available - show placeholder
+                            let placeholder = get_data_source_placeholder(master_source.kind());
+                            let state = if selected {
+                                TextState::Selected
+                            } else {
+                                TextState::Normal
+                            };
+                            return input_spans_with_placeholder(String::new(), placeholder, state);
+                        }
+
+                        let editing = selected && matches!(input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+
+                        let current_index = if let Some(port) = selected_port {
+                            available_ports.iter().position(|p| p == port).unwrap_or(0)
+                        } else {
+                            0
+                        };
+
+                        let selected_index = if editing {
+                            if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                                *i
+                            } else {
+                                current_index
+                            }
+                        } else {
+                            current_index
+                        };
+
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
+
+                        // Display port name as selector
+                        let display_text = available_ports.get(selected_index)
+                            .or_else(|| selected_port.as_ref())
+                            .map(|s| s.as_str())
+                            .unwrap_or("-");
+
+                        match state {
+                            TextState::Normal => Ok(vec![Span::raw(display_text.to_string())]),
+                            TextState::Selected => Ok(vec![Span::styled(
+                                display_text.to_string(),
+                                Style::default().fg(Color::Green),
+                            )]),
+                            TextState::Editing => {
+                                let mut spans = Vec::new();
+                                spans.push(Span::raw("< "));
+                                spans.push(Span::styled(
+                                    display_text.to_string(),
+                                    Style::default().fg(Color::Yellow),
+                                ));
+                                spans.push(Span::raw(" >"));
+                                Ok(spans)
+                            }
+                        }
+                    } else {
+                        // Render as text input for other types
+                        let current_value = match master_source {
+                            ModbusMasterDataSource::MqttServer { url }
+                            | ModbusMasterDataSource::HttpServer { url } => url.clone(),
+                            ModbusMasterDataSource::IpcPipe { path }
+                            | ModbusMasterDataSource::PythonModule { path } => path.clone(),
+                            _ => String::new(),
+                        };
+
+                        let editing = selected
+                            && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
+
+                        if editing {
+                            let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer
+                            else {
+                                unreachable!("editing state requires string buffer");
+                            };
+                            let custom_value = String::from_utf8_lossy(bytes).to_string();
+                            let placeholder = get_data_source_placeholder(master_source.kind());
+                            return input_spans_with_placeholder(custom_value, placeholder, state);
+                        }
+
+                        let placeholder = get_data_source_placeholder(master_source.kind());
+                        input_spans_with_placeholder(current_value, placeholder, state)
+                    }
                 };
 
                 lines.push(create_line(
