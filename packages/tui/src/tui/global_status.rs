@@ -77,6 +77,9 @@ derive_struct! {
                 message: String,
                 timestamp: DateTime<Local>,
             },
+            // Last dismissed error metadata (used to debounce re-display)
+            dismissed_error_message?: String,
+            dismissed_error_timestamp?: DateTime<Local>,
             // Config panel persistent-for-session editing state
             config_edit: {
                 /// Whether the config panel is currently in edit mode.

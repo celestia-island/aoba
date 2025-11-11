@@ -11,18 +11,17 @@ use crate::tui::status::Status;
 fn render_ui(frame: &mut Frame) -> Result<()> {
     let area = frame.area();
 
-    let bottom_height = crate::tui::status::read_status(|status| {
-        let err_lines = if status.temporarily.error.is_some() {
-            1
-        } else {
-            0
-        };
-        let hints_count = match crate::tui::ui::pages::bottom_hints_for_app() {
-            Ok(h) => h.len(),
-            Err(_) => 0,
-        };
-        Ok(hints_count + err_lines)
-    })?;
+    let mut hints_count = match crate::tui::ui::pages::bottom_hints_for_app() {
+        Ok(h) => h.len(),
+        Err(_) => 0,
+    };
+
+    let error_visible = crate::tui::ui::bottom::visible_error()?.is_some();
+    if error_visible {
+        hints_count += 1; // dismiss hint row is appended to bottom hints
+    }
+
+    let bottom_height = hints_count + if error_visible { 1 } else { 0 };
 
     let main_chunks = Layout::default()
         .direction(Direction::Vertical)

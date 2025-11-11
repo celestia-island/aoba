@@ -1,19 +1,65 @@
 use anyhow::Result;
+use chrono::Local;
 
 use ratatui::{layout::*, prelude::*, widgets::*};
 
 use crate::{
     i18n::lang,
-    tui::{status::read_status, ui::pages::bottom_hints_for_app},
+    tui::{
+        status::{read_status, write_status, ErrorInfo},
+        ui::pages::bottom_hints_for_app,
+    },
 };
+
+const ERROR_DISMISS_SUPPRESS_SECS: i64 = 5;
+
+pub fn visible_error() -> Result<Option<ErrorInfo>> {
+    let (error_opt, dismissed_message, dismissed_timestamp) = read_status(|status| {
+        Ok((
+            status.temporarily.error.clone(),
+            status.temporarily.dismissed_error_message.clone(),
+            status.temporarily.dismissed_error_timestamp,
+        ))
+    })?;
+
+    if let Some(error) = error_opt {
+        if let (Some(msg), Some(ts)) = (dismissed_message.as_ref(), dismissed_timestamp) {
+            if msg == &error.message {
+                let elapsed = Local::now().signed_duration_since(ts);
+                if elapsed.num_seconds() < ERROR_DISMISS_SUPPRESS_SECS {
+                    return Ok(None);
+                }
+
+                let _ = write_status(|status| {
+                    status.temporarily.dismissed_error_message = None;
+                    status.temporarily.dismissed_error_timestamp = None;
+                    Ok(())
+                });
+            }
+        }
+        return Ok(Some(error));
+    }
+
+    Ok(None)
+}
 
 pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
     // Cumulative rendering: we render page-provided bottom hints and also
-    // append transient error lines (error message + clear hint) if present.
-    let hints = bottom_hints_for_app().unwrap_or_else(|_| vec![]);
-    let err_opt = read_status(|status| Ok(status.temporarily.error.clone()))?;
+    // prepend a transient error banner plus a dismiss hint when present.
+    let mut hints = bottom_hints_for_app().unwrap_or_else(|_| vec![]);
+    let err_opt = visible_error()?;
 
-    let err_lines = if err_opt.is_some() { 2usize } else { 0usize };
+    if err_opt.is_some() {
+        let dismiss_hint = vec![lang().hotkeys.press_x_clear_error.as_str().to_string()];
+        if hints.is_empty() {
+            hints.push(dismiss_hint);
+        } else {
+            let insert_idx = hints.len().saturating_sub(1);
+            hints.insert(insert_idx, dismiss_hint);
+        }
+    }
+
+    let err_lines = if err_opt.is_some() { 1usize } else { 0usize };
     let rows_count = hints.len() + err_lines;
 
     if rows_count == 0 {
@@ -45,17 +91,6 @@ pub fn render_bottom(frame: &mut Frame, area: Rect) -> Result<()> {
             .alignment(Alignment::Left)
             .block(err_block);
         frame.render_widget(para, rows[next_row]);
-        next_row += 1;
-
-        // clear hint line
-        let clear_hint = lang().hotkeys.press_c_clear.as_str().to_string();
-        let hint_block = Block::default()
-            .borders(Borders::NONE)
-            .style(Style::default().bg(Color::Gray).fg(Color::White));
-        let hint_para = Paragraph::new(clear_hint)
-            .alignment(Alignment::Center)
-            .block(hint_block);
-        frame.render_widget(hint_para, rows[next_row]);
         next_row += 1;
     }
 
