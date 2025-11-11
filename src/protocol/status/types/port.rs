@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
-use super::modbus::{ModbusConnectionMode, ModbusRegisterItem};
+use super::modbus::{ModbusConnectionMode, ModbusMasterDataSource, ModbusRegisterItem};
 use crate::protocol::tty::PortExtra;
 
 /// Serial port configuration (baud rate, data bits, stop bits, parity)
@@ -257,6 +257,8 @@ pub enum PortConfig {
         /// Global master/slave mode for this port. All stations in this port
         /// will operate in the same mode.
         mode: ModbusConnectionMode,
+        /// Optional external data source configuration used in master mode.
+        master_source: ModbusMasterDataSource,
         /// Stores logical entries related to Modbus (using RegisterEntry as a
         /// lightweight placeholder for per-endpoint configuration). The connection_mode
         /// field in individual items is now derived from the global mode above.
@@ -268,6 +270,7 @@ impl Default for PortConfig {
     fn default() -> Self {
         PortConfig::Modbus {
             mode: ModbusConnectionMode::default_master(),
+            master_source: ModbusMasterDataSource::default(),
             stations: Vec::new(),
         }
     }

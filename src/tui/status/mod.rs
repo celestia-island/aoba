@@ -165,7 +165,11 @@ pub mod serializable {
                     let mut modbus_masters = Vec::new();
                     let mut modbus_slaves = Vec::new();
 
-                    let PortConfig::Modbus { mode, stations } = &port.config;
+                    let PortConfig::Modbus {
+                        mode,
+                        master_source: _,
+                        stations,
+                    } = &port.config;
                     for station in stations {
                         let station_snapshot = TuiModbusStation {
                             station_id: station.station_id,
@@ -300,6 +304,7 @@ pub mod serializable {
             }
             let config = PortConfig::Modbus {
                 mode: ModbusConnectionMode::default_slave(),
+                master_source: Default::default(),
                 stations,
             };
             let status_indicator = match &state {
@@ -322,6 +327,7 @@ pub mod serializable {
             }
             let config = PortConfig::Modbus {
                 mode: ModbusConnectionMode::default_master(),
+                master_source: Default::default(),
                 stations,
             };
             let status_indicator = match &state {
