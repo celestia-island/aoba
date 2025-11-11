@@ -6,8 +6,10 @@ use ratatui::{
     widgets::*,
 };
 
-use crate::tui::status::read_status;
-use crate::protocol::{i18n::lang, status::types::port::PortStatusIndicator};
+use crate::{
+    protocol::{i18n::lang, status::types::port::PortStatusIndicator},
+    tui::status::read_status,
+};
 
 fn get_port_name(selected_port: usize) -> Result<String> {
     let port_name = if selected_port < read_status(|status| Ok(status.ports.order.len()))? {

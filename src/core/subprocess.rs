@@ -9,13 +9,15 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use crate::cli::{config::StationConfig, status::CliMode};
-use crate::protocol::{
-    ipc::{
-        generate_socket_name, get_command_channel_name, IpcClient, IpcCommandClient, IpcConnection,
-        IpcMessage,
+use crate::{
+    cli::{config::StationConfig, status::CliMode},
+    protocol::{
+        ipc::{
+            generate_socket_name, get_command_channel_name, IpcClient, IpcCommandClient,
+            IpcConnection, IpcMessage,
+        },
+        status::debug_dump::is_debug_dump_enabled,
     },
-    status::debug_dump::is_debug_dump_enabled,
 };
 
 /// Configuration for a CLI subprocess

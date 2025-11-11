@@ -21,7 +21,7 @@ pub fn check_ports_occupied(exe_path: &Path, ports: &[String]) -> Result<Vec<(St
     }
 
     for port_name in ports {
-        let output = Command::new(&exe_path)
+        let output = Command::new(exe_path)
             .arg("--check-port")
             .arg(port_name)
             .output();

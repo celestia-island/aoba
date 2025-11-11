@@ -1,15 +1,17 @@
 use anyhow::Result;
 
-use crate::tui::{
-    logs::{
-        append_cli_log_message, append_lifecycle_log, append_modbus_log, append_state_lock_ack_log,
-        append_state_lock_request_log, append_stations_update_failed_log,
-        append_stations_update_logs, append_status_log,
+use crate::{
+    cli::config::StationConfig,
+    protocol::ipc::IpcMessage,
+    tui::{
+        logs::{
+            append_cli_log_message, append_lifecycle_log, append_modbus_log,
+            append_state_lock_ack_log, append_state_lock_request_log,
+            append_stations_update_failed_log, append_stations_update_logs, append_status_log,
+        },
+        status::{self as types},
     },
-    status::{self as types},
 };
-use crate::cli::config::StationConfig;
-use crate::protocol::ipc::IpcMessage;
 
 pub(crate) fn map_register_mode_hint(
     value: Option<String>,

@@ -1,14 +1,16 @@
 use anyhow::{anyhow, Result};
 
-use crate::tui::{
-    status as types,
-    status::{
-        port::{PortState, PortSubprocessInfo, PortSubprocessMode},
-        {read_status, write_status},
+use crate::{
+    protocol::modbus::generate_pull_set_holding_request,
+    tui::{
+        status as types,
+        status::{
+            port::{PortState, PortSubprocessInfo, PortSubprocessMode},
+            {read_status, write_status},
+        },
+        utils::bus::{self, Bus, UiToCore},
     },
-    utils::bus::{self, Bus, UiToCore},
 };
-use crate::protocol::modbus::generate_pull_set_holding_request;
 
 pub fn handle_enter_action(bus: &Bus) -> Result<()> {
     log::info!("🔵 handle_enter_action called");

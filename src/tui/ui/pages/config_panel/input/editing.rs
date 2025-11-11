@@ -4,8 +4,8 @@ use strum::IntoEnumIterator;
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::navigation::sanitize_configpanel_cursor;
-use crate::core::bus::{self, Bus};
 use crate::{
+    core::bus::{self, Bus},
     i18n::lang,
     tui::{
         status as types,

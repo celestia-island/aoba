@@ -15,10 +15,12 @@ use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
     ModbusIpcLogPayload, ModbusResponse,
 };
-use crate::cli::{actions, cleanup};
-use crate::protocol::modbus::{
-    build_slave_coils_response, build_slave_discrete_inputs_response,
-    build_slave_holdings_response, build_slave_inputs_response,
+use crate::{
+    cli::{actions, cleanup},
+    protocol::modbus::{
+        build_slave_coils_response, build_slave_discrete_inputs_response,
+        build_slave_holdings_response, build_slave_inputs_response,
+    },
 };
 
 const SERIAL_PORT_OPEN_RETRIES: usize = 10;

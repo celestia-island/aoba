@@ -4,6 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
     i18n::lang,
+    protocol::modbus::generate_pull_set_holding_request,
     tui::{
         status as types,
         status::{
@@ -15,7 +16,6 @@ use crate::{
         utils::bus::{self, Bus, UiToCore},
     },
 };
-use crate::protocol::modbus::generate_pull_set_holding_request;
 
 pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
