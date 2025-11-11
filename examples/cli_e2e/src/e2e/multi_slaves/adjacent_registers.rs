@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::utils::build_debug_bin;
-use aoba_cli::config::{
+use aoba::cli::config::{
     CommunicationMethod, CommunicationParams, ModbusBootConfig, PersistenceMode, RegisterMap,
     RegisterRange, StationConfig, StationMode,
 };
