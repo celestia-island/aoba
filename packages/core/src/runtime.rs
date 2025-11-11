@@ -3,7 +3,7 @@
 /// This module contains the main core thread logic that can be shared across
 /// different UI frontends (TUI, GUI, WebUI).
 use anyhow::{anyhow, Result};
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 
 use crate::{
     bus::{CoreToUi, UiToCore},
@@ -82,7 +82,6 @@ pub fn run_core_thread<C: CoreContext>(
     let mut polling_enabled = config.polling_enabled;
     let scan_interval = config.scan_interval;
     let mut last_scan = std::time::Instant::now() - scan_interval;
-    let mut scan_in_progress = false;
 
     let mut subprocess_manager = SubprocessManager::new();
 
@@ -111,17 +110,13 @@ pub fn run_core_thread<C: CoreContext>(
                         .map_err(|err| anyhow!("Failed to send Refreshed: {err}"))?;
                 }
                 UiToCore::RescanPorts => {
-                    if !scan_in_progress {
-                        scan_in_progress = true;
-                        if let Err(err) = context.scan_ports() {
-                            log::warn!("Port scan failed: {err}");
-                        }
-                        last_scan = std::time::Instant::now();
-                        scan_in_progress = false;
-                        core_tx
-                            .send(CoreToUi::Refreshed)
-                            .map_err(|err| anyhow!("Failed to send Refreshed: {err}"))?;
+                    if let Err(err) = context.scan_ports() {
+                        log::warn!("Port scan failed: {err}");
                     }
+                    last_scan = std::time::Instant::now();
+                    core_tx
+                        .send(CoreToUi::Refreshed)
+                        .map_err(|err| anyhow!("Failed to send Refreshed: {err}"))?;
                 }
                 UiToCore::PausePolling => {
                     polling_enabled = false;
@@ -229,13 +224,11 @@ pub fn run_core_thread<C: CoreContext>(
         }
 
         // Periodic port scanning
-        if polling_enabled && last_scan.elapsed() >= scan_interval && !scan_in_progress {
-            scan_in_progress = true;
+        if polling_enabled && last_scan.elapsed() >= scan_interval {
             if let Err(err) = context.scan_ports() {
                 log::warn!("Port scan failed: {err}");
             }
             last_scan = std::time::Instant::now();
-            scan_in_progress = false;
         }
 
         // Allow context to perform periodic updates
