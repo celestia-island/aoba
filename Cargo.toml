@@ -10,6 +10,7 @@ build = "build.rs"
 
 [workspace]
 members = ["examples/*"]
+default-members = ["aoba"]
 resolver = "2"
 
 [workspace.package]

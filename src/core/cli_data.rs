@@ -31,7 +31,7 @@ fn create_cli_data_source_path(
 
     let mut path = std::env::temp_dir();
     path.push(format!(
-        "aoba_cli_{fallback}_s{station_id}_t{type_code:02}_a{start_address:04X}.jsonl"
+        "aoba_{fallback}_s{station_id}_t{type_code:02}_a{start_address:04X}.jsonl"
     ));
     path
 }
