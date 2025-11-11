@@ -8,7 +8,10 @@ use crate::{
     tui::{
         status as types,
         status::{
-            modbus::{ModbusConnectionMode, RegisterMode},
+            modbus::{
+                ModbusConnectionMode, ModbusMasterDataSource, ModbusMasterDataSourceKind,
+                ModbusMasterDataSourceValueKind, RegisterMode,
+            },
             read_status,
         },
         ui::components::{
@@ -97,7 +100,7 @@ pub fn render_kv_lines_with_indicators(
     let global_mode_renderer = || -> Result<Vec<Span<'static>>> {
         let mut rendered_value_spans: Vec<Span> = Vec::new();
         if let Some(ref port) = port_data {
-            let types::port::PortConfig::Modbus { mode, stations: _ } = &port.config;
+            let types::port::PortConfig::Modbus { mode, .. } = &port.config;
             let (current_mode, mode_obj) = (mode.to_index(), mode.clone());
 
             let selected = matches!(
@@ -168,6 +171,139 @@ pub fn render_kv_lines_with_indicators(
         ),
         global_mode_renderer,
     )?);
+
+    if let Some(ref port) = port_data {
+        let types::port::PortConfig::Modbus {
+            mode,
+            master_source,
+            ..
+        } = &port.config;
+
+        if mode.is_master() {
+            let master_source_renderer = || -> Result<Vec<Span<'static>>> {
+                let Some(port) = port_data.as_ref() else {
+                    return Ok(vec![]);
+                };
+
+                let types::port::PortConfig::Modbus { master_source, .. } = &port.config;
+
+                let current_index = master_source.kind().to_index();
+                let selected = matches!(
+                    current_selection,
+                    types::cursor::ModbusDashboardCursor::MasterSourceKind
+                );
+
+                let editing =
+                    selected && matches!(input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+
+                let selected_index = if editing {
+                    if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                        *i
+                    } else {
+                        current_index
+                    }
+                } else {
+                    current_index
+                };
+
+                let state = if editing {
+                    TextState::Editing
+                } else if selected {
+                    TextState::Selected
+                } else {
+                    TextState::Normal
+                };
+
+                let rendered_value_spans =
+                    selector_spans::<ModbusMasterDataSourceKind>(selected_index, state)?;
+                Ok(rendered_value_spans)
+            };
+
+            lines.push(create_line(
+                &lang().protocol.modbus.data_source,
+                matches!(
+                    current_selection,
+                    types::cursor::ModbusDashboardCursor::MasterSourceKind
+                ),
+                master_source_renderer,
+            )?);
+
+            let value_kind = master_source.value_kind();
+            if !matches!(value_kind, ModbusMasterDataSourceValueKind::None) {
+                let value_label = match value_kind {
+                    ModbusMasterDataSourceValueKind::Port => {
+                        lang().protocol.modbus.data_source_port.clone()
+                    }
+                    ModbusMasterDataSourceValueKind::Url => {
+                        lang().protocol.modbus.data_source_address.clone()
+                    }
+                    ModbusMasterDataSourceValueKind::Path => {
+                        lang().protocol.modbus.data_source_path.clone()
+                    }
+                    ModbusMasterDataSourceValueKind::None => unreachable!(),
+                };
+
+                let master_source_value_renderer = || -> Result<Vec<Span<'static>>> {
+                    let Some(port) = port_data.as_ref() else {
+                        return Ok(vec![]);
+                    };
+
+                    let types::port::PortConfig::Modbus { master_source, .. } = &port.config;
+
+                    let mut current_value = match master_source {
+                        ModbusMasterDataSource::TransparentForward { port } => {
+                            port.clone().unwrap_or_default()
+                        }
+                        ModbusMasterDataSource::MqttServer { url }
+                        | ModbusMasterDataSource::HttpServer { url } => url.clone(),
+                        ModbusMasterDataSource::IpcPipe { path }
+                        | ModbusMasterDataSource::PythonModule { path } => path.clone(),
+                        ModbusMasterDataSource::Manual => String::new(),
+                    };
+
+                    let selected = matches!(
+                        current_selection,
+                        types::cursor::ModbusDashboardCursor::MasterSourceValue
+                    );
+
+                    let editing = selected
+                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+
+                    let state = if editing {
+                        TextState::Editing
+                    } else if selected {
+                        TextState::Selected
+                    } else {
+                        TextState::Normal
+                    };
+
+                    if editing {
+                        let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer
+                        else {
+                            unreachable!("editing state requires string buffer");
+                        };
+                        let custom_value = String::from_utf8_lossy(bytes).to_string();
+                        return input_spans(custom_value, state);
+                    }
+
+                    if current_value.is_empty() {
+                        current_value = "-".to_string();
+                    }
+
+                    input_spans(current_value, state)
+                };
+
+                lines.push(create_line(
+                    value_label,
+                    matches!(
+                        current_selection,
+                        types::cursor::ModbusDashboardCursor::MasterSourceValue
+                    ),
+                    master_source_value_renderer,
+                )?);
+            }
+        }
+    }
 
     // Add RequestInterval and Timeout only in Slave mode
     if let Some(ref port) = port_data {
@@ -274,7 +410,7 @@ pub fn render_kv_lines_with_indicators(
                 if let Some(port_entry) = status.ports.map.get(port_name) {
                     let port = port_entry;
                     match &port.config {
-                        types::port::PortConfig::Modbus { mode: _, stations } => {
+                        types::port::PortConfig::Modbus { stations, .. } => {
                             return Ok(!stations.is_empty());
                         }
                     }
@@ -289,7 +425,7 @@ pub fn render_kv_lines_with_indicators(
 
     if let Some(port_entry) = &port_data {
         let port_data = port_entry;
-        let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
+        let types::port::PortConfig::Modbus { stations, .. } = &port_data.config;
         let all_items = stations.clone();
 
         for (index, item) in all_items.iter().enumerate() {
@@ -308,7 +444,7 @@ pub fn render_kv_lines_with_indicators(
                     types::cursor::ModbusDashboardCursor::StationId { index: i } if i == index
                 ),
                 || -> Result<Vec<Span<'static>>> {
-                    let types::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
+                    let types::port::PortConfig::Modbus { stations, .. } = &port_data.config;
                     let current_value = if let Some(item) = stations.get(index) {
                         item.station_id.to_string()
                     } else {
@@ -351,7 +487,7 @@ pub fn render_kv_lines_with_indicators(
                     ),
                     || -> Result<Vec<Span<'static>>> {
 
-                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                        let types::port::PortConfig::Modbus { stations, .. } =
                             &port_data.config;
                         let current_mode = if let Some(item) = stations.get(index) {
                             (item.register_mode as u8 - 1u8) as usize
@@ -398,7 +534,7 @@ pub fn render_kv_lines_with_indicators(
                     ),
                     || -> Result<Vec<Span<'static>>> {
 
-                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                        let types::port::PortConfig::Modbus { stations, .. } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {
                             item.register_address.to_string()
@@ -442,7 +578,7 @@ pub fn render_kv_lines_with_indicators(
                     ),
                     || -> Result<Vec<Span<'static>>> {
 
-                        let types::port::PortConfig::Modbus { mode: _, stations } =
+                        let types::port::PortConfig::Modbus { stations, .. } =
                             &port_data.config;
                         let current_value = if let Some(item) = stations.get(index) {
                             item.register_length.to_string()

@@ -9,4 +9,4 @@ pub mod modbus;
 pub mod port;
 
 pub use cli::{CliMode, CliStatus};
-pub use modbus::RegisterMode;
+pub use modbus::{ModbusMasterDataSource, ModbusMasterDataSourceKind, RegisterMode};

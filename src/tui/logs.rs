@@ -187,7 +187,7 @@ pub(crate) fn append_modbus_log(
     let status_lookup = crate::tui::status::read_status(|status| {
         if let Some(port) = status.ports.map.get(port_name) {
             match &port.config {
-                PortConfig::Modbus { mode, stations } => {
+                PortConfig::Modbus { mode, stations, .. } => {
                     let role = if mode.is_master() {
                         StationMode::Master
                     } else {

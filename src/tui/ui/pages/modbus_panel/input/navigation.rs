@@ -183,8 +183,11 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
                                 let port = port_entry;
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
+                                let types::port::PortConfig::Modbus {
+                                    mode: _,
+                                    master_source: _,
+                                    stations,
+                                } = &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
@@ -256,8 +259,11 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
                                 let port = port_entry;
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
+                                let types::port::PortConfig::Modbus {
+                                    mode: _,
+                                    master_source: _,
+                                    stations,
+                                } = &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     return Ok(item.register_length as usize);
@@ -330,8 +336,11 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         if let Some(port_name) = port_name_opt {
                             if let Some(port_entry) = status.ports.map.get(&port_name) {
                                 let port = port_entry;
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
+                                let types::port::PortConfig::Modbus {
+                                    mode: _,
+                                    master_source: _,
+                                    stations,
+                                } = &port.config;
                                 let all_items: Vec<_> = stations.iter().collect();
                                 if let Some(item) = all_items.get(slave_index) {
                                     let has_next = slave_index + 1 < all_items.len();
@@ -512,6 +521,12 @@ fn jump_to_prev_group(
             // Jump to AddLine
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
         }
+        types::cursor::ModbusDashboardCursor::MasterSourceKind => {
+            Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+        }
+        types::cursor::ModbusDashboardCursor::MasterSourceValue => {
+            Ok(types::cursor::ModbusDashboardCursor::MasterSourceKind)
+        }
         types::cursor::ModbusDashboardCursor::RequestInterval => {
             // Jump to AddLine
             Ok(types::cursor::ModbusDashboardCursor::AddLine)
@@ -570,29 +585,61 @@ fn jump_to_next_group(
                 // Jump to RequestInterval
                 Ok(types::cursor::ModbusDashboardCursor::RequestInterval)
             } else {
-                // Jump to first station if exists
-                let has_stations = read_status(|status| {
-                    if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
-                        &status.page
-                    {
-                        if let Some(port_name) = status.ports.order.get(*selected_port) {
-                            if let Some(port_entry) = status.ports.map.get(port_name) {
-                                let port = port_entry;
-                                let types::port::PortConfig::Modbus { mode: _, stations } =
-                                    &port.config;
-                                return Ok(!stations.is_empty());
-                            }
+                Ok(types::cursor::ModbusDashboardCursor::MasterSourceKind)
+            }
+        }
+        types::cursor::ModbusDashboardCursor::MasterSourceKind => {
+            let (has_value_field, has_stations) = read_status(|status| {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            let types::port::PortConfig::Modbus {
+                                master_source,
+                                stations,
+                                ..
+                            } = &port_entry.config;
+                            let value_kind = master_source.value_kind();
+                            let has_value = !matches!(
+                                value_kind,
+                                types::modbus::ModbusMasterDataSourceValueKind::None
+                            );
+                            return Ok((has_value, !stations.is_empty()));
                         }
                     }
-                    Ok(false)
-                })?;
-
-                if has_stations {
-                    Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
-                } else {
-                    // No stations, stay at ModbusMode
-                    Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
                 }
+                Ok((false, false))
+            })?;
+
+            if has_value_field {
+                Ok(types::cursor::ModbusDashboardCursor::MasterSourceValue)
+            } else if has_stations {
+                Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
+            } else {
+                Ok(types::cursor::ModbusDashboardCursor::MasterSourceKind)
+            }
+        }
+        types::cursor::ModbusDashboardCursor::MasterSourceValue => {
+            let has_stations = read_status(|status| {
+                if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } =
+                    &status.page
+                {
+                    if let Some(port_name) = status.ports.order.get(*selected_port) {
+                        if let Some(port_entry) = status.ports.map.get(port_name) {
+                            let types::port::PortConfig::Modbus { stations, .. } =
+                                &port_entry.config;
+                            return Ok(!stations.is_empty());
+                        }
+                    }
+                }
+                Ok(false)
+            })?;
+
+            if has_stations {
+                Ok(types::cursor::ModbusDashboardCursor::StationId { index: 0 })
+            } else {
+                Ok(types::cursor::ModbusDashboardCursor::MasterSourceValue)
             }
         }
         types::cursor::ModbusDashboardCursor::RequestInterval
@@ -605,8 +652,11 @@ fn jump_to_next_group(
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port.config;
+                            let types::port::PortConfig::Modbus {
+                                mode: _,
+                                master_source: _,
+                                stations,
+                            } = &port.config;
                             return Ok(!stations.is_empty());
                         }
                     }
@@ -636,8 +686,11 @@ fn jump_to_next_group(
                     if let Some(port_name) = status.ports.order.get(*selected_port) {
                         if let Some(port_entry) = status.ports.map.get(port_name) {
                             let port = port_entry;
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &port.config;
+                            let types::port::PortConfig::Modbus {
+                                mode: _,
+                                master_source: _,
+                                stations,
+                            } = &port.config;
                             let all_items: Vec<_> = stations.iter().collect();
                             return Ok(index + 1 < all_items.len());
                         }
@@ -663,7 +716,11 @@ fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
             if let Some(port_name) = status.ports.order.get(*selected_port) {
                 if let Some(port_entry) = status.ports.map.get(port_name) {
                     let port = port_entry;
-                    let types::port::PortConfig::Modbus { mode: _, stations } = &port.config;
+                    let types::port::PortConfig::Modbus {
+                        mode: _,
+                        master_source: _,
+                        stations,
+                    } = &port.config;
                     let all_items: Vec<_> = stations.iter().collect();
                     if !all_items.is_empty() {
                         return Ok(Some(all_items.len() - 1));

@@ -109,6 +109,7 @@ pub(crate) fn handle_cli_ipc_message(port_name: &str, message: IpcMessage) -> Re
                         if let Some(port) = status.ports.map.get_mut(port_name) {
                             let types::port::PortConfig::Modbus {
                                 mode: _,
+                                master_source: _,
                                 stations: ref mut modbus_stations,
                             } = &mut port.config;
                             for station_config in &stations {

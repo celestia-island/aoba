@@ -66,6 +66,177 @@ impl std::fmt::Display for ModbusConnectionMode {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumIter)]
+#[serde(rename_all = "snake_case")]
+pub enum ModbusMasterDataSourceKind {
+    Manual,
+    TransparentForward,
+    MqttServer,
+    HttpServer,
+    IpcPipe,
+    PythonModule,
+}
+
+impl ModbusMasterDataSourceKind {
+    pub const fn all() -> &'static [Self] {
+        &[
+            Self::Manual,
+            Self::TransparentForward,
+            Self::MqttServer,
+            Self::HttpServer,
+            Self::IpcPipe,
+            Self::PythonModule,
+        ]
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        Self::all().get(index).copied().unwrap_or(Self::Manual)
+    }
+
+    pub fn to_index(self) -> usize {
+        Self::all()
+            .iter()
+            .position(|kind| *kind == self)
+            .unwrap_or(0)
+    }
+
+    pub fn value_kind(self) -> ModbusMasterDataSourceValueKind {
+        match self {
+            Self::Manual => ModbusMasterDataSourceValueKind::None,
+            Self::TransparentForward => ModbusMasterDataSourceValueKind::Port,
+            Self::MqttServer | Self::HttpServer => ModbusMasterDataSourceValueKind::Url,
+            Self::IpcPipe | Self::PythonModule => ModbusMasterDataSourceValueKind::Path,
+        }
+    }
+}
+
+impl fmt::Display for ModbusMasterDataSourceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let label = match self {
+            ModbusMasterDataSourceKind::Manual => lang().protocol.modbus.data_source_manual.clone(),
+            ModbusMasterDataSourceKind::TransparentForward => lang()
+                .protocol
+                .modbus
+                .data_source_transparent_forward
+                .clone(),
+            ModbusMasterDataSourceKind::MqttServer => {
+                lang().protocol.modbus.data_source_mqtt.clone()
+            }
+            ModbusMasterDataSourceKind::HttpServer => {
+                lang().protocol.modbus.data_source_http.clone()
+            }
+            ModbusMasterDataSourceKind::IpcPipe => lang().protocol.modbus.data_source_ipc.clone(),
+            ModbusMasterDataSourceKind::PythonModule => {
+                lang().protocol.modbus.data_source_python.clone()
+            }
+        };
+        write!(f, "{label}")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModbusMasterDataSourceValueKind {
+    None,
+    Port,
+    Url,
+    Path,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ModbusMasterDataSource {
+    Manual,
+    TransparentForward { port: Option<String> },
+    MqttServer { url: String },
+    HttpServer { url: String },
+    IpcPipe { path: String },
+    PythonModule { path: String },
+}
+
+impl Default for ModbusMasterDataSource {
+    fn default() -> Self {
+        Self::Manual
+    }
+}
+
+impl ModbusMasterDataSource {
+    pub fn kind(&self) -> ModbusMasterDataSourceKind {
+        match self {
+            ModbusMasterDataSource::Manual => ModbusMasterDataSourceKind::Manual,
+            ModbusMasterDataSource::TransparentForward { .. } => {
+                ModbusMasterDataSourceKind::TransparentForward
+            }
+            ModbusMasterDataSource::MqttServer { .. } => ModbusMasterDataSourceKind::MqttServer,
+            ModbusMasterDataSource::HttpServer { .. } => ModbusMasterDataSourceKind::HttpServer,
+            ModbusMasterDataSource::IpcPipe { .. } => ModbusMasterDataSourceKind::IpcPipe,
+            ModbusMasterDataSource::PythonModule { .. } => ModbusMasterDataSourceKind::PythonModule,
+        }
+    }
+
+    pub fn value_kind(&self) -> ModbusMasterDataSourceValueKind {
+        self.kind().value_kind()
+    }
+
+    pub fn with_kind(kind: ModbusMasterDataSourceKind) -> Self {
+        match kind {
+            ModbusMasterDataSourceKind::Manual => Self::Manual,
+            ModbusMasterDataSourceKind::TransparentForward => {
+                Self::TransparentForward { port: None }
+            }
+            ModbusMasterDataSourceKind::MqttServer => Self::MqttServer { url: String::new() },
+            ModbusMasterDataSourceKind::HttpServer => Self::HttpServer { url: String::new() },
+            ModbusMasterDataSourceKind::IpcPipe => Self::IpcPipe {
+                path: String::new(),
+            },
+            ModbusMasterDataSourceKind::PythonModule => Self::PythonModule {
+                path: String::new(),
+            },
+        }
+    }
+
+    pub fn set_kind(&mut self, kind: ModbusMasterDataSourceKind) {
+        *self = Self::with_kind(kind);
+    }
+
+    pub fn get_port(&self) -> Option<&str> {
+        match self {
+            ModbusMasterDataSource::TransparentForward { port } => port.as_deref(),
+            _ => None,
+        }
+    }
+
+    pub fn set_port(&mut self, port: Option<String>) {
+        if let ModbusMasterDataSource::TransparentForward { port: existing } = self {
+            *existing = port;
+        }
+    }
+
+    pub fn get_text(&self) -> Option<&str> {
+        match self {
+            ModbusMasterDataSource::MqttServer { url }
+            | ModbusMasterDataSource::HttpServer { url } => Some(url.as_str()),
+            ModbusMasterDataSource::IpcPipe { path }
+            | ModbusMasterDataSource::PythonModule { path } => Some(path.as_str()),
+            _ => None,
+        }
+    }
+
+    pub fn set_text(&mut self, value: String) {
+        match self {
+            ModbusMasterDataSource::MqttServer { url }
+            | ModbusMasterDataSource::HttpServer { url } => {
+                *url = value;
+            }
+            ModbusMasterDataSource::IpcPipe { path }
+            | ModbusMasterDataSource::PythonModule { path } => {
+                *path = value;
+            }
+            ModbusMasterDataSource::Manual => {}
+            ModbusMasterDataSource::TransparentForward { .. } => {}
+        }
+    }
+}
+
 /// Station-level configuration primitive shared by CLI, TUI and tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -219,6 +219,10 @@ pub enum ModbusDashboardCursor {
     AddLine,
     /// Select the global mode for all stations in this port (Master/Slave)
     ModbusMode,
+    /// Select the master data source kind when in master mode
+    MasterSourceKind,
+    /// Edit the master data source value (port/url/path) when applicable
+    MasterSourceValue,
     /// Request interval time (ms) - only shown in Slave mode
     RequestInterval,
     /// Timeout waiting time (ms) - only shown in Slave mode
@@ -247,6 +251,14 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
         flat.push(ModbusDashboardCursor::ModbusMode);
+
+        let master_value_kind = master_source_value_kind();
+        if is_modbus_master_mode() {
+            flat.push(ModbusDashboardCursor::MasterSourceKind);
+            if master_value_kind.is_some() {
+                flat.push(ModbusDashboardCursor::MasterSourceValue);
+            }
+        }
 
         // Add RequestInterval and Timeout only in Slave mode
         if is_modbus_slave_mode() {
@@ -281,6 +293,14 @@ impl Cursor for ModbusDashboardCursor {
         let mut flat: Vec<ModbusDashboardCursor> = Vec::new();
         flat.push(ModbusDashboardCursor::AddLine);
         flat.push(ModbusDashboardCursor::ModbusMode);
+
+        let master_value_kind = master_source_value_kind();
+        if is_modbus_master_mode() {
+            flat.push(ModbusDashboardCursor::MasterSourceKind);
+            if master_value_kind.is_some() {
+                flat.push(ModbusDashboardCursor::MasterSourceValue);
+            }
+        }
 
         // Add RequestInterval and Timeout only in Slave mode
         if is_modbus_slave_mode() {
@@ -317,14 +337,27 @@ impl Cursor for ModbusDashboardCursor {
         let registers_per_row = 4;
         let mut offset = 0usize;
 
-        // Start with base rows: AddLine + ModbusMode
+        // Start with base rows: AddLine + ModbusMode + optional master/slave extras
         let is_slave = is_modbus_slave_mode();
+        let has_master = is_modbus_master_mode();
+        let value_kind = master_source_value_kind();
+
         let base_rows = if is_slave {
             // AddLine + ModbusMode + RequestInterval + Timeout + blank separator = 5
             5
         } else {
-            // AddLine + ModbusMode + blank separator = 3
-            3
+            // Start with AddLine + ModbusMode
+            let mut rows = 2usize;
+            if has_master {
+                // Master source selector
+                rows += 1;
+                if value_kind.is_some() {
+                    // Optional value field (port/url/path)
+                    rows += 1;
+                }
+            }
+            // + blank separator
+            rows + 1
         };
         offset += base_rows;
 
@@ -334,6 +367,18 @@ impl Cursor for ModbusDashboardCursor {
         }
         if *self == ModbusDashboardCursor::ModbusMode {
             return 1;
+        }
+        if has_master {
+            let mut row = 2usize;
+            if *self == ModbusDashboardCursor::MasterSourceKind {
+                return row;
+            }
+            if value_kind.is_some() {
+                row += 1;
+                if *self == ModbusDashboardCursor::MasterSourceValue {
+                    return row;
+                }
+            }
         }
         if *self == ModbusDashboardCursor::RequestInterval {
             return 2;
@@ -397,6 +442,42 @@ fn is_modbus_slave_mode() -> bool {
     .unwrap_or(false)
 }
 
+/// Helper to check if current modbus mode is Master
+fn is_modbus_master_mode() -> bool {
+    crate::tui::status::read_status(|status| {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_data) = status.ports.map.get(port_name) {
+                    let status::port::PortConfig::Modbus { mode, .. } = &port_data.config;
+                    return Ok(mode.is_master());
+                }
+            }
+        }
+        Ok(false)
+    })
+    .unwrap_or(false)
+}
+
+/// Helper to fetch current master data source value kind when applicable
+fn master_source_value_kind() -> Option<status::modbus::ModbusMasterDataSourceValueKind> {
+    crate::tui::status::read_status(|status| {
+        if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+            if let Some(port_name) = status.ports.order.get(*selected_port) {
+                if let Some(port_data) = status.ports.map.get(port_name) {
+                    let status::port::PortConfig::Modbus { master_source, .. } = &port_data.config;
+                    let kind = master_source.value_kind();
+                    return Ok(match kind {
+                        status::modbus::ModbusMasterDataSourceValueKind::None => None,
+                        other => Some(other),
+                    });
+                }
+            }
+        }
+        Ok(None)
+    })
+    .unwrap_or(None)
+}
+
 /// Helper to build the per-port items vector in a single consistent place.
 fn build_modbus_items_vec() -> Vec<status::modbus::ModbusRegisterItem> {
     let mut items_vec: Vec<status::modbus::ModbusRegisterItem> = Vec::new();
@@ -416,7 +497,11 @@ fn build_modbus_items_vec() -> Vec<status::modbus::ModbusRegisterItem> {
         if let Ok(Some(port_data)) =
             crate::tui::status::read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))
         {
-            let status::port::PortConfig::Modbus { mode: _, stations } = &port_data.config;
+            let status::port::PortConfig::Modbus {
+                mode: _,
+                master_source: _,
+                stations,
+            } = &port_data.config;
             for it in stations.iter() {
                 // Just add the item as-is since the global mode is now stored separately
                 items_vec.push(it.clone());

@@ -21,7 +21,10 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::protocol::status::types::{modbus::ModbusRegisterItem, port::PortConfig};
+use crate::protocol::status::types::{
+    modbus::{ModbusMasterDataSource, ModbusRegisterItem},
+    port::PortConfig,
+};
 
 /// Global flag to disable config cache (set via --no-config-cache)
 static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);
@@ -61,8 +64,15 @@ pub struct PersistedPortConfig {
 pub enum SerializablePortConfig {
     Modbus {
         mode: String, // "Master" or "Slave"
+        master_source: Option<SerializableMasterSource>,
         stations: Vec<SerializableStation>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableMasterSource {
+    pub kind: String,
+    pub value: Option<String>,
 }
 
 /// Serializable version of ModbusRegisterItem
@@ -111,9 +121,51 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
         .iter()
         .map(|(name, config)| {
             let serializable_config = match config {
-                PortConfig::Modbus { mode, stations } => {
+                PortConfig::Modbus {
+                    mode,
+                    master_source,
+                    stations,
+                } => {
                     let mode_str = if mode.is_master() { "Master" } else { "Slave" };
                     let persist_values = mode.is_master();
+                    let master_source_serialized = if mode.is_master() {
+                        match master_source {
+                            ModbusMasterDataSource::Manual => None,
+                            ModbusMasterDataSource::TransparentForward { port } => {
+                                Some(SerializableMasterSource {
+                                    kind: "transparent_forward".to_string(),
+                                    value: port.clone(),
+                                })
+                            }
+                            ModbusMasterDataSource::MqttServer { url } => {
+                                Some(SerializableMasterSource {
+                                    kind: "mqtt".to_string(),
+                                    value: Some(url.clone()),
+                                })
+                            }
+                            ModbusMasterDataSource::HttpServer { url } => {
+                                Some(SerializableMasterSource {
+                                    kind: "http".to_string(),
+                                    value: Some(url.clone()),
+                                })
+                            }
+                            ModbusMasterDataSource::IpcPipe { path } => {
+                                Some(SerializableMasterSource {
+                                    kind: "ipc".to_string(),
+                                    value: Some(path.clone()),
+                                })
+                            }
+                            ModbusMasterDataSource::PythonModule { path } => {
+                                Some(SerializableMasterSource {
+                                    kind: "python".to_string(),
+                                    value: Some(path.clone()),
+                                })
+                            }
+                        }
+                    } else {
+                        None
+                    };
+
                     let serializable_stations = stations
                         .iter()
                         .map(|station| SerializableStation {
@@ -131,6 +183,7 @@ pub fn save_port_configs(configs: &HashMap<String, PortConfig>) -> Result<()> {
 
                     SerializablePortConfig::Modbus {
                         mode: mode_str.to_string(),
+                        master_source: master_source_serialized,
                         stations: serializable_stations,
                     }
                 }
@@ -189,13 +242,47 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
 
     for p in persisted {
         let config = match p.config {
-            SerializablePortConfig::Modbus { mode, stations } => {
-                use crate::protocol::status::types::modbus::{ModbusConnectionMode, RegisterMode};
+            SerializablePortConfig::Modbus {
+                mode,
+                master_source,
+                stations,
+            } => {
+                use crate::protocol::status::types::modbus::{
+                    ModbusConnectionMode, ModbusMasterDataSource, RegisterMode,
+                };
 
                 let mode_enum = if mode == "Master" {
                     ModbusConnectionMode::default_master()
                 } else {
                     ModbusConnectionMode::default_slave()
+                };
+
+                let master_source_enum = if mode_enum.is_master() {
+                    master_source
+                        .and_then(|src| {
+                            let SerializableMasterSource { kind, value } = src;
+                            match kind.as_str() {
+                                "transparent_forward" => {
+                                    Some(ModbusMasterDataSource::TransparentForward { port: value })
+                                }
+                                "mqtt" => Some(ModbusMasterDataSource::MqttServer {
+                                    url: value.unwrap_or_default(),
+                                }),
+                                "http" => Some(ModbusMasterDataSource::HttpServer {
+                                    url: value.unwrap_or_default(),
+                                }),
+                                "ipc" => Some(ModbusMasterDataSource::IpcPipe {
+                                    path: value.unwrap_or_default(),
+                                }),
+                                "python" => Some(ModbusMasterDataSource::PythonModule {
+                                    path: value.unwrap_or_default(),
+                                }),
+                                _ => None,
+                            }
+                        })
+                        .unwrap_or_default()
+                } else {
+                    ModbusMasterDataSource::default()
                 };
 
                 let register_items: Vec<ModbusRegisterItem> = stations
@@ -227,6 +314,7 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
 
                 PortConfig::Modbus {
                     mode: mode_enum,
+                    master_source: master_source_enum,
                     stations: register_items,
                 }
             }
