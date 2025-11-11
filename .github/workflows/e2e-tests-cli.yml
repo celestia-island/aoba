@@ -46,7 +46,7 @@ jobs:
             cli-e2e-cargo-
 
       - name: Build packages
-        run: cargo build --package aoba --package aoba_cli --package cli_e2e
+        run: cargo build --package aoba --package cli_e2e
 
       - name: Make binaries executable
         run: |
@@ -100,7 +100,7 @@ jobs:
             cli-e2e-cargo-
 
       - name: Build packages
-        run: cargo build --package aoba --package aoba_cli --package cli_e2e
+        run: cargo build --package aoba --package cli_e2e
 
       - name: Make binaries executable
         run: |
