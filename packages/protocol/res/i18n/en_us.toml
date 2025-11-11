@@ -32,6 +32,7 @@ welcome = "Thanks for using this tool — a compact and full-featured serial ter
 [hotkeys]
 hint_kv_template = "Press {key} to {label}"
 press_c_clear = "clear logs"
+press_x_clear_error = "Press x to dismiss the error warning"
 press_c_confirm = "Press c again to confirm clearing logs"
 press_enter_toggle = "Press Enter to select/enable port"
 press_enter_select = "Press Enter to select"

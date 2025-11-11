@@ -636,6 +636,9 @@ derive_struct! {
                 message: String,
                 timestamp: chrono::DateTime<chrono::Local>,
             },
+            // Last dismissed error metadata (used to debounce re-display)
+            dismissed_error_message?: String,
+            dismissed_error_timestamp?: chrono::DateTime<chrono::Local>,
             // Config panel persistent-for-session editing state
             config_edit: {
                 /// Whether the config panel is currently in edit mode.
