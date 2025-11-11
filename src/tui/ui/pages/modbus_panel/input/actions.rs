@@ -251,6 +251,22 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             if let Some(port_name) = port_name_opt {
+                // Check if register editing is allowed (only for Manual mode in Master)
+                let is_editable = read_status(|status| {
+                    if let Some(port_entry) = status.ports.map.get(&port_name) {
+                        let types::port::PortConfig::Modbus { mode, master_source, .. } = &port_entry.config;
+                        // Allow editing in slave mode or in master mode with Manual data source
+                        return Ok(mode.is_slave() || matches!(master_source, types::modbus::ModbusMasterDataSource::Manual));
+                    }
+                    Ok(false)
+                })?;
+
+                if !is_editable {
+                    // Don't allow editing in non-Manual master modes
+                    log::info!("Register editing not allowed in non-Manual master mode");
+                    return Ok(());
+                }
+
                 // Get the register mode to determine behavior
                 let register_mode = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
