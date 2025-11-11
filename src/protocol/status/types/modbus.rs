@@ -144,19 +144,25 @@ pub enum ModbusMasterDataSourceValueKind {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum ModbusMasterDataSource {
+    #[default]
     Manual,
-    TransparentForward { port: Option<String> },
-    MqttServer { url: String },
-    HttpServer { url: String },
-    IpcPipe { path: String },
-    PythonModule { path: String },
-}
-
-impl Default for ModbusMasterDataSource {
-    fn default() -> Self {
-        Self::Manual
-    }
+    TransparentForward {
+        port: Option<String>,
+    },
+    MqttServer {
+        url: String,
+    },
+    HttpServer {
+        url: String,
+    },
+    IpcPipe {
+        path: String,
+    },
+    PythonModule {
+        path: String,
+    },
 }
 
 impl ModbusMasterDataSource {
