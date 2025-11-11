@@ -47,7 +47,7 @@ pub fn render_ui_for_testing(frame: &mut Frame) -> Result<()> {
 }
 
 pub(crate) fn run_rendering_loop(
-    bus: crate::tui::utils::bus::Bus,
+    bus: aoba_core::bus::Bus,
     thr_rx: flume::Receiver<anyhow::Result<()>>,
 ) -> Result<()> {
     // Initialize terminal inside rendering thread to avoid cross-thread Terminal usage
@@ -71,9 +71,9 @@ pub(crate) fn run_rendering_loop(
 
             let should_quit = !matches!(
                 bus.core_rx.recv_timeout(Duration::from_millis(100)),
-                Ok(crate::tui::utils::bus::CoreToUi::Tick)
-                    | Ok(crate::tui::utils::bus::CoreToUi::Refreshed)
-                    | Ok(crate::tui::utils::bus::CoreToUi::Error)
+                Ok(aoba_core::bus::CoreToUi::Tick)
+                    | Ok(aoba_core::bus::CoreToUi::Refreshed)
+                    | Ok(aoba_core::bus::CoreToUi::Error)
                     | Err(flume::RecvTimeoutError::Timeout)
             );
 
@@ -229,8 +229,8 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
     let backend = TestBackend::new(120, 40);
     let mut terminal = Terminal::new(backend)?;
 
-    let (core_tx, core_rx) = flume::unbounded::<crate::tui::utils::bus::CoreToUi>();
-    let (ui_tx, ui_rx) = flume::unbounded::<crate::tui::utils::bus::UiToCore>();
+    let (core_tx, core_rx) = flume::unbounded::<aoba_core::bus::CoreToUi>();
+    let (ui_tx, ui_rx) = flume::unbounded::<aoba_core::bus::UiToCore>();
 
     let (input_kill_tx, _input_kill_rx) = flume::bounded::<()>(1);
 
@@ -251,7 +251,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
         }
     };
 
-    let bus = crate::tui::utils::bus::Bus::new(core_rx.clone(), ui_tx.clone());
+    let bus = aoba_core::bus::Bus::new(core_rx.clone(), ui_tx.clone());
 
     log::info!("🔄 Starting IPC message loop");
     loop {
@@ -329,7 +329,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
     }
 
     log::info!("🧹 Cleaning up IPC mode");
-    ui_tx.send(crate::tui::utils::bus::UiToCore::Quit)?;
+    ui_tx.send(aoba_core::bus::UiToCore::Quit)?;
     core_handle
         .join()
         .map_err(|err| anyhow!("Failed to join core thread: {err:?}"))??;

@@ -12,9 +12,9 @@ use crate::{
             cursor::Cursor,
             {read_status, write_status},
         },
-        utils::bus::{self, Bus},
     },
 };
+use aoba_core::bus::{self, Bus};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("ConfigPanel::handle_input: key={:?}", key.code);
@@ -353,9 +353,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 log::info!("Sending ToggleRuntime for port: {port_name}");
                 log::info!("📤 Sending ToggleRuntime({port_name}) message to core");
                 bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::ToggleRuntime(
-                        port_name.clone(),
-                    ))
+                    .send(aoba_core::bus::UiToCore::ToggleRuntime(port_name.clone()))
                     .map_err(|err| anyhow!(err))?;
                 log::info!("✅ ToggleRuntime({port_name}) message sent successfully");
             } else {

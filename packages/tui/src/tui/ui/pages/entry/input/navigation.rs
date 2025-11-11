@@ -8,14 +8,14 @@ use crate::tui::{status as types, status::cursor};
 use crate::tui::status::cursor::Cursor;
 use crate::tui::status::{read_status, write_status, Page};
 use crate::tui::ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT};
-use crate::tui::utils::bus::{self, Bus};
+use aoba_core::bus::{self, Bus};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Char('q') => {
             // Quit the application
             bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Quit)
+                .send(aoba_core::bus::UiToCore::Quit)
                 .map_err(|err| anyhow!(err))?;
         }
         KeyCode::PageUp => {
@@ -182,7 +182,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Some(types::cursor::EntryCursor::Refresh) => {
                     bus.ui_tx
-                        .send(crate::tui::utils::bus::UiToCore::RescanPorts)
+                        .send(aoba_core::bus::UiToCore::RescanPorts)
                         .map_err(|err| anyhow!(err))?;
                 }
                 Some(types::cursor::EntryCursor::CreateVirtual) => {
