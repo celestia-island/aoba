@@ -11,10 +11,28 @@ use crate::tui::{
         port::{PortConfig, PortData, PortState, PortStatusIndicator, PortSubprocessInfo},
         {self as types, Status, TuiStatus},
     },
-    subprocess::{CliSubprocessConfig, SubprocessManager},
-    utils::bus::{Bus, CoreToUi, UiToCore},
 };
-use aoba_protocol::status::debug_dump::{enable_debug_dump, start_status_dump_thread};
+use aoba_cli::config::StationConfig;
+use aoba_core::{
+    bus::{Bus, CoreToUi, UiToCore},
+    subprocess::{CliSubprocessConfig, SubprocessManager},
+};
+use aoba_protocol::status::{
+    debug_dump::{enable_debug_dump, start_status_dump_thread},
+    port_stations_to_config,
+};
+
+/// Helper function to get stations configuration from TUI status
+fn get_stations_from_status(port_name: &str) -> Result<Vec<StationConfig>> {
+    crate::tui::status::read_status(|status| {
+        if let Some(port) = status.ports.map.get(port_name) {
+            let stations_vec = port_stations_to_config(port);
+            Ok(stations_vec)
+        } else {
+            Ok(vec![])
+        }
+    })
+}
 
 pub async fn start(matches: &clap::ArgMatches) -> Result<()> {
     log::info!("[TUI] aoba TUI starting...");
@@ -305,7 +323,9 @@ pub fn run_core_thread(
                     log::debug!(
                         "📡 Sending full stations update for {port_name} to ensure synchronization"
                     );
-                    if let Err(err) = subprocess_manager.send_stations_update_for_port(&port_name) {
+                    if let Err(err) = subprocess_manager
+                        .send_stations_update_for_port(&port_name, get_stations_from_status)
+                    {
                         log::warn!("❌ Failed to send stations update for {port_name}: {err}");
                     } else {
                         log::debug!("✅ Sent full stations update for {port_name}");
@@ -587,7 +607,10 @@ fn start_runtime(
                             log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
                             let mut stations_sent = false;
                             for attempt in 1..=10 {
-                                match subprocess_manager.send_stations_update_for_port(port_name) {
+                                match subprocess_manager.send_stations_update_for_port(
+                                    port_name,
+                                    get_stations_from_status,
+                                ) {
                                     Ok(()) => {
                                         stations_sent = true;
                                         break;
@@ -674,7 +697,10 @@ fn start_runtime(
                             log::info!("📡 Sending initial stations configuration to CLI subprocess for {port_name}");
                             let mut stations_sent = false;
                             for attempt in 1..=10 {
-                                match subprocess_manager.send_stations_update_for_port(port_name) {
+                                match subprocess_manager.send_stations_update_for_port(
+                                    port_name,
+                                    get_stations_from_status,
+                                ) {
                                     Ok(()) => {
                                         stations_sent = true;
                                         break;

@@ -1,7 +1,7 @@
-/// CLI subprocess manager for TUI
+/// CLI subprocess manager for core business logic
 ///
 /// This module manages CLI subprocesses that handle actual serial port communication.
-/// The TUI acts as a control shell, spawning and managing CLI processes via IPC.
+/// It can be used by any UI frontend (TUI, GUI, WebUI).
 use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
@@ -9,14 +9,13 @@ use std::{
     process::{Child, Command, Stdio},
 };
 
-use crate::tui::status::read_status;
 use aoba_cli::{config::StationConfig, status::CliMode};
 use aoba_protocol::{
     ipc::{
-        {generate_socket_name, IpcClient, IpcMessage},
-        {get_command_channel_name, IpcCommandClient, IpcConnection},
+        generate_socket_name, get_command_channel_name, IpcClient, IpcCommandClient, IpcConnection,
+        IpcMessage,
     },
-    status::{debug_dump::is_debug_dump_enabled, port_stations_to_config},
+    status::debug_dump::is_debug_dump_enabled,
 };
 
 /// Configuration for a CLI subprocess
@@ -535,20 +534,21 @@ impl SubprocessManager {
 
     /// Send full stations update to CLI subprocess via IPC
     /// This sends the complete station configuration for the port
-    pub fn send_stations_update_for_port(&mut self, port_name: &str) -> Result<()> {
-        // Get current stations configuration from the port
-        let stations: Vec<StationConfig> = read_status(|status| {
-            if let Some(port_arc) = status.ports.map.get(port_name) {
-                let port_data = port_arc;
-                let stations_vec = port_stations_to_config(port_data);
-                Ok(stations_vec)
-            } else {
-                Ok(vec![]) // Return empty vec if port not found
-            }
-        })?;
+    ///
+    /// The caller must provide a callback to retrieve station configuration
+    pub fn send_stations_update_for_port<F>(
+        &mut self,
+        port_name: &str,
+        get_stations: F,
+    ) -> Result<()>
+    where
+        F: FnOnce(&str) -> Result<Vec<StationConfig>>,
+    {
+        // Get current stations configuration from the caller
+        let stations = get_stations(port_name)?;
 
         if stations.is_empty() {
-            return Err(anyhow!("Port {port_name} not found or has no stations"));
+            return Err(anyhow!("Port {port_name} has no stations"));
         }
 
         // Send to subprocess

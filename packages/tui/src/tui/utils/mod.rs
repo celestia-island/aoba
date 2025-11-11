@@ -1,5 +1,8 @@
 //! Collection of common TUI utility modules.
-pub mod bus;
+
+// Re-export bus from core package
 pub mod constants;
 pub mod edit;
 pub mod scan;
+
+pub use aoba_core::bus;

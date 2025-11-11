@@ -1,7 +1,6 @@
 ﻿pub mod input;
 pub mod persistence;
 pub mod status;
-pub mod subprocess;
 pub mod ui;
 pub mod utils;
 
@@ -13,6 +12,9 @@ pub mod logs;
 pub mod rendering;
 pub mod runtime;
 pub mod status_utils;
+
+// Re-export subprocess from core for backwards compatibility
+pub use aoba_core::subprocess;
 
 // Re-export Page for convenience since it's used throughout TUI code
 pub use status::Page;
