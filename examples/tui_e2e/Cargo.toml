@@ -40,10 +40,4 @@ ratatui.workspace = true
 nix = { version = "^0.28", default-features = false, features = ["fs"] }
 
 [dependencies.aoba]
-path = "../../packages/tui"
-
-[dependencies.aoba_protocol]
-path = "../../packages/protocol"
-
-[dependencies.aoba_utils]
-path = "../../packages/utils"
+path = "../.."

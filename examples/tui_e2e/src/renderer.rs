@@ -7,7 +7,7 @@ use anyhow::{bail, Result};
 
 use ratatui::{backend::TestBackend, Terminal};
 
-use aoba_utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};
+use aoba::utils::{E2EToTuiMessage, IpcSender, TuiToE2EMessage};
 
 /// Render the TUI via IPC by requesting screen content from the TUI process
 ///

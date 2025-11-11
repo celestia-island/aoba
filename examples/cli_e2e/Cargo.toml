@@ -29,5 +29,5 @@ expectrl.workspace = true
 [target.'cfg(windows)'.dependencies]
 serialport.workspace = true
 
-[dependencies.aoba_cli]
-path = "../../packages/cli"
+[dependencies.aoba]
+path = "../.."
