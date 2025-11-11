@@ -44,3 +44,5 @@ interprocess.workspace = true
 
 regex.workspace = true
 whoami.workspace = true
+
+aoba_utils = { path = "../utils" }

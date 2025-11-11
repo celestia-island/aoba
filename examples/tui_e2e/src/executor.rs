@@ -11,7 +11,7 @@ use crate::{
     retry_state_machine::{group_steps, is_verification_step, StepGroup},
     workflow::{Workflow, WorkflowStep},
 };
-use aoba_ci_utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
+use aoba_utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

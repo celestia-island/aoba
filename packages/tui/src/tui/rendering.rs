@@ -241,9 +241,9 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
         move || crate::tui::runtime::run_core_thread(ui_rx, core_tx, input_kill_tx)
     });
 
-    let ipc_channel_id = aoba_ci_utils::IpcChannelId(channel_id.to_string());
+    let ipc_channel_id = aoba_utils::IpcChannelId(channel_id.to_string());
     log::info!("🔌 Creating IPC receiver...");
-    let mut receiver = match aoba_ci_utils::IpcReceiver::new(ipc_channel_id.clone()).await {
+    let mut receiver = match aoba_utils::IpcReceiver::new(ipc_channel_id.clone()).await {
         Ok(r) => r,
         Err(e) => {
             log::error!("❌ Failed to create IPC receiver: {e}");
@@ -256,7 +256,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
     log::info!("🔄 Starting IPC message loop");
     loop {
         match receiver.receive().await {
-            Ok(aoba_ci_utils::E2EToTuiMessage::KeyPress { key }) => {
+            Ok(aoba_utils::E2EToTuiMessage::KeyPress { key }) => {
                 log::info!("⌨️  Processing key press: {key}");
                 if let Ok(event) = parse_key_string(&key) {
                     if let Err(err) = crate::tui::input::handle_event(event, &bus) {
@@ -265,7 +265,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
-            Ok(aoba_ci_utils::E2EToTuiMessage::CharInput { ch }) => {
+            Ok(aoba_utils::E2EToTuiMessage::CharInput { ch }) => {
                 log::info!("📝 Processing char input: {ch}");
                 let event = crossterm::event::Event::Key(crossterm::event::KeyEvent::new(
                     crossterm::event::KeyCode::Char(ch),
@@ -276,7 +276,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            Ok(aoba_ci_utils::E2EToTuiMessage::RequestScreen) => {
+            Ok(aoba_utils::E2EToTuiMessage::RequestScreen) => {
                 log::info!("🖼️  Rendering screen to TestBackend");
 
                 while let Ok(_msg) = bus.core_rx.try_recv() {}
@@ -305,7 +305,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                     }
                 }
 
-                let response = aoba_ci_utils::TuiToE2EMessage::ScreenContent {
+                let response = aoba_utils::TuiToE2EMessage::ScreenContent {
                     content,
                     width,
                     height,
@@ -317,7 +317,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                     log::info!("📤 Sent screen content");
                 }
             }
-            Ok(aoba_ci_utils::E2EToTuiMessage::Shutdown) => {
+            Ok(aoba_utils::E2EToTuiMessage::Shutdown) => {
                 log::info!("🛑 Received shutdown message");
                 break;
             }

@@ -45,5 +45,5 @@ path = "../../packages/tui"
 [dependencies.aoba_protocol]
 path = "../../packages/protocol"
 
-[dependencies.aoba_ci_utils]
-path = "../../packages/ci_utils"
+[dependencies.aoba_utils]
+path = "../../packages/utils"

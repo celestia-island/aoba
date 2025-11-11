@@ -64,7 +64,7 @@ ctrlc.workspace = true
 
 aoba_cli = { path = "../cli" }
 aoba_protocol = { path = "../protocol" }
-aoba_ci_utils = { path = "../ci_utils" }
+aoba_utils = { path = "../utils" }
 aoba_core = { path = "../core" }
 
 [dev-dependencies]
