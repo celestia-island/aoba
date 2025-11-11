@@ -16,10 +16,49 @@ use crate::{
         },
         ui::components::{
             kv_line::render_kv_line,
-            styled_label::{input_spans, selector_spans, TextState},
+            styled_label::{input_spans, input_spans_with_placeholder, selector_spans, TextState},
         },
     },
 };
+
+/// Get placeholder text for data source based on kind
+fn get_data_source_placeholder(kind: ModbusMasterDataSourceKind) -> Option<String> {
+    match kind {
+        ModbusMasterDataSourceKind::Manual => None,
+        ModbusMasterDataSourceKind::TransparentForward => {
+            // Check if we have at least 2 ports
+            let has_enough_ports = read_status(|status| {
+                Ok(status.ports.order.len() >= 2)
+            }).unwrap_or(false);
+            
+            if !has_enough_ports {
+                Some(lang().protocol.modbus.data_source_placeholder_no_ports.clone())
+            } else {
+                None
+            }
+        }
+        ModbusMasterDataSourceKind::MqttServer => {
+            Some(lang().protocol.modbus.data_source_placeholder_mqtt.clone())
+        }
+        ModbusMasterDataSourceKind::HttpServer => {
+            Some(lang().protocol.modbus.data_source_placeholder_http.clone())
+        }
+        ModbusMasterDataSourceKind::IpcPipe => {
+            #[cfg(unix)]
+            let placeholder = lang().protocol.modbus.data_source_placeholder_ipc_unix.clone();
+            #[cfg(windows)]
+            let placeholder = lang().protocol.modbus.data_source_placeholder_ipc_windows.clone();
+            Some(placeholder)
+        }
+        ModbusMasterDataSourceKind::PythonModule => {
+            #[cfg(unix)]
+            let placeholder = lang().protocol.modbus.data_source_placeholder_python_unix.clone();
+            #[cfg(windows)]
+            let placeholder = lang().protocol.modbus.data_source_placeholder_python_windows.clone();
+            Some(placeholder)
+        }
+    }
+}
 
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {
@@ -250,7 +289,7 @@ pub fn render_kv_lines_with_indicators(
 
                     let types::port::PortConfig::Modbus { master_source, .. } = &port.config;
 
-                    let mut current_value = match master_source {
+                    let current_value = match master_source {
                         ModbusMasterDataSource::TransparentForward { port } => {
                             port.clone().unwrap_or_default()
                         }
@@ -283,14 +322,12 @@ pub fn render_kv_lines_with_indicators(
                             unreachable!("editing state requires string buffer");
                         };
                         let custom_value = String::from_utf8_lossy(bytes).to_string();
-                        return input_spans(custom_value, state);
+                        let placeholder = get_data_source_placeholder(master_source.kind());
+                        return input_spans_with_placeholder(custom_value, placeholder, state);
                     }
 
-                    if current_value.is_empty() {
-                        current_value = "-".to_string();
-                    }
-
-                    input_spans(current_value, state)
+                    let placeholder = get_data_source_placeholder(master_source.kind());
+                    input_spans_with_placeholder(current_value, placeholder, state)
                 };
 
                 lines.push(create_line(

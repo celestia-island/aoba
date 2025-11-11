@@ -167,6 +167,10 @@ name = "unicode-width"
 version = "0.2"
 
 [[dependencies]]
+name = "url"
+version = "2"
+
+[[dependencies]]
 name = "uuid"
 version = "1"
 
@@ -225,6 +229,7 @@ tracing = "MIT"
 tracing-appender = "MIT"
 tracing-subscriber = "MIT"
 unicode-width = "MIT OR Apache-2.0"
+url = "MIT OR Apache-2.0"
 uuid = "Apache-2.0 OR MIT"
 vt100 = "MIT"
 whoami = "Apache-2.0 OR BSL-1.0 OR MIT"
