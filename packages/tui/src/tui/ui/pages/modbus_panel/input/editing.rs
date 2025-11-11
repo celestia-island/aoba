@@ -12,7 +12,7 @@ use crate::{
             {read_status, write_status},
         },
         ui::components::input_span_handler::handle_input_span,
-        utils::bus::{Bus, UiToCore},
+        utils::bus::{self, Bus, UiToCore},
     },
 };
 use aoba_protocol::modbus::generate_pull_set_holding_request;
@@ -64,9 +64,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 Ok(())
             })?;
 
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
 
             if let Some(port_name) = maybe_restart {
                 bus.ui_tx
@@ -88,9 +86,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                     Ok(())
                 })?;
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                 return Ok(());
             }
 
@@ -131,9 +127,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
 
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
 
                 if let Some(port_name) = maybe_restart {
                     bus.ui_tx
@@ -147,9 +141,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::None;
                     Ok(())
                 })?;
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             }
 
             Ok(())
@@ -183,9 +175,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }
@@ -220,9 +210,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::ui::InputRawBuffer::Index(new_index);
                     Ok(())
                 })?;
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             } else {
                 handle_input_span(key, bus, None, None, |_| true, |_| Ok(()))?;
             }

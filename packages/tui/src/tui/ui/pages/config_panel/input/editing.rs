@@ -8,13 +8,13 @@ use crate::{
     i18n::lang,
     tui::{
         status as types,
-        status::{read_status, write_status},
+        status::{
+            cursor::Cursor,
+            {read_status, write_status},
+        },
+        utils::bus::{self, Bus},
     },
 };
-
-// Bring cursor trait into scope so `.prev()/.next()/.view_offset()` resolve
-use crate::tui::status::cursor::Cursor;
-use crate::tui::utils::bus::{Bus, UiToCore};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     log::info!("ConfigPanel::handle_input: key={:?}", key.code);
@@ -121,9 +121,7 @@ fn handle_editing_input(
                     }
                 }
 
-                bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                 Ok(())
             },
         )?;
@@ -181,9 +179,7 @@ fn handle_editing_input(
                     }
                 }
 
-                bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                 Ok(())
             },
         )?;
@@ -218,9 +214,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -239,9 +233,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Up | KeyCode::Down | KeyCode::Char('k') | KeyCode::Char('j') => {
@@ -268,9 +260,7 @@ fn handle_navigation_input(
 
             sanitize_configpanel_cursor()?;
 
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Right | KeyCode::Char('h') | KeyCode::Char('l') => Ok(()),
@@ -312,9 +302,7 @@ fn handle_navigation_input(
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         _ => Ok(()),
@@ -358,9 +346,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                         });
                         Ok(())
                     })?;
-                    bus.ui_tx
-                        .send(UiToCore::Refresh)
-                        .map_err(|err| anyhow!(err))?;
+                    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                     return Ok(());
                 }
 
@@ -389,9 +375,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         types::cursor::ConfigPanelCursor::ViewCommunicationLog => {
@@ -405,9 +389,7 @@ fn handle_enter_action(selected_cursor: types::cursor::ConfigPanelCursor, bus: &
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         types::cursor::ConfigPanelCursor::BaudRate
