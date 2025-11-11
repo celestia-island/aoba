@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::{fs, io::Write, path::PathBuf};
 
-use crate::tui::{status as types, status::modbus::RegisterMode};
+use aoba_protocol::status::types::modbus::{ModbusRegisterItem, RegisterMode};
 
 fn create_cli_data_source_path(
     port_name: &str,
@@ -36,11 +36,7 @@ fn create_cli_data_source_path(
     path
 }
 
-pub(crate) fn write_cli_data_snapshot(
-    path: &PathBuf,
-    values: &[u16],
-    truncate: bool,
-) -> Result<()> {
+pub fn write_cli_data_snapshot(path: &PathBuf, values: &[u16], truncate: bool) -> Result<()> {
     let payload = serde_json::json!({ "values": values });
     let serialized = serde_json::to_string(&payload)?;
 
@@ -57,7 +53,7 @@ pub(crate) fn write_cli_data_snapshot(
     Ok(())
 }
 
-pub(crate) fn station_values_for_cli(station: &types::modbus::ModbusRegisterItem) -> Vec<u16> {
+pub fn station_values_for_cli(station: &ModbusRegisterItem) -> Vec<u16> {
     let target_len = station.register_length as usize;
     if target_len == 0 {
         return Vec::new();
@@ -68,9 +64,7 @@ pub(crate) fn station_values_for_cli(station: &types::modbus::ModbusRegisterItem
     values
 }
 
-pub(crate) fn register_mode_to_cli_arg(mode: types::modbus::RegisterMode) -> &'static str {
-    use types::modbus::RegisterMode;
-
+pub fn register_mode_to_cli_arg(mode: RegisterMode) -> &'static str {
     match mode {
         RegisterMode::Coils => "coils",
         RegisterMode::DiscreteInputs => "discrete",
@@ -79,19 +73,21 @@ pub(crate) fn register_mode_to_cli_arg(mode: types::modbus::RegisterMode) -> &'s
     }
 }
 
-pub(crate) fn cli_mode_to_port_mode(
+pub fn cli_mode_to_port_mode(
     mode: &aoba_cli::status::CliMode,
-) -> types::port::PortSubprocessMode {
+) -> aoba_protocol::status::types::port::PortSubprocessMode {
+    use aoba_protocol::status::types::port::PortSubprocessMode;
+
     match mode {
-        aoba_cli::status::CliMode::SlaveListen => types::port::PortSubprocessMode::SlaveListen,
-        aoba_cli::status::CliMode::SlavePoll => types::port::PortSubprocessMode::SlavePoll,
-        aoba_cli::status::CliMode::MasterProvide => types::port::PortSubprocessMode::MasterProvide,
+        aoba_cli::status::CliMode::SlaveListen => PortSubprocessMode::SlaveListen,
+        aoba_cli::status::CliMode::SlavePoll => PortSubprocessMode::SlavePoll,
+        aoba_cli::status::CliMode::MasterProvide => PortSubprocessMode::MasterProvide,
     }
 }
 
-pub(crate) fn initialize_cli_data_source(
+pub fn initialize_cli_data_source(
     port_name: &str,
-    stations: &[types::modbus::ModbusRegisterItem],
+    stations: &[ModbusRegisterItem],
 ) -> Result<(PathBuf, u16, u16, u16)> {
     use anyhow::anyhow;
 

@@ -76,7 +76,7 @@ pub(crate) fn append_modbus_log(
     use crate::tui::status::modbus::StationMode;
     use crate::tui::status::port::PortCommunicationLog;
 
-    let payload = crate::tui::parse_hex_payload(data);
+    let payload = aoba_core::helpers::parse_hex_payload(data);
     let direction_enum = match direction {
         "tx" => PortCommunicationDirection::Outbound,
         _ => PortCommunicationDirection::Inbound,

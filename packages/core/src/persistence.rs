@@ -1,17 +1,16 @@
-//! Configuration persistence module for TUI
+//! Configuration persistence module
 //!
 //! Provides functionality to save and load port configurations to/from disk.
 //!
-//! **IMPORTANT**: This module is designed EXCLUSIVELY for TUI use. CLI processes
+//! **IMPORTANT**: This module is designed for frontend use (TUI/GUI/WebUI). CLI processes
 //! should NOT use this persistence layer to avoid communication conflicts and race
-//! conditions. The configuration file is stored in the working directory as
-//! `aoba_tui_config.json` to ensure cross-platform compatibility.
+//! conditions. The configuration file is stored in a platform-appropriate location.
 //!
 //! ## --no-config-cache flag
 //!
-//! When TUI is started with `--no-config-cache`, all save/load operations are
+//! When the application is started with `--no-config-cache`, all save/load operations are
 //! skipped. This is useful for E2E tests to ensure clean state without cache
-//! interference. Call `set_no_cache(true)` early in TUI startup to enable this.
+//! interference. Call `set_no_cache(true)` early in application startup to enable this.
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -22,7 +21,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::tui::status::{modbus::ModbusRegisterItem, port::PortConfig};
+use aoba_protocol::status::types::{modbus::ModbusRegisterItem, port::PortConfig};
 
 /// Global flag to disable config cache (set via --no-config-cache)
 static NO_CONFIG_CACHE: AtomicBool = AtomicBool::new(false);
@@ -191,7 +190,7 @@ pub fn load_port_configs() -> Result<HashMap<String, PortConfig>> {
     for p in persisted {
         let config = match p.config {
             SerializablePortConfig::Modbus { mode, stations } => {
-                use crate::tui::status::modbus::{ModbusConnectionMode, RegisterMode};
+                use aoba_protocol::status::types::modbus::{ModbusConnectionMode, RegisterMode};
 
                 let mode_enum = if mode == "Master" {
                     ModbusConnectionMode::default_master()
