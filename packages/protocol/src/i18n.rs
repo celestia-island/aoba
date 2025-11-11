@@ -48,6 +48,7 @@ derive_struct! {
             hint_kv_template: String = "hint_kv_template".to_string(),
 
             press_c_clear: String = "press_c_clear".to_string(),
+            press_x_clear_error: String = "press_x_clear_error".to_string(),
             press_c_confirm: String = "press_c_confirm".to_string(),
             press_enter_toggle: String = "press_enter_toggle".to_string(),
             press_enter_select: String = "press_enter_select".to_string(),

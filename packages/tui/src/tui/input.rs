@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use chrono::Local;
 use std::time::Duration;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -107,6 +108,30 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
 
     // Global quit shortcut with "q" (lower/upper) when Control is not held.
     let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    if !has_ctrl {
+        if let KeyCode::Char(ch) = key.code {
+            if ch.eq_ignore_ascii_case(&'x') {
+                let cleared = write_status(|status| {
+                    if let Some(err) = status.temporarily.error.take() {
+                        status.temporarily.dismissed_error_message = Some(err.message);
+                        status.temporarily.dismissed_error_timestamp = Some(Local::now());
+                        Ok(true)
+                    } else {
+                        Ok(false)
+                    }
+                })?;
+
+                if cleared {
+                    log::info!("Global dismiss: cleared transient error via x");
+                    if let Err(err) = bus.ui_tx.send(UiToCore::Refresh) {
+                        log::warn!("Failed to notify core after clearing transient error: {err}");
+                    }
+                    return Ok(());
+                }
+            }
+        }
+    }
+
     if !has_ctrl && matches!(key.code, KeyCode::Char('q') | KeyCode::Char('Q')) {
         log::info!("Global quit: q/Q detected (no modifiers)");
         bus.ui_tx.send(UiToCore::Quit).map_err(|err| anyhow!(err))?;

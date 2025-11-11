@@ -32,6 +32,7 @@ welcome = "感謝使用本工具，一個小而全的串列埠調試終端；這
 [hotkeys]
 hint_kv_template = "按 {key} {label}"
 press_c_clear = "清空日誌"
+press_x_clear_error = "按 x 消除錯誤警告"
 press_c_confirm = "再按一次 c 確認清空日誌"
 press_enter_toggle = "按 Enter 選中/啟用端口"
 press_enter_select = "按 Enter 選中"
