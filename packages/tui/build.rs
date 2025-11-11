@@ -2,7 +2,7 @@ use anyhow::Result;
 use serde_json::Value as JsonValue;
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    env, fs,
     process::Command,
 };
 use toml::value::{Table, Value as TomlValue};
@@ -75,10 +75,13 @@ fn main() -> Result<()> {
                         } else {
                             k.to_string()
                         };
-                        direct_dep_names.push(actual_name);
+                        direct_dep_names.push(actual_name.clone());
 
                         let mut dep_t = Table::new();
-                        dep_t.insert("name".to_string(), TomlValue::String(k.to_string()));
+                        dep_t.insert("name".to_string(), TomlValue::String(actual_name.clone()));
+                        if actual_name != k.as_str() {
+                            dep_t.insert("alias".to_string(), TomlValue::String(k.to_string()));
+                        }
                         dep_t.insert("version".to_string(), TomlValue::String(ver));
                         darr.push(TomlValue::Table(dep_t));
                     }
@@ -96,6 +99,8 @@ fn main() -> Result<()> {
             }
         }
     }
+
+    hydrate_package_metadata_from_env(&mut out_tbl);
 
     // Try cargo metadata for license map (metadata is JSON)
     if let Ok(o) = Command::new("cargo")
@@ -151,10 +156,29 @@ fn main() -> Result<()> {
                         }
                     }
 
+                    if let Some(deps_arr) = out_tbl
+                        .get_mut("dependencies")
+                        .and_then(|v| v.as_array_mut())
+                    {
+                        for dep in deps_arr.iter_mut() {
+                            if let TomlValue::Table(dep_tbl) = dep {
+                                if let Some(dep_name) = dep_tbl.get("name").and_then(|x| x.as_str())
+                                {
+                                    if let Some((ver, _)) = best_map.get(dep_name) {
+                                        dep_tbl.insert(
+                                            "version".to_string(),
+                                            TomlValue::String(ver.to_string()),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let mut map_tbl = Table::new();
                     for (name, (_ver, lic)) in best_map.into_iter() {
                         // only write a single key per package: `name` -> license
-                        map_tbl.insert(name.clone(), TomlValue::String(lic));
+                        map_tbl.insert(name, TomlValue::String(lic));
                     }
                     out_tbl.insert("license_map".to_string(), TomlValue::Table(map_tbl));
                 }
@@ -170,4 +194,72 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn hydrate_package_metadata_from_env(out_tbl: &mut Table) {
+    let pkg_tbl = match out_tbl.get_mut("package") {
+        Some(TomlValue::Table(tbl)) => tbl,
+        _ => {
+            out_tbl.insert("package".to_string(), TomlValue::Table(Table::new()));
+            match out_tbl.get_mut("package") {
+                Some(TomlValue::Table(tbl)) => tbl,
+                _ => return,
+            }
+        }
+    };
+
+    let name = env::var("CARGO_PKG_NAME").unwrap_or_default();
+    set_string_field_if_missing(pkg_tbl, "name", &name);
+
+    let version = env::var("CARGO_PKG_VERSION").unwrap_or_default();
+    set_string_field_if_missing(pkg_tbl, "version", &version);
+
+    let repository = env::var("CARGO_PKG_REPOSITORY").unwrap_or_default();
+    set_string_field_if_missing(pkg_tbl, "repository", &repository);
+
+    let license = env::var("CARGO_PKG_LICENSE").unwrap_or_default();
+    set_string_field_if_missing(pkg_tbl, "license", &license);
+
+    let authors_raw = env::var("CARGO_PKG_AUTHORS").unwrap_or_default();
+    let authors: Vec<String> = authors_raw
+        .split(':')
+        .map(str::trim)
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| entry.to_string())
+        .collect();
+
+    if !authors.is_empty() {
+        let should_set = match pkg_tbl.get("authors") {
+            Some(TomlValue::Array(existing)) => existing
+                .iter()
+                .filter_map(|value| value.as_str())
+                .all(|value| value.trim().is_empty()),
+            Some(_) => true,
+            None => true,
+        };
+
+        if should_set {
+            let arr = authors
+                .into_iter()
+                .map(TomlValue::String)
+                .collect::<Vec<_>>();
+            pkg_tbl.insert("authors".to_string(), TomlValue::Array(arr));
+        }
+    }
+}
+
+fn set_string_field_if_missing(tbl: &mut Table, key: &str, value: &str) {
+    if value.is_empty() {
+        return;
+    }
+
+    let should_set = match tbl.get(key) {
+        Some(TomlValue::String(existing)) => existing.trim().is_empty(),
+        Some(_) => true,
+        None => true,
+    };
+
+    if should_set {
+        tbl.insert(key.to_string(), TomlValue::String(value.to_string()));
+    }
 }

@@ -112,6 +112,52 @@ pub(crate) fn init_about_cache() -> Arc<Mutex<RepoManifest>> {
         }
     }
 
+    if cache.full_name.trim().is_empty() {
+        if let Some(name) = option_env!("CARGO_PKG_NAME") {
+            if !name.trim().is_empty() {
+                cache.full_name = name.to_string();
+            }
+        }
+    }
+
+    if cache.version.trim().is_empty() {
+        if let Some(version) = option_env!("CARGO_PKG_VERSION") {
+            if !version.trim().is_empty() {
+                cache.version = version.to_string();
+            }
+        }
+    }
+
+    if cache.authors.trim().is_empty() {
+        if let Some(authors_env) = option_env!("CARGO_PKG_AUTHORS") {
+            let formatted = authors_env
+                .split(':')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if !formatted.is_empty() {
+                cache.authors = formatted;
+            }
+        }
+    }
+
+    if cache.repo.trim().is_empty() {
+        if let Some(repo) = option_env!("CARGO_PKG_REPOSITORY") {
+            if !repo.trim().is_empty() {
+                cache.repo = repo.to_string();
+            }
+        }
+    }
+
+    if cache.license.trim().is_empty() {
+        if let Some(license) = option_env!("CARGO_PKG_LICENSE") {
+            if !license.trim().is_empty() {
+                cache.license = license.to_string();
+            }
+        }
+    }
+
     let arc = Arc::new(Mutex::new(cache));
     if ABOUT_CACHE.set(arc.clone()).is_err() {
         log::warn!("Failed to set ABOUT_CACHE, use default value instead");
