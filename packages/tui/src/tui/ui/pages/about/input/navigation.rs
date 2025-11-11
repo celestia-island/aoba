@@ -7,7 +7,7 @@ use crate::tui::{
     status as types,
     status::{read_status, write_status},
     ui::pages::entry::{calculate_special_items_offset, CONSERVATIVE_VIEWPORT_HEIGHT},
-    utils::bus::Bus,
+    utils::bus::{self, Bus},
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -21,12 +21,12 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     match key.code {
         KeyCode::Up | KeyCode::Char('k') => {
             handle_scroll_up(1)?;
-            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
             handle_scroll_down(1)?;
-            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::PageUp => {
@@ -42,7 +42,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageUp: Scroll up by page size
                 handle_scroll_up(PAGE_SIZE)?;
             }
-            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -55,7 +55,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageDown: Scroll down by page size
                 handle_scroll_down(PAGE_SIZE)?;
             }
-            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         KeyCode::Esc => {
@@ -69,7 +69,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus.ui_tx.send(crate::tui::utils::bus::UiToCore::Refresh)?;
+            bus::request_refresh(&bus.ui_tx)?;
             Ok(())
         }
         _ => Ok(()),

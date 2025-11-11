@@ -7,7 +7,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crate::tui::{
     status::{read_status, write_status},
     ui::pages,
-    utils::bus::{Bus, UiToCore},
+    utils::bus::{self, Bus, UiToCore},
 };
 
 fn key_is_ctrl_c(key: &KeyEvent) -> bool {
@@ -123,7 +123,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                 if cleared {
                     log::info!("Global dismiss: cleared transient error via x");
-                    if let Err(err) = bus.ui_tx.send(UiToCore::Refresh) {
+                    if let Err(err) = bus::request_refresh(&bus.ui_tx) {
                         log::warn!("Failed to notify core after clearing transient error: {err}");
                     }
                     return Ok(());
@@ -161,9 +161,7 @@ fn handle_key_event(key: KeyEvent, bus: &Bus) -> Result<()> {
                     status.temporarily.input_raw_buffer.push(c);
                     Ok(())
                 })?;
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                 return Ok(());
             }
         }

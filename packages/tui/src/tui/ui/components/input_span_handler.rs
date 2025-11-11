@@ -4,7 +4,7 @@ use crossterm::event::KeyEvent;
 
 use crate::tui::{
     status::{read_status, ui::InputRawBuffer, write_status},
-    utils::bus::Bus,
+    utils::bus::{self, Bus},
 };
 
 /// Handle keys when we are in an input/span edit mode.
@@ -74,9 +74,7 @@ where
                 Ok(())
             })?;
 
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         crossterm::event::KeyCode::Char(c) => {
@@ -110,9 +108,7 @@ where
                     Ok(())
                 })?;
 
-                bus.ui_tx
-                    .send(crate::tui::utils::bus::UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             }
 
             Ok(())
@@ -134,9 +130,7 @@ where
                 }
             }
 
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         crossterm::event::KeyCode::Esc => {
@@ -144,9 +138,7 @@ where
                 status.temporarily.input_raw_buffer.clear();
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         crossterm::event::KeyCode::Backspace | crossterm::event::KeyCode::Delete => {
@@ -154,9 +146,7 @@ where
                 status.temporarily.input_raw_buffer.pop();
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         _ => Ok(()),

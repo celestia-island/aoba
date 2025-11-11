@@ -6,7 +6,7 @@ use crate::tui::{
         port::{PortState, PortSubprocessInfo, PortSubprocessMode},
         {read_status, write_status},
     },
-    utils::bus::{Bus, UiToCore},
+    utils::bus::{self, Bus, UiToCore},
 };
 use aoba_protocol::modbus::generate_pull_set_holding_request;
 
@@ -57,9 +57,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             })?;
 
             log::info!("🔵 Sending refresh");
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             log::info!("🔵 Refresh sent");
         }
         types::cursor::ModbusDashboardCursor::ModbusMode => {
@@ -85,9 +83,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_mode);
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
             // Get the current register mode value from port config
@@ -115,9 +111,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     types::ui::InputRawBuffer::Index(current_value);
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::StationId { .. }
         | types::cursor::ModbusDashboardCursor::RegisterStartAddress { .. }
@@ -131,9 +125,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 };
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::Register {
             slave_index,
@@ -299,9 +291,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     }
                                 }
                             }
-                            bus.ui_tx
-                                .send(UiToCore::Refresh)
-                                .map_err(|err| anyhow!(err))?;
+                            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                         }
                         types::modbus::RegisterMode::Holding
                         | types::modbus::RegisterMode::Input => {
@@ -315,9 +305,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                     };
                                 Ok(())
                             })?;
-                            bus.ui_tx
-                                .send(UiToCore::Refresh)
-                                .map_err(|err| anyhow!(err))?;
+                            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                         }
                     }
                 }
@@ -440,9 +428,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         };
         Ok(())
     })?;
-    bus.ui_tx
-        .send(UiToCore::Refresh)
-        .map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
     Ok(())
 }
 
