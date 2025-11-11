@@ -9,8 +9,8 @@ edition.workspace = true
 build = "build.rs"
 
 [workspace]
-members = ["examples/*"]
-default-members = ["aoba"]
+members = [".", "examples/*"]
+default-members = ["."]
 resolver = "2"
 
 [workspace.package]
