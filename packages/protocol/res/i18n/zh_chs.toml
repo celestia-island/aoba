@@ -32,6 +32,7 @@ welcome = "感谢使用本工具，一个小而全的串口调试终端；这是
 [hotkeys]
 hint_kv_template = "按 {key} {label}"
 press_c_clear = "清空日志"
+press_x_clear_error = "按 x 消除错误警告"
 press_c_confirm = "再按一次 c 确认清空日志"
 press_enter_toggle = "按 Enter 选中/启用端口"
 press_enter_select = "按 Enter 选中"
