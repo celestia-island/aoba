@@ -252,8 +252,8 @@ run_workflow_tests() {
             chmod +x "${REPO_ROOT}/target/debug/aoba" "${REPO_ROOT}/target/debug/tui_e2e" || true
             ;;
         cli)
-            echo "=== Building (local) packages: aoba, aoba_cli, cli_e2e ==="
-            run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package aoba_cli --package cli_e2e"
+            echo "=== Building (local) packages: aoba, cli_e2e ==="
+            run_and_log_cmd "$OUTPUT_DIR/${workflow_type}_build.log" "build:${workflow_type}" "cd \"${REPO_ROOT}\" && cargo build --package aoba --package cli_e2e"
             local build_exit=$?
             if [[ $build_exit -ne 0 ]]; then
                 echo -e "${RED}Build failed for workflow ${workflow_type} (exit ${build_exit}). See $OUTPUT_DIR/${workflow_type}_build.log${NC}"
