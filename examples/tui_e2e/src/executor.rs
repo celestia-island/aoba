@@ -11,7 +11,7 @@ use crate::{
     retry_state_machine::{group_steps, is_verification_step, StepGroup},
     workflow::{Workflow, WorkflowStep},
 };
-use aoba_ci_utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
+use aoba::utils::{E2EToTuiMessage, IpcChannelId, IpcSender};
 
 /// Execution mode
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -213,7 +213,7 @@ async fn spawn_tui_with_ipc(ctx: &mut ExecutionContext, _workflow_id: &str) -> R
 /// For master mode tests, CLI acts as slave.
 /// For slave mode tests, CLI acts as master.
 async fn spawn_cli_emulator(ctx: &ExecutionContext, workflow: &Workflow) -> Result<()> {
-    use aoba_protocol::status::types::modbus::StationMode;
+    use aoba::protocol::status::types::modbus::StationMode;
     use serde_json::json;
 
     // Determine TUI mode (default to Master if not specified)

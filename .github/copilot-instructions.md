@@ -1,13 +1,15 @@
 # Agent 项目指南
 
-## 迁移后包布局
+## 模块布局
 
-- `packages/tui`：拥有终端 UI、全局状态管理和 TUI 驱动的 IPC 前端
-- `packages/cli`：托管 CLI 二进制文件、命令分派和长期运行的 Modbus 工作进程
-- `packages/protocol`：共享 IPC 定义、状态模式和 Modbus 传输原语
-- `packages/ci_utils`：每个分层测试套件使用的共享测试工具实用程序
+- `src/cli`：CLI 参数解析、命令分派以及长生命周期的 Modbus 工作进程
+- `src/core`：跨 CLI/TUI 共享的核心业务逻辑与进程编排
+- `src/protocol`：IPC 定义、状态模型和 Modbus 传输原语
+- `src/tui`：终端 UI、全局状态管理与 IPC 前端
+- `src/utils`：供多个子模块复用的实用函数
+- `res/`：构建脚本和运行时加载的静态资源（例如 `logo.png`、国际化文件）
 
-所有四个 crate 都保留在顶级工作区中。共享依赖项必须在根 `Cargo.toml` 中声明；单个包清单仅添加特定于包的额外内容。
+工作区已折叠为单一的 `aoba` crate。共享依赖项依旧在根 `Cargo.toml` 的 `[workspace.dependencies]` 中声明；示例 crate 通过工作区依赖复用根 crate。
 
 ## 测试套件分段
 
@@ -125,8 +127,8 @@ cargo run --package tui_e2e -- --module single_station_master_coils
 
 有关详细文档，请参见：
 
-- [TUI E2E 测试 README](../examples/tui_e2e/README.md)
-- [IPC 架构详情](../examples/tui_e2e/IPC_ARCHITECTURE.md)
+- `examples/tui_e2e/` 目录中的模块级文档与工作流定义
+- `examples/tui_e2e/workflow/` 下的 TOML 测试流程说明
 
 ### 调试模式激活
 
