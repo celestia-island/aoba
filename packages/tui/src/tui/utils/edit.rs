@@ -53,7 +53,7 @@ pub fn select_field_by_cursor(
 
 /// Begin editing: set `editing = true` and invoke `select_field_by_cursor`.
 pub fn begin_edit(editing: &mut bool) {
-    *editing = true;
+    aoba_utils::form::begin_edit(editing);
 }
 
 /// End editing: reset editing state.
@@ -64,9 +64,10 @@ pub fn end_edit(
     edit_choice_index: &mut Option<usize>,
     edit_confirmed: &mut bool,
 ) {
-    *editing = false;
-    *editing_field = None;
-    input_buffer.clear();
-    *edit_choice_index = None;
-    *edit_confirmed = false;
+    aoba_utils::form::end_edit_with_reset(editing, || {
+        *editing_field = None;
+        input_buffer.clear();
+        *edit_choice_index = None;
+        *edit_confirmed = false;
+    });
 }

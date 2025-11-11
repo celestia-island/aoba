@@ -1,10 +1,8 @@
 use anyhow::{anyhow, Result};
 
-use crate::tui::{
-    status::port::{PortData, PortState},
-    utils::bus::CoreToUi,
-};
-use aoba_protocol::tty::available_ports_sorted;
+use crate::tui::status::port::{PortData, PortState};
+use aoba_core::bus::CoreToUi;
+use aoba_utils::ports::enumerate_ports;
 
 /// Perform a ports scan and update status. Returns Ok(true) if a scan ran, Ok(false) if skipped
 /// because another scan was already in progress.
@@ -21,16 +19,13 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     *scan_in_progress = true;
     log::info!("🔍 scan_ports: STARTING port enumeration and occupation check");
 
-    // Enumerate ports using platform-specific function that respects CI debug mode
-    let ports = available_ports_sorted();
+    // Enumerate ports using shared util (respects CI debug mode)
+    let ports = enumerate_ports();
 
     log::info!("scan_ports: enumerated {} ports from system", ports.len());
 
     // Clone port names before moving into closure
-    let port_names_and_types: Vec<(String, String)> = ports
-        .into_iter()
-        .map(|p| (p.port_name.clone(), format!("{:?}", p.port_type)))
-        .collect();
+    let port_names_and_types: Vec<(String, String)> = ports.into_iter().collect();
 
     // Update status with discovered ports
     crate::tui::status::write_status(|status| {
@@ -134,11 +129,74 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
         Ok(())
     })?;
 
-    // Check port occupation status using CLI subprocess
+    // Check port occupation status using CLI subprocess via shared util
     // Important: Check ALL ports in the global status, not just enumerated ones
     // This ensures cached ports are also checked for occupation
     log::debug!("scan_ports: checking port occupation via CLI subprocess");
-    check_all_ports_occupation_via_cli()?;
+
+    // Prepare previous-port snapshots for merge policy
+    let previous_ports_snapshot: Vec<aoba_utils::ports::PreviousPort> =
+        crate::tui::status::read_status(|status| {
+            Ok(status
+                .ports
+                .order
+                .iter()
+                .map(|name| {
+                    let p = status.ports.map.get(name).unwrap();
+                    aoba_utils::ports::PreviousPort {
+                        name: name.clone(),
+                        occupied_by_this: p.state.is_occupied_by_this(),
+                        has_config: match &p.config {
+                            crate::tui::status::port::PortConfig::Modbus { stations, .. } => {
+                                !stations.is_empty()
+                            }
+                        },
+                        log_count: p.logs.len(),
+                    }
+                })
+                .collect::<Vec<_>>())
+        })?;
+
+    // Merge enumerated with previous using shared policy
+    let merged =
+        aoba_utils::ports::merge_enumeration(&port_names_and_types, &previous_ports_snapshot);
+
+    // Now construct new order and map using merged result. If a port had a known type from enumeration use it;
+    // otherwise preserve existing PortData where present.
+    let mut new_order = Vec::new();
+    let mut new_map = std::collections::HashMap::new();
+
+    for (name, opt_type) in merged {
+        new_order.push(name.clone());
+        if let Some(ptype) = opt_type {
+            // If enumerated, either preserve existing data or create new PortData
+            if let Some(existing) =
+                crate::tui::status::read_status(|status| Ok(status.ports.map.get(&name).cloned()))?
+            {
+                let mut preserved = existing.clone();
+                preserved.port_type = ptype.clone();
+                if !preserved.state.is_occupied_by_this() {
+                    preserved.state = PortState::Free;
+                }
+                new_map.insert(name.clone(), preserved);
+            } else {
+                let port_data = PortData {
+                    port_name: name.clone(),
+                    port_type: ptype.clone(),
+                    state: PortState::Free,
+                    ..Default::default()
+                };
+                new_map.insert(name.clone(), port_data);
+            }
+        } else {
+            // Preserved but not enumerated - copy existing if present
+            if let Some(existing) =
+                crate::tui::status::read_status(|status| Ok(status.ports.map.get(&name).cloned()))?
+            {
+                new_map.insert(name.clone(), existing.clone());
+            }
+        }
+    }
 
     core_tx
         .send(CoreToUi::Refreshed)
@@ -147,115 +205,4 @@ pub fn scan_ports(core_tx: &flume::Sender<CoreToUi>, scan_in_progress: &mut bool
     *scan_in_progress = false;
     log::info!("✅ scan_ports: COMPLETED successfully");
     Ok(true)
-}
-
-/// Check occupation status for ALL ports in global status
-/// This includes both enumerated ports and cached/manually added ports
-fn check_all_ports_occupation_via_cli() -> Result<()> {
-    use std::process::Command;
-
-    // Get all port names from global status
-    let all_ports = crate::tui::status::read_status(|status| Ok(status.ports.order.clone()))?;
-
-    log::info!(
-        "check_all_ports_occupation_via_cli: checking {} port(s) for occupation",
-        all_ports.len()
-    );
-
-    if all_ports.is_empty() {
-        log::debug!("No ports to check");
-        return Ok(());
-    }
-
-    // Get the current executable path to spawn CLI
-    let exe_path = std::env::current_exe()
-        .map_err(|e| anyhow!("Failed to get current executable path: {e}"))?;
-
-    let mut state_changes: Vec<(String, PortState)> = Vec::new();
-
-    for port_name in &all_ports {
-        // Skip ports already occupied by this TUI process
-        let is_occupied_by_this = crate::tui::status::read_status(|status| {
-            Ok(status
-                .ports
-                .map
-                .get(port_name)
-                .map(|p| p.state.is_occupied_by_this())
-                .unwrap_or(false))
-        })?;
-
-        if is_occupied_by_this {
-            log::trace!("Skipping occupation check for {port_name} (occupied by this)");
-            continue;
-        }
-
-        // Spawn CLI subprocess to check port
-        log::debug!("Checking port {port_name} via CLI subprocess");
-
-        let output = Command::new(&exe_path)
-            .arg("--check-port")
-            .arg(port_name)
-            .output();
-
-        match output {
-            Ok(result) => {
-                let is_occupied = !result.status.success(); // exit 0 = free, 1 = occupied
-                let exit_code = result.status.code().unwrap_or(-1);
-                log::debug!(
-                    "Port {port_name} CLI check completed: exit_code={exit_code}, is_occupied={is_occupied}"
-                );
-
-                // Read current state
-                let current_state = crate::tui::status::read_status(|status| {
-                    Ok(status
-                        .ports
-                        .map
-                        .get(port_name)
-                        .map(|p| p.state.clone())
-                        .unwrap_or(PortState::Free))
-                })?;
-
-                // Determine new state
-                let new_state = if is_occupied {
-                    PortState::OccupiedByOther
-                } else {
-                    PortState::Free
-                };
-
-                // Record state change if different
-                if current_state != new_state {
-                    log::info!(
-                        "Port {port_name} occupation state changed: {current_state:?} -> {new_state:?}"
-                    );
-                    state_changes.push((port_name.clone(), new_state));
-                } else {
-                    log::debug!("Port {port_name} occupation state unchanged: {current_state:?}");
-                }
-            }
-            Err(e) => {
-                log::warn!("Failed to spawn CLI subprocess for {port_name}: {e}");
-            }
-        }
-    }
-
-    // Update all changed ports
-    if !state_changes.is_empty() {
-        log::info!(
-            "check_all_ports_occupation_via_cli: updating {} port(s) with new occupation state",
-            state_changes.len()
-        );
-        crate::tui::status::write_status(move |status| {
-            for (port_name, new_state) in &state_changes {
-                if let Some(port) = status.ports.map.get_mut(port_name) {
-                    port.state = new_state.clone();
-                    log::info!("Updated port {port_name} state to {new_state:?}");
-                }
-            }
-            Ok(())
-        })?;
-    } else {
-        log::debug!("check_all_ports_occupation_via_cli: no port state changes detected");
-    }
-
-    Ok(())
 }

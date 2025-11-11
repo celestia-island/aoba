@@ -16,6 +16,7 @@ serde_json.workspace = true
 postcard.workspace = true
 toml.workspace = true
 yuuka.workspace = true
+serialport.workspace = true
 
 log.workspace = true
 
