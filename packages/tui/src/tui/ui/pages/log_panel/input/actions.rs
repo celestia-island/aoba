@@ -3,7 +3,7 @@ use anyhow::{anyhow, Result};
 use crate::tui::{
     status as types,
     status::{read_status, write_status},
-    utils::bus::{Bus, UiToCore},
+    utils::bus::{self, Bus},
 };
 
 pub fn handle_leave_page(bus: &Bus) -> Result<()> {
@@ -23,9 +23,7 @@ pub fn handle_leave_page(bus: &Bus) -> Result<()> {
         };
         Ok(())
     })?;
-    bus.ui_tx
-        .send(UiToCore::Refresh)
-        .map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
     Ok(())
 }
 
@@ -60,9 +58,7 @@ pub fn handle_toggle_follow(bus: &Bus) -> Result<()> {
         }
         Ok(())
     })?;
-    bus.ui_tx
-        .send(UiToCore::Refresh)
-        .map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
     Ok(())
 }
 
@@ -79,8 +75,6 @@ pub fn handle_clear_logs(bus: &Bus) -> Result<()> {
         }
         Ok(())
     })?;
-    bus.ui_tx
-        .send(UiToCore::Refresh)
-        .map_err(|err| anyhow!(err))?;
+    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
     Ok(())
 }

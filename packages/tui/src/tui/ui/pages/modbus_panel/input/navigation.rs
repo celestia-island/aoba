@@ -11,7 +11,7 @@ use crate::{
             cursor::Cursor,
             {read_status, write_status},
         },
-        utils::bus::{Bus, UiToCore},
+        utils::bus::{self, Bus, UiToCore},
     },
 };
 
@@ -71,9 +71,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -115,9 +113,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Left | KeyCode::Char('h') => {
@@ -158,9 +154,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Right | KeyCode::Char('l') => {
@@ -233,9 +227,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Up | KeyCode::Char('k') => {
@@ -309,9 +301,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Down | KeyCode::Char('j') => {
@@ -397,9 +387,7 @@ pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Enter => {
@@ -451,9 +439,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                     });
                     Ok(())
                 })?;
-                bus.ui_tx
-                    .send(UiToCore::Refresh)
-                    .map_err(|err| anyhow!(err))?;
+                bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
                 return Ok(());
             }
 
@@ -487,9 +473,7 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             })?;
 
             // Trigger immediate UI refresh to show status change
-            bus.ui_tx
-                .send(UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
 
             if !is_enabled {
                 // Enable the port if not already enabled

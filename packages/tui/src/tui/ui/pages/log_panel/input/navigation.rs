@@ -3,7 +3,10 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use super::actions::{handle_clear_logs, handle_leave_page, handle_toggle_follow};
-use crate::tui::{status::write_status, utils::bus::Bus};
+use crate::tui::{
+    status::write_status,
+    utils::bus::{self, Bus},
+};
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
     // Conservative estimate of viewport height (total height minus title, borders, bottom hints)
@@ -31,9 +34,7 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageUp: Scroll up by one page (viewport height)
                 crate::tui::ui::pages::log_panel::components::handle_scroll_up(VIEWPORT_HEIGHT)?;
             }
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::PageDown => {
@@ -62,23 +63,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 // PageDown: Scroll down by one page (viewport height)
                 crate::tui::ui::pages::log_panel::components::handle_scroll_down(VIEWPORT_HEIGHT)?;
             }
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Up => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_up(1)?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Down => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_down(1)?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Enter => {
@@ -97,23 +92,17 @@ pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                 }
                 Ok(())
             })?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Char('k') => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_up(1)?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Char('j') => {
             crate::tui::ui::pages::log_panel::components::handle_scroll_down(1)?;
-            bus.ui_tx
-                .send(crate::tui::utils::bus::UiToCore::Refresh)
-                .map_err(|err| anyhow!(err))?;
+            bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
             Ok(())
         }
         KeyCode::Esc | KeyCode::Char('h') => {

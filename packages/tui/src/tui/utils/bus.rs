@@ -1,4 +1,8 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use flume::{Receiver, Sender};
+
+static REFRESH_PENDING: AtomicBool = AtomicBool::new(false);
 
 /// Messages sent from UI thread to core worker thread.
 #[derive(Debug, Clone, PartialEq)]
@@ -51,4 +55,23 @@ impl Bus {
     pub fn new(core_rx: Receiver<CoreToUi>, ui_tx: Sender<UiToCore>) -> Self {
         Self { core_rx, ui_tx }
     }
+}
+
+/// Try to enqueue a refresh message unless one is already pending.
+/// Returns `Ok(true)` when a message was sent, `Ok(false)` when it was coalesced.
+pub fn request_refresh(sender: &Sender<UiToCore>) -> Result<bool, flume::SendError<UiToCore>> {
+    // Only one Refresh should be outstanding to avoid starving the writer thread.
+    if REFRESH_PENDING
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        .is_err()
+    {
+        return Ok(false);
+    }
+
+    sender.send(UiToCore::Refresh).map(|_| true)
+}
+
+/// Mark the refresh flag as cleared so the next request can be queued.
+pub fn mark_refresh_complete() {
+    REFRESH_PENDING.store(false, Ordering::Release);
 }
