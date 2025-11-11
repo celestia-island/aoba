@@ -8,7 +8,10 @@ use crate::{
     tui::{
         status as types,
         status::{
-            modbus::{ModbusConnectionMode, RegisterMode, StationMode},
+            modbus::{
+                ModbusConnectionMode, ModbusMasterDataSource, ModbusMasterDataSourceKind,
+                RegisterMode, StationMode,
+            },
             port::{PortState, PortSubprocessInfo, PortSubprocessMode},
             {read_status, write_status},
         },
@@ -160,9 +163,16 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                 let max_index = match current_cursor {
                     types::cursor::ModbusDashboardCursor::ModbusMode => 2, // Master, Slave
+                    types::cursor::ModbusDashboardCursor::MasterSourceKind => {
+                        types::modbus::ModbusMasterDataSourceKind::all().len()
+                    }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
                 };
+
+                if max_index == 0 {
+                    return Ok(());
+                }
 
                 let new_index = if current_index == 0 {
                     max_index - 1 // wrap to last item
@@ -195,9 +205,16 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
 
                 let max_index = match current_cursor {
                     types::cursor::ModbusDashboardCursor::ModbusMode => 2, // Master, Slave
+                    types::cursor::ModbusDashboardCursor::MasterSourceKind => {
+                        types::modbus::ModbusMasterDataSourceKind::all().len()
+                    }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
                 };
+
+                if max_index == 0 {
+                    return Ok(());
+                }
 
                 let new_index = if current_index + 1 >= max_index {
                     0 // wrap to first item
@@ -263,8 +280,7 @@ fn commit_selector_edit(
                         // evaluate occupancy before taking a mutable borrow of port.config
                         let was_occupied_by_this = matches!(port.state, PortState::OccupiedByThis);
 
-                        let types::port::PortConfig::Modbus { mode, stations: _ } =
-                            &mut port.config;
+                        let types::port::PortConfig::Modbus { mode, .. } = &mut port.config;
                         let old_was_master = mode.is_master();
                         let new_is_master = new_mode.is_master();
 
@@ -295,6 +311,53 @@ fn commit_selector_edit(
                         return Ok(Some(port_name.clone()));
                     }
                 }
+                types::cursor::ModbusDashboardCursor::MasterSourceKind => {
+                    let new_kind = ModbusMasterDataSourceKind::from_index(selected_index);
+
+                    let mut should_restart = false;
+                    write_status(|status| {
+                        let port = status
+                            .ports
+                            .map
+                            .get_mut(&port_name)
+                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+
+                        let types::port::PortConfig::Modbus { master_source, .. } =
+                            &mut port.config;
+
+                        let old_kind = master_source.kind();
+                        if old_kind != new_kind {
+                            if matches!(port.state, PortState::OccupiedByThis) {
+                                should_restart = true;
+                            }
+
+                            master_source.set_kind(new_kind);
+                            port.config_modified = true;
+                            log::info!("Updated master data source kind to {:?}", new_kind);
+                        }
+
+                        Ok(())
+                    })?;
+
+                    if should_restart {
+                        let translations = lang();
+                        let reason = format!(
+                            "{} {}",
+                            translations
+                                .tabs
+                                .log
+                                .runtime_restart_reason_data_source_change
+                                .clone(),
+                            new_kind
+                        );
+                        crate::tui::append_runtime_restart_log(
+                            &port_name,
+                            reason,
+                            StationMode::Master,
+                        );
+                        return Ok(Some(port_name.clone()));
+                    }
+                }
                 types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
                     // Apply register mode changes
                     let new_mode = RegisterMode::from_u8((selected_index as u8) + 1);
@@ -307,7 +370,11 @@ fn commit_selector_edit(
                             .map
                             .get_mut(&port_name)
                             .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                        let types::port::PortConfig::Modbus { mode, stations } = &mut port.config;
+                        let types::port::PortConfig::Modbus {
+                            mode,
+                            master_source: _,
+                            stations,
+                        } = &mut port.config;
                         let mut all_items: Vec<_> = stations.iter_mut().collect();
                         if let Some(item) = all_items.get_mut(index) {
                             item.register_mode = new_mode;
@@ -366,6 +433,97 @@ fn commit_text_edit(
     if let Some(port_name) = port_name_opt {
         if let Some(_port) = read_status(|status| Ok(status.ports.map.get(&port_name).cloned()))? {
             match cursor {
+                types::cursor::ModbusDashboardCursor::MasterSourceValue => {
+                    let trimmed = value.trim().to_string();
+                    let mut should_restart = false;
+                    let mut updated_kind: Option<ModbusMasterDataSourceKind> = None;
+
+                    write_status(|status| {
+                        let port_data = status
+                            .ports
+                            .map
+                            .get_mut(&port_name)
+                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
+
+                        let types::port::PortConfig::Modbus { master_source, .. } =
+                            &mut port_data.config;
+                        let current_kind = master_source.kind();
+                        updated_kind = Some(current_kind);
+
+                        match master_source {
+                            ModbusMasterDataSource::TransparentForward { port: existing } => {
+                                let new_value = if trimmed.is_empty() {
+                                    None
+                                } else {
+                                    Some(trimmed.clone())
+                                };
+                                if *existing != new_value {
+                                    *existing = new_value;
+                                    port_data.config_modified = true;
+                                    if matches!(
+                                        port_data.state,
+                                        types::port::PortState::OccupiedByThis
+                                    ) {
+                                        should_restart = true;
+                                    }
+                                }
+                            }
+                            ModbusMasterDataSource::MqttServer { url }
+                            | ModbusMasterDataSource::HttpServer { url } => {
+                                if *url != trimmed {
+                                    *url = trimmed.clone();
+                                    port_data.config_modified = true;
+                                    if matches!(
+                                        port_data.state,
+                                        types::port::PortState::OccupiedByThis
+                                    ) {
+                                        should_restart = true;
+                                    }
+                                }
+                            }
+                            ModbusMasterDataSource::IpcPipe { path }
+                            | ModbusMasterDataSource::PythonModule { path } => {
+                                if *path != trimmed {
+                                    *path = trimmed.clone();
+                                    port_data.config_modified = true;
+                                    if matches!(
+                                        port_data.state,
+                                        types::port::PortState::OccupiedByThis
+                                    ) {
+                                        should_restart = true;
+                                    }
+                                }
+                            }
+                            ModbusMasterDataSource::Manual => {}
+                        }
+
+                        Ok(())
+                    })?;
+
+                    if should_restart {
+                        if let Some(kind) = updated_kind {
+                            let translations = lang();
+                            let reason = format!(
+                                "{} {}",
+                                translations
+                                    .tabs
+                                    .log
+                                    .runtime_restart_reason_data_source_change
+                                    .clone(),
+                                kind
+                            );
+                            crate::tui::append_runtime_restart_log(
+                                &port_name,
+                                reason,
+                                StationMode::Master,
+                            );
+                        }
+
+                        bus.ui_tx
+                            .send(UiToCore::RestartRuntime(port_name.clone()))
+                            .map_err(|err| anyhow!(err))?;
+                    }
+                }
                 types::cursor::ModbusDashboardCursor::StationId { index } => {
                     if let Ok(station_id) = value.parse::<u8>() {
                         write_status(|status| {
@@ -374,8 +532,11 @@ fn commit_text_edit(
                                 .map
                                 .get_mut(&port_name)
                                 .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &mut port.config;
+                            let types::port::PortConfig::Modbus {
+                                mode: _,
+                                master_source: _,
+                                stations,
+                            } = &mut port.config;
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
                             if let Some(item) = all_items.get_mut(index) {
                                 item.station_id = station_id;
@@ -394,8 +555,11 @@ fn commit_text_edit(
                                 .map
                                 .get_mut(&port_name)
                                 .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &mut port.config;
+                            let types::port::PortConfig::Modbus {
+                                mode: _,
+                                master_source: _,
+                                stations,
+                            } = &mut port.config;
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
                             if let Some(item) = all_items.get_mut(index) {
                                 item.register_address = start_address;
@@ -414,8 +578,11 @@ fn commit_text_edit(
                                 .map
                                 .get_mut(&port_name)
                                 .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-                            let types::port::PortConfig::Modbus { mode: _, stations } =
-                                &mut port.config;
+                            let types::port::PortConfig::Modbus {
+                                mode: _,
+                                master_source: _,
+                                stations,
+                            } = &mut port.config;
                             let mut all_items: Vec<_> = stations.iter_mut().collect();
                             if let Some(item) = all_items.get_mut(index) {
                                 item.register_length = length;
@@ -452,8 +619,11 @@ fn commit_text_edit(
                                 .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
                             let owner_info = port.subprocess_info.clone();
 
-                            let types::port::PortConfig::Modbus { mode, stations } =
-                                &mut port.config;
+                            let types::port::PortConfig::Modbus {
+                                mode,
+                                master_source: _,
+                                stations,
+                            } = &mut port.config;
                             if let Some(item) = stations.get_mut(slave_index) {
                                 if item.register_length as usize != item.last_values.len() {
                                     item.last_values.resize(item.register_length as usize, 0);

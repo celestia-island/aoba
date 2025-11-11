@@ -526,7 +526,11 @@ fn start_runtime(
 ) -> Result<bool> {
     let cli_inputs = crate::tui::status::read_status(|status| {
         if let Some(port) = status.ports.map.get(port_name) {
-            let types::port::PortConfig::Modbus { mode, stations } = &port.config;
+            let types::port::PortConfig::Modbus {
+                mode,
+                master_source: _,
+                stations,
+            } = &port.config;
             log::info!(
                 "{label}({port_name}): checking CLI inputs - mode={}, station_count={}",
                 if mode.is_master() { "Master" } else { "Slave" },
