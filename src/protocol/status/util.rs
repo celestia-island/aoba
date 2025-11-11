@@ -11,7 +11,9 @@ pub fn port_stations_to_config(port_data: &PortData) -> Vec<StationConfig> {
     use super::types::port::PortConfig;
 
     match &port_data.config {
-        PortConfig::Modbus { mode, stations } => register_items_to_stations(stations, mode.clone()),
+        PortConfig::Modbus { mode, stations, .. } => {
+            register_items_to_stations(stations, mode.clone())
+        }
     }
 }
 
