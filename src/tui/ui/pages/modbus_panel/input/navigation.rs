@@ -820,7 +820,7 @@ fn validate_url(url: &str, expected_scheme: &str) -> Result<(), String> {
     // Basic URL validation - check if it looks like a valid URL
     if let Ok(parsed) = url::Url::parse(url) {
         // Check if scheme matches expected
-        if parsed.scheme() == expected_scheme || parsed.scheme() == &format!("{}s", expected_scheme)
+        if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme)
         {
             Ok(())
         } else {

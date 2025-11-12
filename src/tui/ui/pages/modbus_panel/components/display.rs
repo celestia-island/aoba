@@ -206,17 +206,14 @@ pub fn render_kv_lines_with_indicators(
                     )];
                 }
                 TextState::Editing => {
-                    let mut spans = Vec::new();
-                    spans.push(Span::raw("< "));
                     // Use localized Display implementation instead of hardcoded strings
                     let selected_variant = variants.get(selected_index).unwrap_or(&variants[0]);
                     let localized_text = format!("{selected_variant}");
-                    spans.push(Span::styled(
-                        localized_text,
-                        Style::default().fg(Color::Yellow),
-                    ));
-                    spans.push(Span::raw(" >"));
-                    rendered_value_spans = spans;
+                    rendered_value_spans = vec![
+                        Span::raw("< "),
+                        Span::styled(localized_text, Style::default().fg(Color::Yellow)),
+                        Span::raw(" >"),
+                    ];
                 }
             }
         }
@@ -381,7 +378,7 @@ pub fn render_kv_lines_with_indicators(
                         // Display port name as selector
                         let display_text = available_ports
                             .get(selected_index)
-                            .or_else(|| selected_port.as_ref())
+                            .or(selected_port.as_ref())
                             .map(|s| s.as_str())
                             .unwrap_or("-");
 
@@ -391,16 +388,14 @@ pub fn render_kv_lines_with_indicators(
                                 display_text.to_string(),
                                 Style::default().fg(Color::Green),
                             )]),
-                            TextState::Editing => {
-                                let mut spans = Vec::new();
-                                spans.push(Span::raw("< "));
-                                spans.push(Span::styled(
+                            TextState::Editing => Ok(vec![
+                                Span::raw("< "),
+                                Span::styled(
                                     display_text.to_string(),
                                     Style::default().fg(Color::Yellow),
-                                ));
-                                spans.push(Span::raw(" >"));
-                                Ok(spans)
-                            }
+                                ),
+                                Span::raw(" >"),
+                            ]),
                         }
                     } else {
                         // Render as text input for other types

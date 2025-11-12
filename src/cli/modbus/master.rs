@@ -986,10 +986,7 @@ fn update_storage_loop(
             }
             DataSource::TransparentForward(port) => {
                 // Transparent forwarding: continuously read from IPC channel
-                let channel_name = format!(
-                    "/tmp/aoba_forward_{}",
-                    port.replace('/', "_").replace('\\', "_")
-                );
+                let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
 
                 log::info!("TransparentForward: monitoring channel {}", channel_name);
 
@@ -1512,10 +1509,7 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             log::debug!("Reading from transparent forward source port: {}", port);
 
             // Create IPC channel name from port name
-            let channel_name = format!(
-                "/tmp/aoba_forward_{}",
-                port.replace('/', "_").replace('\\', "_")
-            );
+            let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
 
             log::info!(
                 "TransparentForward: waiting for data from channel {}",
