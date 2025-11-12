@@ -1,14 +1,14 @@
 use anyhow::{anyhow, Result};
-use clap::ArgMatches;
 use std::{
     cell::RefCell,
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{
@@ -79,7 +79,13 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     );
 
     // Read one line of data
-    let values = read_one_data_update(&data_source)?;
+    let values = read_one_data_update(
+        &data_source,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+    )?;
 
     // Initialize modbus storage with values
     use rmodbus::server::storage::ModbusStorageSmall;
@@ -287,7 +293,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
 
     // Load initial data into storage
-    let initial_values = read_one_data_update(&data_source)?;
+    let initial_values = read_one_data_update(
+        &data_source,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+    )?;
     log::info!("Loaded initial values: {initial_values:?}");
     {
         let mut context = storage.lock().unwrap();
@@ -330,8 +342,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         update_storage_loop(
             storage_clone,
             data_source_clone,
+            station_id,
             reg_mode,
             register_address,
+            register_length,
             changed_ranges_clone,
         )
     });
@@ -972,12 +986,351 @@ fn respond_to_request(
 fn update_storage_loop(
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     data_source: DataSource,
+    station_id: u8,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
+    register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
 ) -> Result<()> {
     loop {
         match &data_source {
+            DataSource::Manual => {
+                // Manual mode: no automatic updates, values are set via IPC or other means
+                log::debug!("Manual data source mode - sleeping");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            DataSource::TransparentForward(port) => {
+                // Transparent forwarding: continuously read from IPC channel
+                let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
+
+                log::info!("TransparentForward: monitoring channel {}", channel_name);
+
+                loop {
+                    match std::fs::File::open(&channel_name) {
+                        Ok(file) => {
+                            let reader = BufReader::new(file);
+
+                            for line in reader.lines() {
+                                let line = match line {
+                                    Ok(l) => l,
+                                    Err(e) => {
+                                        log::warn!("Error reading from forward channel: {}", e);
+                                        break;
+                                    }
+                                };
+
+                                if line.trim().is_empty() {
+                                    continue;
+                                }
+
+                                if let Ok(values) = parse_data_line(
+                                    &line,
+                                    station_id,
+                                    reg_mode,
+                                    register_address,
+                                    register_length,
+                                ) {
+                                    log::debug!(
+                                        "Updating storage with {} values from transparent forward",
+                                        values.len()
+                                    );
+                                    let mut context = storage.lock().unwrap();
+                                    match reg_mode {
+                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_holding(register_address + i as u16, val)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_coil(register_address + i as u16, val != 0)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_discrete(register_address + i as u16, val != 0)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_input(register_address + i as u16, val)?;
+                                            }
+                                        }
+                                    }
+                                    drop(context);
+
+                                    // Record changed range
+                                    {
+                                        let len = values.len() as u16;
+                                        let mut cr = changed_ranges.lock().unwrap();
+                                        cr.push((register_address, len, Instant::now()));
+                                        while cr.len() > 1000 {
+                                            cr.remove(0);
+                                        }
+                                    }
+                                } else {
+                                    log::warn!("Failed to parse forward channel data");
+                                }
+                            }
+
+                            log::debug!("Forward channel closed, reopening...");
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to open forward channel {}: {}", channel_name, e);
+                            log::info!("Waiting for source port to start...");
+                            std::thread::sleep(Duration::from_secs(5));
+                        }
+                    }
+                }
+            }
+            DataSource::MqttServer(url) => {
+                // MQTT: subscribe to broker and continuously update on new messages
+                log::info!("Starting MQTT subscription loop for: {}", url);
+
+                // Parse MQTT URL
+                let parsed_url = match url::Url::parse(url) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        log::error!("Invalid MQTT URL: {}", e);
+                        return Err(anyhow!("Invalid MQTT URL: {}", e));
+                    }
+                };
+
+                let host = parsed_url.host_str().unwrap_or("localhost");
+                let port = parsed_url.port().unwrap_or(1883);
+                let topic = parsed_url.path().trim_start_matches('/');
+
+                if topic.is_empty() {
+                    log::error!("MQTT URL must include a topic path");
+                    return Err(anyhow!("MQTT URL must include a topic path"));
+                }
+
+                log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
+
+                // Create a unique client ID
+                let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
+
+                // Create MQTT options
+                let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
+
+                // Create client
+                let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
+
+                // Subscribe to topic
+                if let Err(e) = client.subscribe(topic, rumqttc::QoS::AtMostOnce) {
+                    log::error!("Failed to subscribe to MQTT topic: {}", e);
+                    return Err(anyhow!("Failed to subscribe: {}", e));
+                }
+
+                log::info!("MQTT: subscribed to topic '{}'", topic);
+
+                // Process incoming messages
+                for notification in connection.iter() {
+                    match notification {
+                        Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
+                            let payload = String::from_utf8_lossy(&publish.payload);
+                            log::debug!("Received MQTT message: {}", payload);
+
+                            if let Ok(values) = parse_data_line(
+                                &payload,
+                                station_id,
+                                reg_mode,
+                                register_address,
+                                register_length,
+                            ) {
+                                log::debug!(
+                                    "Updating storage with {} values from MQTT",
+                                    values.len()
+                                );
+                                let mut context = storage.lock().unwrap();
+                                match reg_mode {
+                                    crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_holding(register_address + i as u16, val)?;
+                                        }
+                                    }
+                                    crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_coil(register_address + i as u16, val != 0)?;
+                                        }
+                                    }
+                                    crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_discrete(register_address + i as u16, val != 0)?;
+                                        }
+                                    }
+                                    crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                        for (i, &val) in values.iter().enumerate() {
+                                            context.set_input(register_address + i as u16, val)?;
+                                        }
+                                    }
+                                }
+                                drop(context);
+
+                                // Record changed range
+                                {
+                                    let len = values.len() as u16;
+                                    let mut cr = changed_ranges.lock().unwrap();
+                                    cr.push((register_address, len, Instant::now()));
+                                    while cr.len() > 1000 {
+                                        cr.remove(0);
+                                    }
+                                }
+                            } else {
+                                log::warn!("Failed to parse MQTT message data");
+                            }
+                        }
+                        Ok(_) => {
+                            // Other events, ignore
+                        }
+                        Err(e) => {
+                            log::warn!("MQTT connection error: {}", e);
+                            std::thread::sleep(Duration::from_secs(1));
+                            break; // Break inner loop to reconnect
+                        }
+                    }
+                }
+
+                log::warn!("MQTT connection lost, will retry...");
+                std::thread::sleep(Duration::from_secs(5));
+            }
+            DataSource::HttpServer(url) => {
+                // HTTP: poll server periodically for updates
+                loop {
+                    match ureq::get(url).call() {
+                        Ok(mut response) => {
+                            match response.body_mut().read_to_string() {
+                                Ok(text) => {
+                                    if let Ok(values) = parse_data_line(
+                                        &text,
+                                        station_id,
+                                        reg_mode,
+                                        register_address,
+                                        register_length,
+                                    ) {
+                                        log::debug!(
+                                            "Updating storage with {} values from HTTP",
+                                            values.len()
+                                        );
+                                        let mut context = storage.lock().unwrap();
+                                        match reg_mode {
+                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_holding(register_address + i as u16, val)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_coil(register_address + i as u16, val != 0)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_discrete(register_address + i as u16, val != 0)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_input(register_address + i as u16, val)?;
+                                                }
+                                            }
+                                        }
+                                        drop(context);
+
+                                        // Record changed range
+                                        {
+                                            let len = values.len() as u16;
+                                            let mut cr = changed_ranges.lock().unwrap();
+                                            cr.push((register_address, len, Instant::now()));
+                                            while cr.len() > 1000 {
+                                                cr.remove(0);
+                                            }
+                                        }
+                                    } else {
+                                        log::warn!("Failed to parse HTTP response data");
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to read HTTP response: {}", e);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::warn!("Failed to fetch from HTTP server: {}", err);
+                        }
+                    }
+
+                    // Poll every second
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+            DataSource::IpcPipe(path) => {
+                // IPC pipe: similar to regular Pipe
+                let file = std::fs::File::open(path)?;
+                let reader = BufReader::new(file);
+
+                for line in reader.lines() {
+                    let line = line?;
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
+                    match parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    ) {
+                        Ok(values) => {
+                            log::info!("Updating storage with values from IPC: {values:?}");
+                            let mut context = storage.lock().unwrap();
+                            match reg_mode {
+                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_holding(register_address + i as u16, val)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_coil(register_address + i as u16, val != 0)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_discrete(register_address + i as u16, val != 0)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_input(register_address + i as u16, val)?;
+                                    }
+                                }
+                            }
+                            drop(context);
+
+                            // Record changed range
+                            {
+                                let len = values.len() as u16;
+                                let mut cr = changed_ranges.lock().unwrap();
+                                cr.push((register_address, len, Instant::now()));
+                                while cr.len() > 1000 {
+                                    cr.remove(0);
+                                }
+                            }
+
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        Err(err) => {
+                            log::warn!("Error parsing data line from IPC: {err}");
+                        }
+                    }
+                }
+
+                // Pipe closed, reopen and continue
+                log::debug!("IPC pipe closed, reopening...");
+            }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
                 let file = match std::fs::File::open(path) {
@@ -1005,7 +1358,13 @@ fn update_storage_loop(
                     }
 
                     line_count += 1;
-                    match parse_data_line(&line) {
+                    match parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    ) {
                         Ok(values) => {
                             log::debug!(
                                 "Updating storage with {} values from line {}",
@@ -1073,7 +1432,13 @@ fn update_storage_loop(
                         continue;
                     }
 
-                    match parse_data_line(&line) {
+                    match parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    ) {
                         Ok(values) => {
                             log::info!("Updating storage with values: {values:?}");
                             let mut context = storage.lock().unwrap();
@@ -1172,14 +1537,30 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
 }
 
 /// Read one data update from source
-fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
+fn read_one_data_update(
+    source: &DataSource,
+    station_id: u8,
+    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    register_address: u16,
+    register_length: u16,
+) -> Result<Vec<u16>> {
     match source {
+        DataSource::Manual => {
+            // Manual mode: return empty values, will be set via TUI or other means
+            Ok(vec![])
+        }
         DataSource::File(path) => {
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();
             reader.read_line(&mut line)?;
-            parse_data_line(&line)
+            parse_data_line(
+                &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
         }
         DataSource::Pipe(path) => {
             // Open named pipe (FIFO) for reading
@@ -1187,7 +1568,141 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             let mut reader = BufReader::new(file);
             let mut line = String::new();
             reader.read_line(&mut line)?;
-            parse_data_line(&line)
+            parse_data_line(
+                &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
+        }
+        DataSource::TransparentForward(port) => {
+            // Transparent forwarding: read from IPC channel connected to source port
+            // The source port should be publishing data to a named pipe
+            log::debug!("Reading from transparent forward source port: {}", port);
+
+            // Create IPC channel name from port name
+            let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
+
+            log::info!(
+                "TransparentForward: waiting for data from channel {}",
+                channel_name
+            );
+
+            // Try to read from the channel file
+            match std::fs::File::open(&channel_name) {
+                Ok(file) => {
+                    let mut reader = BufReader::new(file);
+                    let mut line = String::new();
+                    reader.read_line(&mut line)?;
+                    parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    )
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to open transparent forward channel {}: {}",
+                        channel_name,
+                        e
+                    );
+                    log::info!("Ensure source port is running with transparent forwarding enabled");
+                    Err(anyhow!("TransparentForward channel not available: {}", e))
+                }
+            }
+        }
+        DataSource::MqttServer(url) => {
+            // MQTT: connect to broker and wait for one message
+            log::debug!("Connecting to MQTT broker: {}", url);
+
+            // Parse MQTT URL to extract broker and topic
+            let parsed_url =
+                url::Url::parse(url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
+
+            let host = parsed_url
+                .host_str()
+                .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
+            let port = parsed_url.port().unwrap_or(1883);
+            let topic = parsed_url.path().trim_start_matches('/');
+
+            if topic.is_empty() {
+                return Err(anyhow!(
+                    "MQTT URL must include a topic path (e.g., mqtt://host:port/topic)"
+                ));
+            }
+
+            log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
+
+            // Create a unique client ID
+            let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
+
+            // Create MQTT options
+            let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
+
+            // Create client
+            let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
+
+            // Subscribe to topic
+            client
+                .subscribe(topic, rumqttc::QoS::AtMostOnce)
+                .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
+
+            // Wait for one message
+            for notification in connection.iter() {
+                if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
+                    notification
+                {
+                    let payload = String::from_utf8_lossy(&publish.payload);
+                    log::debug!("Received MQTT message: {}", payload);
+                    return parse_data_line(
+                        &payload,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    );
+                }
+            }
+
+            Err(anyhow!("MQTT connection closed without receiving data"))
+        }
+        DataSource::HttpServer(url) => {
+            // HTTP: make GET request to server and parse JSON response
+            log::debug!("Fetching data from HTTP server: {}", url);
+            let response = ureq::get(url)
+                .call()
+                .map_err(|e| anyhow!("Failed to fetch from HTTP server: {}", e))?;
+
+            let mut response = response;
+            let text = response
+                .body_mut()
+                .read_to_string()
+                .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
+
+            parse_data_line(
+                &text,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
+        }
+        DataSource::IpcPipe(path) => {
+            // IPC pipe: similar to Pipe but for inter-process communication
+            let file = std::fs::File::open(path)?;
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+            parse_data_line(
+                &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
         }
     }
 }

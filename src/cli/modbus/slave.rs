@@ -1,10 +1,11 @@
 use anyhow::{anyhow, Result};
-use clap::ArgMatches;
 use std::{
     io::Write,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
+
+use clap::ArgMatches;
 
 use super::{
     emit_modbus_ipc_log, extract_values_from_storage, open_serial_port, parse_register_mode,

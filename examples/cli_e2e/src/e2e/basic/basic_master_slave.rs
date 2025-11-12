@@ -80,6 +80,7 @@ pub async fn test_basic_master_slave_communication() -> Result<()> {
 
     let binary = build_debug_bin("aoba")?;
     let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--slave-poll",
             &ports.port2_name,

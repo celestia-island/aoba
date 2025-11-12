@@ -83,6 +83,7 @@ pub async fn test_multi_masters() -> Result<()> {
     // Start configuration mode
     log::info!("🧪 Starting multi-masters configuration...");
     let mut process = Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .arg("--config")
         .arg(&config_file)
         .stdout(Stdio::piped())

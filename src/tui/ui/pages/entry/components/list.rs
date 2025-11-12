@@ -8,7 +8,6 @@ use ratatui::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    i18n::lang,
     tui::{
         status as types,
         {
@@ -22,6 +21,7 @@ use crate::{
             },
         },
     },
+    utils::i18n::lang,
 };
 
 /// Helper function to derive selection from page state (entry page specific)

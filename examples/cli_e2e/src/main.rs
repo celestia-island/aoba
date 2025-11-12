@@ -9,13 +9,17 @@ mod port_occupation;
 mod utils;
 
 use anyhow::Result;
-use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
 
+use clap::Parser;
+
 // use config_mode::test_config_mode;
 use e2e::{
-    basic::test_basic_master_slave_communication,
+    basic::{
+        test_basic_master_slave_communication, test_http_data_source,
+        test_http_data_source_persist, test_ipc_pipe_data_source, test_manual_data_source,
+    },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
         test_multi_slaves, test_multi_slaves_adjacent_registers, test_multi_slaves_same_station,
@@ -159,6 +163,11 @@ async fn main() -> Result<()> {
             log::info!("    - modbus_multi_slaves");
             log::info!("    - modbus_multi_slaves_same_station");
             log::info!("    - modbus_multi_slaves_adjacent_registers");
+            log::info!("  Data Source Tests:");
+            log::info!("    - data_source_manual");
+            log::info!("    - data_source_ipc_pipe");
+            log::info!("    - data_source_http");
+            log::info!("    - data_source_http_persist");
             log::info!("  Port Occupation Detection:");
             log::info!("    - port_occupation_detection");
             log::info!("");
@@ -193,6 +202,12 @@ async fn main() -> Result<()> {
         "modbus_multi_slaves" => test_multi_slaves().await?,
         "modbus_multi_slaves_same_station" => test_multi_slaves_same_station().await?,
         "modbus_multi_slaves_adjacent_registers" => test_multi_slaves_adjacent_registers().await?,
+
+        // Data source tests
+        "data_source_manual" => test_manual_data_source().await?,
+        "data_source_ipc_pipe" => test_ipc_pipe_data_source().await?,
+        "data_source_http" => test_http_data_source().await?,
+        "data_source_http_persist" => test_http_data_source_persist().await?,
 
         // Port occupation detection tests
         #[cfg(windows)]

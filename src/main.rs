@@ -16,6 +16,11 @@ async fn main() -> Result<()> {
     // Console launcher: keep it simple and let the OS / terminal manage stdio.
     init_common();
 
+    if matches.get_flag("enable-virtual-ports") {
+        aoba::protocol::tty::enable_virtual_port_hint();
+        log::info!("🔌 Virtual VCOM port detection enabled");
+    }
+
     // Ensure registered cleanup handlers are run on Ctrl-C and on panic
     // Note: using ctrlc crate to register handler cross-platform
     {
