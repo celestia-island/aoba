@@ -84,6 +84,7 @@ pub fn run_binary_sync(args: &[&str]) -> Result<std::process::Output> {
 
     log::info!("▶️ Running binary: {} {:?}", bin_path.display(), args);
     let output = Command::new(&bin_path)
+        .arg("--enable-virtual-ports")
         .args(args)
         .output()
         .map_err(|err| anyhow!("Failed to execute binary {}: {}", bin_path.display(), err))?;
@@ -210,6 +211,7 @@ pub fn create_modbus_command(
     }
 
     let mut cmd = Command::new(binary);
+    cmd.arg("--enable-virtual-ports");
     cmd.args(args.iter());
     Ok(cmd)
 }

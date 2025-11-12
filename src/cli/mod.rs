@@ -134,12 +134,19 @@ pub fn parse_args() -> ArgMatches {
         .arg(
             Arg::new("data-source")
                 .long("data-source")
-                .help("Data source for master mode: file:<path> or pipe:<name>")
+                .help("Data source for master mode: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, or file:<path>")
                 .value_name("SOURCE")
                 .requires_ifs([
                     ("master-provide", "master-provide"),
                     ("master-provide-persist", "master-provide-persist"),
                 ]),
+        )
+        .arg(
+            Arg::new("data-source-proxy")
+                .long("data-source-proxy")
+                .help("Proxy server address for MQTT/HTTP data sources")
+                .value_name("PROXY_URL")
+                .requires("data-source"),
         )
         .arg(
             Arg::new("output")
@@ -194,6 +201,12 @@ pub fn parse_args() -> ArgMatches {
                 .help("Enable CI E2E test mode: periodically dump global status to /tmp/ci_cli_{port}_status.json")
                 .action(clap::ArgAction::SetTrue)
                 .hide(true), // Hidden from normal help output
+        )
+        .arg(
+            Arg::new("enable-virtual-ports")
+                .long("enable-virtual-ports")
+                .help("Enable detection of socat-created virtual VCOM ports without turning on full CI debug mode")
+                .action(clap::ArgAction::SetTrue),
         )
         .arg(
             Arg::new("debug-ci")

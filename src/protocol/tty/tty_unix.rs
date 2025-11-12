@@ -3,11 +3,24 @@ use std::{
     fs,
     os::unix::fs::FileTypeExt,
     path::Path,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use serialport::{SerialPortInfo, SerialPortType};
 
 use super::{PortExtra, VidPidSerial};
+
+/// Flag that allows manual opt-in to the CI-style virtual port detection logic.
+static FORCE_VIRTUAL_PORT_HINT: AtomicBool = AtomicBool::new(false);
+
+/// Enable the virtual port hint without toggling full CI debug dumping.
+pub fn enable_virtual_port_hint() {
+    FORCE_VIRTUAL_PORT_HINT.store(true, Ordering::SeqCst);
+}
+
+fn is_virtual_port_hint_enabled() -> bool {
+    FORCE_VIRTUAL_PORT_HINT.load(Ordering::SeqCst)
+}
 
 // Utility functions for parsing debug strings (shared with Windows)
 fn parse_string_after(s: &str, key: &str) -> Option<String> {
@@ -73,24 +86,26 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
 
     // In CI debug mode (when --debug-ci-e2e-test is set), only detect vcom1 and vcom2
     // to avoid false positives from residual ports (vcom3, vcom4, etc.)
-    let virtual_port_paths = if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
-        vec!["/dev/vcom1", "/dev/vcom2", "/tmp/vcom1", "/tmp/vcom2"]
-    } else {
-        vec![
-            "/dev/vcom1",
-            "/dev/vcom2",
-            "/dev/vcom3",
-            "/dev/vcom4",
-            "/dev/vcom5",
-            "/dev/vcom6",
-            "/tmp/vcom1",
-            "/tmp/vcom2",
-            "/tmp/vcom3",
-            "/tmp/vcom4",
-            "/tmp/vcom5",
-            "/tmp/vcom6",
-        ]
-    };
+    let virtual_hint = is_virtual_port_hint_enabled();
+    let virtual_port_paths =
+        if virtual_hint || crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+            vec!["/dev/vcom1", "/dev/vcom2", "/tmp/vcom1", "/tmp/vcom2"]
+        } else {
+            vec![
+                "/dev/vcom1",
+                "/dev/vcom2",
+                "/dev/vcom3",
+                "/dev/vcom4",
+                "/dev/vcom5",
+                "/dev/vcom6",
+                "/tmp/vcom1",
+                "/tmp/vcom2",
+                "/tmp/vcom3",
+                "/tmp/vcom4",
+                "/tmp/vcom5",
+                "/tmp/vcom6",
+            ]
+        };
 
     for port_path in &virtual_port_paths {
         if Path::new(port_path).exists() {
@@ -154,7 +169,8 @@ fn detect_virtual_ports() -> Vec<SerialPortInfo> {
 pub fn available_ports_sorted() -> Vec<SerialPortInfo> {
     // In CI debug mode (when --debug-ci-e2e-test is set), skip real serial port enumeration
     // and only return virtual ports to avoid interference from host serial devices
-    let mut raw_ports = if crate::protocol::status::debug_dump::is_debug_dump_enabled() {
+    let debug_enabled = crate::protocol::status::debug_dump::is_debug_dump_enabled();
+    let mut raw_ports = if debug_enabled || is_virtual_port_hint_enabled() {
         log::debug!("CI debug mode: skipping real serial port enumeration");
         Vec::new()
     } else {

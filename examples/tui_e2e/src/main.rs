@@ -59,6 +59,7 @@ pub use renderer::*;
 pub use workflow::*;
 
 use anyhow::Result;
+use aoba::utils::i18n;
 use clap::Parser;
 
 /// TUI E2E test suite with TOML-based workflows
@@ -113,7 +114,7 @@ async fn main() -> Result<()> {
     log::info!("🧪 TUI E2E Test Framework (TOML-based)");
 
     // Ensure language resources are loaded using the caller's locale
-    aoba::i18n::init_i18n();
+    i18n::init_i18n();
 
     // Determine execution mode
     let exec_mode = if args.screen_capture_only {

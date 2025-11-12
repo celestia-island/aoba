@@ -4,7 +4,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 
 use super::actions::{handle_enter_action, handle_leave_page};
 use crate::{
-    i18n::lang,
     tui::{
         status as types,
         status::{
@@ -13,6 +12,7 @@ use crate::{
         },
         utils::bus::{self, Bus, UiToCore},
     },
+    utils::i18n::lang,
 };
 
 pub fn handle_navigation_input(key: KeyEvent, bus: &Bus) -> Result<()> {
@@ -452,6 +452,27 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
                 return Ok(());
             }
 
+            // Validate data source configuration in master mode
+            let types::port::PortConfig::Modbus {
+                mode,
+                master_source,
+                ..
+            } = &port.config;
+            if mode.is_master() {
+                if let Err(validation_error) = validate_data_source(master_source) {
+                    let err_msg = validation_error.clone();
+                    write_status(|status| {
+                        status.temporarily.error = Some(crate::tui::status::ErrorInfo {
+                            message: err_msg.clone(),
+                            timestamp: Local::now(),
+                        });
+                        Ok(())
+                    })?;
+                    bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
+                    return Ok(());
+                }
+            }
+
             // Mark config as applied and check whether a restart is required
             let (is_enabled, needs_restart) = write_status(|status| {
                 let port = status
@@ -736,5 +757,78 @@ fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
     } else {
         // No stations, stay at ModbusMode
         Ok(types::cursor::ModbusDashboardCursor::ModbusMode)
+    }
+}
+
+/// Validate data source configuration
+/// Returns Ok(()) if valid, Err(message) if invalid
+fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Result<(), String> {
+    match source {
+        types::modbus::ModbusMasterDataSource::Manual => Ok(()),
+        types::modbus::ModbusMasterDataSource::TransparentForward { port } => {
+            // For transparent forward, we don't need to validate the port here
+            // The port will be validated when actually starting the subprocess
+            if port.is_none() || port.as_ref().map(|p| p.is_empty()).unwrap_or(true) {
+                return Err(lang()
+                    .protocol
+                    .modbus
+                    .data_source_placeholder_no_ports
+                    .clone());
+            }
+            Ok(())
+        }
+        types::modbus::ModbusMasterDataSource::MqttServer { url } => {
+            if url.is_empty() {
+                return Ok(()); // Allow empty URL, will use placeholder
+            }
+            validate_url(url, "mqtt")
+        }
+        types::modbus::ModbusMasterDataSource::HttpServer { url } => {
+            if url.is_empty() {
+                return Ok(()); // Allow empty URL, will use placeholder
+            }
+            validate_url(url, "http")
+        }
+        types::modbus::ModbusMasterDataSource::IpcPipe { path } => {
+            if path.is_empty() {
+                return Ok(()); // Allow empty path, will use placeholder
+            }
+            // For IPC, we don't validate the path exists yet
+            // It will be created or connected when starting
+            Ok(())
+        }
+        types::modbus::ModbusMasterDataSource::PythonModule { path } => {
+            if path.is_empty() {
+                return Ok(()); // Allow empty path, will use placeholder
+            }
+            // Check if file exists
+            if !std::path::Path::new(path).exists() {
+                let err_msg = lang()
+                    .protocol
+                    .modbus
+                    .err_file_not_found
+                    .replace("{}", path);
+                return Err(err_msg);
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Validate URL format
+fn validate_url(url: &str, expected_scheme: &str) -> Result<(), String> {
+    // Basic URL validation - check if it looks like a valid URL
+    if let Ok(parsed) = url::Url::parse(url) {
+        // Check if scheme matches expected
+        if parsed.scheme() == expected_scheme || parsed.scheme() == format!("{}s", expected_scheme)
+        {
+            Ok(())
+        } else {
+            let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);
+            Err(err_msg)
+        }
+    } else {
+        let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);
+        Err(err_msg)
     }
 }

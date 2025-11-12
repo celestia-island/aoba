@@ -8,8 +8,8 @@ use ratatui::{
 };
 
 use crate::{
-    i18n::lang,
     tui::{status as types, status::read_status},
+    utils::i18n::{lang, Lang},
 };
 
 /// Extract log data from current page state
@@ -263,7 +263,7 @@ fn build_communication_lines(
 fn build_master_comm_lines(
     time_line: Line<'static>,
     comm: &types::port::PortCommunicationLog,
-    lang: &crate::i18n::Lang,
+    lang: &Lang,
 ) -> [Line<'static>; 3] {
     let success = comm_is_success(comm);
 
@@ -318,7 +318,7 @@ fn build_master_comm_lines(
 fn build_slave_comm_lines(
     time_line: Line<'static>,
     comm: &types::port::PortCommunicationLog,
-    lang: &crate::i18n::Lang,
+    lang: &Lang,
 ) -> [Line<'static>; 3] {
     let success = comm_is_success(comm);
 
@@ -377,10 +377,7 @@ fn comm_is_success(comm: &types::port::PortCommunicationLog) -> bool {
     }
 }
 
-fn comm_failure_reason(
-    comm: &types::port::PortCommunicationLog,
-    lang: &crate::i18n::Lang,
-) -> String {
+fn comm_failure_reason(comm: &types::port::PortCommunicationLog, lang: &Lang) -> String {
     comm.failure_reason
         .clone()
         .or_else(|| comm.parse_error.clone())
@@ -389,10 +386,7 @@ fn comm_failure_reason(
         .unwrap_or_else(|| lang.tabs.log.reason_none.clone())
 }
 
-fn build_comm_success_line(
-    lang: &crate::i18n::Lang,
-    comm: &types::port::PortCommunicationLog,
-) -> Line<'static> {
+fn build_comm_success_line(lang: &Lang, comm: &types::port::PortCommunicationLog) -> Line<'static> {
     let station_label = lang.tabs.log.comm_station_id_label.clone();
     let unknown = lang.tabs.log.comm_unknown.clone();
     let station_value = comm
