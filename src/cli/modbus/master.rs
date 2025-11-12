@@ -1198,9 +1198,9 @@ fn update_storage_loop(
             DataSource::HttpServer(url) => {
                 // HTTP: poll server periodically for updates
                 loop {
-                    match reqwest::blocking::get(url) {
+                    match ureq::get(url).call() {
                         Ok(response) => {
-                            if let Ok(text) = response.text() {
+                            if let Ok(text) = response.into_string() {
                                 if let Ok(values) = parse_data_line(
                                     &text,
                                     station_id,
@@ -1669,11 +1669,12 @@ fn read_one_data_update(
         DataSource::HttpServer(url) => {
             // HTTP: make GET request to server and parse JSON response
             log::debug!("Fetching data from HTTP server: {}", url);
-            let response = reqwest::blocking::get(url)
+            let response = ureq::get(url)
+                .call()
                 .map_err(|e| anyhow!("Failed to fetch from HTTP server: {}", e))?;
 
             let text = response
-                .text()
+                .into_string()
                 .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
 
             parse_data_line(

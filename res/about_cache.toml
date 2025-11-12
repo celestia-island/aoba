@@ -115,10 +115,6 @@ name = "regex"
 version = "1"
 
 [[dependencies]]
-name = "reqwest"
-version = "0.12"
-
-[[dependencies]]
 name = "rmodbus"
 version = "0.11"
 
@@ -175,6 +171,10 @@ name = "unicode-width"
 version = "0.2"
 
 [[dependencies]]
+name = "ureq"
+version = "2"
+
+[[dependencies]]
 name = "url"
 version = "2"
 
@@ -224,7 +224,6 @@ postcard = "MIT OR Apache-2.0"
 rand = "MIT OR Apache-2.0"
 ratatui = "MIT"
 regex = "MIT OR Apache-2.0"
-reqwest = "MIT OR Apache-2.0"
 rmodbus = "Apache-2.0"
 rumqttc = "Apache-2.0"
 serde = "MIT OR Apache-2.0"
@@ -239,6 +238,7 @@ tracing = "MIT"
 tracing-appender = "MIT"
 tracing-subscriber = "MIT"
 unicode-width = "MIT OR Apache-2.0"
+ureq = "MIT OR Apache-2.0"
 url = "MIT OR Apache-2.0"
 uuid = "Apache-2.0 OR MIT"
 vt100 = "MIT"

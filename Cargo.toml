@@ -86,6 +86,7 @@ rmodbus = { version = "^0.11", features = ["with_serde"] }
 libc = "^0.2"
 serialport = "^4"
 interprocess = "^2"
+ureq = { version = "^2", features = ["json"] }
 reqwest = { version = "^0.12", features = ["blocking", "json"] }
 rumqttc = "^0.24"
 
@@ -148,7 +149,7 @@ rmodbus.workspace = true
 libc.workspace = true
 serialport.workspace = true
 interprocess.workspace = true
-reqwest.workspace = true
+ureq.workspace = true
 rumqttc.workspace = true
 
 expectrl.workspace = true
