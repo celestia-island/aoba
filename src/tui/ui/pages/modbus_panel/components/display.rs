@@ -4,7 +4,6 @@ use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;
 use crate::{
-    i18n::lang,
     tui::{
         status as types,
         status::{
@@ -16,10 +15,71 @@ use crate::{
         },
         ui::components::{
             kv_line::render_kv_line,
-            styled_label::{input_spans, selector_spans, TextState},
+            styled_label::{input_spans, input_spans_with_placeholder, selector_spans, TextState},
         },
     },
+    utils::i18n::lang,
 };
+
+/// Get placeholder text for data source based on kind
+fn get_data_source_placeholder(kind: ModbusMasterDataSourceKind) -> Option<String> {
+    match kind {
+        ModbusMasterDataSourceKind::Manual => None,
+        ModbusMasterDataSourceKind::TransparentForward => {
+            // Check if we have at least 2 ports
+            let has_enough_ports =
+                read_status(|status| Ok(status.ports.order.len() >= 2)).unwrap_or(false);
+
+            if !has_enough_ports {
+                Some(
+                    lang()
+                        .protocol
+                        .modbus
+                        .data_source_placeholder_no_ports
+                        .clone(),
+                )
+            } else {
+                None
+            }
+        }
+        ModbusMasterDataSourceKind::MqttServer => {
+            Some(lang().protocol.modbus.data_source_placeholder_mqtt.clone())
+        }
+        ModbusMasterDataSourceKind::HttpServer => {
+            Some(lang().protocol.modbus.data_source_placeholder_http.clone())
+        }
+        ModbusMasterDataSourceKind::IpcPipe => {
+            #[cfg(unix)]
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_ipc_unix
+                .clone();
+            #[cfg(windows)]
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_ipc_windows
+                .clone();
+            Some(placeholder)
+        }
+        ModbusMasterDataSourceKind::PythonModule => {
+            #[cfg(unix)]
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_python_unix
+                .clone();
+            #[cfg(windows)]
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_python_windows
+                .clone();
+            Some(placeholder)
+        }
+    }
+}
 
 /// Derive selection index for modbus panel from current page state
 pub fn derive_selection() -> Result<types::cursor::ModbusDashboardCursor> {
@@ -146,17 +206,14 @@ pub fn render_kv_lines_with_indicators(
                     )];
                 }
                 TextState::Editing => {
-                    let mut spans = Vec::new();
-                    spans.push(Span::raw("< "));
                     // Use localized Display implementation instead of hardcoded strings
                     let selected_variant = variants.get(selected_index).unwrap_or(&variants[0]);
                     let localized_text = format!("{selected_variant}");
-                    spans.push(Span::styled(
-                        localized_text,
-                        Style::default().fg(Color::Yellow),
-                    ));
-                    spans.push(Span::raw(" >"));
-                    rendered_value_spans = spans;
+                    rendered_value_spans = vec![
+                        Span::raw("< "),
+                        Span::styled(localized_text, Style::default().fg(Color::Yellow)),
+                        Span::raw(" >"),
+                    ];
                 }
             }
         }
@@ -250,47 +307,130 @@ pub fn render_kv_lines_with_indicators(
 
                     let types::port::PortConfig::Modbus { master_source, .. } = &port.config;
 
-                    let mut current_value = match master_source {
-                        ModbusMasterDataSource::TransparentForward { port } => {
-                            port.clone().unwrap_or_default()
-                        }
-                        ModbusMasterDataSource::MqttServer { url }
-                        | ModbusMasterDataSource::HttpServer { url } => url.clone(),
-                        ModbusMasterDataSource::IpcPipe { path }
-                        | ModbusMasterDataSource::PythonModule { path } => path.clone(),
-                        ModbusMasterDataSource::Manual => String::new(),
-                    };
-
                     let selected = matches!(
                         current_selection,
                         types::cursor::ModbusDashboardCursor::MasterSourceValue
                     );
 
-                    let editing = selected
-                        && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+                    // Check if this is TransparentForward (selector) or text input
+                    let is_transparent_forward = matches!(
+                        master_source,
+                        ModbusMasterDataSource::TransparentForward { .. }
+                    );
 
-                    let state = if editing {
-                        TextState::Editing
-                    } else if selected {
-                        TextState::Selected
-                    } else {
-                        TextState::Normal
-                    };
-
-                    if editing {
-                        let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer
+                    if is_transparent_forward {
+                        // Render as selector for TransparentForward
+                        let ModbusMasterDataSource::TransparentForward {
+                            port: selected_port,
+                        } = master_source
                         else {
-                            unreachable!("editing state requires string buffer");
+                            unreachable!();
                         };
-                        let custom_value = String::from_utf8_lossy(bytes).to_string();
-                        return input_spans(custom_value, state);
-                    }
 
-                    if current_value.is_empty() {
-                        current_value = "-".to_string();
-                    }
+                        let available_ports: Vec<String> = read_status(|status| {
+                            Ok(status
+                                .ports
+                                .order
+                                .iter()
+                                .filter(|p| p != &&port.port_name)
+                                .cloned()
+                                .collect())
+                        })?;
 
-                    input_spans(current_value, state)
+                        if available_ports.is_empty() {
+                            // No ports available - show placeholder
+                            let placeholder = get_data_source_placeholder(master_source.kind());
+                            let state = if selected {
+                                TextState::Selected
+                            } else {
+                                TextState::Normal
+                            };
+                            return input_spans_with_placeholder(String::new(), placeholder, state);
+                        }
+
+                        let editing = selected
+                            && matches!(input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+
+                        let current_index = if let Some(port) = selected_port {
+                            available_ports.iter().position(|p| p == port).unwrap_or(0)
+                        } else {
+                            0
+                        };
+
+                        let selected_index = if editing {
+                            if let types::ui::InputRawBuffer::Index(i) = &input_raw_buffer {
+                                *i
+                            } else {
+                                current_index
+                            }
+                        } else {
+                            current_index
+                        };
+
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
+
+                        // Display port name as selector
+                        let display_text = available_ports
+                            .get(selected_index)
+                            .or(selected_port.as_ref())
+                            .map(|s| s.as_str())
+                            .unwrap_or("-");
+
+                        match state {
+                            TextState::Normal => Ok(vec![Span::raw(display_text.to_string())]),
+                            TextState::Selected => Ok(vec![Span::styled(
+                                display_text.to_string(),
+                                Style::default().fg(Color::Green),
+                            )]),
+                            TextState::Editing => Ok(vec![
+                                Span::raw("< "),
+                                Span::styled(
+                                    display_text.to_string(),
+                                    Style::default().fg(Color::Yellow),
+                                ),
+                                Span::raw(" >"),
+                            ]),
+                        }
+                    } else {
+                        // Render as text input for other types
+                        let current_value = match master_source {
+                            ModbusMasterDataSource::MqttServer { url }
+                            | ModbusMasterDataSource::HttpServer { url } => url.clone(),
+                            ModbusMasterDataSource::IpcPipe { path }
+                            | ModbusMasterDataSource::PythonModule { path } => path.clone(),
+                            _ => String::new(),
+                        };
+
+                        let editing = selected
+                            && matches!(input_raw_buffer, types::ui::InputRawBuffer::String { .. });
+
+                        let state = if editing {
+                            TextState::Editing
+                        } else if selected {
+                            TextState::Selected
+                        } else {
+                            TextState::Normal
+                        };
+
+                        if editing {
+                            let types::ui::InputRawBuffer::String { bytes, .. } = &input_raw_buffer
+                            else {
+                                unreachable!("editing state requires string buffer");
+                            };
+                            let custom_value = String::from_utf8_lossy(bytes).to_string();
+                            let placeholder = get_data_source_placeholder(master_source.kind());
+                            return input_spans_with_placeholder(custom_value, placeholder, state);
+                        }
+
+                        let placeholder = get_data_source_placeholder(master_source.kind());
+                        input_spans_with_placeholder(current_value, placeholder, state)
+                    }
                 };
 
                 lines.push(create_line(

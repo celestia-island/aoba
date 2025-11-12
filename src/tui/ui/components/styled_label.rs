@@ -77,20 +77,44 @@ where
     })
 }
 
-pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
+/// Input spans with placeholder support
+/// When current_value is empty and placeholder is provided, displays placeholder in gray italic
+pub fn input_spans_with_placeholder<'a>(
+    current_value: impl ToString,
+    placeholder: Option<impl ToString>,
+    state: TextState,
+) -> Result<Vec<Span<'a>>> {
+    let value_str = current_value.to_string();
+    let show_placeholder = value_str.is_empty() && placeholder.is_some();
+
     let mut out: Vec<Span> = Vec::new();
     match state {
         TextState::Normal => {
-            out.push(Span::raw(current_value.to_string()));
+            if show_placeholder {
+                out.push(Span::styled(
+                    placeholder.unwrap().to_string(),
+                    Style::default()
+                        .fg(Color::DarkGray)
+                        .add_modifier(Modifier::ITALIC),
+                ));
+            } else {
+                out.push(Span::raw(value_str));
+            }
         }
         TextState::Selected => {
-            out.push(Span::styled(
-                current_value.to_string(),
-                Style::default().fg(Color::Green),
-            ));
+            if show_placeholder {
+                out.push(Span::styled(
+                    placeholder.unwrap().to_string(),
+                    Style::default()
+                        .fg(Color::Gray)
+                        .add_modifier(Modifier::ITALIC),
+                ));
+            } else {
+                out.push(Span::styled(value_str, Style::default().fg(Color::Green)));
+            }
         }
         TextState::Editing => {
-            // Read the temporary input buffer string and offset (if present).
+            // When editing starts, clear placeholder
             let editing_opt = read_status(|status| {
                 Ok(
                     if let InputRawBuffer::String { bytes, offset } =
@@ -103,20 +127,20 @@ pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result
                 )
             })?;
 
-            // If there's no editing buffer, fall back to the provided current value
-            // and place the cursor at the end.
             let (editing_string, offset) = if let Some((s, o)) = editing_opt {
                 (s, o)
             } else {
-                let s = current_value.to_string();
-                let o = s.chars().count() as isize; // place cursor at end
+                let s = if show_placeholder {
+                    String::new() // Start with empty string when editing placeholder
+                } else {
+                    value_str
+                };
+                let o = s.chars().count() as isize;
                 (s, o)
             };
 
-            // Split the string by character boundary and compute cursor position.
             let chars: Vec<char> = editing_string.chars().collect();
             let len = chars.len() as isize;
-            // Negative offsets count from end: -1 means after last char.
             let mut pos_isize = if offset < 0 { len + offset } else { offset };
             if pos_isize < 0 {
                 pos_isize = 0;
@@ -135,16 +159,13 @@ pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ));
-            // Left side of cursor
             out.push(Span::styled(left, Style::default().fg(Color::Yellow)));
-            // Visible cursor (underscore) at the current offset
             out.push(Span::styled(
                 "_",
                 Style::default()
                     .fg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             ));
-            // Right side of cursor
             out.push(Span::styled(right, Style::default().fg(Color::Yellow)));
             out.push(Span::styled(
                 " <",
@@ -155,6 +176,10 @@ pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result
         }
     }
     Ok(out)
+}
+
+pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
+    input_spans_with_placeholder(current_value, None::<String>, state)
 }
 
 pub fn switch_spans<'a>(

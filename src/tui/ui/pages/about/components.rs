@@ -10,7 +10,7 @@ use ratatui::{
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{i18n::lang, tui::ui::components::kv_pairs_to_lines};
+use crate::{tui::ui::components::kv_pairs_to_lines, utils::i18n::lang};
 
 #[derive(Default, Clone)]
 pub struct RepoManifest {

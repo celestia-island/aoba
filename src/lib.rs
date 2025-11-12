@@ -6,19 +6,18 @@ pub mod utils;
 
 use anyhow::Result;
 use chrono::Local;
-use clap::ArgMatches;
-use env_logger::{Builder, Target};
 use log::LevelFilter;
 use std::io::{self, Write};
 
-pub use protocol::i18n;
+use clap::ArgMatches;
+use env_logger::{Builder, Target};
 
 /// Common initialization used by TUI entrypoint.
 pub fn init_common() {
     let log_file = std::env::var("AOBA_LOG_FILE").ok().or_else(|| {
         #[cfg(debug_assertions)]
         {
-            Some("./log.log".to_string())
+            Some(format!("./log_{}.log", Local::now().format("%Y%m%d%H%M%S")))
         }
         #[cfg(not(debug_assertions))]
         {
@@ -35,7 +34,7 @@ pub fn init_common() {
         env_logger::init();
     }
 
-    i18n::init_i18n();
+    utils::i18n::init_i18n();
 }
 
 pub async fn start_tui(matches: &ArgMatches) -> Result<()> {

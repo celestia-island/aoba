@@ -3,7 +3,6 @@ use anyhow::Result;
 use ratatui::prelude::*;
 
 use crate::{
-    i18n::lang,
     tui::{
         status::read_status,
         ui::{
@@ -11,6 +10,7 @@ use crate::{
             pages::about::components::{init_about_cache, render_about_page_manifest_lines},
         },
     },
+    utils::i18n::lang,
 };
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {

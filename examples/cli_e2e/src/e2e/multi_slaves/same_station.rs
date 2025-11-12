@@ -67,6 +67,7 @@ pub async fn test_multi_slaves_same_station() -> Result<()> {
     // Start configuration mode
     log::info!("🧪 Starting multi-slaves with same station configuration...");
     let mut process = Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .arg("--config")
         .arg(&config_file)
         .stdout(Stdio::piped())

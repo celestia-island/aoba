@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use strum::{EnumIter, FromRepr};
 
-use crate::i18n::lang;
+use crate::utils::i18n::lang;
 
 #[repr(u8)]
 #[derive(Debug, Clone)]

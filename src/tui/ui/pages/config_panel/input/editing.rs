@@ -6,7 +6,6 @@ use crossterm::event::{KeyCode, KeyEvent};
 use super::navigation::sanitize_configpanel_cursor;
 use crate::{
     core::bus::{self, Bus},
-    i18n::lang,
     tui::{
         status as types,
         status::{
@@ -14,6 +13,7 @@ use crate::{
             {read_status, write_status},
         },
     },
+    utils::i18n::lang,
 };
 
 pub fn handle_input(key: KeyEvent, bus: &Bus) -> Result<()> {
