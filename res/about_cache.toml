@@ -115,8 +115,16 @@ name = "regex"
 version = "1"
 
 [[dependencies]]
+name = "reqwest"
+version = "0.12"
+
+[[dependencies]]
 name = "rmodbus"
 version = "0.11"
+
+[[dependencies]]
+name = "rumqttc"
+version = "0.24"
 
 [[dependencies]]
 name = "serde"
@@ -216,7 +224,9 @@ postcard = "MIT OR Apache-2.0"
 rand = "MIT OR Apache-2.0"
 ratatui = "MIT"
 regex = "MIT OR Apache-2.0"
+reqwest = "MIT OR Apache-2.0"
 rmodbus = "Apache-2.0"
+rumqttc = "Apache-2.0"
 serde = "MIT OR Apache-2.0"
 serde_json = "MIT OR Apache-2.0"
 serde_json_path = "MIT"
