@@ -5,6 +5,8 @@ use anyhow::{anyhow, Result};
 use serde::Serialize;
 use std::{io::Write, time::Duration};
 
+use crate::protocol::status::types::modbus::{RegisterMode, StationConfig};
+
 /// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
 pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {
     if bytes.is_empty() {
@@ -198,13 +200,29 @@ pub fn parse_register_mode(
 }
 
 /// Parse a data line in JSON format
-pub fn parse_data_line(line: &str) -> Result<Vec<u16>> {
+pub fn parse_data_line(
+    line: &str,
+    station_id: u8,
+    register_mode: RegisterMode,
+    start_address: u16,
+    register_length: u16,
+) -> Result<Vec<u16>> {
     let line = line.trim();
     if line.is_empty() {
         return Err(anyhow!("Empty line"));
     }
 
-    // Try to parse as JSON object with "values" field
+    if let Ok(stations) = serde_json::from_str::<Vec<StationConfig>>(line) {
+        return extract_values_from_station_configs(
+            &stations,
+            station_id,
+            register_mode,
+            start_address,
+            register_length,
+        );
+    }
+
+    // Fallback: legacy format {"values": [...]}
     if let Ok(json) = serde_json::from_str::<serde_json::Value>(line) {
         if let Some(values) = json.get("values") {
             if let Some(arr) = values.as_array() {
@@ -220,6 +238,73 @@ pub fn parse_data_line(line: &str) -> Result<Vec<u16>> {
     }
 
     Err(anyhow!("Invalid data format"))
+}
+
+fn extract_values_from_station_configs(
+    stations: &[StationConfig],
+    station_id: u8,
+    register_mode: RegisterMode,
+    start_address: u16,
+    register_length: u16,
+) -> Result<Vec<u16>> {
+    if register_length == 0 {
+        return Ok(Vec::new());
+    }
+
+    let station = stations
+        .iter()
+        .find(|station| station.station_id == station_id)
+        .ok_or_else(|| anyhow!("Station {station_id} not found in data source payload"))?;
+
+    let ranges = match register_mode {
+        RegisterMode::Coils => &station.map.coils,
+        RegisterMode::DiscreteInputs => &station.map.discrete_inputs,
+        RegisterMode::Holding => &station.map.holding,
+        RegisterMode::Input => &station.map.input,
+    };
+
+    let range = ranges
+        .iter()
+        .find(|range| {
+            let end_address = range
+                .address_start
+                .saturating_add(range.length.saturating_sub(1));
+            range.address_start <= start_address
+                && end_address
+                    >= start_address.saturating_add(register_length.saturating_sub(1))
+        })
+        .ok_or_else(|| {
+            anyhow!(
+                "Register range for station {station_id} does not cover address {start_address} (len {register_length})"
+            )
+        })?;
+
+    if start_address < range.address_start {
+        return Err(anyhow!(
+            "Register range for station {station_id} starts at {} but requested address {start_address}",
+            range.address_start
+        ));
+    }
+
+    let offset = (start_address - range.address_start) as usize;
+    let total_available = range.length.saturating_sub(offset as u16) as usize;
+
+    if total_available < register_length as usize {
+        return Err(anyhow!(
+            "Register range length {} too small for requested length {} at offset {}",
+            range.length,
+            register_length,
+            offset
+        ));
+    }
+
+    let mut values = Vec::with_capacity(register_length as usize);
+    let mut iter = range.initial_values.iter().skip(offset);
+    for _ in 0..register_length {
+        values.push(iter.next().copied().unwrap_or(0));
+    }
+
+    Ok(values)
 }
 
 /// Extract values from modbus storage

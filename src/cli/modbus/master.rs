@@ -79,7 +79,13 @@ pub fn handle_master_provide(matches: &ArgMatches, port: &str) -> Result<()> {
     );
 
     // Read one line of data
-    let values = read_one_data_update(&data_source)?;
+    let values = read_one_data_update(
+        &data_source,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+    )?;
 
     // Initialize modbus storage with values
     use rmodbus::server::storage::ModbusStorageSmall;
@@ -287,7 +293,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     let storage = Arc::new(Mutex::new(ModbusStorageSmall::default()));
 
     // Load initial data into storage
-    let initial_values = read_one_data_update(&data_source)?;
+    let initial_values = read_one_data_update(
+        &data_source,
+        station_id,
+        reg_mode,
+        register_address,
+        register_length,
+    )?;
     log::info!("Loaded initial values: {initial_values:?}");
     {
         let mut context = storage.lock().unwrap();
@@ -330,8 +342,10 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         update_storage_loop(
             storage_clone,
             data_source_clone,
+            station_id,
             reg_mode,
             register_address,
+            register_length,
             changed_ranges_clone,
         )
     });
@@ -972,8 +986,10 @@ fn respond_to_request(
 fn update_storage_loop(
     storage: Arc<Mutex<rmodbus::server::storage::ModbusStorageSmall>>,
     data_source: DataSource,
+    station_id: u8,
     reg_mode: crate::protocol::status::types::modbus::RegisterMode,
     register_address: u16,
+    register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
 ) -> Result<()> {
     loop {
@@ -1008,7 +1024,13 @@ fn update_storage_loop(
                                     continue;
                                 }
 
-                                if let Ok(values) = parse_data_line(&line) {
+                                if let Ok(values) = parse_data_line(
+                                    &line,
+                                    station_id,
+                                    reg_mode,
+                                    register_address,
+                                    register_length,
+                                ) {
                                     log::debug!(
                                         "Updating storage with {} values from transparent forward",
                                         values.len()
@@ -1110,7 +1132,13 @@ fn update_storage_loop(
                             let payload = String::from_utf8_lossy(&publish.payload);
                             log::debug!("Received MQTT message: {}", payload);
 
-                            if let Ok(values) = parse_data_line(&payload) {
+                            if let Ok(values) = parse_data_line(
+                                &payload,
+                                station_id,
+                                reg_mode,
+                                register_address,
+                                register_length,
+                            ) {
                                 log::debug!(
                                     "Updating storage with {} values from MQTT",
                                     values.len()
@@ -1173,7 +1201,13 @@ fn update_storage_loop(
                     match reqwest::blocking::get(url) {
                         Ok(response) => {
                             if let Ok(text) = response.text() {
-                                if let Ok(values) = parse_data_line(&text) {
+                                if let Ok(values) = parse_data_line(
+                                    &text,
+                                    station_id,
+                                    reg_mode,
+                                    register_address,
+                                    register_length,
+                                ) {
                                     log::debug!(
                                         "Updating storage with {} values from HTTP",
                                         values.len()
@@ -1239,7 +1273,13 @@ fn update_storage_loop(
                         continue;
                     }
 
-                    match parse_data_line(&line) {
+                    match parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    ) {
                         Ok(values) => {
                             log::info!("Updating storage with values from IPC: {values:?}");
                             let mut context = storage.lock().unwrap();
@@ -1315,7 +1355,13 @@ fn update_storage_loop(
                     }
 
                     line_count += 1;
-                    match parse_data_line(&line) {
+                    match parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    ) {
                         Ok(values) => {
                             log::debug!(
                                 "Updating storage with {} values from line {}",
@@ -1383,7 +1429,13 @@ fn update_storage_loop(
                         continue;
                     }
 
-                    match parse_data_line(&line) {
+                    match parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    ) {
                         Ok(values) => {
                             log::info!("Updating storage with values: {values:?}");
                             let mut context = storage.lock().unwrap();
@@ -1482,7 +1534,13 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
 }
 
 /// Read one data update from source
-fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
+fn read_one_data_update(
+    source: &DataSource,
+    station_id: u8,
+    reg_mode: crate::protocol::status::types::modbus::RegisterMode,
+    register_address: u16,
+    register_length: u16,
+) -> Result<Vec<u16>> {
     match source {
         DataSource::Manual => {
             // Manual mode: return empty values, will be set via TUI or other means
@@ -1493,7 +1551,13 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             let mut reader = BufReader::new(file);
             let mut line = String::new();
             reader.read_line(&mut line)?;
-            parse_data_line(&line)
+            parse_data_line(
+                &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
         }
         DataSource::Pipe(path) => {
             // Open named pipe (FIFO) for reading
@@ -1501,7 +1565,13 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             let mut reader = BufReader::new(file);
             let mut line = String::new();
             reader.read_line(&mut line)?;
-            parse_data_line(&line)
+            parse_data_line(
+                &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
         }
         DataSource::TransparentForward(port) => {
             // Transparent forwarding: read from IPC channel connected to source port
@@ -1522,7 +1592,13 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
                     let mut reader = BufReader::new(file);
                     let mut line = String::new();
                     reader.read_line(&mut line)?;
-                    parse_data_line(&line)
+                    parse_data_line(
+                        &line,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    )
                 }
                 Err(e) => {
                     log::warn!(
@@ -1578,7 +1654,13 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
                 {
                     let payload = String::from_utf8_lossy(&publish.payload);
                     log::debug!("Received MQTT message: {}", payload);
-                    return parse_data_line(&payload);
+                    return parse_data_line(
+                        &payload,
+                        station_id,
+                        reg_mode,
+                        register_address,
+                        register_length,
+                    );
                 }
             }
 
@@ -1594,7 +1676,13 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
                 .text()
                 .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
 
-            parse_data_line(&text)
+            parse_data_line(
+                &text,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
         }
         DataSource::IpcPipe(path) => {
             // IPC pipe: similar to Pipe but for inter-process communication
@@ -1602,7 +1690,13 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             let mut reader = BufReader::new(file);
             let mut line = String::new();
             reader.read_line(&mut line)?;
-            parse_data_line(&line)
+            parse_data_line(
+                &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
         }
     }
 }
