@@ -3,7 +3,6 @@ use std::process::ExitStatus;
 
 use crate::{
     cli::status::CliMode,
-    i18n::lang,
     tui::status::{
         modbus::{RegisterMode, StationMode},
         port::{
@@ -11,6 +10,7 @@ use crate::{
             PortLogEntry, PortLogMetadata, PortManagementEvent, PortManagementLog,
         },
     },
+    utils::i18n::lang,
 };
 
 #[derive(Default)]

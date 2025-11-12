@@ -39,20 +39,8 @@ name = "derive_more"
 version = "2"
 
 [[dependencies]]
-name = "eframe"
-version = "0.32"
-
-[[dependencies]]
-name = "egui"
-version = "0.32"
-
-[[dependencies]]
 name = "env_logger"
 version = "0.11"
-
-[[dependencies]]
-name = "expectrl"
-version = "0.8"
 
 [[dependencies]]
 name = "flume"
@@ -61,10 +49,6 @@ version = "0.11"
 [[dependencies]]
 name = "futures"
 version = "0.3"
-
-[[dependencies]]
-name = "image"
-version = "0.25"
 
 [[dependencies]]
 name = "interprocess"
@@ -111,16 +95,12 @@ name = "ratatui"
 version = "0.29"
 
 [[dependencies]]
-name = "regex"
-version = "1"
-
-[[dependencies]]
 name = "rmodbus"
 version = "0.11"
 
 [[dependencies]]
 name = "rumqttc"
-version = "0.24"
+version = "0.25"
 
 [[dependencies]]
 name = "serde"
@@ -172,7 +152,7 @@ version = "0.2"
 
 [[dependencies]]
 name = "ureq"
-version = "2"
+version = "3"
 
 [[dependencies]]
 name = "url"
@@ -181,10 +161,6 @@ version = "2"
 [[dependencies]]
 name = "uuid"
 version = "1"
-
-[[dependencies]]
-name = "vt100"
-version = "0.15"
 
 [[dependencies]]
 name = "whoami"
@@ -205,13 +181,9 @@ clap = "MIT OR Apache-2.0"
 crossterm = "MIT"
 ctrlc = "MIT/Apache-2.0"
 derive_more = "MIT"
-eframe = "MIT OR Apache-2.0"
-egui = "MIT OR Apache-2.0"
 env_logger = "MIT OR Apache-2.0"
-expectrl = "MIT"
 flume = "Apache-2.0/MIT"
 futures = "MIT OR Apache-2.0"
-image = "MIT OR Apache-2.0"
 interprocess = "MIT OR Apache-2.0"
 libc = "MIT OR Apache-2.0"
 log = "MIT OR Apache-2.0"
@@ -223,7 +195,6 @@ percent-encoding = "MIT OR Apache-2.0"
 postcard = "MIT OR Apache-2.0"
 rand = "MIT OR Apache-2.0"
 ratatui = "MIT"
-regex = "MIT OR Apache-2.0"
 rmodbus = "Apache-2.0"
 rumqttc = "Apache-2.0"
 serde = "MIT OR Apache-2.0"
@@ -241,7 +212,6 @@ unicode-width = "MIT OR Apache-2.0"
 ureq = "MIT OR Apache-2.0"
 url = "MIT OR Apache-2.0"
 uuid = "Apache-2.0 OR MIT"
-vt100 = "MIT"
 whoami = "Apache-2.0 OR BSL-1.0 OR MIT"
 yuuka = "Apache-2.0"
 

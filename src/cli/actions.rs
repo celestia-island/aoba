@@ -1,5 +1,6 @@
-use clap::ArgMatches;
 use serde::Serialize;
+
+use clap::ArgMatches;
 
 use crate::protocol::ipc::{self, IpcCommandListener, IpcServer};
 

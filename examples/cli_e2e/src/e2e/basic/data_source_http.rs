@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use reqwest::Client;
-use std::{process::Stdio, sync::Arc, time::Duration};
+use std::{net::TcpListener, process::Stdio, sync::Arc, thread, time::Duration};
 use tokio::task;
 
-use axum::{http::StatusCode, routing::get, serve, Router};
+use tiny_http::{Header, Response, Server};
+use ureq::Agent;
 
 use crate::utils::{
     build_debug_bin, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
@@ -12,37 +12,38 @@ use crate::utils::{
 use aoba::protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode};
 
 async fn run_simple_server(payload: Arc<String>) -> Result<String> {
-    let response_body = payload.clone();
-    let app = Router::new().route(
-        "/",
-        get(move || {
-            let body = response_body.clone();
-            async move { (StatusCode::OK, body.as_ref().clone()) }
-        }),
-    );
-
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let listener = TcpListener::bind("127.0.0.1:0")?;
     let addr = listener.local_addr()?;
+    listener.set_nonblocking(false)?;
+    let server = Server::from_listener(listener, None)
+        .map_err(|err| anyhow!("Failed to start HTTP server: {err}"))?;
 
-    let server = serve(listener, app);
-    task::spawn(async move {
-        if let Err(e) = server.await {
-            log::error!("server error: {e}");
+    let response_payload = payload.clone();
+    thread::spawn(move || {
+        for request in server.incoming_requests() {
+            let mut response = Response::from_string(response_payload.as_ref().clone());
+            if let Ok(header) = Header::from_bytes(b"Content-Type", b"application/json") {
+                response.add_header(header);
+            }
+            if let Err(err) = request.respond(response) {
+                log::error!("HTTP server respond error: {err}");
+            }
         }
     });
 
     let url = format!("http://{}", addr);
-    let client = Client::new();
-    let mut attempts = 0;
-    while attempts < 20 {
-        match client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => break,
-            _ => {
-                tokio::time::sleep(Duration::from_millis(50)).await;
-                attempts += 1;
+    let url_clone = url.clone();
+    task::spawn_blocking(move || {
+        let agent = Agent::new_with_defaults();
+        for _ in 0..20 {
+            match agent.get(&url_clone).call() {
+                Ok(resp) if resp.status() == 200 => return Ok(()),
+                _ => thread::sleep(Duration::from_millis(50)),
             }
         }
-    }
+        Err(anyhow!("HTTP server failed to respond in time"))
+    })
+    .await??;
 
     Ok(url)
 }
@@ -78,7 +79,7 @@ fn parse_client_values(stdout: &[u8]) -> Result<Vec<u16>> {
         .collect())
 }
 
-/// Test master mode with HTTP data source using axum for the test server
+/// Test master mode with HTTP data source using tiny_http for the test server
 pub async fn test_http_data_source() -> Result<()> {
     log::info!("🧪 Testing HTTP data source mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);
@@ -171,7 +172,7 @@ pub async fn test_http_data_source() -> Result<()> {
     Ok(())
 }
 
-/// Test master mode with HTTP data source in persistent mode using axum
+/// Test master mode with HTTP data source in persistent mode using tiny_http
 pub async fn test_http_data_source_persist() -> Result<()> {
     log::info!("🧪 Testing HTTP data source persistent mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, DEFAULT_PORT2);

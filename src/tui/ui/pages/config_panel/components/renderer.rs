@@ -5,7 +5,6 @@ use types::modbus::ParityOption;
 
 use super::utilities::{derive_selection, is_port_occupied_by_this};
 use crate::{
-    i18n::lang,
     tui::{
         status as types,
         status::read_status,
@@ -14,6 +13,7 @@ use crate::{
             styled_label::{input_spans, link_spans, selector_spans, switch_spans, TextState},
         },
     },
+    utils::i18n::lang,
 };
 
 /// Generate lines for config panel with 1:4:5 layout (indicator:label:value).

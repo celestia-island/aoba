@@ -8,7 +8,6 @@ use ratatui::{
 use unicode_width::UnicodeWidthStr;
 
 use crate::{
-    i18n::lang,
     tui::{
         status as types,
         status::{cursor::EntryCursor, read_status},
@@ -17,6 +16,7 @@ use crate::{
             pages::about::components::{init_about_cache, render_about_page_manifest_lines},
         },
     },
+    utils::i18n::lang,
 };
 
 /// Render the right details panel content

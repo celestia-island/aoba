@@ -4,7 +4,6 @@ use ratatui::{prelude::*, style::Modifier, text::Line};
 
 use super::table::render_register_row_line;
 use crate::{
-    i18n::lang,
     tui::{
         status as types,
         status::{
@@ -19,6 +18,7 @@ use crate::{
             styled_label::{input_spans, input_spans_with_placeholder, selector_spans, TextState},
         },
     },
+    utils::i18n::lang,
 };
 
 /// Get placeholder text for data source based on kind

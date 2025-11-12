@@ -9,9 +9,10 @@ mod port_occupation;
 mod utils;
 
 use anyhow::Result;
-use clap::Parser;
 #[cfg(not(windows))]
 use std::process::Command;
+
+use clap::Parser;
 
 // use config_mode::test_config_mode;
 use e2e::{

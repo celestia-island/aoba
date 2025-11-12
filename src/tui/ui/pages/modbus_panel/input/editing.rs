@@ -3,7 +3,6 @@ use anyhow::{anyhow, Result};
 use crossterm::event::{KeyCode, KeyEvent};
 
 use crate::{
-    i18n::lang,
     protocol::modbus::generate_pull_set_holding_request,
     tui::{
         status as types,
@@ -18,6 +17,7 @@ use crate::{
         ui::components::input_span_handler::handle_input_span,
         utils::bus::{self, Bus, UiToCore},
     },
+    utils::i18n::lang,
 };
 
 pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {

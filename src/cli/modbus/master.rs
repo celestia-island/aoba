@@ -1,14 +1,14 @@
 use anyhow::{anyhow, Result};
-use clap::ArgMatches;
 use std::{
     cell::RefCell,
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{
@@ -1199,58 +1199,61 @@ fn update_storage_loop(
                 // HTTP: poll server periodically for updates
                 loop {
                     match ureq::get(url).call() {
-                        Ok(response) => {
-                            if let Ok(text) = response.into_string() {
-                                if let Ok(values) = parse_data_line(
-                                    &text,
-                                    station_id,
-                                    reg_mode,
-                                    register_address,
-                                    register_length,
-                                ) {
-                                    log::debug!(
-                                        "Updating storage with {} values from HTTP",
-                                        values.len()
-                                    );
-                                    let mut context = storage.lock().unwrap();
-                                    match reg_mode {
-                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_holding(register_address + i as u16, val)?;
+                        Ok(mut response) => {
+                            match response.body_mut().read_to_string() {
+                                Ok(text) => {
+                                    if let Ok(values) = parse_data_line(
+                                        &text,
+                                        station_id,
+                                        reg_mode,
+                                        register_address,
+                                        register_length,
+                                    ) {
+                                        log::debug!(
+                                            "Updating storage with {} values from HTTP",
+                                            values.len()
+                                        );
+                                        let mut context = storage.lock().unwrap();
+                                        match reg_mode {
+                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_holding(register_address + i as u16, val)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_coil(register_address + i as u16, val != 0)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_discrete(register_address + i as u16, val != 0)?;
+                                                }
+                                            }
+                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                                for (i, &val) in values.iter().enumerate() {
+                                                    context.set_input(register_address + i as u16, val)?;
+                                                }
                                             }
                                         }
-                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_coil(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_discrete(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_input(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                    }
-                                    drop(context);
+                                        drop(context);
 
-                                    // Record changed range
-                                    {
-                                        let len = values.len() as u16;
-                                        let mut cr = changed_ranges.lock().unwrap();
-                                        cr.push((register_address, len, Instant::now()));
-                                        while cr.len() > 1000 {
-                                            cr.remove(0);
+                                        // Record changed range
+                                        {
+                                            let len = values.len() as u16;
+                                            let mut cr = changed_ranges.lock().unwrap();
+                                            cr.push((register_address, len, Instant::now()));
+                                            while cr.len() > 1000 {
+                                                cr.remove(0);
+                                            }
                                         }
+                                    } else {
+                                        log::warn!("Failed to parse HTTP response data");
                                     }
-                                } else {
-                                    log::warn!("Failed to parse HTTP response data");
                                 }
-                            } else {
-                                log::warn!("Failed to read HTTP response text");
+                                Err(e) => {
+                                    log::warn!("Failed to read HTTP response: {}", e);
+                                }
                             }
                         }
                         Err(err) => {
@@ -1673,8 +1676,10 @@ fn read_one_data_update(
                 .call()
                 .map_err(|e| anyhow!("Failed to fetch from HTTP server: {}", e))?;
 
+            let mut response = response;
             let text = response
-                .into_string()
+                .body_mut()
+                .read_to_string()
                 .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
 
             parse_data_line(
