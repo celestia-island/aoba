@@ -469,16 +469,17 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     let register_length = *matches.get_one::<u16>("register-length").unwrap();
     let register_mode = matches.get_one::<String>("register-mode").unwrap();
     let baud_rate = *matches.get_one::<u32>("baud-rate").unwrap();
+    let timeout_ms = *matches.get_one::<u32>("timeout-ms").unwrap();
 
     let reg_mode = parse_register_mode(register_mode)?;
 
     log::info!(
-        "Starting slave poll on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate})"
+        "Starting slave poll on {port} (station_id={station_id}, addr={register_address}, len={register_length}, mode={reg_mode:?}, baud={baud_rate}, timeout={timeout_ms}ms)"
     );
 
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
-        let port_handle = open_serial_port(port, baud_rate, Duration::from_secs(5))?;
+        let port_handle = open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 
@@ -500,7 +501,7 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
     };
 
     // Output response as JSON
-    let json = serde_json::to_string_pretty(&response)?;
+    let json = serde_json::to_string(&response)?;
     println!("{json}");
 
     Ok(())
