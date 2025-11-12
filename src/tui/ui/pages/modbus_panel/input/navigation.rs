@@ -453,7 +453,11 @@ fn handle_save_config(bus: &Bus) -> Result<()> {
             }
 
             // Validate data source configuration in master mode
-            let types::port::PortConfig::Modbus { mode, master_source, .. } = &port.config;
+            let types::port::PortConfig::Modbus {
+                mode,
+                master_source,
+                ..
+            } = &port.config;
             if mode.is_master() {
                 if let Err(validation_error) = validate_data_source(master_source) {
                     let err_msg = validation_error.clone();
@@ -765,7 +769,11 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             // For transparent forward, we don't need to validate the port here
             // The port will be validated when actually starting the subprocess
             if port.is_none() || port.as_ref().map(|p| p.is_empty()).unwrap_or(true) {
-                return Err(lang().protocol.modbus.data_source_placeholder_no_ports.clone());
+                return Err(lang()
+                    .protocol
+                    .modbus
+                    .data_source_placeholder_no_ports
+                    .clone());
             }
             Ok(())
         }
@@ -795,7 +803,11 @@ fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Resul
             }
             // Check if file exists
             if !std::path::Path::new(path).exists() {
-                let err_msg = lang().protocol.modbus.err_file_not_found.replace("{}", path);
+                let err_msg = lang()
+                    .protocol
+                    .modbus
+                    .err_file_not_found
+                    .replace("{}", path);
                 return Err(err_msg);
             }
             Ok(())
@@ -808,7 +820,8 @@ fn validate_url(url: &str, expected_scheme: &str) -> Result<(), String> {
     // Basic URL validation - check if it looks like a valid URL
     if let Ok(parsed) = url::Url::parse(url) {
         // Check if scheme matches expected
-        if parsed.scheme() == expected_scheme || parsed.scheme() == &format!("{}s", expected_scheme) {
+        if parsed.scheme() == expected_scheme || parsed.scheme() == &format!("{}s", expected_scheme)
+        {
             Ok(())
         } else {
             let err_msg = lang().protocol.modbus.err_invalid_url.replace("{}", url);

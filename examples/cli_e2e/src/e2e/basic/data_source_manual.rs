@@ -91,7 +91,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
 
     // Create IPC pipe path - use a regular file for testing since mkfifo needs nix crate
     let ipc_pipe = temp_dir.join("test_ipc_pipe_file");
-    
+
     // Create a test file with initial data
     {
         let mut file = File::create(&ipc_pipe)?;

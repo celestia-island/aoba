@@ -27,12 +27,17 @@ fn get_data_source_placeholder(kind: ModbusMasterDataSourceKind) -> Option<Strin
         ModbusMasterDataSourceKind::Manual => None,
         ModbusMasterDataSourceKind::TransparentForward => {
             // Check if we have at least 2 ports
-            let has_enough_ports = read_status(|status| {
-                Ok(status.ports.order.len() >= 2)
-            }).unwrap_or(false);
-            
+            let has_enough_ports =
+                read_status(|status| Ok(status.ports.order.len() >= 2)).unwrap_or(false);
+
             if !has_enough_ports {
-                Some(lang().protocol.modbus.data_source_placeholder_no_ports.clone())
+                Some(
+                    lang()
+                        .protocol
+                        .modbus
+                        .data_source_placeholder_no_ports
+                        .clone(),
+                )
             } else {
                 None
             }
@@ -45,16 +50,32 @@ fn get_data_source_placeholder(kind: ModbusMasterDataSourceKind) -> Option<Strin
         }
         ModbusMasterDataSourceKind::IpcPipe => {
             #[cfg(unix)]
-            let placeholder = lang().protocol.modbus.data_source_placeholder_ipc_unix.clone();
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_ipc_unix
+                .clone();
             #[cfg(windows)]
-            let placeholder = lang().protocol.modbus.data_source_placeholder_ipc_windows.clone();
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_ipc_windows
+                .clone();
             Some(placeholder)
         }
         ModbusMasterDataSourceKind::PythonModule => {
             #[cfg(unix)]
-            let placeholder = lang().protocol.modbus.data_source_placeholder_python_unix.clone();
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_python_unix
+                .clone();
             #[cfg(windows)]
-            let placeholder = lang().protocol.modbus.data_source_placeholder_python_windows.clone();
+            let placeholder = lang()
+                .protocol
+                .modbus
+                .data_source_placeholder_python_windows
+                .clone();
             Some(placeholder)
         }
     }
@@ -302,12 +323,18 @@ pub fn render_kv_lines_with_indicators(
 
                     if is_transparent_forward {
                         // Render as selector for TransparentForward
-                        let ModbusMasterDataSource::TransparentForward { port: selected_port } = master_source else {
+                        let ModbusMasterDataSource::TransparentForward {
+                            port: selected_port,
+                        } = master_source
+                        else {
                             unreachable!();
                         };
 
                         let available_ports: Vec<String> = read_status(|status| {
-                            Ok(status.ports.order.iter()
+                            Ok(status
+                                .ports
+                                .order
+                                .iter()
                                 .filter(|p| p != &&port.port_name)
                                 .cloned()
                                 .collect())
@@ -324,7 +351,8 @@ pub fn render_kv_lines_with_indicators(
                             return input_spans_with_placeholder(String::new(), placeholder, state);
                         }
 
-                        let editing = selected && matches!(input_raw_buffer, types::ui::InputRawBuffer::Index(_));
+                        let editing = selected
+                            && matches!(input_raw_buffer, types::ui::InputRawBuffer::Index(_));
 
                         let current_index = if let Some(port) = selected_port {
                             available_ports.iter().position(|p| p == port).unwrap_or(0)
@@ -351,7 +379,8 @@ pub fn render_kv_lines_with_indicators(
                         };
 
                         // Display port name as selector
-                        let display_text = available_ports.get(selected_index)
+                        let display_text = available_ports
+                            .get(selected_index)
                             .or_else(|| selected_port.as_ref())
                             .map(|s| s.as_str())
                             .unwrap_or("-");

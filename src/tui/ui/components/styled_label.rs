@@ -86,7 +86,7 @@ pub fn input_spans_with_placeholder<'a>(
 ) -> Result<Vec<Span<'a>>> {
     let value_str = current_value.to_string();
     let show_placeholder = value_str.is_empty() && placeholder.is_some();
-    
+
     let mut out: Vec<Span> = Vec::new();
     match state {
         TextState::Normal => {
@@ -110,10 +110,7 @@ pub fn input_spans_with_placeholder<'a>(
                         .add_modifier(Modifier::ITALIC),
                 ));
             } else {
-                out.push(Span::styled(
-                    value_str,
-                    Style::default().fg(Color::Green),
-                ));
+                out.push(Span::styled(value_str, Style::default().fg(Color::Green)));
             }
         }
         TextState::Editing => {
@@ -184,8 +181,6 @@ pub fn input_spans_with_placeholder<'a>(
 pub fn input_spans<'a>(current_value: impl ToString, state: TextState) -> Result<Vec<Span<'a>>> {
     input_spans_with_placeholder(current_value, None::<String>, state)
 }
-
-
 
 pub fn switch_spans<'a>(
     is_selected: bool,

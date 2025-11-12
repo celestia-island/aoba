@@ -123,19 +123,27 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                             let types::port::PortConfig::Modbus { master_source, .. } =
                                 &port_entry.config;
                             match master_source {
-                                types::modbus::ModbusMasterDataSource::TransparentForward { port } => {
+                                types::modbus::ModbusMasterDataSource::TransparentForward {
+                                    port,
+                                } => {
                                     // Find index of selected port in available ports list
-                                    let available_ports: Vec<String> = status.ports.order.iter()
+                                    let available_ports: Vec<String> = status
+                                        .ports
+                                        .order
+                                        .iter()
                                         .filter(|p| *p != port_name)
                                         .cloned()
                                         .collect();
-                                    
+
                                     let index = if let Some(selected_port) = port {
-                                        available_ports.iter().position(|p| p == selected_port).unwrap_or(0)
+                                        available_ports
+                                            .iter()
+                                            .position(|p| p == selected_port)
+                                            .unwrap_or(0)
                                     } else {
                                         0
                                     };
-                                    
+
                                     return Ok((true, index));
                                 }
                                 _ => return Ok((false, 0)),
@@ -149,7 +157,8 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
             if is_transparent_forward {
                 // Use Index buffer for selector
                 write_status(|status| {
-                    status.temporarily.input_raw_buffer = types::ui::InputRawBuffer::Index(current_port_index);
+                    status.temporarily.input_raw_buffer =
+                        types::ui::InputRawBuffer::Index(current_port_index);
                     Ok(())
                 })?;
             } else {
@@ -168,9 +177,9 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                                         url.clone()
                                     }
                                     types::modbus::ModbusMasterDataSource::IpcPipe { path }
-                                    | types::modbus::ModbusMasterDataSource::PythonModule { path } => {
-                                        path.clone()
-                                    }
+                                    | types::modbus::ModbusMasterDataSource::PythonModule {
+                                        path,
+                                    } => path.clone(),
                                     _ => String::new(),
                                 };
                                 return Ok(value);
@@ -191,7 +200,7 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                     Ok(())
                 })?;
             }
-            
+
             bus::request_refresh(&bus.ui_tx).map_err(|err| anyhow!(err))?;
         }
         types::cursor::ModbusDashboardCursor::RegisterMode { index } => {
@@ -254,9 +263,17 @@ pub fn handle_enter_action(bus: &Bus) -> Result<()> {
                 // Check if register editing is allowed (only for Manual mode in Master)
                 let is_editable = read_status(|status| {
                     if let Some(port_entry) = status.ports.map.get(&port_name) {
-                        let types::port::PortConfig::Modbus { mode, master_source, .. } = &port_entry.config;
+                        let types::port::PortConfig::Modbus {
+                            mode,
+                            master_source,
+                            ..
+                        } = &port_entry.config;
                         // Allow editing in slave mode or in master mode with Manual data source
-                        return Ok(mode.is_slave() || matches!(master_source, types::modbus::ModbusMasterDataSource::Manual));
+                        return Ok(mode.is_slave()
+                            || matches!(
+                                master_source,
+                                types::modbus::ModbusMasterDataSource::Manual
+                            ));
                     }
                     Ok(false)
                 })?;

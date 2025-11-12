@@ -169,17 +169,24 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     types::cursor::ModbusDashboardCursor::MasterSourceValue => {
                         // Count available ports for TransparentForward selector
                         read_status(|status| {
-                            if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                            if let crate::tui::status::Page::ModbusDashboard {
+                                selected_port, ..
+                            } = &status.page
+                            {
                                 if let Some(port_name) = status.ports.order.get(*selected_port) {
                                     // Count ports excluding the current one
-                                    let count = status.ports.order.iter()
+                                    let count = status
+                                        .ports
+                                        .order
+                                        .iter()
                                         .filter(|p| *p != port_name)
                                         .count();
                                     return Ok(count);
                                 }
                             }
                             Ok(0)
-                        }).unwrap_or(0)
+                        })
+                        .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
@@ -226,17 +233,24 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                     types::cursor::ModbusDashboardCursor::MasterSourceValue => {
                         // Count available ports for TransparentForward selector
                         read_status(|status| {
-                            if let crate::tui::status::Page::ModbusDashboard { selected_port, .. } = &status.page {
+                            if let crate::tui::status::Page::ModbusDashboard {
+                                selected_port, ..
+                            } = &status.page
+                            {
                                 if let Some(port_name) = status.ports.order.get(*selected_port) {
                                     // Count ports excluding the current one
-                                    let count = status.ports.order.iter()
+                                    let count = status
+                                        .ports
+                                        .order
+                                        .iter()
                                         .filter(|p| *p != port_name)
                                         .count();
                                     return Ok(count);
                                 }
                             }
                             Ok(0)
-                        }).unwrap_or(0)
+                        })
+                        .unwrap_or(0)
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
@@ -451,19 +465,27 @@ fn commit_selector_edit(
                         let types::port::PortConfig::Modbus { master_source, .. } =
                             &mut port_data.config;
 
-                        if let ModbusMasterDataSource::TransparentForward { port: existing } = master_source {
+                        if let ModbusMasterDataSource::TransparentForward { port: existing } =
+                            master_source
+                        {
                             // Get list of available ports (excluding current port)
-                            let available_ports: Vec<String> = status.ports.order.iter()
+                            let available_ports: Vec<String> = status
+                                .ports
+                                .order
+                                .iter()
                                 .filter(|p| *p != &port_name)
                                 .cloned()
                                 .collect();
-                            
+
                             if let Some(selected_port_name) = available_ports.get(selected_index) {
                                 let new_value = Some(selected_port_name.clone());
                                 if *existing != new_value {
                                     *existing = new_value;
                                     port_data.config_modified = true;
-                                    if matches!(port_data.state, types::port::PortState::OccupiedByThis) {
+                                    if matches!(
+                                        port_data.state,
+                                        types::port::PortState::OccupiedByThis
+                                    ) {
                                         should_restart = true;
                                     }
                                 }

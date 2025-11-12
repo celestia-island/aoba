@@ -986,16 +986,18 @@ fn update_storage_loop(
             }
             DataSource::TransparentForward(port) => {
                 // Transparent forwarding: continuously read from IPC channel
-                let channel_name = format!("/tmp/aoba_forward_{}", 
-                    port.replace('/', "_").replace('\\', "_"));
-                
+                let channel_name = format!(
+                    "/tmp/aoba_forward_{}",
+                    port.replace('/', "_").replace('\\', "_")
+                );
+
                 log::info!("TransparentForward: monitoring channel {}", channel_name);
-                
+
                 loop {
                     match std::fs::File::open(&channel_name) {
                         Ok(file) => {
                             let reader = BufReader::new(file);
-                            
+
                             for line in reader.lines() {
                                 let line = match line {
                                     Ok(l) => l,
@@ -1004,13 +1006,16 @@ fn update_storage_loop(
                                         break;
                                     }
                                 };
-                                
+
                                 if line.trim().is_empty() {
                                     continue;
                                 }
-                                
+
                                 if let Ok(values) = parse_data_line(&line) {
-                                    log::debug!("Updating storage with {} values from transparent forward", values.len());
+                                    log::debug!(
+                                        "Updating storage with {} values from transparent forward",
+                                        values.len()
+                                    );
                                     let mut context = storage.lock().unwrap();
                                     match reg_mode {
                                         crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -1049,7 +1054,7 @@ fn update_storage_loop(
                                     log::warn!("Failed to parse forward channel data");
                                 }
                             }
-                            
+
                             log::debug!("Forward channel closed, reopening...");
                         }
                         Err(e) => {
@@ -1063,7 +1068,7 @@ fn update_storage_loop(
             DataSource::MqttServer(url) => {
                 // MQTT: subscribe to broker and continuously update on new messages
                 log::info!("Starting MQTT subscription loop for: {}", url);
-                
+
                 // Parse MQTT URL
                 let parsed_url = match url::Url::parse(url) {
                     Ok(u) => u,
@@ -1072,44 +1077,47 @@ fn update_storage_loop(
                         return Err(anyhow!("Invalid MQTT URL: {}", e));
                     }
                 };
-                
+
                 let host = parsed_url.host_str().unwrap_or("localhost");
                 let port = parsed_url.port().unwrap_or(1883);
                 let topic = parsed_url.path().trim_start_matches('/');
-                
+
                 if topic.is_empty() {
                     log::error!("MQTT URL must include a topic path");
                     return Err(anyhow!("MQTT URL must include a topic path"));
                 }
-                
+
                 log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
-                
+
                 // Create a unique client ID
                 let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
-                
+
                 // Create MQTT options
                 let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
-                
+
                 // Create client
                 let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
-                
+
                 // Subscribe to topic
                 if let Err(e) = client.subscribe(topic, rumqttc::QoS::AtMostOnce) {
                     log::error!("Failed to subscribe to MQTT topic: {}", e);
                     return Err(anyhow!("Failed to subscribe: {}", e));
                 }
-                
+
                 log::info!("MQTT: subscribed to topic '{}'", topic);
-                
+
                 // Process incoming messages
                 for notification in connection.iter() {
                     match notification {
                         Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) => {
                             let payload = String::from_utf8_lossy(&publish.payload);
                             log::debug!("Received MQTT message: {}", payload);
-                            
+
                             if let Ok(values) = parse_data_line(&payload) {
-                                log::debug!("Updating storage with {} values from MQTT", values.len());
+                                log::debug!(
+                                    "Updating storage with {} values from MQTT",
+                                    values.len()
+                                );
                                 let mut context = storage.lock().unwrap();
                                 match reg_mode {
                                     crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -1158,7 +1166,7 @@ fn update_storage_loop(
                         }
                     }
                 }
-                
+
                 log::warn!("MQTT connection lost, will retry...");
                 std::thread::sleep(Duration::from_secs(5));
             }
@@ -1169,7 +1177,10 @@ fn update_storage_loop(
                         Ok(response) => {
                             if let Ok(text) = response.text() {
                                 if let Ok(values) = parse_data_line(&text) {
-                                    log::debug!("Updating storage with {} values from HTTP", values.len());
+                                    log::debug!(
+                                        "Updating storage with {} values from HTTP",
+                                        values.len()
+                                    );
                                     let mut context = storage.lock().unwrap();
                                     match reg_mode {
                                         crate::protocol::status::types::modbus::RegisterMode::Holding => {
@@ -1215,7 +1226,7 @@ fn update_storage_loop(
                             log::warn!("Failed to fetch from HTTP server: {}", err);
                         }
                     }
-                    
+
                     // Poll every second
                     std::thread::sleep(Duration::from_secs(1));
                 }
@@ -1499,13 +1510,18 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             // Transparent forwarding: read from IPC channel connected to source port
             // The source port should be publishing data to a named pipe
             log::debug!("Reading from transparent forward source port: {}", port);
-            
+
             // Create IPC channel name from port name
-            let channel_name = format!("/tmp/aoba_forward_{}", 
-                port.replace('/', "_").replace('\\', "_"));
-            
-            log::info!("TransparentForward: waiting for data from channel {}", channel_name);
-            
+            let channel_name = format!(
+                "/tmp/aoba_forward_{}",
+                port.replace('/', "_").replace('\\', "_")
+            );
+
+            log::info!(
+                "TransparentForward: waiting for data from channel {}",
+                channel_name
+            );
+
             // Try to read from the channel file
             match std::fs::File::open(&channel_name) {
                 Ok(file) => {
@@ -1515,7 +1531,11 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
                     parse_data_line(&line)
                 }
                 Err(e) => {
-                    log::warn!("Failed to open transparent forward channel {}: {}", channel_name, e);
+                    log::warn!(
+                        "Failed to open transparent forward channel {}: {}",
+                        channel_name,
+                        e
+                    );
                     log::info!("Ensure source port is running with transparent forwarding enabled");
                     Err(anyhow!("TransparentForward channel not available: {}", e))
                 }
@@ -1524,44 +1544,50 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
         DataSource::MqttServer(url) => {
             // MQTT: connect to broker and wait for one message
             log::debug!("Connecting to MQTT broker: {}", url);
-            
+
             // Parse MQTT URL to extract broker and topic
-            let parsed_url = url::Url::parse(url)
-                .map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
-            
-            let host = parsed_url.host_str()
+            let parsed_url =
+                url::Url::parse(url).map_err(|e| anyhow!("Invalid MQTT URL: {}", e))?;
+
+            let host = parsed_url
+                .host_str()
                 .ok_or_else(|| anyhow!("MQTT URL must have a host"))?;
             let port = parsed_url.port().unwrap_or(1883);
             let topic = parsed_url.path().trim_start_matches('/');
-            
+
             if topic.is_empty() {
-                return Err(anyhow!("MQTT URL must include a topic path (e.g., mqtt://host:port/topic)"));
+                return Err(anyhow!(
+                    "MQTT URL must include a topic path (e.g., mqtt://host:port/topic)"
+                ));
             }
-            
+
             log::info!("MQTT: connecting to {}:{}, topic: {}", host, port, topic);
-            
+
             // Create a unique client ID
             let client_id = format!("aoba_{}", uuid::Uuid::new_v4());
-            
+
             // Create MQTT options
             let mqtt_options = rumqttc::MqttOptions::new(&client_id, host, port);
-            
+
             // Create client
             let (client, mut connection) = rumqttc::Client::new(mqtt_options, 10);
-            
+
             // Subscribe to topic
-            client.subscribe(topic, rumqttc::QoS::AtMostOnce)
+            client
+                .subscribe(topic, rumqttc::QoS::AtMostOnce)
                 .map_err(|e| anyhow!("Failed to subscribe to MQTT topic: {}", e))?;
-            
+
             // Wait for one message
             for notification in connection.iter() {
-                if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) = notification {
+                if let Ok(rumqttc::Event::Incoming(rumqttc::Packet::Publish(publish))) =
+                    notification
+                {
                     let payload = String::from_utf8_lossy(&publish.payload);
                     log::debug!("Received MQTT message: {}", payload);
                     return parse_data_line(&payload);
                 }
             }
-            
+
             Err(anyhow!("MQTT connection closed without receiving data"))
         }
         DataSource::HttpServer(url) => {
@@ -1569,10 +1595,11 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
             log::debug!("Fetching data from HTTP server: {}", url);
             let response = reqwest::blocking::get(url)
                 .map_err(|e| anyhow!("Failed to fetch from HTTP server: {}", e))?;
-            
-            let text = response.text()
+
+            let text = response
+                .text()
                 .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
-            
+
             parse_data_line(&text)
         }
         DataSource::IpcPipe(path) => {

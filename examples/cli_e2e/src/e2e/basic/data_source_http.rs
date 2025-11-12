@@ -1,11 +1,5 @@
 use anyhow::Result;
-use std::{
-    io::Write,
-    net::TcpListener,
-    process::Stdio,
-    thread,
-    time::Duration,
-};
+use std::{io::Write, net::TcpListener, process::Stdio, thread, time::Duration};
 
 use crate::utils::{build_debug_bin, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1};
 
@@ -20,7 +14,7 @@ pub async fn test_http_data_source() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let server_addr = listener.local_addr()?;
     let server_url = format!("http://{}", server_addr);
-    
+
     log::info!("🧪 Starting HTTP test server on {}", server_url);
 
     // Spawn HTTP server thread
@@ -108,13 +102,13 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let server_addr = listener.local_addr()?;
     let server_url = format!("http://{}", server_addr);
-    
+
     log::info!("🧪 Starting HTTP test server on {}", server_url);
 
     // Spawn HTTP server thread that handles multiple requests
     let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
     let running_clone = running.clone();
-    
+
     let server_handle = thread::spawn(move || {
         while running_clone.load(std::sync::atomic::Ordering::Relaxed) {
             if let Ok((mut stream, _)) = listener.accept() {
