@@ -96,6 +96,7 @@ pub async fn test_http_data_source() -> Result<()> {
 
     let binary = build_debug_bin("aoba")?;
     let mut master = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--master-provide",
             &ports.port1_name,
@@ -120,6 +121,7 @@ pub async fn test_http_data_source() -> Result<()> {
     sleep_1s().await;
 
     let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--slave-poll",
             &ports.port2_name,
@@ -187,6 +189,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
 
     let binary = build_debug_bin("aoba")?;
     let mut master = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--master-provide-persist",
             &ports.port1_name,
@@ -217,6 +220,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
     }
 
     let client_output = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--slave-poll",
             &ports.port2_name,

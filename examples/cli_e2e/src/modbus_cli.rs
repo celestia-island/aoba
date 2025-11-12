@@ -18,6 +18,7 @@ pub async fn test_slave_listen_temp() -> Result<()> {
     // For now, we'll just verify the command line interface works
 
     let output = Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--slave-listen",
             "/dev/null", // Use /dev/null as placeholder
@@ -57,6 +58,7 @@ pub async fn test_slave_listen_persist() -> Result<()> {
     let binary = build_debug_bin("aoba")?;
 
     let output = Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--slave-listen-persist",
             "/dev/null",
@@ -107,6 +109,7 @@ pub async fn test_master_provide_temp() -> Result<()> {
     }
 
     let output = Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--master-provide",
             "/dev/null",
@@ -162,6 +165,7 @@ pub async fn test_master_provide_persist() -> Result<()> {
     }
 
     let output = Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--master-provide-persist",
             "/dev/null",

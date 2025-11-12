@@ -203,6 +203,12 @@ pub fn parse_args() -> ArgMatches {
                 .hide(true), // Hidden from normal help output
         )
         .arg(
+            Arg::new("enable-virtual-ports")
+                .long("enable-virtual-ports")
+                .help("Enable detection of socat-created virtual VCOM ports without turning on full CI debug mode")
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("debug-ci")
                 .long("debug-ci")
                 .help("Enable CI mode for IPC-based E2E testing: TUI listens for keyboard events via IPC")

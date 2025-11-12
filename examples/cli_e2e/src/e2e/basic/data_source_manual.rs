@@ -26,6 +26,7 @@ pub async fn test_manual_data_source() -> Result<()> {
 
     let binary = build_debug_bin("aoba")?;
     let mut server = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--master-provide-persist",
             &ports.port1_name,
@@ -108,6 +109,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
 
     let binary = build_debug_bin("aoba")?;
     let mut server = std::process::Command::new(&binary)
+        .arg("--enable-virtual-ports")
         .args([
             "--master-provide-persist",
             &ports.port1_name,
