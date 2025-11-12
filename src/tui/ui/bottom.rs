@@ -4,11 +4,11 @@ use chrono::Local;
 use ratatui::{layout::*, prelude::*, widgets::*};
 
 use crate::{
-    i18n::lang,
     tui::{
         status::{read_status, write_status, ErrorInfo},
         ui::pages::bottom_hints_for_app,
     },
+    utils::i18n::lang,
 };
 
 const ERROR_DISMISS_SUPPRESS_SECS: i64 = 5;

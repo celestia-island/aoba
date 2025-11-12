@@ -11,7 +11,13 @@ pub use tty_windows::{
 #[cfg(unix)]
 mod tty_unix;
 #[cfg(unix)]
-pub use tty_unix::{available_ports_enriched, available_ports_sorted, try_extract_vid_pid_serial};
+pub use tty_unix::{
+    available_ports_enriched, available_ports_sorted, enable_virtual_port_hint,
+    try_extract_vid_pid_serial,
+};
+
+#[cfg(not(unix))]
+pub fn enable_virtual_port_hint() {}
 
 /// Unified per-port extra metadata structure
 #[derive(Debug, Clone, Default)]

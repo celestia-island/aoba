@@ -3,13 +3,13 @@ use anyhow::Result;
 use ratatui::prelude::*;
 
 use crate::{
-    i18n::lang,
     tui::{
         status::read_status,
         ui::pages::log_panel::components::{
             extract_log_data, render_log_display, render_log_input,
         },
     },
+    utils::i18n::lang,
 };
 
 pub fn page_bottom_hints() -> Result<Vec<Vec<String>>> {

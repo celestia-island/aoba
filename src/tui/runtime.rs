@@ -22,6 +22,7 @@ use crate::{
             {self as types, Status, TuiStatus},
         },
     },
+    utils::i18n::lang,
 };
 
 /// Helper function to get stations configuration from TUI status
@@ -496,13 +497,7 @@ fn stop_runtime(
 
         append_subprocess_stopped_log(
             port_name,
-            Some(
-                crate::i18n::lang()
-                    .tabs
-                    .log
-                    .subprocess_stopped_reason_tui
-                    .clone(),
-            ),
+            Some(lang().tabs.log.subprocess_stopped_reason_tui.clone()),
         );
 
         if let Err(err) = core_tx.send(CoreToUi::Refreshed) {

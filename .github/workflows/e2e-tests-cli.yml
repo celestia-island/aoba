@@ -22,6 +22,10 @@ jobs:
           - list_ports_status
           - modbus_basic_master_slave
           - port_occupation_detection
+          - data_source_manual
+          - data_source_ipc_pipe
+          - data_source_http
+          - data_source_http_persist
 
     steps:
       - uses: actions/checkout@v5
