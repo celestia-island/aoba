@@ -25,6 +25,9 @@ chrono = { workspace = true, features = ["serde", "alloc"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 
 expectrl.workspace = true
+axum.workspace = true
+hyper.workspace = true
+reqwest.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 serialport.workspace = true

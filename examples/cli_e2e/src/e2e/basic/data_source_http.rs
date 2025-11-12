@@ -1,43 +1,58 @@
 use anyhow::Result;
-use std::{io::Write, net::TcpListener, process::Stdio, thread, time::Duration};
+use axum::{http::StatusCode, routing::get, serve, Router};
+use reqwest::Client;
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::task;
 
 use crate::utils::{build_debug_bin, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1};
 
-/// Test master mode with HTTP data source
-/// This test starts a simple HTTP server and verifies the master can fetch data from it
+/// Start an axum server in a background task that responds with the provided payload.
+async fn run_simple_server(payload: &'static str) -> Result<String> {
+    let app = Router::new().route("/", get(move || async move { (StatusCode::OK, payload) }));
+
+    // Bind a tokio TcpListener to an ephemeral port so we can discover the address
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+
+    // Serve the app in a background task. axum::serve runs forever, so spawn it.
+    let server = serve(listener, app);
+    task::spawn(async move {
+        if let Err(e) = server.await {
+            log::error!("server error: {}", e);
+        }
+    });
+
+    // Wait for server to be reachable (use async reqwest to probe)
+    let url = format!("http://{}", addr);
+    let client = Client::new();
+    let mut attempts = 0;
+    while attempts < 20 {
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => break,
+            _ => {
+                tokio::time::sleep(Duration::from_millis(50)).await;
+                attempts += 1;
+            }
+        }
+    }
+
+    Ok(url)
+}
+
+/// Test master mode with HTTP data source using axum for the test server
 pub async fn test_http_data_source() -> Result<()> {
     log::info!("🧪 Testing HTTP data source mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, crate::utils::DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    // Start a simple HTTP server on a random port
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    let server_addr = listener.local_addr()?;
-    let server_url = format!("http://{}", server_addr);
+    // Prepare server payload and start server
+    let payload = r#"{"values": [10, 20, 30, 40, 50]}"#;
+    let server_url = run_simple_server(payload).await?;
 
     log::info!("🧪 Starting HTTP test server on {}", server_url);
 
-    // Spawn HTTP server thread
-    let server_handle = thread::spawn(move || {
-        // Accept one connection and respond with JSON data
-        if let Ok((mut stream, _)) = listener.accept() {
-            let response = r#"HTTP/1.1 200 OK
-Content-Type: application/json
-Content-Length: 31
-
-{"values": [10, 20, 30, 40, 50]}"#;
-            let _ = stream.write_all(response.as_bytes());
-        }
-    });
-
-    // Give server time to start
-    std::thread::sleep(Duration::from_millis(100));
-
     // Start master with HTTP data source
-    log::info!(
-        "🧪 Starting Modbus master with HTTP data source on {}...",
-        ports.port1_name
-    );
     let server_output = temp_dir.join("server_http_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
 
@@ -81,9 +96,6 @@ Content-Length: 31
         }
     }
 
-    // Wait for server thread
-    let _ = server_handle.join();
-
     // Clean up
     std::fs::remove_file(&server_output).ok();
 
@@ -91,45 +103,19 @@ Content-Length: 31
     Ok(())
 }
 
-/// Test master mode with HTTP data source in persistent mode
-/// This verifies the master can continuously poll an HTTP endpoint
+/// Test master mode with HTTP data source in persistent mode using axum
 pub async fn test_http_data_source_persist() -> Result<()> {
     log::info!("🧪 Testing HTTP data source persistent mode...");
     let ports = vcom_matchers_with_ports(DEFAULT_PORT1, crate::utils::DEFAULT_PORT2);
     let temp_dir = std::env::temp_dir();
 
-    // Start a simple HTTP server on a random port
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    let server_addr = listener.local_addr()?;
-    let server_url = format!("http://{}", server_addr);
+    // Prepare server payload and start server
+    let payload = r#"{"values": [15, 25, 35, 45, 55]}"#;
+    let server_url = run_simple_server(payload).await?;
 
     log::info!("🧪 Starting HTTP test server on {}", server_url);
 
-    // Spawn HTTP server thread that handles multiple requests
-    let running = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
-    let running_clone = running.clone();
-
-    let server_handle = thread::spawn(move || {
-        while running_clone.load(std::sync::atomic::Ordering::Relaxed) {
-            if let Ok((mut stream, _)) = listener.accept() {
-                let response = r#"HTTP/1.1 200 OK
-Content-Type: application/json
-Content-Length: 31
-
-{"values": [15, 25, 35, 45, 55]}"#;
-                let _ = stream.write_all(response.as_bytes());
-            }
-        }
-    });
-
-    // Give server time to start
-    std::thread::sleep(Duration::from_millis(100));
-
     // Start master with HTTP data source in persistent mode
-    log::info!(
-        "🧪 Starting Modbus master (persistent) with HTTP data source on {}...",
-        ports.port1_name
-    );
     let server_output = temp_dir.join("server_http_persist_output.log");
     let server_output_file = std::fs::File::create(&server_output)?;
 
@@ -163,7 +149,6 @@ Content-Length: 31
     // Check if master is still running
     match master.try_wait()? {
         Some(status) => {
-            running.store(false, std::sync::atomic::Ordering::Relaxed);
             std::fs::remove_file(&server_output).ok();
             return Err(anyhow::anyhow!(
                 "Master exited prematurely with status {}",
@@ -178,8 +163,6 @@ Content-Length: 31
     // Clean up
     master.kill().ok();
     let _ = master.wait();
-    running.store(false, std::sync::atomic::Ordering::Relaxed);
-    let _ = server_handle.join();
     std::fs::remove_file(&server_output).ok();
 
     log::info!("✅ HTTP data source persistent test passed");
