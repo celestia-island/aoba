@@ -96,21 +96,40 @@ pub struct ModbusResponse {
 /// Data source for master mode
 #[derive(Clone)]
 pub enum DataSource {
+    Manual,
     File(String),
     Pipe(String),
+    TransparentForward(String), // port name
+    MqttServer(String),         // URL
+    HttpServer(String),         // URL
+    IpcPipe(String),            // pipe path
 }
 
 impl std::str::FromStr for DataSource {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some(path) = s.strip_prefix("file:") {
+        if s == "manual" {
+            Ok(DataSource::Manual)
+        } else if let Some(path) = s.strip_prefix("file:") {
             Ok(DataSource::File(path.to_string()))
         } else if let Some(name) = s.strip_prefix("pipe:") {
             Ok(DataSource::Pipe(name.to_string()))
+        } else if let Some(port) = s.strip_prefix("transparent:") {
+            Ok(DataSource::TransparentForward(port.to_string()))
+        } else if let Some(url) = s.strip_prefix("mqtt://") {
+            Ok(DataSource::MqttServer(format!("mqtt://{}", url)))
+        } else if let Some(url) = s.strip_prefix("mqtts://") {
+            Ok(DataSource::MqttServer(format!("mqtts://{}", url)))
+        } else if let Some(url) = s.strip_prefix("http://") {
+            Ok(DataSource::HttpServer(format!("http://{}", url)))
+        } else if let Some(url) = s.strip_prefix("https://") {
+            Ok(DataSource::HttpServer(format!("https://{}", url)))
+        } else if let Some(path) = s.strip_prefix("ipc:") {
+            Ok(DataSource::IpcPipe(path.to_string()))
         } else {
             Err(anyhow!(
-                "Invalid data source format. Use file:<path> or pipe:<name>"
+                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, or file:<path>"
             ))
         }
     }

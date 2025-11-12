@@ -978,6 +978,90 @@ fn update_storage_loop(
 ) -> Result<()> {
     loop {
         match &data_source {
+            DataSource::Manual => {
+                // Manual mode: no automatic updates, values are set via IPC or other means
+                log::debug!("Manual data source mode - sleeping");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            DataSource::TransparentForward(_port) => {
+                // TODO: Implement IPC-based transparent forwarding
+                log::warn!("TransparentForward update loop not yet implemented");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            DataSource::MqttServer(_url) => {
+                // TODO: Implement MQTT subscription and update
+                log::warn!("MQTT update loop not yet implemented");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            DataSource::HttpServer(_url) => {
+                // TODO: Implement HTTP polling and update
+                log::warn!("HTTP update loop not yet implemented");
+                std::thread::sleep(Duration::from_secs(1));
+                continue;
+            }
+            DataSource::IpcPipe(path) => {
+                // IPC pipe: similar to regular Pipe
+                let file = std::fs::File::open(path)?;
+                let reader = BufReader::new(file);
+
+                for line in reader.lines() {
+                    let line = line?;
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+
+                    match parse_data_line(&line) {
+                        Ok(values) => {
+                            log::info!("Updating storage with values from IPC: {values:?}");
+                            let mut context = storage.lock().unwrap();
+                            match reg_mode {
+                                crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_holding(register_address + i as u16, val)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_coil(register_address + i as u16, val != 0)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_discrete(register_address + i as u16, val != 0)?;
+                                    }
+                                }
+                                crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                    for (i, &val) in values.iter().enumerate() {
+                                        context.set_input(register_address + i as u16, val)?;
+                                    }
+                                }
+                            }
+                            drop(context);
+
+                            // Record changed range
+                            {
+                                let len = values.len() as u16;
+                                let mut cr = changed_ranges.lock().unwrap();
+                                cr.push((register_address, len, Instant::now()));
+                                while cr.len() > 1000 {
+                                    cr.remove(0);
+                                }
+                            }
+
+                            std::thread::sleep(Duration::from_millis(100));
+                        }
+                        Err(err) => {
+                            log::warn!("Error parsing data line from IPC: {err}");
+                        }
+                    }
+                }
+
+                // Pipe closed, reopen and continue
+                log::debug!("IPC pipe closed, reopening...");
+            }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
                 let file = match std::fs::File::open(path) {
@@ -1174,6 +1258,10 @@ fn extract_values_from_response(response: &[u8]) -> Result<Vec<u16>> {
 /// Read one data update from source
 fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
     match source {
+        DataSource::Manual => {
+            // Manual mode: return empty values, will be set via TUI or other means
+            Ok(vec![])
+        }
         DataSource::File(path) => {
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
@@ -1183,6 +1271,32 @@ fn read_one_data_update(source: &DataSource) -> Result<Vec<u16>> {
         }
         DataSource::Pipe(path) => {
             // Open named pipe (FIFO) for reading
+            let file = std::fs::File::open(path)?;
+            let mut reader = BufReader::new(file);
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+            parse_data_line(&line)
+        }
+        DataSource::TransparentForward(_port) => {
+            // Transparent forwarding: would read from another port via IPC
+            // TODO: Implement IPC communication with source port
+            log::warn!("TransparentForward data source not yet fully implemented");
+            Ok(vec![])
+        }
+        DataSource::MqttServer(_url) => {
+            // MQTT: would connect to MQTT broker and subscribe to topic
+            // TODO: Implement MQTT client integration
+            log::warn!("MQTT data source not yet fully implemented");
+            Ok(vec![])
+        }
+        DataSource::HttpServer(_url) => {
+            // HTTP: would make GET request to server
+            // TODO: Implement HTTP client integration
+            log::warn!("HTTP data source not yet fully implemented");
+            Ok(vec![])
+        }
+        DataSource::IpcPipe(path) => {
+            // IPC pipe: similar to Pipe but for inter-process communication
             let file = std::fs::File::open(path)?;
             let mut reader = BufReader::new(file);
             let mut line = String::new();
