@@ -8,6 +8,21 @@ use std::{
 use crate::utils::{
     build_debug_bin, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
+use aoba::protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode};
+
+fn write_station_snapshot(file: &mut File, values: &[u16]) -> Result<()> {
+    let payload = vec![StationConfig::single_range(
+        1,
+        StationMode::Master,
+        RegisterMode::Holding,
+        0,
+        values.len() as u16,
+        Some(values.to_vec()),
+    )];
+    let serialized = serde_json::to_string(&payload)?;
+    writeln!(file, "{serialized}")?;
+    Ok(())
+}
 
 /// Test master mode with manual data source
 /// This tests that the manual data source mode allows the master to start without external data
@@ -96,7 +111,7 @@ pub async fn test_ipc_pipe_data_source() -> Result<()> {
     // Create a test file with initial data
     {
         let mut file = File::create(&ipc_pipe)?;
-        writeln!(file, r#"{{"values": [100, 200, 300, 400, 500]}}"#)?;
+        write_station_snapshot(&mut file, &[100, 200, 300, 400, 500])?;
     }
 
     // Start server with IPC pipe data source

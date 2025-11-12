@@ -9,16 +9,21 @@ use ureq::Agent;
 use crate::utils::{
     build_debug_bin, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
-use aoba::protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode};
+use aoba::{
+    cli::modbus::ModbusResponse,
+    protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
+};
 
-async fn run_simple_server(payload: Arc<String>) -> Result<String> {
+async fn run_simple_server(payload: Arc<Vec<StationConfig>>) -> Result<String> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     let addr = listener.local_addr()?;
     listener.set_nonblocking(false)?;
     let server = Server::from_listener(listener, None)
         .map_err(|err| anyhow!("Failed to start HTTP server: {err}"))?;
 
-    let response_payload = payload.clone();
+    let serialized_payload = serde_json::to_string(payload.as_ref())?;
+    let response_payload = Arc::new(serialized_payload);
+
     thread::spawn(move || {
         for request in server.incoming_requests() {
             let mut response = Response::from_string(response_payload.as_ref().clone());
@@ -48,35 +53,27 @@ async fn run_simple_server(payload: Arc<String>) -> Result<String> {
     Ok(url)
 }
 
-fn build_station_payload(values: &[u16]) -> Result<Arc<String>> {
-    let stations = vec![StationConfig::single_range(
+fn build_station_payload(values: &[u16]) -> Arc<Vec<StationConfig>> {
+    Arc::new(vec![StationConfig::single_range(
         1,
         StationMode::Master,
         RegisterMode::Holding,
         0,
         10,
         Some(values.to_vec()),
-    )];
-    let json = serde_json::to_string(&stations)?;
-    Ok(Arc::new(json))
+    )])
 }
 
-fn parse_client_values(stdout: &[u8]) -> Result<Vec<u16>> {
+fn parse_client_response(stdout: &[u8]) -> Result<ModbusResponse> {
     let output = String::from_utf8_lossy(stdout);
     let response_line = output
         .lines()
         .rev()
         .find(|line| !line.trim().is_empty())
         .ok_or_else(|| anyhow!("Client produced empty stdout"))?;
-    let json: serde_json::Value = serde_json::from_str(response_line)?;
-    let values = json
-        .get("values")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| anyhow!("Response missing values array"))?;
-    Ok(values
-        .iter()
-        .map(|v| v.as_u64().unwrap_or(0) as u16)
-        .collect())
+    let response: ModbusResponse = serde_json::from_str(response_line)
+        .map_err(|err| anyhow!("Failed to parse ModbusResponse JSON: {err}"))?;
+    Ok(response)
 }
 
 /// Test master mode with HTTP data source using tiny_http for the test server
@@ -87,7 +84,7 @@ pub async fn test_http_data_source() -> Result<()> {
 
     let mut rng = StdRng::seed_from_u64(0xA0BA_DA7A_01_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values)?;
+    let payload = build_station_payload(&expected_values);
     let server_url = run_simple_server(payload).await?;
 
     log::info!("🧪 Starting HTTP test server on {}", server_url);
@@ -159,11 +156,11 @@ pub async fn test_http_data_source() -> Result<()> {
         ));
     }
 
-    let received_values = parse_client_values(&client_output.stdout)?;
-    if received_values != expected_values {
+    let response = parse_client_response(&client_output.stdout)?;
+    if response.values != expected_values {
         return Err(anyhow!(
             "Received values {:?} do not match expected {:?}",
-            received_values,
+            response.values,
             expected_values
         ));
     }
@@ -180,7 +177,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
 
     let mut rng = StdRng::seed_from_u64(0xA0BA_DA7A_02_u64);
     let expected_values: Vec<u16> = (0..10).map(|_| rng.random::<u16>()).collect();
-    let payload = build_station_payload(&expected_values)?;
+    let payload = build_station_payload(&expected_values);
     let server_url = run_simple_server(payload).await?;
 
     log::info!("🧪 Starting HTTP test server on {}", server_url);
@@ -254,14 +251,14 @@ pub async fn test_http_data_source_persist() -> Result<()> {
         ));
     }
 
-    let received_values = parse_client_values(&client_output.stdout)?;
-    if received_values != expected_values {
+    let response = parse_client_response(&client_output.stdout)?;
+    if response.values != expected_values {
         master.kill().ok();
         let _ = master.wait();
         std::fs::remove_file(&server_output).ok();
         return Err(anyhow!(
             "Received values {:?} do not match expected {:?}",
-            received_values,
+            response.values,
             expected_values
         ));
     }

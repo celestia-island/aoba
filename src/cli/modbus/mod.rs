@@ -2,7 +2,7 @@ pub mod master;
 pub mod slave;
 
 use anyhow::{anyhow, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{io::Write, time::Duration};
 
 use crate::protocol::status::types::modbus::{RegisterMode, StationConfig};
@@ -86,7 +86,7 @@ pub(crate) fn open_serial_port(
 }
 
 /// Response structure for modbus operations
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct ModbusResponse {
     pub station_id: u8,
     pub register_address: u16,
