@@ -19,6 +19,8 @@ use e2e::{
     basic::{
         test_basic_master_slave_communication, test_http_data_source,
         test_http_data_source_persist, test_ipc_pipe_data_source, test_manual_data_source,
+        test_python_data_source_dynamic, test_python_data_source_external,
+        test_python_data_source_external_persist,
     },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
@@ -168,6 +170,9 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_ipc_pipe");
             log::info!("    - data_source_http");
             log::info!("    - data_source_http_persist");
+            log::info!("    - data_source_python_external");
+            log::info!("    - data_source_python_external_persist");
+            log::info!("    - data_source_python_dynamic");
             log::info!("  Port Occupation Detection:");
             log::info!("    - port_occupation_detection");
             log::info!("");
@@ -208,6 +213,9 @@ async fn main() -> Result<()> {
         "data_source_ipc_pipe" => test_ipc_pipe_data_source().await?,
         "data_source_http" => test_http_data_source().await?,
         "data_source_http_persist" => test_http_data_source_persist().await?,
+        "data_source_python_external" => test_python_data_source_external().await?,
+        "data_source_python_external_persist" => test_python_data_source_external_persist().await?,
+        "data_source_python_dynamic" => test_python_data_source_dynamic().await?,
 
         // Port occupation detection tests
         #[cfg(windows)]
