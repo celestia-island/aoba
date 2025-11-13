@@ -12,8 +12,8 @@ use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
 
 use super::{
-    emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
-    ModbusIpcLogPayload, ModbusResponse,
+    emit_modbus_ipc_log, extract_values_from_station_configs, open_serial_port, parse_data_line,
+    parse_register_mode, DataSource, ModbusIpcLogPayload, ModbusResponse,
 };
 use crate::{
     cli::{actions, cleanup},
@@ -1331,6 +1331,109 @@ fn update_storage_loop(
                 // Pipe closed, reopen and continue
                 log::debug!("IPC pipe closed, reopening...");
             }
+            DataSource::PythonScript { path } => {
+                // Python script: execute periodically and update storage
+                use super::python::create_python_runner;
+
+                let mut runner = match create_python_runner(path.clone(), Some(1000)) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("Failed to create Python runner: {}", e);
+                        return Err(e);
+                    }
+                };
+
+                log::info!("Python script runner initialized: path={}", path);
+
+                loop {
+                    match runner.execute() {
+                        Ok(output) => {
+                            // Extract values from stations
+                            let values = if output
+                                .stations
+                                .iter()
+                                .any(|s| s.station_id == station_id)
+                            {
+                                // Extract values from the station's register map
+                                extract_values_from_station_configs(
+                                    &output.stations,
+                                    station_id,
+                                    reg_mode,
+                                    register_address,
+                                    register_length,
+                                )
+                            } else {
+                                log::warn!("Python script did not return station {}", station_id);
+                                Err(anyhow!("Station {} not found in Python output", station_id))
+                            };
+
+                            match values {
+                                Ok(vals) => {
+                                    log::info!(
+                                        "Updating storage with {} values from Python script",
+                                        vals.len()
+                                    );
+                                    let mut context = storage.lock().unwrap();
+                                    match reg_mode {
+                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                            for (i, &val) in vals.iter().enumerate() {
+                                                context.set_holding(register_address + i as u16, val)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                            for (i, &val) in vals.iter().enumerate() {
+                                                context.set_coil(register_address + i as u16, val != 0)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                            for (i, &val) in vals.iter().enumerate() {
+                                                context.set_discrete(register_address + i as u16, val != 0)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                            for (i, &val) in vals.iter().enumerate() {
+                                                context.set_input(register_address + i as u16, val)?;
+                                            }
+                                        }
+                                    }
+                                    drop(context);
+
+                                    // Record changed range
+                                    {
+                                        let len = vals.len() as u16;
+                                        let mut cr = changed_ranges.lock().unwrap();
+                                        cr.push((register_address, len, Instant::now()));
+                                        while cr.len() > 1000 {
+                                            cr.remove(0);
+                                        }
+                                    }
+
+                                    // Wait for reboot interval if specified
+                                    if let Some(interval_ms) = output.reboot_interval_ms {
+                                        std::thread::sleep(Duration::from_millis(interval_ms));
+                                    } else {
+                                        std::thread::sleep(Duration::from_millis(1000));
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!("Error extracting values from Python output: {}", e);
+                                    std::thread::sleep(Duration::from_millis(1000));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("Python script execution failed: {}", e);
+                            // Wait a bit before retrying
+                            std::thread::sleep(Duration::from_secs(5));
+                        }
+                    }
+
+                    if !runner.is_active() {
+                        log::warn!("Python runner is no longer active, exiting update loop");
+                        break;
+                    }
+                }
+            }
             DataSource::File(path) => {
                 // Try to open the file with better error handling
                 let file = match std::fs::File::open(path) {
@@ -1710,6 +1813,22 @@ fn read_one_data_update(
             reader.read_line(&mut line)?;
             parse_data_line(
                 &line,
+                station_id,
+                reg_mode,
+                register_address,
+                register_length,
+            )
+        }
+        DataSource::PythonScript { path } => {
+            // Python script: execute once and return values
+            use super::python::create_python_runner;
+
+            let mut runner = create_python_runner(path.clone(), None)?;
+            let output = runner.execute()?;
+
+            // Extract values from stations
+            extract_values_from_station_configs(
+                &output.stations,
                 station_id,
                 reg_mode,
                 register_address,

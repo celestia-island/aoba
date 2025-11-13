@@ -1,5 +1,9 @@
 use anyhow::{anyhow, Result};
-use std::{path::PathBuf, process::Command, time::Duration};
+use std::{
+    path::PathBuf,
+    process::Command,
+    time::{Duration, Instant},
+};
 
 /// Platform-specific default port names as constants
 #[cfg(windows)]
@@ -214,4 +218,39 @@ pub fn create_modbus_command(
     cmd.arg("--enable-virtual-ports");
     cmd.args(args.iter());
     Ok(cmd)
+}
+
+/// Maximum timeout for waiting operations (30 seconds)
+const MAX_WAIT_TIMEOUT_SECS: u64 = 30;
+
+/// Wait for a process to be ready by polling its status
+/// Returns Ok(()) if process is still running within timeout, Err otherwise
+pub async fn wait_for_process_ready(
+    process: &mut std::process::Child,
+    min_wait_ms: u64,
+) -> Result<()> {
+    let start = Instant::now();
+    let timeout = Duration::from_secs(MAX_WAIT_TIMEOUT_SECS);
+    let min_wait = Duration::from_millis(min_wait_ms);
+    let poll_interval = Duration::from_millis(100);
+
+    // Wait at least the minimum time
+    while start.elapsed() < min_wait {
+        if start.elapsed() > timeout {
+            return Err(anyhow!("Timeout waiting for process to be ready"));
+        }
+
+        if let Some(status) = process.try_wait()? {
+            return Err(anyhow!("Process exited prematurely with status {}", status));
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    // Final check after minimum wait
+    if let Some(status) = process.try_wait()? {
+        return Err(anyhow!("Process exited prematurely with status {}", status));
+    }
+
+    Ok(())
 }
