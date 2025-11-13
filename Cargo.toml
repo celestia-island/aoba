@@ -87,9 +87,6 @@ ureq = { version = "^3", features = ["json"] }
 tiny_http = "^0.11"
 rumqttc = "^0.25"
 
-axum = "^0.8"
-hyper = { version = "^1", features = ["full"] }
-
 expectrl = "^0.8"
 regex = "^1"
 vt100 = "^0.15"
