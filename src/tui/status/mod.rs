@@ -192,11 +192,7 @@ pub mod serializable {
                         }
                     }
 
-                    let master_source = if let PortConfig::Modbus { master_source, .. } = &port.config {
-                        master_source.clone()
-                    } else {
-                        ModbusMasterDataSource::default()
-                    };
+                    let PortConfig::Modbus { master_source, .. } = &port.config;
 
                     ports.push(TuiPort {
                         name: port.port_name.clone(),
@@ -205,7 +201,7 @@ pub mod serializable {
                         modbus_masters,
                         modbus_slaves,
                         log_count: port.logs.len(),
-                        master_source,
+                        master_source: master_source.clone(),
                     });
                 }
             }
