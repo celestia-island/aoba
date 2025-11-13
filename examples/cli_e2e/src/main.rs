@@ -171,6 +171,7 @@ async fn main() -> Result<()> {
             log::info!("    - data_source_http_persist");
             log::info!("    - data_source_mqtt");
             log::info!("    - data_source_mqtt_persist");
+            log::info!("    - data_source_python");
             log::info!("  Port Occupation Detection:");
             log::info!("    - port_occupation_detection");
             log::info!("");
