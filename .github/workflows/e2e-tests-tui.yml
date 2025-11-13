@@ -38,6 +38,7 @@ jobs:
           # Data source configuration
           - data_source_ipc_pipe
           - data_source_http_server
+          - data_source_python_script
 
     steps:
       - uses: actions/checkout@v5
@@ -101,6 +102,7 @@ jobs:
           # Data source configuration
           - data_source_ipc_pipe
           - data_source_http_server
+          - data_source_python_script
 
     steps:
       - uses: actions/checkout@v5

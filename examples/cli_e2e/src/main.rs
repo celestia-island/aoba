@@ -19,7 +19,7 @@ use e2e::{
     basic::{
         test_basic_master_slave_communication, test_http_data_source,
         test_http_data_source_persist, test_ipc_pipe_data_source, test_manual_data_source,
-        test_mqtt_data_source, test_mqtt_data_source_persist,
+        test_mqtt_data_source, test_mqtt_data_source_persist, test_python_script_data_source,
     },
     multi_masters::{test_multi_masters, test_multi_masters_same_station},
     multi_slaves::{
@@ -213,6 +213,7 @@ async fn main() -> Result<()> {
         "data_source_http_persist" => test_http_data_source_persist().await?,
         "data_source_mqtt" => test_mqtt_data_source().await?,
         "data_source_mqtt_persist" => test_mqtt_data_source_persist().await?,
+        "data_source_python" => test_python_script_data_source().await?,
 
         // Port occupation detection tests
         #[cfg(windows)]
