@@ -80,7 +80,7 @@ fn run_http_server_daemon(
     
     log::info!("HTTP server daemon listening on {}", addr);
     
-    for request in server.incoming_requests() {
+    for mut request in server.incoming_requests() {
         // Only accept POST requests
         if request.method() != &Method::Post {
             let response = Response::from_string("Method Not Allowed")

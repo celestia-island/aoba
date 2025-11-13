@@ -167,7 +167,7 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::modbus::ModbusMasterDataSourceKind::all().len()
                     }
                     types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-                        // Count available ports for TransparentForward selector
+                        // No selector for MasterSourceValue - HttpServer uses numeric text input
                         read_status(|status| {
                             if let crate::tui::status::Page::ModbusDashboard {
                                 selected_port, ..
@@ -231,26 +231,8 @@ pub fn handle_editing_input(key: KeyEvent, bus: &Bus) -> Result<()> {
                         types::modbus::ModbusMasterDataSourceKind::all().len()
                     }
                     types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-                        // Count available ports for TransparentForward selector
-                        read_status(|status| {
-                            if let crate::tui::status::Page::ModbusDashboard {
-                                selected_port, ..
-                            } = &status.page
-                            {
-                                if let Some(port_name) = status.ports.order.get(*selected_port) {
-                                    // Count ports excluding the current one
-                                    let count = status
-                                        .ports
-                                        .order
-                                        .iter()
-                                        .filter(|p| *p != port_name)
-                                        .count();
-                                    return Ok(count);
-                                }
-                            }
-                            Ok(0)
-                        })
-                        .unwrap_or(0)
+                        // No selector for MasterSourceValue - HttpServer uses numeric text input
+                        0
                     }
                     types::cursor::ModbusDashboardCursor::RegisterMode { .. } => 4, // Coils, DiscreteInputs, Holding, Input
                     _ => 0,
@@ -453,66 +435,8 @@ fn commit_selector_edit(
                     }
                 }
                 types::cursor::ModbusDashboardCursor::MasterSourceValue => {
-                    // Handle TransparentForward port selector
-                    let mut should_restart = false;
-                    write_status(|status| {
-                        let port_data = status
-                            .ports
-                            .map
-                            .get_mut(&port_name)
-                            .ok_or_else(|| anyhow::anyhow!("Port not found"))?;
-
-                        let types::port::PortConfig::Modbus { master_source, .. } =
-                            &mut port_data.config;
-
-                        if let ModbusMasterDataSource::TransparentForward { port: existing } =
-                            master_source
-                        {
-                            // Get list of available ports (excluding current port)
-                            let available_ports: Vec<String> = status
-                                .ports
-                                .order
-                                .iter()
-                                .filter(|p| *p != &port_name)
-                                .cloned()
-                                .collect();
-
-                            if let Some(selected_port_name) = available_ports.get(selected_index) {
-                                let new_value = Some(selected_port_name.clone());
-                                if *existing != new_value {
-                                    *existing = new_value;
-                                    port_data.config_modified = true;
-                                    if matches!(
-                                        port_data.state,
-                                        types::port::PortState::OccupiedByThis
-                                    ) {
-                                        should_restart = true;
-                                    }
-                                }
-                            }
-                        }
-
-                        Ok(())
-                    })?;
-
-                    if should_restart {
-                        let translations = lang();
-                        let reason = format!(
-                            "{} {}",
-                            translations
-                                .tabs
-                                .log
-                                .runtime_restart_reason_data_source_change
-                                .clone(),
-                            ModbusMasterDataSourceKind::TransparentForward
-                        );
-                        crate::tui::append_runtime_restart_log(
-                            &port_name,
-                            reason,
-                            StationMode::Master,
-                        );
-                        return Ok(Some(port_name.clone()));
-                    }
+                    // MasterSourceValue now only handles text inputs (no selectors)
+                    // HttpServer is handled via text input with numeric validation
                 }
                 _ => {}
             }
@@ -557,25 +481,7 @@ fn commit_text_edit(
                         updated_kind = Some(current_kind);
 
                         match master_source {
-                            ModbusMasterDataSource::TransparentForward { port: existing } => {
-                                let new_value = if trimmed.is_empty() {
-                                    None
-                                } else {
-                                    Some(trimmed.clone())
-                                };
-                                if *existing != new_value {
-                                    *existing = new_value;
-                                    port_data.config_modified = true;
-                                    if matches!(
-                                        port_data.state,
-                                        types::port::PortState::OccupiedByThis
-                                    ) {
-                                        should_restart = true;
-                                    }
-                                }
-                            }
-                            ModbusMasterDataSource::MqttServer { url }
-                            | ModbusMasterDataSource::HttpServer { url } => {
+                            ModbusMasterDataSource::MqttServer { url } => {
                                 if *url != trimmed {
                                     *url = trimmed.clone();
                                     port_data.config_modified = true;
@@ -585,6 +491,26 @@ fn commit_text_edit(
                                     ) {
                                         should_restart = true;
                                     }
+                                }
+                            }
+                            ModbusMasterDataSource::HttpServer { port } => {
+                                // Parse port number with validation
+                                if let Ok(new_port) = trimmed.parse::<u16>() {
+                                    if new_port == 0 || new_port > 65535 {
+                                        // Invalid port range
+                                        log::warn!("Invalid port number: {}", new_port);
+                                    } else if *port != new_port {
+                                        *port = new_port;
+                                        port_data.config_modified = true;
+                                        if matches!(
+                                            port_data.state,
+                                            types::port::PortState::OccupiedByThis
+                                        ) {
+                                            should_restart = true;
+                                        }
+                                    }
+                                } else {
+                                    log::warn!("Failed to parse port number from: {}", trimmed);
                                 }
                             }
                             ModbusMasterDataSource::IpcPipe { path } => {

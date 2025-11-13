@@ -765,29 +765,18 @@ fn jump_to_last_group() -> Result<types::cursor::ModbusDashboardCursor> {
 fn validate_data_source(source: &types::modbus::ModbusMasterDataSource) -> Result<(), String> {
     match source {
         types::modbus::ModbusMasterDataSource::Manual => Ok(()),
-        types::modbus::ModbusMasterDataSource::TransparentForward { port } => {
-            // For transparent forward, we don't need to validate the port here
-            // The port will be validated when actually starting the subprocess
-            if port.is_none() || port.as_ref().map(|p| p.is_empty()).unwrap_or(true) {
-                return Err(lang()
-                    .protocol
-                    .modbus
-                    .data_source_placeholder_no_ports
-                    .clone());
-            }
-            Ok(())
-        }
         types::modbus::ModbusMasterDataSource::MqttServer { url } => {
             if url.is_empty() {
                 return Ok(()); // Allow empty URL, will use placeholder
             }
             validate_url(url, "mqtt")
         }
-        types::modbus::ModbusMasterDataSource::HttpServer { url } => {
-            if url.is_empty() {
-                return Ok(()); // Allow empty URL, will use placeholder
+        types::modbus::ModbusMasterDataSource::HttpServer { port } => {
+            // Validate port number range (1-65535)
+            if *port == 0 {
+                return Err("Port number must be between 1 and 65535".to_string());
             }
-            validate_url(url, "http")
+            Ok(())
         }
         types::modbus::ModbusMasterDataSource::IpcPipe { path } => {
             if path.is_empty() {
