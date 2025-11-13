@@ -1335,14 +1335,13 @@ fn update_storage_loop(
                 // Python script: execute periodically and update storage
                 use super::python::create_python_runner;
 
-                let mut runner =
-                    match create_python_runner(*mode, path.clone(), Some(1000)) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            log::error!("Failed to create Python runner: {}", e);
-                            return Err(e);
-                        }
-                    };
+                let mut runner = match create_python_runner(*mode, path.clone(), Some(1000)) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("Failed to create Python runner: {}", e);
+                        return Err(e);
+                    }
+                };
 
                 log::info!(
                     "Python script runner initialized: mode={:?}, path={}",
@@ -1354,10 +1353,10 @@ fn update_storage_loop(
                     match runner.execute() {
                         Ok(output) => {
                             // Extract values from stations
-                            let values = if let Some(station) = output
+                            let values = if output
                                 .stations
                                 .iter()
-                                .find(|s| s.station_id == station_id)
+                                .any(|s| s.station_id == station_id)
                             {
                                 // Extract values from the station's register map
                                 extract_values_from_station_configs(
@@ -1374,7 +1373,10 @@ fn update_storage_loop(
 
                             match values {
                                 Ok(vals) => {
-                                    log::info!("Updating storage with {} values from Python script", vals.len());
+                                    log::info!(
+                                        "Updating storage with {} values from Python script",
+                                        vals.len()
+                                    );
                                     let mut context = storage.lock().unwrap();
                                     match reg_mode {
                                         crate::protocol::status::types::modbus::RegisterMode::Holding => {

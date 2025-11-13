@@ -1,12 +1,14 @@
+use anyhow::{anyhow, Result};
 use std::{
     io::{BufRead, BufReader},
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, Result};
-
-use super::{types::{PythonOutput, PythonScriptOutput}, PythonRunner};
+use super::{
+    types::{PythonOutput, PythonScriptOutput},
+    PythonRunner,
+};
 
 /// External CPython process runner
 pub struct PythonExternalRunner {
@@ -65,7 +67,10 @@ impl PythonExternalRunner {
         {
             // Try python first on Windows, then python3
             if let Ok(output) = Command::new("powershell")
-                .args(["-Command", "Get-Command python -ErrorAction SilentlyContinue"])
+                .args([
+                    "-Command",
+                    "Get-Command python -ErrorAction SilentlyContinue",
+                ])
                 .output()
             {
                 if output.status.success() && !output.stdout.is_empty() {
@@ -74,7 +79,10 @@ impl PythonExternalRunner {
             }
 
             if let Ok(output) = Command::new("powershell")
-                .args(["-Command", "Get-Command python3 -ErrorAction SilentlyContinue"])
+                .args([
+                    "-Command",
+                    "Get-Command python3 -ErrorAction SilentlyContinue",
+                ])
                 .output()
             {
                 if output.status.success() && !output.stdout.is_empty() {
@@ -153,10 +161,7 @@ impl PythonRunner for PythonExternalRunner {
                                 self.reboot_interval_ms = interval;
                             }
                             found_valid_json = true;
-                            log::info!(
-                                "Parsed station data: {} stations",
-                                output.stations.len()
-                            );
+                            log::info!("Parsed station data: {} stations", output.stations.len());
                         }
                         Err(_) => {
                             // Not JSON, treat as info message

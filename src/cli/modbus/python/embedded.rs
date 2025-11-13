@@ -1,6 +1,6 @@
+use anyhow::{anyhow, Result};
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Result};
 use flume::{Receiver, Sender};
 
 use super::{types::PythonOutput, PythonRunner};
@@ -73,7 +73,7 @@ impl PythonEmbeddedRunner {
     ) {
         use rustpython_vm::{self as vm, Interpreter};
 
-        // Initialize interpreter once for this thread  
+        // Initialize interpreter once for this thread
         let interp = Interpreter::with_init(Default::default(), |vm| {
             vm.add_native_modules(rustpython_stdlib::get_module_inits());
         });
@@ -89,8 +89,9 @@ impl PythonEmbeddedRunner {
                             rustpython_compiler::Mode::Exec,
                             "<embedded>".to_string(),
                             Default::default(),
-                        ).map_err(|e| vm.new_runtime_error(format!("Compile error: {:?}", e)))?;
-                        
+                        )
+                        .map_err(|e| vm.new_runtime_error(format!("Compile error: {:?}", e)))?;
+
                         let code = vm.ctx.new_code(code_obj);
                         let scope = vm.new_scope_with_builtins();
                         vm.run_code_obj(code, scope)?;
@@ -103,8 +104,7 @@ impl PythonEmbeddedRunner {
                             // For now, embedded mode doesn't capture stdout well in RustPython 0.4
                             // Return a minimal success response
                             // Users should use external mode for full functionality
-                            let output = PythonOutput::new(Vec::new())
-                                .with_reboot_interval(1000);
+                            let output = PythonOutput::new(Vec::new()).with_reboot_interval(1000);
 
                             if response_tx.send(DaemonResponse::Success(output)).is_err() {
                                 break;

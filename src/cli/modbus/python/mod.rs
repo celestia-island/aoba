@@ -2,11 +2,11 @@ pub mod embedded;
 pub mod external;
 pub mod types;
 
+use anyhow::Result;
+
 pub use embedded::PythonEmbeddedRunner;
 pub use external::PythonExternalRunner;
 pub use types::{PythonExecutionMode, PythonOutput};
-
-use anyhow::Result;
 
 /// Trait for Python script execution
 pub trait PythonRunner: Send {

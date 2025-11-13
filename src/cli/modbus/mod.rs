@@ -6,9 +6,9 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, time::Duration};
 
-use crate::protocol::status::types::modbus::{RegisterMode, StationConfig};
-
 pub use python::{PythonExecutionMode, PythonRunner};
+
+use crate::protocol::status::types::modbus::{RegisterMode, StationConfig};
 
 /// Convert a byte slice into an uppercase hexadecimal string separated by spaces.
 pub(crate) fn format_hex_bytes(bytes: &[u8]) -> String {

@@ -1,20 +1,10 @@
 use anyhow::{anyhow, Result};
-use std::{
-    path::PathBuf,
-    process::Stdio,
-    time::{Duration, Instant},
-};
+use std::{path::PathBuf, process::Stdio};
 
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
 };
 use aoba::cli::modbus::ModbusResponse;
-
-/// Maximum timeout for waiting operations (30 seconds)
-const MAX_WAIT_TIMEOUT_SECS: u64 = 30;
-
-// Use `wait_for_process_ready` from `crate::utils` so the implementation
-// is shared across tests. The function is imported above.
 
 fn parse_client_response(stdout: &[u8]) -> Result<ModbusResponse> {
     let output = String::from_utf8_lossy(stdout);
