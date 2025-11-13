@@ -223,7 +223,10 @@ pub fn parse_data_line(
             );
         }
         Err(e) => {
-            log::debug!("Failed to parse as Vec<StationConfig>: {}. Trying legacy format...", e);
+            log::debug!(
+                "Failed to parse as Vec<StationConfig>: {}. Trying legacy format...",
+                e
+            );
         }
     }
 

@@ -479,7 +479,8 @@ pub fn handle_slave_poll(matches: &ArgMatches, port: &str) -> Result<()> {
 
     let response = {
         // Open serial port in a scope to ensure it's closed before returning
-        let port_handle = open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64))?;
+        let port_handle =
+            open_serial_port(port, baud_rate, Duration::from_millis(timeout_ms as u64))?;
 
         let port_arc = Arc::new(Mutex::new(port_handle));
 

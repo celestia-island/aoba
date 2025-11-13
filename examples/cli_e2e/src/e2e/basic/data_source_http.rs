@@ -1,14 +1,18 @@
 use anyhow::{anyhow, Result};
 use rand::{rngs::StdRng, Rng, SeedableRng};
-use std::{net::TcpListener, process::Stdio, sync::Arc, thread, time::{Duration, Instant}};
+use std::{
+    net::TcpListener,
+    process::Stdio,
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 use tokio::task;
 
 use tiny_http::{Header, Response, Server};
 use ureq::Agent;
 
-use crate::utils::{
-    build_debug_bin, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
-};
+use crate::utils::{build_debug_bin, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2};
 use aoba::{
     cli::modbus::ModbusResponse,
     protocol::status::types::modbus::{RegisterMode, StationConfig, StationMode},
@@ -19,10 +23,7 @@ const MAX_WAIT_TIMEOUT_SECS: u64 = 30;
 
 /// Wait for a process to be ready by polling its status
 /// Returns Ok(()) if process is still running within timeout, Err otherwise
-async fn wait_for_process_ready(
-    process: &mut std::process::Child,
-    min_wait_ms: u64,
-) -> Result<()> {
+async fn wait_for_process_ready(process: &mut std::process::Child, min_wait_ms: u64) -> Result<()> {
     let start = Instant::now();
     let timeout = Duration::from_secs(MAX_WAIT_TIMEOUT_SECS);
     let min_wait = Duration::from_millis(min_wait_ms);
@@ -33,19 +34,19 @@ async fn wait_for_process_ready(
         if start.elapsed() > timeout {
             return Err(anyhow!("Timeout waiting for process to be ready"));
         }
-        
+
         if let Some(status) = process.try_wait()? {
             return Err(anyhow!("Process exited prematurely with status {}", status));
         }
-        
+
         tokio::time::sleep(poll_interval).await;
     }
-    
+
     // Final check after minimum wait
     if let Some(status) = process.try_wait()? {
         return Err(anyhow!("Process exited prematurely with status {}", status));
     }
-    
+
     Ok(())
 }
 
@@ -169,7 +170,7 @@ pub async fn test_http_data_source() -> Result<()> {
             "--baud-rate",
             "9600",
             "--timeout-ms",
-            "10000",  // 10 second timeout to account for serial communication delays
+            "10000", // 10 second timeout to account for serial communication delays
             "--json",
         ])
         .stdout(Stdio::piped())
@@ -264,7 +265,7 @@ pub async fn test_http_data_source_persist() -> Result<()> {
             "--baud-rate",
             "9600",
             "--timeout-ms",
-            "10000",  // 10 second timeout to account for serial communication delays
+            "10000", // 10 second timeout to account for serial communication delays
             "--json",
         ])
         .stdout(Stdio::piped())
