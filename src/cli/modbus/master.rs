@@ -4,12 +4,14 @@ use std::{
     collections::{hash_map::DefaultHasher, HashMap},
     hash::Hasher,
     io::{BufRead, BufReader, Read},
+    net::TcpListener,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use clap::ArgMatches;
 use rmodbus::{server::context::ModbusContext, ModbusProto};
+use tiny_http::{Header, Method, Response, Server};
 
 use super::{
     emit_modbus_ipc_log, open_serial_port, parse_data_line, parse_register_mode, DataSource,
@@ -58,6 +60,72 @@ fn open_serial_port_with_retry(
     Err(anyhow!(
         "Failed to open port {port} after {SERIAL_PORT_OPEN_RETRIES} attempts: {last_error}"
     ))
+}
+
+/// Run HTTP server daemon that listens for POST requests with JSON data
+fn run_http_server_daemon(
+    port: u16,
+    tx: flume::Sender<Vec<crate::protocol::status::types::modbus::StationConfig>>,
+) -> Result<()> {
+    let addr = format!("127.0.0.1:{}", port);
+    log::info!("Starting HTTP server daemon on {}", addr);
+    
+    let listener = TcpListener::bind(&addr)
+        .map_err(|e| anyhow!("Failed to bind HTTP server to {}: {}", addr, e))?;
+    
+    listener.set_nonblocking(false)?;
+    
+    let server = Server::from_listener(listener, None)
+        .map_err(|e| anyhow!("Failed to create HTTP server: {}", e))?;
+    
+    log::info!("HTTP server daemon listening on {}", addr);
+    
+    for request in server.incoming_requests() {
+        // Only accept POST requests
+        if request.method() != &Method::Post {
+            let response = Response::from_string("Method Not Allowed")
+                .with_status_code(405);
+            let _ = request.respond(response);
+            continue;
+        }
+        
+        // Read body
+        let mut body = String::new();
+        if let Err(e) = request.as_reader().read_to_string(&mut body) {
+            log::warn!("Failed to read HTTP request body: {}", e);
+            let response = Response::from_string("Bad Request")
+                .with_status_code(400);
+            let _ = request.respond(response);
+            continue;
+        }
+        
+        // Parse JSON as Vec<StationConfig>
+        match serde_json::from_str::<Vec<crate::protocol::status::types::modbus::StationConfig>>(&body) {
+            Ok(stations) => {
+                log::debug!("HTTP server received {} stations", stations.len());
+                
+                // Send to update thread via channel
+                if let Err(e) = tx.send(stations) {
+                    log::error!("Failed to send stations to update thread: {}", e);
+                    let response = Response::from_string("Internal Server Error")
+                        .with_status_code(500);
+                    let _ = request.respond(response);
+                } else {
+                    let response = Response::from_string("OK")
+                        .with_status_code(200);
+                    let _ = request.respond(response);
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to parse HTTP request body as JSON: {}", e);
+                let response = Response::from_string(format!("Invalid JSON: {}", e))
+                    .with_status_code(400);
+                let _ = request.respond(response);
+            }
+        }
+    }
+    
+    Ok(())
 }
 
 /// Handle master provide (temporary: output once and exit)
@@ -338,6 +406,25 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
     // request overlaps a recently-updated register range.
     let changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>> = Arc::new(Mutex::new(Vec::new()));
     let changed_ranges_clone = changed_ranges.clone();
+
+    // Create HTTP server daemon if needed
+    let (http_tx, http_rx) = flume::unbounded::<Vec<crate::protocol::status::types::modbus::StationConfig>>();
+    let http_server_thread = if let DataSource::HttpServer(port) = &data_source {
+        let port = *port;
+        let tx = http_tx.clone();
+        Some(std::thread::spawn(move || {
+            run_http_server_daemon(port, tx)
+        }))
+    } else {
+        None
+    };
+
+    let http_rx_clone = if matches!(&data_source, DataSource::HttpServer(_)) {
+        Some(http_rx.clone())
+    } else {
+        None
+    };
+
     let update_thread = std::thread::spawn(move || {
         update_storage_loop(
             storage_clone,
@@ -347,6 +434,7 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
             register_address,
             register_length,
             changed_ranges_clone,
+            http_rx_clone,
         )
     });
 
@@ -444,6 +532,13 @@ pub fn handle_master_provide_persist(matches: &ArgMatches, port: &str) -> Result
         // Check if update thread has panicked
         if update_thread.is_finished() {
             return Err(anyhow!("Data update thread terminated unexpectedly"));
+        }
+
+        // Check if HTTP server thread has panicked
+        if let Some(ref http_thread) = http_server_thread {
+            if http_thread.is_finished() {
+                return Err(anyhow!("HTTP server thread terminated unexpectedly"));
+            }
         }
 
         // Accept command connection if not yet connected
@@ -991,6 +1086,7 @@ fn update_storage_loop(
     register_address: u16,
     register_length: u16,
     changed_ranges: Arc<Mutex<Vec<(u16, u16, Instant)>>>,
+    http_rx: Option<flume::Receiver<Vec<crate::protocol::status::types::modbus::StationConfig>>>,
 ) -> Result<()> {
     loop {
         match &data_source {
@@ -999,90 +1095,6 @@ fn update_storage_loop(
                 log::debug!("Manual data source mode - sleeping");
                 std::thread::sleep(Duration::from_secs(1));
                 continue;
-            }
-            DataSource::TransparentForward(port) => {
-                // Transparent forwarding: continuously read from IPC channel
-                let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
-
-                log::info!("TransparentForward: monitoring channel {}", channel_name);
-
-                loop {
-                    match std::fs::File::open(&channel_name) {
-                        Ok(file) => {
-                            let reader = BufReader::new(file);
-
-                            for line in reader.lines() {
-                                let line = match line {
-                                    Ok(l) => l,
-                                    Err(e) => {
-                                        log::warn!("Error reading from forward channel: {}", e);
-                                        break;
-                                    }
-                                };
-
-                                if line.trim().is_empty() {
-                                    continue;
-                                }
-
-                                if let Ok(values) = parse_data_line(
-                                    &line,
-                                    station_id,
-                                    reg_mode,
-                                    register_address,
-                                    register_length,
-                                ) {
-                                    log::debug!(
-                                        "Updating storage with {} values from transparent forward",
-                                        values.len()
-                                    );
-                                    let mut context = storage.lock().unwrap();
-                                    match reg_mode {
-                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_holding(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_coil(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_discrete(register_address + i as u16, val != 0)?;
-                                            }
-                                        }
-                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                            for (i, &val) in values.iter().enumerate() {
-                                                context.set_input(register_address + i as u16, val)?;
-                                            }
-                                        }
-                                    }
-                                    drop(context);
-
-                                    // Record changed range
-                                    {
-                                        let len = values.len() as u16;
-                                        let mut cr = changed_ranges.lock().unwrap();
-                                        cr.push((register_address, len, Instant::now()));
-                                        while cr.len() > 1000 {
-                                            cr.remove(0);
-                                        }
-                                    }
-                                } else {
-                                    log::warn!("Failed to parse forward channel data");
-                                }
-                            }
-
-                            log::debug!("Forward channel closed, reopening...");
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to open forward channel {}: {}", channel_name, e);
-                            log::info!("Waiting for source port to start...");
-                            std::thread::sleep(Duration::from_secs(5));
-                        }
-                    }
-                }
             }
             DataSource::MqttServer(url) => {
                 // MQTT: subscribe to broker and continuously update on new messages
@@ -1195,74 +1207,81 @@ fn update_storage_loop(
                 log::warn!("MQTT connection lost, will retry...");
                 std::thread::sleep(Duration::from_secs(5));
             }
-            DataSource::HttpServer(url) => {
-                // HTTP: poll server periodically for updates
-                loop {
-                    match ureq::get(url).call() {
-                        Ok(mut response) => {
-                            match response.body_mut().read_to_string() {
-                                Ok(text) => {
-                                    if let Ok(values) = parse_data_line(
-                                        &text,
-                                        station_id,
-                                        reg_mode,
-                                        register_address,
-                                        register_length,
-                                    ) {
-                                        log::debug!(
-                                            "Updating storage with {} values from HTTP",
-                                            values.len()
-                                        );
-                                        let mut context = storage.lock().unwrap();
-                                        match reg_mode {
-                                            crate::protocol::status::types::modbus::RegisterMode::Holding => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_holding(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Coils => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_coil(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_discrete(register_address + i as u16, val != 0)?;
-                                                }
-                                            }
-                                            crate::protocol::status::types::modbus::RegisterMode::Input => {
-                                                for (i, &val) in values.iter().enumerate() {
-                                                    context.set_input(register_address + i as u16, val)?;
-                                                }
-                                            }
-                                        }
-                                        drop(context);
+            DataSource::HttpServer(_port) => {
+                // HTTP Server: receive data from HTTP daemon via channel
+                let rx = http_rx
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("HTTP receiver channel not initialized"))?;
 
-                                        // Record changed range
-                                        {
-                                            let len = values.len() as u16;
-                                            let mut cr = changed_ranges.lock().unwrap();
-                                            cr.push((register_address, len, Instant::now()));
-                                            while cr.len() > 1000 {
-                                                cr.remove(0);
+                log::info!("HTTP Server: waiting for data from HTTP daemon...");
+
+                loop {
+                    match rx.recv_timeout(Duration::from_secs(1)) {
+                        Ok(stations) => {
+                            log::debug!("Received {} stations from HTTP server", stations.len());
+
+                            // Extract values for this station
+                            match super::extract_values_from_station_configs(
+                                &stations,
+                                station_id,
+                                reg_mode,
+                                register_address,
+                                register_length,
+                            ) {
+                                Ok(values) => {
+                                    log::debug!(
+                                        "Updating storage with {} values from HTTP server",
+                                        values.len()
+                                    );
+                                    let mut context = storage.lock().unwrap();
+                                    match reg_mode {
+                                        crate::protocol::status::types::modbus::RegisterMode::Holding => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_holding(register_address + i as u16, val)?;
                                             }
                                         }
-                                    } else {
-                                        log::warn!("Failed to parse HTTP response data");
+                                        crate::protocol::status::types::modbus::RegisterMode::Coils => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_coil(register_address + i as u16, val != 0)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::DiscreteInputs => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_discrete(register_address + i as u16, val != 0)?;
+                                            }
+                                        }
+                                        crate::protocol::status::types::modbus::RegisterMode::Input => {
+                                            for (i, &val) in values.iter().enumerate() {
+                                                context.set_input(register_address + i as u16, val)?;
+                                            }
+                                        }
+                                    }
+                                    drop(context);
+
+                                    // Record changed range
+                                    {
+                                        let len = values.len() as u16;
+                                        let mut cr = changed_ranges.lock().unwrap();
+                                        cr.push((register_address, len, Instant::now()));
+                                        while cr.len() > 1000 {
+                                            cr.remove(0);
+                                        }
                                     }
                                 }
                                 Err(e) => {
-                                    log::warn!("Failed to read HTTP response: {}", e);
+                                    log::warn!("Failed to extract values from HTTP data: {}", e);
                                 }
                             }
                         }
-                        Err(err) => {
-                            log::warn!("Failed to fetch from HTTP server: {}", err);
+                        Err(flume::RecvTimeoutError::Timeout) => {
+                            // Timeout is normal, just continue
+                            continue;
+                        }
+                        Err(flume::RecvTimeoutError::Disconnected) => {
+                            log::error!("HTTP server channel disconnected");
+                            return Err(anyhow!("HTTP server channel disconnected"));
                         }
                     }
-
-                    // Poll every second
-                    std::thread::sleep(Duration::from_secs(1));
                 }
             }
             DataSource::IpcPipe(path) => {
@@ -1576,44 +1595,6 @@ fn read_one_data_update(
                 register_length,
             )
         }
-        DataSource::TransparentForward(port) => {
-            // Transparent forwarding: read from IPC channel connected to source port
-            // The source port should be publishing data to a named pipe
-            log::debug!("Reading from transparent forward source port: {}", port);
-
-            // Create IPC channel name from port name
-            let channel_name = format!("/tmp/aoba_forward_{}", port.replace(['/', '\\'], "_"));
-
-            log::info!(
-                "TransparentForward: waiting for data from channel {}",
-                channel_name
-            );
-
-            // Try to read from the channel file
-            match std::fs::File::open(&channel_name) {
-                Ok(file) => {
-                    let mut reader = BufReader::new(file);
-                    let mut line = String::new();
-                    reader.read_line(&mut line)?;
-                    parse_data_line(
-                        &line,
-                        station_id,
-                        reg_mode,
-                        register_address,
-                        register_length,
-                    )
-                }
-                Err(e) => {
-                    log::warn!(
-                        "Failed to open transparent forward channel {}: {}",
-                        channel_name,
-                        e
-                    );
-                    log::info!("Ensure source port is running with transparent forwarding enabled");
-                    Err(anyhow!("TransparentForward channel not available: {}", e))
-                }
-            }
-        }
         DataSource::MqttServer(url) => {
             // MQTT: connect to broker and wait for one message
             log::debug!("Connecting to MQTT broker: {}", url);
@@ -1669,38 +1650,11 @@ fn read_one_data_update(
 
             Err(anyhow!("MQTT connection closed without receiving data"))
         }
-        DataSource::HttpServer(url) => {
-            // HTTP: make GET request to server and parse JSON response
-            log::debug!("Fetching data from HTTP server: {}", url);
-            let response = ureq::get(url)
-                .call()
-                .map_err(|e| anyhow!("Failed to fetch from HTTP server: {}", e))?;
-
-            let mut response = response;
-            let text = response
-                .body_mut()
-                .read_to_string()
-                .map_err(|e| anyhow!("Failed to read HTTP response: {}", e))?;
-
-            log::debug!(
-                "HTTP response text (first 500 chars): {}",
-                &text.chars().take(500).collect::<String>()
-            );
-
-            parse_data_line(
-                &text,
-                station_id,
-                reg_mode,
-                register_address,
-                register_length,
-            )
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to parse HTTP response data: {}. Response was: {}",
-                    e,
-                    &text.chars().take(200).collect::<String>()
-                )
-            })
+        DataSource::HttpServer(_port) => {
+            // HTTP Server: For initial setup, return empty values
+            // Actual updates come via the HTTP daemon thread
+            log::debug!("HTTP Server mode - returning empty initial values");
+            Ok(vec![])
         }
         DataSource::IpcPipe(path) => {
             // IPC pipe: similar to Pipe but for inter-process communication

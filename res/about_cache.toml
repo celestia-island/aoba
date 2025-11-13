@@ -127,6 +127,10 @@ name = "strum"
 version = "0.27"
 
 [[dependencies]]
+name = "tiny_http"
+version = "0.11"
+
+[[dependencies]]
 name = "tokio"
 version = "1"
 
@@ -203,6 +207,7 @@ serde_json_path = "MIT"
 serialport = "MPL-2.0"
 sqids = "MIT"
 strum = "MIT"
+tiny_http = "MIT OR Apache-2.0"
 tokio = "MIT"
 toml = "MIT OR Apache-2.0"
 tracing = "MIT"

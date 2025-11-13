@@ -143,6 +143,7 @@ serialport.workspace = true
 interprocess.workspace = true
 ureq.workspace = true
 rumqttc.workspace = true
+tiny_http.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true

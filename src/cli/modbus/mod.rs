@@ -101,10 +101,9 @@ pub enum DataSource {
     Manual,
     File(String),
     Pipe(String),
-    TransparentForward(String), // port name
-    MqttServer(String),         // URL
-    HttpServer(String),         // URL
-    IpcPipe(String),            // pipe path
+    MqttServer(String),  // URL
+    HttpServer(u16),     // Port
+    IpcPipe(String),     // pipe path
 }
 
 impl std::str::FromStr for DataSource {
@@ -117,21 +116,21 @@ impl std::str::FromStr for DataSource {
             Ok(DataSource::File(path.to_string()))
         } else if let Some(name) = s.strip_prefix("pipe:") {
             Ok(DataSource::Pipe(name.to_string()))
-        } else if let Some(port) = s.strip_prefix("transparent:") {
-            Ok(DataSource::TransparentForward(port.to_string()))
         } else if let Some(url) = s.strip_prefix("mqtt://") {
             Ok(DataSource::MqttServer(format!("mqtt://{}", url)))
         } else if let Some(url) = s.strip_prefix("mqtts://") {
             Ok(DataSource::MqttServer(format!("mqtts://{}", url)))
-        } else if let Some(url) = s.strip_prefix("http://") {
-            Ok(DataSource::HttpServer(format!("http://{}", url)))
-        } else if let Some(url) = s.strip_prefix("https://") {
-            Ok(DataSource::HttpServer(format!("https://{}", url)))
+        } else if let Some(port_str) = s.strip_prefix("http://") {
+            // Parse port number from http://PORT format
+            let port: u16 = port_str.parse().map_err(|_| {
+                anyhow!("Invalid HTTP port number. Use: http://<port> (e.g., http://8080)")
+            })?;
+            Ok(DataSource::HttpServer(port))
         } else if let Some(path) = s.strip_prefix("ipc:") {
             Ok(DataSource::IpcPipe(path.to_string()))
         } else {
             Err(anyhow!(
-                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, or file:<path>"
+                "Invalid data source format. Use: manual, mqtt://<url>, http://<port>, ipc:<path>, or file:<path>"
             ))
         }
     }
