@@ -11,7 +11,7 @@ env:
 jobs:
   cli-e2e-basic:
     name: CLI E2E Basic - ${{ matrix.module }}
-    runs-on: [self-hosted, ubuntu-latest]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -79,7 +79,7 @@ jobs:
 
   cli-e2e-config-mode:
     name: CLI E2E Config Mode - ${{ matrix.module }}
-    runs-on: [self-hosted, ubuntu-latest]
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:

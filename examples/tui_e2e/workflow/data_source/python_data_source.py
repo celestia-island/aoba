@@ -8,7 +8,6 @@ Usage: python python_data_source.py [round_number]
 import json
 import sys
 
-
 def get_registers(round_num=1):
     """Get register values based on test round."""
     if round_num == 1:
@@ -24,7 +23,6 @@ def get_registers(round_num=1):
         # Default: zeros
         return [0] * 10
 
-
 def main():
     """Main function to output register data."""
     round_num = 1
@@ -33,9 +31,9 @@ def main():
             round_num = int(sys.argv[1])
         except ValueError:
             round_num = 1
-
+    
     registers = get_registers(round_num)
-
+    
     # Output in JSON format
     data = {
         "station_id": 1,
@@ -43,9 +41,8 @@ def main():
         "start_address": 0,
         "registers": registers
     }
-
+    
     print(json.dumps(data))
-
 
 if __name__ == "__main__":
     main()
