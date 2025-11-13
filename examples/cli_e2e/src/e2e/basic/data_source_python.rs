@@ -5,40 +5,16 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::utils::{build_debug_bin, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2};
+use crate::utils::{
+    build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
+};
 use aoba::cli::modbus::ModbusResponse;
 
 /// Maximum timeout for waiting operations (30 seconds)
 const MAX_WAIT_TIMEOUT_SECS: u64 = 30;
 
-/// Wait for a process to be ready by polling its status
-/// Returns Ok(()) if process is still running within timeout, Err otherwise
-async fn wait_for_process_ready(process: &mut std::process::Child, min_wait_ms: u64) -> Result<()> {
-    let start = Instant::now();
-    let timeout = Duration::from_secs(MAX_WAIT_TIMEOUT_SECS);
-    let min_wait = Duration::from_millis(min_wait_ms);
-    let poll_interval = Duration::from_millis(100);
-
-    // Wait at least the minimum time
-    while start.elapsed() < min_wait {
-        if start.elapsed() > timeout {
-            return Err(anyhow!("Timeout waiting for process to be ready"));
-        }
-
-        if let Some(status) = process.try_wait()? {
-            return Err(anyhow!("Process exited prematurely with status {}", status));
-        }
-
-        tokio::time::sleep(poll_interval).await;
-    }
-
-    // Final check after minimum wait
-    if let Some(status) = process.try_wait()? {
-        return Err(anyhow!("Process exited prematurely with status {}", status));
-    }
-
-    Ok(())
-}
+// Use `wait_for_process_ready` from `crate::utils` so the implementation
+// is shared across tests. The function is imported above.
 
 fn parse_client_response(stdout: &[u8]) -> Result<ModbusResponse> {
     let output = String::from_utf8_lossy(stdout);
@@ -61,10 +37,7 @@ pub async fn test_python_data_source_external() -> Result<()> {
     // Get the path to the test script
     let script_path = PathBuf::from("examples/cli_e2e/scripts/test_simple.py");
     if !script_path.exists() {
-        return Err(anyhow!(
-            "Test script not found: {}",
-            script_path.display()
-        ));
+        return Err(anyhow!("Test script not found: {}", script_path.display()));
     }
 
     let script_path_abs = std::fs::canonicalize(&script_path)?;
@@ -164,10 +137,7 @@ pub async fn test_python_data_source_external_persist() -> Result<()> {
     // Get the path to the test script
     let script_path = PathBuf::from("examples/cli_e2e/scripts/test_simple.py");
     if !script_path.exists() {
-        return Err(anyhow!(
-            "Test script not found: {}",
-            script_path.display()
-        ));
+        return Err(anyhow!("Test script not found: {}", script_path.display()));
     }
 
     let script_path_abs = std::fs::canonicalize(&script_path)?;
@@ -280,10 +250,7 @@ pub async fn test_python_data_source_dynamic() -> Result<()> {
     // Get the path to the test script
     let script_path = PathBuf::from("examples/cli_e2e/scripts/test_dynamic.py");
     if !script_path.exists() {
-        return Err(anyhow!(
-            "Test script not found: {}",
-            script_path.display()
-        ));
+        return Err(anyhow!("Test script not found: {}", script_path.display()));
     }
 
     let script_path_abs = std::fs::canonicalize(&script_path)?;
@@ -359,13 +326,10 @@ pub async fn test_python_data_source_dynamic() -> Result<()> {
     }
 
     let response = parse_client_response(&client_output.stdout)?;
-    
+
     // Verify we got 3 values
     if response.values.len() != 3 {
-        return Err(anyhow!(
-            "Expected 3 values, got {}",
-            response.values.len()
-        ));
+        return Err(anyhow!("Expected 3 values, got {}", response.values.len()));
     }
 
     // Verify values are in expected ranges (from test_dynamic.py)
@@ -374,16 +338,29 @@ pub async fn test_python_data_source_dynamic() -> Result<()> {
     let pressure = response.values[2];
 
     if !(200..=300).contains(&temperature) {
-        return Err(anyhow!("Temperature {} out of expected range 200-300", temperature));
+        return Err(anyhow!(
+            "Temperature {} out of expected range 200-300",
+            temperature
+        ));
     }
     if !(400..=600).contains(&humidity) {
-        return Err(anyhow!("Humidity {} out of expected range 400-600", humidity));
+        return Err(anyhow!(
+            "Humidity {} out of expected range 400-600",
+            humidity
+        ));
     }
     if !(9800..=10200).contains(&pressure) {
-        return Err(anyhow!("Pressure {} out of expected range 9800-10200", pressure));
+        return Err(anyhow!(
+            "Pressure {} out of expected range 9800-10200",
+            pressure
+        ));
     }
 
-    log::info!("✅ Python data source dynamic test passed (T={}, H={}, P={})", 
-               temperature, humidity, pressure);
+    log::info!(
+        "✅ Python data source dynamic test passed (T={}, H={}, P={})",
+        temperature,
+        humidity,
+        pressure
+    );
     Ok(())
 }
