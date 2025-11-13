@@ -1,0 +1,524 @@
+# Data Source - HTTP Server Mode
+# Test ID: data_source_http_server
+# Station: ID=1, Type=Holding, Address=0x0000, Length=10
+# Data Source: HTTP Server with URL http://localhost:8080/modbus
+#
+# Test Focus:
+# - Configure master station with HTTP server data source
+# - Verify data source configuration in mock state
+# - Simulate external data source feeding data
+# - Verify data appears correctly on screen (3 rounds)
+#
+# Test Data (3 Rounds - simulated as external data feed):
+# Round 1 - Sequential: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+# Round 2 - Reverse: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+# Round 3 - Custom: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+
+[manifest]
+id = "data_source_http_server"
+description = "Master mode with IPC pipe data source"
+station_id = 1
+register_type = "Holding"
+start_address = 0x0000
+register_count = 10
+mode = "master"
+
+init_order = [
+  "navigate_to_entry",
+  "enter_config_panel",
+  "navigate_to_business_config",
+  "enter_modbus_panel",
+  "configure_data_source",
+  "create_station",
+  "configure_station_fields",
+  "save_configuration",
+  "verify_port_enabled",
+  "simulate_data_feed_round1",
+]
+
+recycle_order = [
+  "simulate_data_feed_round2",
+  "simulate_data_feed_round3",
+]
+
+# Step 1: Navigate to Entry page
+[[workflow.navigate_to_entry]]
+description = "Initialize mock state for entry page"
+mock_path = "$.page"
+mock_set_value = { type = "entry" }
+
+[[workflow.navigate_to_entry]]
+description = "Ensure entry page port order"
+mock_path = "$.port_order"
+mock_set_value = ["/tmp/vcom1", "/tmp/vcom2"]
+
+[[workflow.navigate_to_entry]]
+description = "Initial navigation to entry page"
+verify = "/tmp/vcom1"
+
+[[workflow.navigate_to_entry]]
+verify = "/tmp/vcom2"
+
+# Step 2: Enter configuration panel
+[[workflow.enter_config_panel]]
+description = "Press Enter on selected port to enter config panel"
+key = "Enter"
+
+[[workflow.enter_config_panel]]
+description = "Switch mock state to config panel"
+mock_path = "$.page"
+mock_set_value = { type = "config_panel" }
+
+[[workflow.enter_config_panel]]
+description = "Set config panel cursor to EnablePort"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "EnablePort"
+
+[[workflow.enter_config_panel]]
+verify = "Enable Port"
+
+# Step 3: Navigate to business configuration
+[[workflow.navigate_to_business_config]]
+description = "Navigate down to Business Configuration menu item"
+key = "Down"
+times = 2
+
+[[workflow.navigate_to_business_config]]
+description = "Highlight Business Configuration entry"
+mock_path = "$.page_state.config_panel.cursor"
+mock_set_value = "ProtocolConfig"
+
+[[workflow.navigate_to_business_config]]
+verify = "Enter Business Configuration"
+
+# Step 4: Enter Modbus panel
+[[workflow.enter_modbus_panel]]
+description = "Press Enter to enter Modbus dashboard"
+key = "Enter"
+
+[[workflow.enter_modbus_panel]]
+description = "Switch mock state to Modbus dashboard"
+mock_path = "$.page"
+mock_set_value = { type = "modbus_dashboard" }
+
+[[workflow.enter_modbus_panel]]
+description = "Reset Modbus cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.enter_modbus_panel]]
+verify = "ModBus Master/Slave Set"
+
+# Step 5: Configure Data Source
+[[workflow.configure_data_source]]
+description = "Navigate down from AddLine to ModbusMode"
+key = "Down"
+
+[[workflow.configure_data_source]]
+description = "Update cursor to ModbusMode"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "ModbusMode" }
+
+[[workflow.configure_data_source]]
+description = "Verify ModbusMode field is shown"
+verify = "Connection Mode"
+
+[[workflow.configure_data_source]]
+description = "Navigate down from ModbusMode to MasterSourceKind"
+key = "Down"
+
+[[workflow.configure_data_source]]
+description = "Update cursor to MasterSourceKind"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "MasterSourceKind" }
+
+[[workflow.configure_data_source]]
+description = "Verify Data Source field is shown"
+verify = "Data Source"
+
+[[workflow.configure_data_source]]
+description = "Enter edit mode for Data Source Kind"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Cycle to HttpServer (Manual->TransparentForward->MqttServer->HttpServer->HttpServer)"
+key = "Char(h)"
+times = 3
+
+[[workflow.configure_data_source]]
+description = "Initialize data source in mock state to HttpServer"
+mock_path = "$.ports['/tmp/vcom1'].master_source"
+mock_set_value = { type = "http_server", url = "" }
+
+[[workflow.configure_data_source]]
+description = "Confirm Data Source Kind"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Verify HTTP Server data source is selected"
+verify = "HTTP Server"
+
+[[workflow.configure_data_source]]
+description = "Navigate down to MasterSourceValue"
+key = "Down"
+
+[[workflow.configure_data_source]]
+description = "Update cursor to MasterSourceValue"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "MasterSourceValue" }
+
+[[workflow.configure_data_source]]
+description = "Enter edit mode for data source path"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Type IPC pipe path"
+input = "string"
+value = "http://localhost:8080/modbus"
+
+[[workflow.configure_data_source]]
+description = "Confirm data source path"
+key = "Enter"
+
+[[workflow.configure_data_source]]
+description = "Update data source path in mock state"
+mock_path = "$.ports['/tmp/vcom1'].master_source.url"
+mock_set_value = "http://localhost:8080/modbus"
+
+[[workflow.configure_data_source]]
+description = "Verify data source path is shown"
+verify = "http://localhost:8080/modbus"
+
+# Step 6: Create station
+[[workflow.create_station]]
+description = "Navigate down to AddLine (station creation)"
+key = "Down"
+
+[[workflow.create_station]]
+description = "Update cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+[[workflow.create_station]]
+description = "Press Enter on 'Create Station' to create new station"
+key = "Enter"
+
+[[workflow.create_station]]
+description = "Initialize master station structure with empty registers"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
+mock_set_value = [
+  { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
+]
+
+[[workflow.create_station]]
+description = "Focus cursor on station header"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "StationId", station_index = 0 }
+
+[[workflow.create_station]]
+verify = "#1 - ID: 1"
+
+# Step 7: Configure Station Fields (no register editing - data comes from external source)
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+a"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type station ID value 1"
+input = "decimal"
+value = 1
+
+[[workflow.configure_station_fields]]
+description = "Confirm Station ID"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Update Station ID in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
+mock_set_value = 1
+
+# Navigate to Register Type using absolute positioning
+[[workflow.configure_station_fields]]
+description = "Return to top with Ctrl+PageUp"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station_fields]]
+description = "Jump to ModbusMode with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceKind with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceValue with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to station with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Move to Register Type field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Type"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Keep Holding register type (default)"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Type is correctly set"
+verify = "Register Type         Holding Registers(03)"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Type in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_type"
+mock_set_value = "Holding"
+
+# Navigate to Start Address using absolute positioning
+[[workflow.configure_station_fields]]
+description = "Return to top with Ctrl+PageUp"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station_fields]]
+description = "Jump to ModbusMode with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceKind with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceValue with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to station with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Move to Register Type field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Move to Start Address field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Start Address"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+a"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type start address 0x0000"
+input = "hex"
+value = 0x0000
+
+[[workflow.configure_station_fields]]
+description = "Confirm Start Address"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Start Address is correctly set to 0x0000"
+verify = "Start Address         0x0000 (0)"
+
+[[workflow.configure_station_fields]]
+description = "Update Start Address in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].start_address"
+mock_set_value = 0
+
+# Navigate to Register Count using absolute positioning
+[[workflow.configure_station_fields]]
+description = "Return to top with Ctrl+PageUp"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station_fields]]
+description = "Jump to ModbusMode with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceKind with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to MasterSourceValue with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Jump to station with PageDown"
+key = "PageDown"
+
+[[workflow.configure_station_fields]]
+description = "Move to Register Type field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Move to Start Address field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Move to Register Count field"
+key = "Down"
+
+[[workflow.configure_station_fields]]
+description = "Enter edit mode for Register Count"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Clear existing value"
+key = "Ctrl+a"
+
+[[workflow.configure_station_fields]]
+description = "Delete cleared content"
+key = "Backspace"
+
+[[workflow.configure_station_fields]]
+description = "Type register count 10"
+input = "decimal"
+value = 10
+
+[[workflow.configure_station_fields]]
+description = "Confirm Register Count"
+key = "Enter"
+
+[[workflow.configure_station_fields]]
+description = "Verify Register Length is correctly set to 10"
+verify = "Register Length       0x000A (10)"
+
+[[workflow.configure_station_fields]]
+description = "Update Register Count in mock state"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
+mock_set_value = 10
+
+[[workflow.configure_station_fields]]
+description = "Ensure registers array matches length"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+[[workflow.configure_station_fields]]
+description = "Return to top of panel"
+key = "Ctrl+PageUp"
+
+[[workflow.configure_station_fields]]
+description = "Reset cursor to AddLine"
+mock_path = "$.page_state.modbus_dashboard.cursor"
+mock_set_value = { kind = "AddLine" }
+
+# Step 8: Save configuration
+[[workflow.save_configuration]]
+description = "Save configuration with Ctrl+S"
+key = "Ctrl+S"
+
+[[workflow.save_configuration]]
+description = "Enable port in mock state"
+mock_path = "$.ports['/tmp/vcom1'].enabled"
+mock_set_value = true
+
+[[workflow.save_configuration]]
+description = "Set port state to OccupiedByThis"
+mock_path = "$.ports['/tmp/vcom1'].state"
+mock_set_value = { type = "occupied_by_this" }
+
+[[workflow.save_configuration]]
+description = "Wait for port to enable and stabilize"
+sleep_ms = 5000
+
+[[workflow.save_configuration]]
+description = "Verify Running status indicator"
+verify = "Running ●"
+
+# Step 9: Verify port enabled
+[[workflow.verify_port_enabled]]
+description = "Check port is enabled in status"
+mock_verify_path = "$.ports['/tmp/vcom1'].enabled"
+mock_verify_value = true
+
+[[workflow.verify_port_enabled]]
+description = "Check port state is Running"
+mock_verify_path = "$.ports['/tmp/vcom1'].state"
+mock_verify_value = { type = "occupied_by_this" }
+
+[[workflow.verify_port_enabled]]
+description = "Verify data source configuration"
+mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
+mock_verify_value = { type = "http_server", url = "http://localhost:8080/modbus" }
+
+# Step 10: Simulate external data feed - Round 1 (Sequential: 0-9)
+[[workflow.simulate_data_feed_round1]]
+description = "Simulate HTTP server feeding data - Round 1 (Sequential)"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+[[workflow.simulate_data_feed_round1]]
+description = "Verify data appears on screen (partial)"
+verify = "    0x0000              0x0000 0x0001 0x0002 0x0003 0x0004 0x0005 0x0006 0x0007"
+
+[[workflow.simulate_data_feed_round1]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0008 0x0009"
+
+[[workflow.simulate_data_feed_round1]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+# Step 11: Simulate external data feed - Round 2 (Reverse: 9-0)
+[[workflow.simulate_data_feed_round2]]
+description = "Simulate HTTP server feeding data - Round 2 (Reverse)"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data appears on screen (partial)"
+verify = "    0x0000              0x0009 0x0008 0x0007 0x0006 0x0005 0x0004 0x0003 0x0002"
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0001 0x0000"
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data on 0x0008 row (partial)"
+verify = "    0x0008              0x0001 0x0000"
+
+[[workflow.simulate_data_feed_round2]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+
+
+# Step 12: Simulate external data feed - Round 3 (Custom pattern)
+[[workflow.simulate_data_feed_round3]]
+description = "Simulate HTTP server feeding data - Round 3 (Custom)"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
+
+[[workflow.simulate_data_feed_round3]]
+description = "Verify data appears on screen (partial)"
+verify = "    0x0000              0x1111 0x2222 0x3333 0x4444 0x5555 0x6666 0x7777 0x8888"
+
+[[workflow.simulate_data_feed_round3]]
+description = "Verify data on 0x0008 row (partial)"
+
+[[workflow.simulate_data_feed_round3]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]

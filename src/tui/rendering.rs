@@ -4,8 +4,7 @@ use std::{io, sync::Arc, thread, time::Duration};
 
 use ratatui::{backend::CrosstermBackend, layout::*, prelude::*};
 
-// Note: logs helpers are available in `crate::tui::logs`, import them where needed.
-use crate::tui::status::Status;
+use crate::{tui::status::Status, utils::sleep_1s};
 
 /// Render UI function that only reads from Status (immutable reference)
 fn render_ui(frame: &mut Frame) -> Result<()> {
@@ -262,7 +261,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                     if let Err(err) = crate::tui::input::handle_event(event, &bus) {
                         log::warn!("Failed to handle key event: {err}");
                     }
-                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    sleep_1s().await;
                 }
             }
             Ok(crate::utils::E2EToTuiMessage::CharInput { ch }) => {
@@ -274,7 +273,7 @@ pub(crate) async fn start_with_ipc(_matches: &clap::ArgMatches, channel_id: &str
                 if let Err(err) = crate::tui::input::handle_event(event, &bus) {
                     log::warn!("Failed to handle char input: {err}");
                 }
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                sleep_1s().await;
             }
             Ok(crate::utils::E2EToTuiMessage::RequestScreen) => {
                 log::info!("🖼️  Rendering screen to TestBackend");

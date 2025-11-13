@@ -1,12 +1,9 @@
 pub mod master;
-pub mod python;
 pub mod slave;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{io::Write, time::Duration};
-
-pub use python::PythonRunner;
 
 use crate::protocol::status::types::modbus::{RegisterMode, StationConfig};
 
@@ -108,7 +105,6 @@ pub enum DataSource {
     MqttServer(String),         // URL
     HttpServer(String),         // URL
     IpcPipe(String),            // pipe path
-    PythonScript { path: String },
 }
 
 impl std::str::FromStr for DataSource {
@@ -133,37 +129,9 @@ impl std::str::FromStr for DataSource {
             Ok(DataSource::HttpServer(format!("https://{}", url)))
         } else if let Some(path) = s.strip_prefix("ipc:") {
             Ok(DataSource::IpcPipe(path.to_string()))
-        } else if let Some(spec) = s.strip_prefix("python:") {
-            if spec
-                .strip_prefix("external:")
-                .or_else(|| spec.strip_prefix("cpython:"))
-                .is_some()
-            {
-                return Err(anyhow!(
-                    "CPython runner has been removed. Use the IPC data source instead (ipc:<path>)."
-                ));
-            }
-
-            let path = spec
-                .strip_prefix("embedded:")
-                .or_else(|| spec.strip_prefix("rustpython:"))
-                .unwrap_or(spec);
-
-            if path.is_empty()
-                || path.eq_ignore_ascii_case("embedded")
-                || path.eq_ignore_ascii_case("rustpython")
-                || path.eq_ignore_ascii_case("external")
-                || path.eq_ignore_ascii_case("cpython")
-            {
-                return Err(anyhow!("Python data source path cannot be empty"));
-            }
-
-            Ok(DataSource::PythonScript {
-                path: path.to_string(),
-            })
         } else {
             Err(anyhow!(
-                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, python:<path>, or file:<path>"
+                "Invalid data source format. Use: manual, transparent:<port>, mqtt://<url>, http://<url>, ipc:<path>, or file:<path>"
             ))
         }
     }

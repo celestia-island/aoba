@@ -12,8 +12,9 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    time::Duration,
 };
+
+use crate::utils::sleep_1s;
 
 /// Manages periodic dumping of CLI status to a JSON file for E2E testing.
 ///
@@ -53,7 +54,7 @@ impl CliStatusDumper {
                         log::error!("Failed to serialize CLI status: {e}");
                     }
                 }
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                sleep_1s().await;
             }
         });
 

@@ -63,21 +63,6 @@ fn get_data_source_placeholder(kind: ModbusMasterDataSourceKind) -> Option<Strin
                 .clone();
             Some(placeholder)
         }
-        ModbusMasterDataSourceKind::PythonModule => {
-            #[cfg(unix)]
-            let placeholder = lang()
-                .protocol
-                .modbus
-                .data_source_placeholder_python_unix
-                .clone();
-            #[cfg(windows)]
-            let placeholder = lang()
-                .protocol
-                .modbus
-                .data_source_placeholder_python_windows
-                .clone();
-            Some(placeholder)
-        }
     }
 }
 
@@ -402,8 +387,7 @@ pub fn render_kv_lines_with_indicators(
                         let current_value = match master_source {
                             ModbusMasterDataSource::MqttServer { url }
                             | ModbusMasterDataSource::HttpServer { url } => url.clone(),
-                            ModbusMasterDataSource::IpcPipe { path }
-                            | ModbusMasterDataSource::PythonModule { path } => path.clone(),
+                            ModbusMasterDataSource::IpcPipe { path } => path.clone(),
                             _ => String::new(),
                         };
 

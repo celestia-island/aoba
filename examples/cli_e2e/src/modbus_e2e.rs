@@ -6,9 +6,9 @@ use std::{
 };
 
 use crate::utils::{
-    build_debug_bin, create_modbus_command, sleep_1s, vcom_matchers_with_ports, DEFAULT_PORT1,
-    DEFAULT_PORT2,
+    build_debug_bin, create_modbus_command, vcom_matchers_with_ports, DEFAULT_PORT1, DEFAULT_PORT2,
 };
+use aoba::utils::{sleep_1s, sleep_3s};
 
 /// Test master-slave communication with virtual serial ports
 /// Server = Modbus Master (provides data, responds to requests) on port1
@@ -45,8 +45,7 @@ pub async fn test_master_slave_communication() -> Result<()> {
 
     // Give server time to start and fully acquire the port
     // use multiple async short waits to emulate a few seconds
-    sleep_1s().await;
-    sleep_1s().await;
+    sleep_3s().await;
 
     // Check if server is still running
     match server.try_wait()? {
