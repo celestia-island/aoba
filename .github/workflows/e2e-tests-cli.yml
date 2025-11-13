@@ -26,6 +26,8 @@ jobs:
           - data_source_ipc_pipe
           - data_source_http
           - data_source_http_persist
+          - data_source_mqtt
+          - data_source_mqtt_persist
 
     steps:
       - uses: actions/checkout@v5
@@ -59,6 +61,12 @@ jobs:
 
       - name: Install socat
         run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Install and start mosquitto MQTT broker
+        run: |
+          sudo apt-get install -y mosquitto
+          sudo systemctl start mosquitto
+          sudo systemctl status mosquitto || true
 
       - name: Setup virtual serial ports
         run: |
@@ -113,6 +121,12 @@ jobs:
 
       - name: Install socat
         run: sudo apt-get update && sudo apt-get install -y socat
+
+      - name: Install and start mosquitto MQTT broker
+        run: |
+          sudo apt-get install -y mosquitto
+          sudo systemctl start mosquitto
+          sudo systemctl status mosquitto || true
 
       - name: Setup virtual serial ports
         run: |
