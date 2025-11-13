@@ -95,9 +95,9 @@ async fn publish_mqtt_data(broker_host: &str, broker_port: u16, topic: &str, pay
     // Wait for connection
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Publish the payload
+    // Publish the payload with retained flag so the subscriber can receive it even if it connects later
     client
-        .publish(topic, QoS::AtLeastOnce, false, payload.as_bytes())
+        .publish(topic, QoS::AtLeastOnce, true, payload.as_bytes())
         .await
         .map_err(|e| anyhow!("Failed to publish MQTT message: {}", e))?;
 
