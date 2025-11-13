@@ -1331,11 +1331,11 @@ fn update_storage_loop(
                 // Pipe closed, reopen and continue
                 log::debug!("IPC pipe closed, reopening...");
             }
-            DataSource::PythonScript { mode, path } => {
+            DataSource::PythonScript { path } => {
                 // Python script: execute periodically and update storage
                 use super::python::create_python_runner;
 
-                let mut runner = match create_python_runner(*mode, path.clone(), Some(1000)) {
+                let mut runner = match create_python_runner(path.clone(), Some(1000)) {
                     Ok(r) => r,
                     Err(e) => {
                         log::error!("Failed to create Python runner: {}", e);
@@ -1343,11 +1343,7 @@ fn update_storage_loop(
                     }
                 };
 
-                log::info!(
-                    "Python script runner initialized: mode={:?}, path={}",
-                    mode,
-                    path
-                );
+                log::info!("Python script runner initialized: path={}", path);
 
                 loop {
                     match runner.execute() {
@@ -1410,14 +1406,6 @@ fn update_storage_loop(
                                         while cr.len() > 1000 {
                                             cr.remove(0);
                                         }
-                                    }
-
-                                    // Log stdout/stderr messages
-                                    for msg in output.stdout_messages {
-                                        log::info!("Python stdout: {}", msg);
-                                    }
-                                    for msg in output.stderr_messages {
-                                        log::warn!("Python stderr: {}", msg);
                                     }
 
                                     // Wait for reboot interval if specified
@@ -1831,20 +1819,12 @@ fn read_one_data_update(
                 register_length,
             )
         }
-        DataSource::PythonScript { mode, path } => {
+        DataSource::PythonScript { path } => {
             // Python script: execute once and return values
             use super::python::create_python_runner;
 
-            let mut runner = create_python_runner(*mode, path.clone(), None)?;
+            let mut runner = create_python_runner(path.clone(), None)?;
             let output = runner.execute()?;
-
-            // Log stdout/stderr messages
-            for msg in &output.stdout_messages {
-                log::info!("Python stdout: {}", msg);
-            }
-            for msg in &output.stderr_messages {
-                log::warn!("Python stderr: {}", msg);
-            }
 
             // Extract values from stations
             extract_values_from_station_configs(

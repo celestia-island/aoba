@@ -168,14 +168,6 @@ impl PythonRunner for PythonEmbeddedRunner {
                     self.reboot_interval_ms = interval;
                 }
 
-                // Log stdout/stderr
-                for msg in &output.stdout_messages {
-                    log::info!("Python stdout: {}", msg);
-                }
-                for msg in &output.stderr_messages {
-                    log::warn!("Python stderr: {}", msg);
-                }
-
                 self.last_execution = Some(Instant::now());
                 Ok(output)
             }

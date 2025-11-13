@@ -1,12 +1,10 @@
 pub mod embedded;
-pub mod external;
 pub mod types;
 
 use anyhow::Result;
 
 pub use embedded::PythonEmbeddedRunner;
-pub use external::PythonExternalRunner;
-pub use types::{PythonExecutionMode, PythonOutput};
+pub use types::PythonOutput;
 
 /// Trait for Python script execution
 pub trait PythonRunner: Send {
@@ -22,18 +20,11 @@ pub trait PythonRunner: Send {
 
 /// Create a Python runner based on the execution mode
 pub fn create_python_runner(
-    mode: PythonExecutionMode,
     script_path: String,
     initial_reboot_interval_ms: Option<u64>,
 ) -> Result<Box<dyn PythonRunner>> {
-    match mode {
-        PythonExecutionMode::Embedded => Ok(Box::new(PythonEmbeddedRunner::new(
-            script_path,
-            initial_reboot_interval_ms,
-        )?)),
-        PythonExecutionMode::External => Ok(Box::new(PythonExternalRunner::new(
-            script_path,
-            initial_reboot_interval_ms,
-        )?)),
-    }
+    Ok(Box::new(PythonEmbeddedRunner::new(
+        script_path,
+        initial_reboot_interval_ms,
+    )?))
 }
