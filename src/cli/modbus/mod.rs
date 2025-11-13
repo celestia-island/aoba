@@ -134,9 +134,10 @@ impl std::str::FromStr for DataSource {
         } else if let Some(path) = s.strip_prefix("ipc:") {
             Ok(DataSource::IpcPipe(path.to_string()))
         } else if let Some(spec) = s.strip_prefix("python:") {
-            if let Some(_) = spec
+            if spec
                 .strip_prefix("external:")
                 .or_else(|| spec.strip_prefix("cpython:"))
+                .is_some()
             {
                 return Err(anyhow!(
                     "CPython runner has been removed. Use the IPC data source instead (ipc:<path>)."
