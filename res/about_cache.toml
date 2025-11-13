@@ -103,6 +103,18 @@ name = "rumqttc"
 version = "0.25"
 
 [[dependencies]]
+name = "rustpython-compiler"
+version = "0.4"
+
+[[dependencies]]
+name = "rustpython-stdlib"
+version = "0.4"
+
+[[dependencies]]
+name = "rustpython-vm"
+version = "0.4"
+
+[[dependencies]]
 name = "serde"
 version = "1"
 
@@ -197,6 +209,9 @@ rand = "MIT OR Apache-2.0"
 ratatui = "MIT"
 rmodbus = "Apache-2.0"
 rumqttc = "Apache-2.0"
+rustpython-compiler = "MIT"
+rustpython-stdlib = "MIT"
+rustpython-vm = "MIT"
 serde = "MIT OR Apache-2.0"
 serde_json = "MIT OR Apache-2.0"
 serde_json_path = "MIT"
