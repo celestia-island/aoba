@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{process::Stdio};
+use std::process::Stdio;
 
 use crate::utils::{
     build_debug_bin, vcom_matchers_with_ports, wait_for_process_ready, DEFAULT_PORT1, DEFAULT_PORT2,
@@ -13,7 +13,8 @@ pub async fn test_python_script_data_source() -> Result<()> {
     let temp_dir = std::env::temp_dir();
 
     // Path to the Python script
-    let script_path = std::path::Path::new("examples/tui_e2e/workflow/data_source/python_data_source.py");
+    let script_path =
+        std::path::Path::new("examples/tui_e2e/workflow/data_source/python_data_source.py");
     let script_path = std::fs::canonicalize(script_path)?;
     let script_path_str = script_path.to_str().unwrap();
 
@@ -60,7 +61,9 @@ pub async fn test_python_script_data_source() -> Result<()> {
 
     // Round 3: Custom pattern
     log::info!("🧪 Testing Round 3: Custom pattern");
-    let expected_round3 = vec![0x1111u16, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA];
+    let expected_round3 = vec![
+        0x1111u16, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA,
+    ];
     test_python_round(binary.to_str().unwrap(), &ports, &expected_round3).await?;
 
     master.kill()?;
@@ -68,7 +71,11 @@ pub async fn test_python_script_data_source() -> Result<()> {
     Ok(())
 }
 
-async fn test_python_round(binary: &str, ports: &crate::utils::VcomMatchers, expected: &[u16]) -> Result<()> {
+async fn test_python_round(
+    binary: &str,
+    ports: &crate::utils::VcomMatchers,
+    expected: &[u16],
+) -> Result<()> {
     let client_output = std::process::Command::new(binary)
         .arg("--enable-virtual-ports")
         .args([
@@ -102,8 +109,13 @@ async fn test_python_round(binary: &str, ports: &crate::utils::VcomMatchers, exp
     let stdout = String::from_utf8_lossy(&client_output.stdout);
     log::debug!("Raw slave response:\n{}", stdout);
 
-    let response: ModbusResponse = serde_json::from_str(stdout.trim())
-        .map_err(|e| anyhow::anyhow!("Failed to parse JSON response: {}\nRaw output: {}", e, stdout))?;
+    let response: ModbusResponse = serde_json::from_str(stdout.trim()).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to parse JSON response: {}\nRaw output: {}",
+            e,
+            stdout
+        )
+    })?;
 
     log::info!("📊 Received registers: {:?}", response.values);
 

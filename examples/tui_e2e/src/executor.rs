@@ -691,12 +691,17 @@ async fn execute_single_step(
                 Ok(())
             } else {
                 // Log the actual screen content for debugging
-                log::error!("❌ Verification failed. Expected text not found: '{}'", expected_text);
+                log::error!(
+                    "❌ Verification failed. Expected text not found: '{}'",
+                    expected_text
+                );
                 log::error!("📺 Actual screen content:\n{}", screen_content);
-                log::error!("📏 Screen size: {} lines, {} chars total", 
-                    screen_content.lines().count(), 
-                    screen_content.len());
-                
+                log::error!(
+                    "📏 Screen size: {} lines, {} chars total",
+                    screen_content.lines().count(),
+                    screen_content.len()
+                );
+
                 Err(VerificationFailure::new(
                     expected_text.clone(),
                     Some("expected text not present on screen".to_string()),
