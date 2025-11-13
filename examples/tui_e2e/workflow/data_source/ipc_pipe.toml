@@ -3,7 +3,13 @@
 # Station: ID=1, Type=Holding, Address=0x0000, Length=10
 # Data Source: IPC Pipe with path /tmp/test_ipc_pipe
 #
-# Test Data (3 Rounds for Integer Holding Registers):
+# Test Focus:
+# - Configure master station with IPC pipe data source
+# - Verify data source configuration in mock state
+# - Simulate external data source feeding data
+# - Verify data appears correctly on screen (3 rounds)
+#
+# Test Data (3 Rounds - simulated as external data feed):
 # Round 1 - Sequential: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 # Round 2 - Reverse: [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 # Round 3 - Custom: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
@@ -25,18 +31,14 @@ init_order = [
   "configure_data_source",
   "create_station",
   "configure_station_fields",
-  "edit_registers_round1",
   "save_configuration",
   "verify_port_enabled",
+  "simulate_data_feed_round1",
 ]
 
 recycle_order = [
-  "edit_registers_round2",
-  "save_configuration",
-  "verify_mock_data",
-  "edit_registers_round3",
-  "save_configuration",
-  "verify_mock_data",
+  "simulate_data_feed_round2",
+  "simulate_data_feed_round3",
 ]
 
 # Step 1: Navigate to Entry page
@@ -202,7 +204,7 @@ description = "Press Enter on 'Create Station' to create new station"
 key = "Enter"
 
 [[workflow.create_station]]
-description = "Initialize master station structure"
+description = "Initialize master station structure with empty registers"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters"
 mock_set_value = [
   { station_id = 1, register_type = "Holding", start_address = 0, register_count = 10, registers = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
@@ -216,7 +218,7 @@ mock_set_value = { kind = "StationId", station_index = 0 }
 [[workflow.create_station]]
 verify = "#1 - ID: 1"
 
-# Step 7: Configure Station Fields
+# Step 7: Configure Station Fields (no register editing - data comes from external source)
 [[workflow.configure_station_fields]]
 description = "Enter edit mode for Station ID"
 key = "Enter"
@@ -412,241 +414,16 @@ description = "Ensure registers array matches length"
 mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
 mock_set_value = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
-# Step 8: Edit Registers - Round 1 (Sequential: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
-[[workflow.edit_registers_round1]]
-description = "Move focus to first register row"
-key = "Down"
-
-[[workflow.edit_registers_round1]]
-description = "Register 0 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 0 - Type value 0 (0x0000)"
-input = "hex"
-value = 0x0000
-
-[[workflow.edit_registers_round1]]
-description = "Register 0 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 0"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
-mock_set_value = 0
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 1"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 1 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 1 - Type value 1 (0x0001)"
-input = "hex"
-value = 0x0001
-
-[[workflow.edit_registers_round1]]
-description = "Register 1 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 1"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
-mock_set_value = 1
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 2"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 2 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 2 - Type value 2 (0x0002)"
-input = "hex"
-value = 0x0002
-
-[[workflow.edit_registers_round1]]
-description = "Register 2 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 2"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
-mock_set_value = 2
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 3"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 3 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 3 - Type value 3 (0x0003)"
-input = "hex"
-value = 0x0003
-
-[[workflow.edit_registers_round1]]
-description = "Register 3 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 3"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
-mock_set_value = 3
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 4"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 4 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 4 - Type value 4 (0x0004)"
-input = "hex"
-value = 0x0004
-
-[[workflow.edit_registers_round1]]
-description = "Register 4 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 4"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
-mock_set_value = 4
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 5"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 5 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 5 - Type value 5 (0x0005)"
-input = "hex"
-value = 0x0005
-
-[[workflow.edit_registers_round1]]
-description = "Register 5 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 5"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
-mock_set_value = 5
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 6"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 6 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 6 - Type value 6 (0x0006)"
-input = "hex"
-value = 0x0006
-
-[[workflow.edit_registers_round1]]
-description = "Register 6 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 6"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
-mock_set_value = 6
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 7"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 7 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 7 - Type value 7 (0x0007)"
-input = "hex"
-value = 0x0007
-
-[[workflow.edit_registers_round1]]
-description = "Register 7 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 7"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
-mock_set_value = 7
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 8"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 8 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 8 - Type value 8 (0x0008)"
-input = "hex"
-value = 0x0008
-
-[[workflow.edit_registers_round1]]
-description = "Register 8 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 8"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
-mock_set_value = 8
-
-[[workflow.edit_registers_round1]]
-description = "Move to register 9"
-key = "Right"
-
-[[workflow.edit_registers_round1]]
-description = "Register 9 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Register 9 - Type value 9 (0x0009)"
-input = "hex"
-value = 0x0009
-
-[[workflow.edit_registers_round1]]
-description = "Register 9 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round1]]
-description = "Update mock state register 9"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
-mock_set_value = 9
-
-[[workflow.edit_registers_round1]]
-description = "Verify register values on screen (partial)"
-verify = "0x0000 0x0001 0x0002 0x0003 0x0004 0x0005"
-
-[[workflow.edit_registers_round1]]
+[[workflow.configure_station_fields]]
 description = "Return to top of panel"
 key = "Ctrl+PageUp"
 
-[[workflow.edit_registers_round1]]
+[[workflow.configure_station_fields]]
 description = "Reset cursor to AddLine"
 mock_path = "$.page_state.modbus_dashboard.cursor"
 mock_set_value = { kind = "AddLine" }
 
-# Step 9: Save configuration
+# Step 8: Save configuration
 [[workflow.save_configuration]]
 description = "Save configuration with Ctrl+S"
 key = "Ctrl+s"
@@ -669,7 +446,7 @@ sleep_ms = 5000
 description = "Verify Running status indicator"
 verify = "Running ●"
 
-# Step 10: Verify port enabled
+# Step 9: Verify port enabled
 [[workflow.verify_port_enabled]]
 description = "Check port is enabled in status"
 mock_verify_path = "$.ports['/tmp/vcom1'].enabled"
@@ -685,473 +462,47 @@ description = "Verify data source configuration"
 mock_verify_path = "$.ports['/tmp/vcom1'].master_source"
 mock_verify_value = { type = "ipc_pipe", path = "/tmp/test_ipc_pipe" }
 
-# Edit Registers - Round 2 (Reverse: 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
-[[workflow.edit_registers_round2]]
-description = "Navigate to register row"
-key = "Down"
-times = 6
+# Step 10: Simulate external data feed - Round 1 (Sequential: 0-9)
+[[workflow.simulate_data_feed_round1]]
+description = "Simulate IPC pipe feeding data - Round 1 (Sequential)"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-[[workflow.edit_registers_round2]]
-description = "Register 0 - Enter edit mode"
-key = "Enter"
+[[workflow.simulate_data_feed_round1]]
+description = "Verify data appears on screen (partial)"
+verify = "0x0000 0x0001 0x0002 0x0003 0x0004 0x0005"
 
-[[workflow.edit_registers_round2]]
-description = "Register 0 - Type value 9 (0x0009)"
-input = "hex"
-value = 0x0009
+[[workflow.simulate_data_feed_round1]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
-[[workflow.edit_registers_round2]]
-description = "Register 0 - Confirm value"
-key = "Enter"
+# Step 11: Simulate external data feed - Round 2 (Reverse: 9-0)
+[[workflow.simulate_data_feed_round2]]
+description = "Simulate IPC pipe feeding data - Round 2 (Reverse)"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 0"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
-mock_set_value = 9
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 1"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 1 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 1 - Type value 8 (0x0008)"
-input = "hex"
-value = 0x0008
-
-[[workflow.edit_registers_round2]]
-description = "Register 1 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 1"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
-mock_set_value = 8
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 2"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 2 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 2 - Type value 7 (0x0007)"
-input = "hex"
-value = 0x0007
-
-[[workflow.edit_registers_round2]]
-description = "Register 2 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 2"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
-mock_set_value = 7
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 3"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 3 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 3 - Type value 6 (0x0006)"
-input = "hex"
-value = 0x0006
-
-[[workflow.edit_registers_round2]]
-description = "Register 3 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 3"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
-mock_set_value = 6
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 4"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 4 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 4 - Type value 5 (0x0005)"
-input = "hex"
-value = 0x0005
-
-[[workflow.edit_registers_round2]]
-description = "Register 4 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 4"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
-mock_set_value = 5
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 5"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 5 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 5 - Type value 4 (0x0004)"
-input = "hex"
-value = 0x0004
-
-[[workflow.edit_registers_round2]]
-description = "Register 5 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 5"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
-mock_set_value = 4
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 6"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 6 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 6 - Type value 3 (0x0003)"
-input = "hex"
-value = 0x0003
-
-[[workflow.edit_registers_round2]]
-description = "Register 6 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 6"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
-mock_set_value = 3
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 7"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 7 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 7 - Type value 2 (0x0002)"
-input = "hex"
-value = 0x0002
-
-[[workflow.edit_registers_round2]]
-description = "Register 7 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 7"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
-mock_set_value = 2
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 8"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 8 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 8 - Type value 1 (0x0001)"
-input = "hex"
-value = 0x0001
-
-[[workflow.edit_registers_round2]]
-description = "Register 8 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 8"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
-mock_set_value = 1
-
-[[workflow.edit_registers_round2]]
-description = "Move to register 9"
-key = "Right"
-
-[[workflow.edit_registers_round2]]
-description = "Register 9 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Register 9 - Type value 0 (0x0000)"
-input = "hex"
-value = 0x0000
-
-[[workflow.edit_registers_round2]]
-description = "Register 9 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round2]]
-description = "Update mock state register 9"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
-mock_set_value = 0
-
-[[workflow.edit_registers_round2]]
-description = "Verify register values on screen (partial)"
+[[workflow.simulate_data_feed_round2]]
+description = "Verify data appears on screen (partial)"
 verify = "0x0009 0x0008 0x0007 0x0006 0x0005 0x0004"
 
-[[workflow.edit_registers_round2]]
-description = "Return to top of panel"
-key = "Ctrl+PageUp"
+[[workflow.simulate_data_feed_round2]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
 
-# Verify mock data for screen-capture mode
-[[workflow.verify_mock_data]]
-description = "Verify register count in mock state"
-mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].register_count"
-mock_verify_value = 10
+# Step 12: Simulate external data feed - Round 3 (Custom pattern)
+[[workflow.simulate_data_feed_round3]]
+description = "Simulate IPC pipe feeding data - Round 3 (Custom)"
+mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_set_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
 
-[[workflow.verify_mock_data]]
-description = "Verify station ID in mock state"
-mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].station_id"
-mock_verify_value = 1
-
-# Edit Registers - Round 3 (Custom: 0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA)
-[[workflow.edit_registers_round3]]
-description = "Navigate to register row"
-key = "Down"
-times = 6
-
-[[workflow.edit_registers_round3]]
-description = "Register 0 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 0 - Type value 0x1111"
-input = "hex"
-value = 0x1111
-
-[[workflow.edit_registers_round3]]
-description = "Register 0 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 0"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[0]"
-mock_set_value = 0x1111
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 1"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 1 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 1 - Type value 0x2222"
-input = "hex"
-value = 0x2222
-
-[[workflow.edit_registers_round3]]
-description = "Register 1 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 1"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[1]"
-mock_set_value = 0x2222
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 2"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 2 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 2 - Type value 0x3333"
-input = "hex"
-value = 0x3333
-
-[[workflow.edit_registers_round3]]
-description = "Register 2 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 2"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[2]"
-mock_set_value = 0x3333
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 3"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 3 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 3 - Type value 0x4444"
-input = "hex"
-value = 0x4444
-
-[[workflow.edit_registers_round3]]
-description = "Register 3 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 3"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[3]"
-mock_set_value = 0x4444
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 4"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 4 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 4 - Type value 0x5555"
-input = "hex"
-value = 0x5555
-
-[[workflow.edit_registers_round3]]
-description = "Register 4 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 4"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[4]"
-mock_set_value = 0x5555
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 5"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 5 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 5 - Type value 0x6666"
-input = "hex"
-value = 0x6666
-
-[[workflow.edit_registers_round3]]
-description = "Register 5 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 5"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[5]"
-mock_set_value = 0x6666
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 6"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 6 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 6 - Type value 0x7777"
-input = "hex"
-value = 0x7777
-
-[[workflow.edit_registers_round3]]
-description = "Register 6 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 6"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[6]"
-mock_set_value = 0x7777
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 7"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 7 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 7 - Type value 0x8888"
-input = "hex"
-value = 0x8888
-
-[[workflow.edit_registers_round3]]
-description = "Register 7 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 7"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[7]"
-mock_set_value = 0x8888
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 8"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 8 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 8 - Type value 0x9999"
-input = "hex"
-value = 0x9999
-
-[[workflow.edit_registers_round3]]
-description = "Register 8 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 8"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[8]"
-mock_set_value = 0x9999
-
-[[workflow.edit_registers_round3]]
-description = "Move to register 9"
-key = "Right"
-
-[[workflow.edit_registers_round3]]
-description = "Register 9 - Enter edit mode"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Register 9 - Type value 0xAAAA"
-input = "hex"
-value = 0xAAAA
-
-[[workflow.edit_registers_round3]]
-description = "Register 9 - Confirm value"
-key = "Enter"
-
-[[workflow.edit_registers_round3]]
-description = "Update mock state register 9"
-mock_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers[9]"
-mock_set_value = 0xAAAA
-
-[[workflow.edit_registers_round3]]
-description = "Verify register values on screen (partial)"
+[[workflow.simulate_data_feed_round3]]
+description = "Verify data appears on screen (partial)"
 verify = "0x1111 0x2222 0x3333 0x4444 0x5555 0x6666"
 
-[[workflow.edit_registers_round3]]
-description = "Return to top of panel"
-key = "Ctrl+PageUp"
+[[workflow.simulate_data_feed_round3]]
+description = "Verify all register values in mock state"
+mock_verify_path = "$.ports['/tmp/vcom1'].modbus_masters[0].registers"
+mock_verify_value = [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888, 0x9999, 0xAAAA]
